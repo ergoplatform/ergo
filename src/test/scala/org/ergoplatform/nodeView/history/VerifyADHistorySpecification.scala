@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistoryTestHelpers
@@ -16,7 +16,7 @@ import scala.util.Random
 
 class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
 
-  type PM = ErgoPersistentModifier
+  type PM = BlockSection
 
   private def genHistory(blocksNum: Int = 0,
                          minFullHeight: Option[Int] = Some(ErgoHistory.GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {

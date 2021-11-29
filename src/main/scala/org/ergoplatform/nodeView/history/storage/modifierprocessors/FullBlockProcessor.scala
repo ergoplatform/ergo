@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
@@ -46,7 +46,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     * @return ProgressInfo required for State to process to be consistent with the history
     */
   protected def processFullBlock(fullBlock: ErgoFullBlock,
-                                 newMod: ErgoPersistentModifier): Try[ProgressInfo[ErgoPersistentModifier]] = {
+                                 newMod: BlockSection): Try[ProgressInfo[BlockSection]] = {
     val bestFullChainAfter = calculateBestChain(fullBlock.header)
     val newBestBlockHeader = typedModifierById[Header](bestFullChainAfter.last).ensuring(_.isDefined)
     processing(ToProcess(fullBlock, newMod, newBestBlockHeader, bestFullChainAfter))
@@ -235,7 +235,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     historyStorage.remove(toRemove)
   }
 
-  private def updateStorage(newModRow: ErgoPersistentModifier,
+  private def updateStorage(newModRow: BlockSection,
                             bestFullHeaderId: ModifierId,
                             additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])]): Try[Unit] = {
     val indicesToInsert = Seq(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
@@ -252,10 +252,10 @@ trait FullBlockProcessor extends HeadersProcessor {
 
 object FullBlockProcessor {
 
-  type BlockProcessing = PartialFunction[ToProcess, Try[ProgressInfo[ErgoPersistentModifier]]]
+  type BlockProcessing = PartialFunction[ToProcess, Try[ProgressInfo[BlockSection]]]
 
   case class ToProcess(fullBlock: ErgoFullBlock,
-                       newModRow: ErgoPersistentModifier,
+                       newModRow: BlockSection,
                        newBestBlockHeaderOpt: Option[Header],
                        newBestChain: Seq[ModifierId])
 

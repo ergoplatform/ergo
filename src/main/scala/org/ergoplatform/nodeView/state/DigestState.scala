@@ -7,7 +7,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
@@ -30,7 +30,7 @@ class DigestState protected(override val version: VersionTag,
                             override val store: LDBVersionedStore,
                             ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
-    with ModifierValidation[ErgoPersistentModifier]
+    with ModifierValidation[BlockSection]
     with ScorexLogging
     with ScorexEncoding {
 
@@ -59,7 +59,7 @@ class DigestState protected(override val version: VersionTag,
       .map(_ => ())
   }
 
-  def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
+  def validate(mod: BlockSection): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       fb.adProofs match {
         case None =>
@@ -80,7 +80,7 @@ class DigestState protected(override val version: VersionTag,
       Failure(new Exception(s"Modifier not validated: $a"))
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height]): Try[DigestState] =
+  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height]): Try[DigestState] =
     (processFullBlock orElse processHeader orElse processOther) (mod)
 
   @SuppressWarnings(Array("OptionGet"))

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{NonHeaderBlockSection, BlockSection}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 
@@ -21,12 +21,12 @@ trait BlockSectionProcessor extends ScorexEncoding {
     * @param m - modifier to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(m: BlockSection): Try[ProgressInfo[ErgoPersistentModifier]]
+  protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]]
 
   /**
     * @param m - modifier to validate
     * @return Success() if modifier is valid from History point of view, Failure(error) otherwise
     */
-  protected def validate(m: BlockSection): Try[Unit]
+  protected def validate(m: NonHeaderBlockSection): Try[Unit]
 
 }

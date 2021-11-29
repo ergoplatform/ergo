@@ -5,7 +5,7 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
@@ -420,9 +420,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val parsed: Iterable[ErgoTransaction] = parseModifiers(requestedModifiers, serializer, remote)
         viewHolderRef ! TransactionsFromRemote(parsed)
 
-      case Some(serializer: ScorexSerializer[ErgoPersistentModifier]@unchecked) =>
+      case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
         // parse all modifiers and put them to modifiers cache
-        val parsed: Iterable[ErgoPersistentModifier] = parseModifiers(requestedModifiers, serializer, remote)
+        val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, serializer, remote)
         val valid = parsed.filter(validateAndSetStatus(remote, _))
         if (valid.nonEmpty) {
           viewHolderRef ! ModifiersFromRemote(valid)
@@ -542,7 +542,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * - headers, if our headers chain is not synced yet (by sending sync message)
     * - block sections, if our headers chain is synced
     */
-  protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {
+  protected def requestMoreModifiers(applied: Seq[BlockSection]): Unit = {
     historyReaderOpt foreach { h =>
       if (h.isHeadersChainSynced) {
         // our requested list is is half empty - request more missed modifiers
@@ -578,7 +578,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Move `pmod` to `Invalid` if it is permanently invalid, to `Received` otherwise
     */
   @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
-  def validateAndSetStatus(remote: ConnectedPeer, pmod: ErgoPersistentModifier): Boolean = {
+  def validateAndSetStatus(remote: ConnectedPeer, pmod: BlockSection): Boolean = {
     historyReaderOpt match {
       case Some(hr) =>
         hr.applicableTry(pmod) match {
@@ -734,7 +734,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case ChangedMempool(reader: ErgoMemPool) =>
       mempoolReaderOpt = Some(reader)
 
-    case ModifiersProcessingResult(applied: Seq[ErgoPersistentModifier], cleared: Seq[ErgoPersistentModifier]) =>
+    case ModifiersProcessingResult(applied: Seq[BlockSection], cleared: Seq[BlockSection]) =>
       // stop processing for cleared modifiers
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       cleared.foreach(m => deliveryTracker.setUnknown(m.id))
@@ -833,13 +833,13 @@ object ErgoNodeViewSynchronizer {
 
     case class NewOpenSurface(newSurface: Seq[ModifierId]) extends NodeViewHolderEvent
 
-    case class StartingPersistentModifierApplication(modifier: ErgoPersistentModifier) extends NodeViewHolderEvent
+    case class StartingPersistentModifierApplication(modifier: BlockSection) extends NodeViewHolderEvent
 
     /**
       * After application of batch of modifiers from cache to History, NodeViewHolder sends this message,
       * containing all just applied modifiers and cleared from cache
       */
-    case class ModifiersProcessingResult(applied: Seq[ErgoPersistentModifier], cleared: Seq[ErgoPersistentModifier])
+    case class ModifiersProcessingResult(applied: Seq[BlockSection], cleared: Seq[BlockSection])
 
     // hierarchy of events regarding modifiers application outcome
     trait ModificationOutcome extends NodeViewHolderEvent
@@ -851,13 +851,13 @@ object ErgoNodeViewSynchronizer {
 
     case class SuccessfulTransaction(transaction: ErgoTransaction) extends ModificationOutcome
 
-    case class SyntacticallyFailedModification(modifier: ErgoPersistentModifier, error: Throwable) extends ModificationOutcome
+    case class SyntacticallyFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome
 
-    case class SemanticallyFailedModification(modifier: ErgoPersistentModifier, error: Throwable) extends ModificationOutcome
+    case class SemanticallyFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome
 
-    case class SyntacticallySuccessfulModifier(modifier: ErgoPersistentModifier) extends ModificationOutcome
+    case class SyntacticallySuccessfulModifier(modifier: BlockSection) extends ModificationOutcome
 
-    case class SemanticallySuccessfulModifier(modifier: ErgoPersistentModifier) extends ModificationOutcome
+    case class SemanticallySuccessfulModifier(modifier: BlockSection) extends ModificationOutcome
 
   }
 

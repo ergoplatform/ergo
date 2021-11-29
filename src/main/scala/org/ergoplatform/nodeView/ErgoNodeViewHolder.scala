@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -52,9 +52,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   case class UpdateInformation(history: ErgoHistory,
                                state: State,
-                               failedMod: Option[ErgoPersistentModifier],
-                               alternativeProgressInfo: Option[ProgressInfo[ErgoPersistentModifier]],
-                               suffix: IndexedSeq[ErgoPersistentModifier])
+                               failedMod: Option[BlockSection],
+                               alternativeProgressInfo: Option[ProgressInfo[BlockSection]],
+                               suffix: IndexedSeq[BlockSection])
 
   val scorexSettings: ScorexSettings = settings.scorexSettings
 
@@ -124,19 +124,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     nodeView = newNodeView
   }
 
-  protected def extractTransactions(mod: ErgoPersistentModifier): Seq[ErgoTransaction] = mod match {
+  protected def extractTransactions(mod: BlockSection): Seq[ErgoTransaction] = mod match {
     case tcm: TransactionsCarryingPersistentNodeViewModifier => tcm.transactions
     case _ => Seq()
   }
 
 
-  protected def requestDownloads(pi: ProgressInfo[ErgoPersistentModifier]): Unit =
+  protected def requestDownloads(pi: ProgressInfo[BlockSection]): Unit =
     pi.toDownload.foreach { case (tid, id) =>
       context.system.eventStream.publish(DownloadRequest(tid, id))
     }
 
-  private def trimChainSuffix(suffix: IndexedSeq[ErgoPersistentModifier],
-                              rollbackPoint: scorex.util.ModifierId): IndexedSeq[ErgoPersistentModifier] = {
+  private def trimChainSuffix(suffix: IndexedSeq[BlockSection],
+                              rollbackPoint: scorex.util.ModifierId): IndexedSeq[BlockSection] = {
     val idx = suffix.indexWhere(_.id == rollbackPoint)
     if (idx == -1) IndexedSeq() else suffix.drop(idx)
   }
@@ -176,11 +176,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   @tailrec
   protected final def updateState(history: ErgoHistory,
                                   state: State,
-                                  progressInfo: ProgressInfo[ErgoPersistentModifier],
-                                  suffixApplied: IndexedSeq[ErgoPersistentModifier]): (ErgoHistory, Try[State], Seq[ErgoPersistentModifier]) = {
+                                  progressInfo: ProgressInfo[BlockSection],
+                                  suffixApplied: IndexedSeq[BlockSection]): (ErgoHistory, Try[State], Seq[BlockSection]) = {
     requestDownloads(progressInfo)
 
-    val (stateToApplyTry: Try[State], suffixTrimmed: IndexedSeq[ErgoPersistentModifier]) = if (progressInfo.chainSwitchingNeeded) {
+    val (stateToApplyTry: Try[State], suffixTrimmed: IndexedSeq[BlockSection]) = if (progressInfo.chainSwitchingNeeded) {
       @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
       val branchingPoint = progressInfo.branchPoint.get //todo: .get
       if (state.version != branchingPoint) {
@@ -221,8 +221,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   private def applyState(history: ErgoHistory,
                          stateToApply: State,
-                         suffixTrimmed: IndexedSeq[ErgoPersistentModifier],
-                         progressInfo: ProgressInfo[ErgoPersistentModifier]): Try[UpdateInformation] = {
+                         suffixTrimmed: IndexedSeq[BlockSection],
+                         progressInfo: ProgressInfo[BlockSection]): Try[UpdateInformation] = {
     val updateInfoSample = UpdateInformation(history, stateToApply, None, None, suffixTrimmed)
     progressInfo.toApply.foldLeft[Try[UpdateInformation]](Success(updateInfoSample)) {
       case (f@Failure(ex), _) =>
@@ -271,9 +271,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * Publish `ModifiersProcessingResult` message with all just applied and removed from cache modifiers.
     */
   protected def processRemoteModifiers: Receive = {
-    case ModifiersFromRemote(mods: Seq[ErgoPersistentModifier]@unchecked) =>
+    case ModifiersFromRemote(mods: Seq[BlockSection]@unchecked) =>
       @tailrec
-      def applyFromCacheLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
+      def applyFromCacheLoop(applied: Seq[BlockSection]): Seq[BlockSection] = {
         modifiersCache.popCandidate(history()) match {
           case Some(mod) =>
             pmodModify(mod)
@@ -337,10 +337,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * from rolled back block are to be returned to the pool, and transactions
     * included in applied block are to be removed.
     */
-  protected def updateMemPool(blocksRemoved: Seq[ErgoPersistentModifier],
-                                       blocksApplied: Seq[ErgoPersistentModifier],
-                                       memPool: ErgoMemPool,
-                                       state: State): ErgoMemPool = {
+  protected def updateMemPool(blocksRemoved: Seq[BlockSection],
+                              blocksApplied: Seq[BlockSection],
+                              memPool: ErgoMemPool,
+                              state: State): ErgoMemPool = {
     val rolledBackTxs = blocksRemoved.flatMap(extractTransactions)
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
@@ -398,7 +398,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * which also needs to be propagated to mempool and wallet
     * @param pmod Remote or local persistent modifier
     */
-  protected def pmodModify(pmod: ErgoPersistentModifier): Unit =
+  protected def pmodModify(pmod: BlockSection): Unit =
     if (!history().contains(pmod.id)) {
       context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 
@@ -595,7 +595,7 @@ object ErgoNodeViewHolder {
     case class GetDataFromCurrentView[State, A](f: CurrentView[State] => A)
 
     // Modifiers received from the remote peer with new elements in it
-    case class ModifiersFromRemote(modifiers: Iterable[ErgoPersistentModifier])
+    case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
 
     sealed trait NewTransactions{
       val txs: Iterable[ErgoTransaction]
@@ -607,7 +607,7 @@ object ErgoNodeViewHolder {
 
     case class TransactionsFromRemote(override val txs: Iterable[ErgoTransaction]) extends NewTransactions
 
-    case class LocallyGeneratedModifier(pmod: ErgoPersistentModifier)
+    case class LocallyGeneratedModifier(pmod: BlockSection)
 
     case class EliminateTransactions(ids: Seq[scorex.util.ModifierId])
 

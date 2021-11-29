@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
@@ -88,8 +88,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @param h - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(h: Header): Try[ProgressInfo[ErgoPersistentModifier]] = synchronized {
-    val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = toInsert(h)
+  protected def process(h: Header): Try[ProgressInfo[BlockSection]] = synchronized {
+    val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = toInsert(h)
 
     historyStorage.insert(dataToInsert._1, dataToInsert._2).flatMap { _ =>
       bestHeaderIdOpt match {
@@ -107,7 +107,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   /**
     * Data to add to and remove from the storage to process this modifier
     */
-  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = {
+  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
     val bestRow: Seq[(ByteArrayWrapper, Array[Byte])] =

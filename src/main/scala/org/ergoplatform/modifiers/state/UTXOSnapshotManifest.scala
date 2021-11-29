@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.state
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.settings.Algos
@@ -18,7 +18,7 @@ case class UTXOSnapshotManifest(
                                 blockId: ModifierId,
                                 utxoSetDigest: ADDigest, //33 bytes! extra byte with tree height here!
                                 manifest: BatchAVLProverManifest[Digest32]
-                               ) extends ErgoPersistentModifier {
+                               ) extends BlockSection {
 
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotManifest.modifierTypeId
 

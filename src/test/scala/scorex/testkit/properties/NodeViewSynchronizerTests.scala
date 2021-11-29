@@ -2,7 +2,7 @@ package scorex.testkit.properties
 
 import akka.actor._
 import akka.testkit.TestProbe
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -39,7 +39,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   val memPool: ErgoMemPool
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
-    (ActorRef, ErgoSyncInfo, ErgoPersistentModifier, ErgoTransaction, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[ErgoPersistentModifier])
+    (ActorRef, ErgoSyncInfo, BlockSection, ErgoTransaction, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[BlockSection])
 
   class SynchronizerFixture extends AkkaFixture {
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))

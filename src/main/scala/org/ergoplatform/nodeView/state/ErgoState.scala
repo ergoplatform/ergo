@@ -7,7 +7,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
@@ -42,7 +42,14 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   self: IState =>
 
-  def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height]): Try[IState]
+  /**
+    * A method to modify the state by applying a block section to it
+    *
+    * @param mod - block section to apply
+    * @param estimatedTip - estimated height of blockchain tip
+    * @return - modified state, or application error
+    */
+  def applyModifier(mod: BlockSection, estimatedTip: Option[Height]): Try[IState]
 
   def rollbackTo(version: VersionTag): Try[IState]
 
@@ -57,7 +64,7 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
 object ErgoState extends ScorexLogging {
 
-  type ModifierProcessing[T <: ErgoState[T]] = PartialFunction[ErgoPersistentModifier, Try[T]]
+  type ModifierProcessing[T <: ErgoState[T]] = PartialFunction[BlockSection, Try[T]]
 
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 

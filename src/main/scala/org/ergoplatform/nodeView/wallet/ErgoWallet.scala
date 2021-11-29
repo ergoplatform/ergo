@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
@@ -16,7 +16,7 @@ import scala.util.{Failure, Success, Try}
 
 class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
                 (implicit val actorSystem: ActorSystem)
-  extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
+  extends Vault[ErgoTransaction, BlockSection, ErgoWallet]
     with ErgoWalletReader
     with ScorexLogging {
 
@@ -41,7 +41,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
     this
   }
 
-  override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = {
+  override def scanPersistent(modifier: BlockSection): ErgoWallet = {
     modifier match {
       case fb: ErgoFullBlock =>
         walletActor ! ScanOnChain(fb)

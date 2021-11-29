@@ -1,6 +1,6 @@
 package scorex.testkit.properties.state
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState}
 import org.scalacheck.Gen
 import scala.collection.mutable.ListBuffer
@@ -8,11 +8,11 @@ import scala.collection.mutable.ListBuffer
 
 trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
 
-  lazy val stateGenWithValidModifier: Gen[(ST, ErgoPersistentModifier)] = {
+  lazy val stateGenWithValidModifier: Gen[(ST, BlockSection)] = {
     stateGen.map { s => (s, semanticallyValidModifier(s)) }
   }
 
-  lazy val stateGenWithInvalidModifier: Gen[(ST, ErgoPersistentModifier)] = {
+  lazy val stateGenWithInvalidModifier: Gen[(ST, BlockSection)] = {
     stateGen.map { s => (s, semanticallyInvalidModifier(s))}
   }
 
@@ -76,7 +76,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
       }
       @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
       val rollbackDepth = Gen.chooseNum(1, maxRollbackDepth).sample.get
-      val buf = new ListBuffer[ErgoPersistentModifier]()
+      val buf = new ListBuffer[BlockSection]()
       val ver = s.version
 
       val s2 = (0 until rollbackDepth).foldLeft(s) { case (state, _) =>

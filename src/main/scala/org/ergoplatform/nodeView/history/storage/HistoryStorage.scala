@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage
 
 import com.google.common.cache.CacheBuilder
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.utils.ScorexEncoding
@@ -25,7 +25,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
 
   private val modifiersCache = CacheBuilder.newBuilder()
     .maximumSize(config.history.modifiersCacheSize)
-    .build[String, ErgoPersistentModifier]
+    .build[String, BlockSection]
 
   private val indexCache = CacheBuilder.newBuilder()
     .maximumSize(config.history.indexesCacheSize)
@@ -34,7 +34,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
   def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
     objectsStore.get(idToBytes(id))
 
-  def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
+  def modifierById(id: ModifierId): Option[BlockSection] =
     Option(modifiersCache.getIfPresent(id)) orElse
       objectsStore.get(idToBytes(id)).flatMap { bytes =>
         HistoryModifierSerializer.parseBytesTry(bytes) match {
@@ -61,7 +61,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
   def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
 
   def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
-             objectsToInsert: Seq[ErgoPersistentModifier]): Try[Unit] = {
+             objectsToInsert: Seq[BlockSection]): Try[Unit] = {
     objectsStore.insert(
       objectsToInsert.map(m => idToBytes(m.id) -> HistoryModifierSerializer.toBytes(m))
     ).flatMap { _ =>

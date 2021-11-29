@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
@@ -25,7 +25,7 @@ import scala.util.{Failure, Try}
   * Read-only copy of ErgoHistory
   */
 trait ErgoHistoryReader
-  extends HistoryReader[ErgoPersistentModifier, ErgoSyncInfo]
+  extends HistoryReader[BlockSection, ErgoSyncInfo]
     with HeadersProcessor
     with PoPoWProofsProcessor
     with UTXOSnapshotChunkProcessor
@@ -71,7 +71,7 @@ trait ErgoHistoryReader
     * @param id - modifier id
     * @return semantically valid ErgoPersistentModifier with the given id it is in history
     */
-  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
+  override def modifierById(id: ModifierId): Option[BlockSection] =
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
       historyStorage.modifierById(id)
     } else {
@@ -84,7 +84,7 @@ trait ErgoHistoryReader
     * @tparam T - expected Type
     * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
     */
-  def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
+  def typedModifierById[T <: BlockSection : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
     case Some(m: T) => Some(m)
     case _ => None
   }
@@ -94,7 +94,7 @@ trait ErgoHistoryReader
   /**
     * Check, that it's possible to apply modifier to history
     */
-  def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
+  def applicable(modifier: BlockSection): Boolean = applicableTry(modifier).isSuccess
 
   /**
     * For given headers (sorted in reverse chronological order), find first one (most recent one) which is known
@@ -363,11 +363,11 @@ trait ErgoHistoryReader
     (offset until (limit + offset)).flatMap(height => bestHeaderIdAtHeight(height))
   }
 
-  override def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
+  override def applicableTry(modifier: BlockSection): Try[Unit] = {
     modifier match {
       case header: Header =>
         validate(header)
-      case m: BlockSection =>
+      case m: NonHeaderBlockSection =>
         validate(m)
       case m: NipopowProofModifier =>
         validate(m)

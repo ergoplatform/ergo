@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.state
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSubtree
@@ -12,7 +12,7 @@ import scorex.util.{ModifierId, bytesToId}
 * Container for a chunk of sliced AVL+ tree
 */
 case class UTXOSnapshotChunk(subTree: Either[BatchAVLProverSubtree[Digest32], Array[Byte]])
-  extends ErgoPersistentModifier {
+  extends BlockSection {
 
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.modifierTypeId
 

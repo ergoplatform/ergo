@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state.wrapped
 
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
@@ -13,7 +13,7 @@ class WrappedDigestState(val digestState: DigestState,
                          val settings: ErgoSettings)
   extends DigestState(digestState.version, digestState.rootHash, digestState.store, settings) {
 
-  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height]): Try[WrappedDigestState] = {
+  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height]): Try[WrappedDigestState] = {
     wrapped(super.applyModifier(mod, estimatedTip), wrappedUtxoState.applyModifier(mod, estimatedTip))
   }
 

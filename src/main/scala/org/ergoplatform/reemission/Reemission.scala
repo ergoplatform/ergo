@@ -11,12 +11,12 @@ import sigmastate.Values.{ErgoTree, IntConstant}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractScriptBytes}
 
 
-class Reemission(ms: MonetarySettings) {
+class Reemission(monetarySettings: MonetarySettings) {
   import Reemission._
 
-  val emissionRules = new EmissionRules(ms)
+  val emissionRules = new EmissionRules(monetarySettings)
 
-  val basicChargeAmount = 21 // in ERG
+  val basicChargeAmount = 18 // in ERG
 
   def reemissionForHeight(height: Height): Long = {
     val emission = emissionRules.emissionAtHeight(height)
@@ -39,7 +39,7 @@ class Reemission(ms: MonetarySettings) {
     // miner's output must have script which is time-locking reward for miner's pubkey
     // box height must be the same as block height
     val correctMinerOutput = AND(
-      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(ms.minerRewardDelay, MinerPubkey)),
+      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(monetarySettings.minerRewardDelay, MinerPubkey)),
       EQ(Height, boxCreationHeight(minerOut))
     )
 
@@ -56,7 +56,7 @@ class Reemission(ms: MonetarySettings) {
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(reemissionOut))
 
     // miner's reward
-    val coinsToIssue = ms.oneEpochReduction // 3 ERG
+    val coinsToIssue = monetarySettings.oneEpochReduction // 3 ERG
     val correctCoinsIssued = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
 
     val sponsored = GT(ExtractAmount(reemissionOut), ExtractAmount(Self))

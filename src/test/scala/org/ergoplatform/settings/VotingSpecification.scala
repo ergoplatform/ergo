@@ -97,6 +97,20 @@ class VotingSpecification extends ErgoPropertyTest {
     validCtx.appendFullBlock(lastBlock) shouldBe 'success
   }
 
+  property("voting for non-existing parameter") {
+    val p: Parameters = Parameters(2, Map(BlockVersion -> 0), proposedUpdate)
+    val vr: VotingData = VotingData.empty
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
+    val invalidVote = 100: Byte
+    val votes = Array(invalidVote , NoParameter, NoParameter)
+
+    // voting for non-existing param is okay if not start of an epoch
+    val h = defaultHeaderGen.sample.get.copy(height = 1, votes = votes, version = 0: Byte)
+    val esc2 = esc.appendHeader(h).get
+
+    val h2 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
+    esc2.appendHeader(h2).toEither.left.get.getMessage.contains("Incorrect vote") shouldBe true
+  }
 
   //Simple checks for votes in header could be found also in NonVerifyADHistorySpecification("Header votes")
   property("simple voting - start - conditions") {

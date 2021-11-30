@@ -25,7 +25,6 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGe
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.SigmaAnd
 import sigmastate.Values.{ErgoTree, SigmaPropConstant}
-// import sigmastate.Values.{ErgoTree, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.utxo.CostTable

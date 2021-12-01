@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequ
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
@@ -31,7 +32,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
   private implicit val x: WalletFixture = new WalletFixture(settings, getCurrentView(_).vault)
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 4)
   private lazy val pks = getPublicKeys.toList
-  private val masterKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed("edge talent poet tortoise trumpet dose"))
+  private val masterKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create("edge talent poet tortoise trumpet dose")))
 
   override def afterAll(): Unit = try super.afterAll() finally x.stop()
 
@@ -48,6 +49,23 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
       utxoStateReaderOpt = Option.empty,
       parameters
     )
+  }
+
+  property("restoring wallet should fail if pruning is enabled") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletState = initialState(store, versionedStore)
+        val walletService = new ErgoWalletServiceImpl
+        val settingsWithPruning = settings.copy(nodeSettings = settings.nodeSettings.copy(blocksToKeep = 0))
+        walletService.restoreWallet(
+          walletState,
+          settingsWithPruning,
+          mnemonic = SecretString.create("x"),
+          mnemonicPassOpt = None,
+          walletPass = SecretString.create("y")
+        ).failed.get.getMessage shouldBe "Unable to restore wallet when pruning is enabled"
+      }
+    }
   }
 
   property("it should prepare unsigned transaction") {
@@ -129,7 +147,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
           val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(PaymentsScanId)))
           val spentBox = boxes.head.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = Set(PaymentsScanId))
           val allBoxes = unspentBoxes :+ spentBox
-          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq.empty), blockId, 100)
+          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq.empty), blockId, 100).get
 
           val walletService = new ErgoWalletServiceImpl
           val actualUnspentOnlyWalletBoxes = walletService.getWalletBoxes(wState, unspentOnly = true, considerUnconfirmed = false).toList
@@ -205,9 +223,14 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
         val walletState = initialState(store, versionedStore)
         val walletService = new ErgoWalletServiceImpl
         val pass = Random.nextString(10)
-        val (mnemonic, initializedState) = walletService.initWallet(walletState, settings, pass, Option.empty).get
-        Mnemonic.toSeed(mnemonic, Option.empty)
-        val unlockedWalletState = walletService.unlockWallet(initializedState, pass, usePreEip3Derivation = true).get
+        val initializedState = walletService.initWallet(walletState, settings, SecretString.create(pass), Option.empty).get._2
+
+        // Wallet unlocked after init, so we're locking it
+        val initLockedWalletState = walletService.lockWallet(initializedState)
+        initLockedWalletState.secretStorageOpt.get.isLocked shouldBe true
+        initLockedWalletState.walletVars.proverOpt shouldBe empty
+
+        val unlockedWalletState = walletService.unlockWallet(initLockedWalletState, SecretString.create(pass), usePreEip3Derivation = true).get
         unlockedWalletState.secretStorageOpt.get.isLocked shouldBe false
         unlockedWalletState.storage.readAllKeys().size shouldBe 1
         unlockedWalletState.walletVars.proverOpt shouldNot be(empty)
@@ -216,7 +239,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
         lockedWalletState.secretStorageOpt.get.isLocked shouldBe true
         lockedWalletState.walletVars.proverOpt shouldBe empty
 
-        val finalUnlockedState = walletService.unlockWallet(lockedWalletState, pass, usePreEip3Derivation = true).get
+        val finalUnlockedState = walletService.unlockWallet(lockedWalletState, SecretString.create(pass), usePreEip3Derivation = true).get
         finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
         finalUnlockedState.storage.readAllKeys().size shouldBe 1
         finalUnlockedState.walletVars.proverOpt shouldNot be(empty)

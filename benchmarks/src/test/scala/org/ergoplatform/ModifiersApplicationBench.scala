@@ -2,7 +2,9 @@ package org.ergoplatform
 
 import org.ergoplatform.Utils.BenchReport
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header}
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.{ErgoModifiersCache, NVBenchmark}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
@@ -10,9 +12,9 @@ import org.ergoplatform.utils.HistoryTestHelpers
 
 import scala.annotation.tailrec
 
-object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark with App {
+object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark {
 
-  override def main(args: Array[String]): Unit = {
+  def main(args: Array[String]): Unit = {
 
     val startTs = System.currentTimeMillis()
 

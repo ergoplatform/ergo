@@ -1,6 +1,8 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.HeaderChain
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
@@ -121,7 +123,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
           chain.indices.map(blockIndex => (chainIndex, blockIndex))
         }
 
-        var appended: ArrayBuffer[ErgoFullBlock] = ArrayBuffer.empty
+        val appended: ArrayBuffer[ErgoFullBlock] = ArrayBuffer.empty
 
         def findBestBlock(appendedToCheck: Seq[ErgoFullBlock]): ErgoFullBlock = {
           def firstInAppended(h: Header): Header = {
@@ -209,7 +211,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
   property("syncInfo()") {
     val (history, chain) = genHistory(BlocksInChain)
 
-    val si = history.syncInfo
+    val si = history.syncInfoV1.asInstanceOf[ErgoSyncInfoV1]
     si.lastHeaderIds.last shouldEqual chain.last.header.id
   }
 
@@ -324,7 +326,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     val invalidChain = chain.takeRight(2)
 
     val progressInfo = ProgressInfo[PM](Some(invalidChain.head.parentId), invalidChain, Seq.empty, Seq.empty)
-    val report = history.reportModifierIsInvalid(invalidChain.head.header, progressInfo)
+    val report = history.reportModifierIsInvalid(invalidChain.head.header, progressInfo).get
     history = report._1
     val processInfo = report._2
     processInfo.toApply.isEmpty shouldBe true
@@ -347,7 +349,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
       history.contains(parentHeader.ADProofsId) shouldBe true
 
       val progressInfo = ProgressInfo[PM](Some(parentHeader.id), Seq(fullBlock), Seq.empty, Seq.empty)
-      val (repHistory, _) = history.reportModifierIsInvalid(fullBlock.blockTransactions, progressInfo)
+      val (repHistory, _) = history.reportModifierIsInvalid(fullBlock.blockTransactions, progressInfo).get
       repHistory.bestFullBlockOpt.value.header shouldBe history.bestHeaderOpt.value
       repHistory.bestHeaderOpt.value shouldBe parentHeader
     }
@@ -462,7 +464,6 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
       history.applicable(extension) shouldBe true
       history.bestHeaderOpt.get shouldBe header
       history.bestFullBlockOpt.get shouldBe startFullBlock
-      history.openSurfaceIds().head shouldEqual startFullBlock.header.id
 
       history = history.append(txs).get._1
 
@@ -490,7 +491,6 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
       history.applicable(txs) shouldBe false
       history.bestHeaderOpt.value shouldBe header
       history.bestFullBlockOpt.value shouldBe fullBlock
-      history.openSurfaceIds().head shouldEqual fullBlock.header.id
     }
   }
 

@@ -19,7 +19,14 @@ final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
 
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
-  val miningScripts: Seq[Values.ErgoTree] = WalletCache.miningScripts(trackedPubKeys, settings)
+  // Mining rewards are being tracked only if mining = true in config
+  private val miningScripts: Seq[Values.ErgoTree] = {
+    if (settings.nodeSettings.mining) {
+      WalletCache.miningScripts(trackedPubKeys, settings)
+    } else {
+      Seq.empty
+    }
+  }
 
   val miningScriptsBytes: Seq[Array[Byte]] = miningScripts.map(_.bytes)
 
@@ -39,12 +46,11 @@ final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
 
 object WalletCache {
 
-  // currently only one mining key supported
   def miningScripts(trackedPubKeys: Seq[ExtendedPublicKey],
                     settings: ErgoSettings): Seq[Values.ErgoTree] = {
-    trackedPubKeys.headOption.map { pk =>
+    trackedPubKeys.map { pk =>
       ErgoScriptPredef.rewardOutputScript(settings.miningRewardDelay, pk.key)
-    }.toSeq
+    }
   }
 
   /**

@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.9"
+  version: "4.0.17"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1128,7 +1128,7 @@ components:
           $ref: '#/components/schemas/ErgoAddress'
         ergValue:
           description: Optional, amount of ergs to be put into box with issued assets
-          type: integer
+          type: int64
         amount:
           description: Supply amount
           type: integer
@@ -1194,7 +1194,7 @@ components:
           type: string
           example: '0000000000000000'
         d:
-          type: integer
+          type: number
           example: 987654321
 
     BlockHeaderWithoutPow:
@@ -1256,6 +1256,48 @@ components:
           $ref: '#/components/schemas/ModifierId'
         adProofsId:
           $ref: '#/components/schemas/ModifierId'
+
+    PopowHeader:
+      type: object
+      required:
+        - header
+        - interlinks
+      properties:
+        header:
+          $ref: '#/components/schemas/BlockHeader'
+        interlinks:
+          description: Array of header interlinks
+          type: array
+          items:
+            $ref: '#/components/schemas/ModifierId'
+
+    NipopowProof:
+      type: object
+      required:
+        - m
+        - k
+        - prefix
+        - suffixHead
+        - suffixTail
+      properties:
+        m:
+          description: security parameter (min μ-level superchain length)
+          type: number
+        k:
+          description: security parameter (min suffix length, >= 1)
+          type: number
+        prefix:
+          description: proof prefix headers
+          type: array
+          items:
+            $ref: '#/components/schemas/PopowHeader'
+        suffixHead:
+          $ref: '#/components/schemas/PopowHeader'
+        suffixTail:
+          description: tail of the proof suffix headers
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockHeader'
 
     BlockHeader:
       type: object
@@ -1502,9 +1544,67 @@ components:
         - currentNetworkTime
       properties:
         lastIncomingMessage:
-          $ref: '#/components/schemas/Timestamp'
+          type: integer
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
         currentNetworkTime:
-          $ref: '#/components/schemas/Timestamp'
+          type: integer
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+
+    PeerMode:
+      type: object
+      required:
+        - state
+        - verifyingTransactions
+        - fullBlocksSuffix
+      properties:
+        state:
+          type: string
+          example: 'utxo'
+        verifyingTransactions:
+          type: boolean
+          example: true
+        fullBlocksSuffix:
+          type: integer
+          example: 2880
+
+    PeerInfo:
+      type: object
+      required:
+        - address
+        - mode
+        - version
+        - status
+        - height
+      properties:
+        address:
+          type: string
+          example: '127.0.0.1:5673'
+        mode:
+          type: object
+          description: Peer operating mode parameters
+          $ref: '#/components/schemas/PeerMode'
+        version:
+          type: string
+          example: '4.0.16'
+        status:
+          type: string
+          example: 'Older'
+        height:
+          type: integer
+          example: 65780
+
+    BlacklistedPeers:
+      type: object
+      required:
+        - addresses
+      properties:
+        addresses:
+          type: array
+          items:
+            type: string
+            description: Blacklisted node address
 
     NodeInfo:
       type: object
@@ -1843,7 +1943,7 @@ components:
     Timestamp:
       description: Basic timestamp definition
       type: integer
-      format: int32
+      format: int64
       example: 1524143059077
 
     EmissionInfo:
@@ -1891,7 +1991,6 @@ components:
           type: boolean
         error:
           type: string
-
 
     ApiError:
       type: object
@@ -2252,6 +2351,145 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /nipopow/popowHeaderById/{headerId}:
+    get:
+      summary: Construct PoPow header according to given header id
+      operationId: getPopowHeaderById
+      tags:
+        - nipopow
+      parameters:
+        - in: path
+          name: headerId
+          required: true
+          description: ID of wanted header
+          schema:
+            type: string
+      responses:
+        '200':
+          description: PoPow header object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PopowHeader'
+        '404':
+          description: Header of extension of a corresponding block are not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /nipopow/popowHeaderByHeight/{height}:
+    get:
+      summary: Construct PoPow header for best header at given height
+      operationId: getPopowHeaderByHeight
+      tags:
+        - nipopow
+      parameters:
+        - in: path
+          name: height
+          required: true
+          description: Height of a wanted header
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: PoPow header object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PopowHeader'
+        '404':
+          description: Header of extension of a corresponding block are not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /nipopow/proof/{minChainLength}/{suffixLength}:
+    get:
+      summary: Construct PoPoW proof for given min superchain length and suffix length
+      operationId: getPopowProof
+      tags:
+        - nipopow
+      parameters:
+        - in: path
+          name: minChainLength
+          required: true
+          description: Minimal superchain length
+          schema:
+            type: number
+        - in: path
+          name: suffixLength
+          required: true
+          description: Suffix length
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Nipopow proof object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NipopowProof'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /nipopow/proof/{minChainLength}/{suffixLength}/{headerId}:
+    get:
+      summary: Construct PoPoW proof for given min superchain length, suffix length and header ID
+      operationId: getPopowProofByHeaderId
+      tags:
+        - nipopow
+      parameters:
+        - in: path
+          name: minChainLength
+          required: true
+          description: Minimal superchain length
+          schema:
+            type: number
+        - in: path
+          name: suffixLength
+          required: true
+          description: Suffix length
+          schema:
+            type: number
+        - in: path
+          name: headerId
+          required: true
+          description: ID of wanted header
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Nipopow proof object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NipopowProof'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /info:
     get:
       summary: Get the information about the Node
@@ -2564,10 +2802,8 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
-                  description: Blacklisted node address
+                $ref: '#/components/schemas/BlacklistedPeers'
+
         default:
           description: Error
           content:
@@ -2577,7 +2813,7 @@ paths:
 
   /peers/status:
     get:
-      summary: Get last incomming message timestamp and current network time
+      summary: Get last incoming message timestamp and current network time
       operationId: getPeersStatus
       tags:
         - peers
@@ -2587,7 +2823,31 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PeersStatus'
+                type: array
+                items:
+                  $ref: '#/components/schemas/PeersInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /peers/syncInfo:
+    get:
+      summary: Get sync info reported by peers, including versions, current status and height (if available)
+      operationId: getPeersFullInfo
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Network status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PeersInfo'
         default:
           description: Error
           content:
@@ -2992,6 +3252,7 @@ paths:
                   - isUnlocked
                   - changeAddress
                   - walletHeight
+                  - error
                 properties:
                   isInitialized:
                     type: boolean
@@ -3008,6 +3269,9 @@ paths:
                   walletHeight:
                     type: integer
                     description: last scanned height for the wallet (and external scans)
+                  error:
+                    type: string
+                    description: last wallet error caught
         default:
           description: Error
           content:
@@ -3234,14 +3498,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /wallet/transactionsByScanId:
+  /wallet/transactionsByScanId/{scanId}:
     parameters:
       - in: query
-        name: scanId
-        required: true
-        description: Scan id
+        name: minInclusionHeight
+        required: false
+        description: Minimal tx inclusion height
         schema:
-          type: string
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximal tx inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal confirmations number
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximal confirmations number
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
     get:
       security:
         - ApiKeyAuth: [ api_key ]
@@ -3249,6 +3539,14 @@ paths:
       operationId: walletTransactionsByScanId
       tags:
         - wallet
+      parameters:
+        - in: path
+          name: scanId
+          required: true
+          description: identifier of a scan
+          schema:
+            type: integer
+            format: int32
       responses:
         '200':
           description: Scan-related transactions

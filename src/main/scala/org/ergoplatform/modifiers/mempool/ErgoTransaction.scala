@@ -11,6 +11,7 @@ import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.EphemerealNodeViewModifier
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
@@ -19,15 +20,14 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationState}
-import scorex.db.{ByteArrayUtils, ByteArrayWrapper}
+import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.eval.Extensions._
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
 
-import scala.collection.mutable
+import java.nio.ByteBuffer
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -71,7 +71,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
 
 
-  lazy val outAssetsTry: Try[(Map[ByteArrayWrapper, Long], Int)] = ErgoTransaction.extractAssets(outputCandidates)
+  lazy val outAssetsTry: Try[(Map[ByteBuffer, Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
 
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -115,7 +115,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @param stateContext    - blockchain context at the moment of validation
     * @param accumulatedCost - computational cost before validation, validation starts with this value
     * @param verifier        - interpreter used to check spending correctness for transaction inputs
-    * @return total computation cost
+    * @return total computation cost (accumulatedCost + transaction verification cost), or error details
     */
   def validateStateful(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
@@ -136,16 +136,22 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       multiplyExact(dataBoxes.size, stateContext.currentParameters.dataInputCost),
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
     )
+
+    // Cost limit per block
     val maxCost = stateContext.currentParameters.maxBlockCost
 
+    // We sum up previously accumulated cost and transaction initialization cost
+    val startCost = addExact(initialCost, accumulatedCost)
     ModifierValidator(stateContext.validationSettings)
-      // Check that the transaction is not too big
-      .validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
+      // Check that the initial transaction cost is not too exceeding block limit
+      .validate(bsBlockTransactionsCost, maxCost >= startCost, s"$id: initial cost")
       // Starting validation
-      .payload(initialCost)
+      .payload(startCost)
       // Perform cheap checks first
       .validateNoFailure(txAssetsInOneBox, outAssetsTry)
-      .validate(txPositiveAssets, outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)), s"$id: ${outputCandidates.map(_.additionalTokens)}")
+      .validate(txPositiveAssets,
+        outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)),
+        s"$id: ${outputCandidates.map(_.additionalTokens)}")
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
       validationState
@@ -165,16 +171,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // Check that transaction is not creating money out of thin air.
       .validate(txErgPreservation, inputSumTry == outputsSumTry, s"$id: $inputSumTry == $outputsSumTry")
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
-        ErgoTransaction.extractAssets(boxesToSpend) match {
+        ErgoBoxAssetExtractor.extractAssets(boxesToSpend) match {
           case Success((inAssets, inAssetsNum)) =>
-            lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+            lazy val newAssetId = ByteBuffer.wrap(inputs.head.boxId)
             val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
             val currentTxCost = validation.result.payload.get
-            // Cost of assets preservation rules checks.
-            // We iterate through all assets to create a map (cost: `(outAssetsNum + inAssetsNum) * tokenAccessCost)`)
-            // and after that we iterate through unique asset ids to check preservation rules (cost: `(inAssets.size + outAssets.size) * tokenAccessCost`)
-            val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
-              (inAssets.size + outAssets.size) * tokenAccessCost
+
+            val totalAssetsAccessCost =
+              ErgoBoxAssetExtractor.totalAssetsAccessCost(inAssetsNum, inAssets.size, outAssetsNum, outAssets.size, tokenAccessCost)
             val newCost = addExact(currentTxCost, totalAssetsAccessCost)
 
             validation
@@ -198,33 +202,38 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
-      val currentTxCost = validation.result.payload.get
+        val currentTxCost = validation.result.payload.get
 
-      val input = inputs(idx)
-      val proof = input.spendingProof
-      val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
-      val inputContext = InputContext(idx.toShort, proof.extension)
+        val input = inputs(idx)
+        val proof = input.spendingProof
+        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
+        val inputContext = InputContext(idx.toShort, proof.extension)
 
-      val ctx = new ErgoContext(
-        stateContext, transactionContext, inputContext,
-        costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
-        initCost = 0)
+        val ctx = new ErgoContext(
+          stateContext, transactionContext, inputContext,
+          costLimit = maxCost - currentTxCost, // remaining cost so far
+          initCost = 0)
 
-      val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-      costTry.recover { case t =>
-        log.debug(s"Tx verification failed: ${t.getMessage}")
-      }
+        val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+        val (isCostValid, scriptCost) =
+          costTry match {
+            case Failure(t) =>
+              log.debug(s"Tx verification failed: ${t.getMessage}")
+              (false, maxCost + 1)
+            case Success(result) =>
+              result
+          }
 
-      lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
+        val currCost = addExact(currentTxCost, scriptCost)
 
-      validation
-        // Just in case, should always be true if client implementation is correct.
-        .validateEquals(txBoxToSpend, box.id, input.boxId)
-        // Check whether input box script interpreter raised exception
-        .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
-        // Check that cost of the transaction after checking the input becomes too big
-        .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
-        .map(c => addExact(c, scriptCost))
+        validation
+          // Just in case, should always be true if client implementation is correct.
+          .validateEquals(txBoxToSpend, box.id, input.boxId)
+          // Check whether input box script interpreter raised exception
+          .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
+          // Check that cost of the transaction after checking the input becomes too big
+          .validate(bsBlockTransactionsCost, currCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
+          .map(c => addExact(c, scriptCost))
     }
   }
 
@@ -262,30 +271,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 }
 
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
-
-  val MaxAssetsPerBox = 255
-
-  /**
-    * Extracts a mapping (assets -> total amount) from a set of boxes passed as a parameter.
-    * That is, the method is checking amounts of assets in the boxes(i.e. that a box contains positive
-    * amount for an asset) and then summarize and group their corresponding amounts.
-    *
-    * @param boxes - boxes to check and extract assets from
-    * @return a mapping from asset id to to balance and total assets number
-    */
-  def extractAssets(boxes: IndexedSeq[ErgoBoxCandidate]): Try[(Map[ByteArrayWrapper, Long], Int)] = Try {
-    val map: mutable.Map[ByteArrayWrapper, Long] = mutable.Map[ByteArrayWrapper, Long]()
-    val assetsNum = boxes.foldLeft(0) { case (acc, box) =>
-      require(box.additionalTokens.length <= ErgoTransaction.MaxAssetsPerBox, "too many assets in one box")
-      box.additionalTokens.foreach { case (assetId, amount) =>
-        val aiWrapped = ByteArrayWrapper(assetId)
-        val total = map.getOrElse(aiWrapped, 0L)
-        map.put(aiWrapped, Math.addExact(total, amount))
-      }
-      acc + box.additionalTokens.size
-    }
-    map.toMap -> assetsNum
-  }
 
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction =
     ErgoTransaction(inputs, IndexedSeq(), outputCandidates, None)

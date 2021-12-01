@@ -1,7 +1,7 @@
 package org.ergoplatform.tools
 
 import org.ergoplatform.mining.difficulty.{LinearDifficultyControl, RequiredDifficulty}
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.generators.ErgoGenerators
@@ -148,8 +148,14 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
   }
 
 
-  def constantHashRate(height: Int): Int = 1000
+  def constantHashRate(height: Int): Int = {
+    assert(height > 0)
+    1000
+  }
   def linearGrowingHashRate(height: Int): Int = Math.max(2000 - height / 20, 100)
-  def randomHashRate(height: Int): Int = Random.nextInt(1000)
+  def randomHashRate(height: Int): Int = {
+    assert(height > 0)
+    Random.nextInt(1000)
+  }
 
 }

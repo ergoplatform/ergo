@@ -10,7 +10,10 @@ import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.db.{LDBFactory, LDBKVStore}
 import java.io.File
-import scala.util.{Success, Try}
+
+import scorex.util.ScorexLogging
+
+import scala.util.{Failure, Success, Try}
 
 /**
   * Persists version-agnostic wallet actor's mutable state (which is not a subject to rollbacks in case of forks)
@@ -23,7 +26,7 @@ import scala.util.{Success, Try}
   * * external scans
   */
 final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
-                         (implicit val addressEncoder: ErgoAddressEncoder) {
+                         (implicit val addressEncoder: ErgoAddressEncoder) extends ScorexLogging {
 
   import WalletStorage._
 
@@ -46,29 +49,57 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
   /**
     * Remove pre-3.3.0 derivation paths
     */
-  def removePaths(): Unit = store.remove(Seq(SecretPathsKey))
+  def removePaths(): Try[Unit] = store.remove(Seq(SecretPathsKey))
 
   /**
     * Store wallet-related public key in the database
-    * @param publicKey - public key to store
+    *
+    * @param publicKeys - public key to store
     */
-  def addKey(publicKey: ExtendedPublicKey): Unit = {
-    store.insert(Seq(pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)))
+  def addPublicKeys(publicKeys: ExtendedPublicKey*): Try[Unit] = {
+    store.insert {
+      publicKeys.map { publicKey =>
+        pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)
+      }
+    }
+  }
+
+  /**
+    * Read public key corresponding to a provided derivation path
+    */
+  def getPublicKey(path: DerivationPath): Option[ExtendedPublicKey] = {
+    store
+      .get(pubKeyPrefixKey(path))
+      .flatMap{bytes =>
+        ExtendedPublicKeySerializer.parseBytesTry(bytes) match {
+          case Success(key) =>
+            Some(key)
+          case Failure(t) =>
+            log.error(s"Corrupted data when reading public key data for $path : ", t)
+            None
+        }
+      }
+  }
+
+  def containsPublicKey(path: DerivationPath): Boolean = {
+    getPublicKey(path).isDefined
   }
 
   /**
     * Read wallet-related public keys from the database
     * @return wallet public keys
     */
-  def readAllKeys(): Seq[ExtendedPublicKey] = store.getRange(FirstPublicKeyId, LastPublicKeyId).map { case (_, v) =>
-    ExtendedPublicKeySerializer.parseBytes(v)
+  def readAllKeys(): Seq[ExtendedPublicKey] = {
+    store.getRange(FirstPublicKeyId, LastPublicKeyId).map { case (_, v) =>
+      ExtendedPublicKeySerializer.parseBytes(v)
+    }
   }
 
   /**
     * Write state context into the database
     * @param ctx - state context
     */
-  def updateStateContext(ctx: ErgoStateContext): Unit = store
+  def updateStateContext(ctx: ErgoStateContext): Try[Unit] = store
     .insert(Seq(StateContextKey -> ctx.bytes))
 
   /**
@@ -84,7 +115,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     * Update address used by the wallet for change outputs
     * @param address - new changed address
     */
-  def updateChangeAddress(address: P2PKAddress): Unit = {
+  def updateChangeAddress(address: P2PKAddress): Try[Unit] = {
     val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
     store.insert(Seq(ChangeAddressKey -> bytes))
   }
@@ -109,10 +140,10 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
   def addScan(scanReq: ScanRequest): Try[Scan] = {
     val id = ScanId @@ (lastUsedScanId + 1).toShort
     scanReq.toScan(id).flatMap { app =>
-      Try(store.insert(Seq(
+      store.insert(Seq(
         scanPrefixKey(id) -> ScanSerializer.toBytes(app),
         lastUsedScanIdKey -> Shorts.toByteArray(id)
-      ))).map(_ => app)
+      )).map(_ => app)
     }
   }
 
@@ -120,7 +151,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     * Remove an scan from the database
     * @param id scan identifier
     */
-  def removeScan(id: Short): Unit =
+  def removeScan(id: Short): Try[Unit] =
     store.remove(Seq(scanPrefixKey(id)))
 
   /**
@@ -190,7 +221,8 @@ object WalletStorage {
   val BiggestPossibleScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
 
   def scanPrefixKey(scanId: Short): Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(scanId)
-  def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = PublicKeyPrefixArray ++ pk.path.bytes
+  def pubKeyPrefixKey(path: DerivationPath): Array[Byte] = PublicKeyPrefixArray ++ path.bytes
+  def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = pubKeyPrefixKey(pk.path)
 
 
   // public keys space to iterate over all of them

@@ -2,13 +2,17 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.header.HeaderSerializer
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
+import scorex.core.ModifierTypeId
 import scorex.core.consensus.History.ProgressInfo
 
 class VerifyNonADHistorySpecification extends HistoryTestHelpers {
+  import ToDownloadProcessor._
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
@@ -112,16 +116,20 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header).tail))
 
     val missedChain = chain.tail.toList
-    val missedBS = missedChain.flatMap(fb => Seq((BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId),
-      (Extension.modifierTypeId, fb.extension.encodedId)))
+    val missedBS = missedChain.flatMap { fb =>
+      Seq((BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId), (Extension.modifierTypeId, fb.extension.encodedId))
+    }.foldLeft(Map.empty[ModifierTypeId, Seq[String]]) { case (newAcc, (mType, mId)) =>
+      newAcc.adjust(mType)(_.fold(Seq(mId))(_ :+ mId))
+    }
 
-    history.nextModifiersToDownload(1, id => !history.contains(id)).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS.take(1)
+    history.nextModifiersToDownload(1, id => !history.contains(id))
+      .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS.mapValues(_.take(1)).view.force
 
     history.nextModifiersToDownload(2 * (BlocksToKeep - 1), id => !history.contains(id))
-      .map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS
+      .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS
 
     history.nextModifiersToDownload(2, id => !history.contains(id) && (id != missedChain.head.blockTransactions.id))
-      .map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS.tail.take(2)
+      .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS.mapValues(_.take(2).filter( _ != missedChain.head.blockTransactions.id)).view.force
   }
 
   property("append header as genesis") {
@@ -187,8 +195,6 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
       history.bestHeaderOpt.value shouldBe header
 
       history.bestFullBlockOpt.value shouldBe startFullBlock
-
-      history.openSurfaceIds().head shouldBe startFullBlock.header.id
 
       history = history.append(txs).get._1
       history = history.append(extension).get._1

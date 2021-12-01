@@ -5,6 +5,7 @@ import org.ergoplatform.wallet.utils.{Generators, FileUtils}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import org.ergoplatform.wallet.interface4j.SecretString
 
 class JsonSecretStorageSpec
   extends AnyPropSpec
@@ -17,11 +18,11 @@ class JsonSecretStorageSpec
     forAll(entropyGen, passwordGen, encryptionSettingsGen) { (seed, pass, cryptoSettings) =>
       val dir = createTempDir
       val settings = SecretStorageSettings(dir.getAbsolutePath, cryptoSettings)
-      val storage = JsonSecretStorage.init(seed, pass)(settings)
+      val storage = JsonSecretStorage.init(seed, SecretString.create(pass))(settings)
 
       storage.isLocked shouldBe true
 
-      val unlockTry = storage.unlock(pass)
+      val unlockTry = storage.unlock(SecretString.create(pass))
 
       unlockTry shouldBe 'success
 
@@ -33,9 +34,9 @@ class JsonSecretStorageSpec
     forAll(entropyGen, passwordGen, encryptionSettingsGen) { (seed, pass, cryptoSettings) =>
       val dir = createTempDir
       val settings = SecretStorageSettings(dir.getAbsolutePath, cryptoSettings)
-      val storage = JsonSecretStorage.init(seed, pass)(settings)
+      val storage = JsonSecretStorage.init(seed, SecretString.create(pass))(settings)
 
-      storage.unlock(pass)
+      storage.unlock(SecretString.create(pass))
 
       val secret = storage.secret
 

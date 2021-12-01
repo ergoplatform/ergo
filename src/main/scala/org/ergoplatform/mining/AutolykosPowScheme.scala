@@ -6,11 +6,12 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
+import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer, HeaderWithoutPow}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
-import scorex.core.block.Block
-import scorex.core.block.Block.{Timestamp, Version}
+import org.ergoplatform.modifiers.history.header.Header.{Timestamp, Version}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
@@ -36,8 +37,8 @@ import scala.util.Try
   */
 class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
-  assert(k <= 32, "k > 32 is not allowed due to genIndexes function")
-  assert(n < 31, "n >= 31 is not allowed")
+  require(k <= 32, "k > 32 is not allowed due to genIndexes function")
+  require(n < 31, "n >= 31 is not allowed")
 
   //Consensus-critical code below
 
@@ -170,7 +171,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     // sum as byte array is always about 32 bytes
     val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32, f2.underlying())
-    toBigInt(hash(array))
+    val ha = hash(array)
+    toBigInt(ha)
   }
 
   /**
@@ -221,10 +223,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Generate element of Autolykos equation.
     */
-  private def genElement(version: Block.Version,
+  private def genElement(version: Header.Version,
                          m: Array[Byte],
-                         pk: Array[Byte],  // not used in v2
-                         w: Array[Byte],   // not used in v2
+                         pk: Array[Byte], // not used in v2
+                         w: Array[Byte], // not used in v2
                          indexBytes: Array[Byte],
                          heightBytes: => Array[Byte] // not used in v1
                         ): BigInt = {
@@ -244,7 +246,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * correct solution of the Autolykos PoW puzzle.
     */
   def prove(parentOpt: Option[Header],
-            version: Block.Version,
+            version: Header.Version,
             nBits: Long,
             stateRoot: ADDigest,
             adProofsRoot: Digest32,
@@ -272,7 +274,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * correct solution of the Autolykos PoW puzzle.
     */
   def proveBlock(parentOpt: Option[Header],
-                 version: Block.Version,
+                 version: Header.Version,
                  nBits: Long,
                  stateRoot: ADDigest,
                  adProofBytes: SerializedAdProof,
@@ -323,7 +325,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
-  private[mining] def checkNonces(version: Block.Version,
+  private[mining] def checkNonces(version: Header.Version,
                                   h: Array[Byte],
                                   m: Array[Byte],
                                   sk: BigInt,
@@ -340,7 +342,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     def loop(i: Long): Option[AutolykosSolution] = if (i == endNonce) {
       None
     } else {
-      if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
+      if (i % 1000000 == 0 && i > 0) println(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
       val seed = if(version == 1) {
         Bytes.concat(m, nonce)
@@ -383,7 +385,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   def deriveExternalCandidate(blockCandidate: CandidateBlock,
                               pk: ProveDlog,
                               mandatoryTxIds: Seq[ModifierId]): WorkMessage = {
-    val headerCandidate = ErgoMiner.deriveUnprovenHeader(blockCandidate)
+    val headerCandidate = CandidateGenerator.deriveUnprovenHeader(blockCandidate)
     val msg = msgByHeader(headerCandidate)
     val b = getB(blockCandidate.nBits)
     val hOpt = if (blockCandidate.version == 1) {

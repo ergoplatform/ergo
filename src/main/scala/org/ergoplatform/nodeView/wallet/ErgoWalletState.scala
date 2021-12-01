@@ -13,6 +13,8 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import scorex.util.ScorexLogging
 
+import scala.util.Try
+
 case class ErgoWalletState(
     storage: WalletStorage,
     secretStorageOpt: Option[JsonSecretStorage],
@@ -20,10 +22,11 @@ case class ErgoWalletState(
     offChainRegistry: OffChainRegistry,
     outputsFilter: Option[BloomFilter[Array[Byte]]], // Bloom filter for boxes not being spent to the moment
     walletVars: WalletVars,
-    stateReaderOpt: Option[ErgoStateReader], //todo: temporary 3.2.x collection and readers
+    stateReaderOpt: Option[ErgoStateReader],
     mempoolReaderOpt: Option[ErgoMemPoolReader],
     utxoStateReaderOpt: Option[UtxoStateReader],
-    parameters: Parameters
+    parameters: Parameters,
+    error: Option[String] = None
   ) extends ScorexLogging {
 
   /**
@@ -76,12 +79,13 @@ case class ErgoWalletState(
     */
   def fullHeight: Int = stateContext.currentHeight
 
-  def getChangeAddress(implicit addrEncoder: ErgoAddressEncoder): Option[P2PKAddress] = walletVars.proverOpt.map { prover =>
-    storage.readChangeAddress
-      .getOrElse {
-        log.info("Change address not specified. Using root address from wallet.")
+  def getChangeAddress(implicit addrEncoder: ErgoAddressEncoder): Option[P2PKAddress] = {
+    walletVars.proverOpt.map { prover =>
+      storage.readChangeAddress.getOrElse {
+        log.debug("Change address not specified. Using root address from wallet.")
         P2PKAddress(prover.hdPubKeys.head.key)
       }
+    }
   }
 
   // Read a box from UTXO set if the node has it, otherwise, from the wallet
@@ -129,22 +133,23 @@ object ErgoWalletState {
     */
   val noWalletFilter: FilterFn = (_: TrackedBox) => true
 
-  def initial(ergoSettings: ErgoSettings): ErgoWalletState = {
-    val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)(ergoSettings.addressEncoder)
-    val registry = WalletRegistry.apply(ergoSettings)
-    val offChainRegistry = OffChainRegistry.init(registry)
-    val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
-    ErgoWalletState(
-      ergoStorage,
-      secretStorageOpt = None,
-      registry,
-      offChainRegistry,
-      outputsFilter = None,
-      walletVars,
-      stateReaderOpt = None,
-      mempoolReaderOpt = None,
-      utxoStateReaderOpt = None,
-      LaunchParameters
-    )
+  def initial(ergoSettings: ErgoSettings): Try[ErgoWalletState] = {
+    WalletRegistry.apply(ergoSettings).map { registry =>
+      val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)(ergoSettings.addressEncoder)
+      val offChainRegistry = OffChainRegistry.init(registry)
+      val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
+      ErgoWalletState(
+        ergoStorage,
+        secretStorageOpt = None,
+        registry,
+        offChainRegistry,
+        outputsFilter = None,
+        walletVars,
+        stateReaderOpt = None,
+        mempoolReaderOpt = None,
+        utxoStateReaderOpt = None,
+        LaunchParameters
+      )
+    }
   }
 }

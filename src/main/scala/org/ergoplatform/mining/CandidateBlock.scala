@@ -2,20 +2,19 @@ package org.ergoplatform.mining
 
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.Algos
-import scorex.core.block.Block
-import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 
 case class CandidateBlock(parentOpt: Option[Header],
-                          version: Block.Version,
+                          version: Header.Version,
                           nBits: Long,
                           stateRoot: ADDigest,
                           adProofBytes: SerializedAdProof,
                           transactions: Seq[ErgoTransaction],
-                          timestamp: Timestamp,
+                          timestamp: Header.Timestamp,
                           extension: ExtensionCandidate,
                           votes: Array[Byte]) {
 

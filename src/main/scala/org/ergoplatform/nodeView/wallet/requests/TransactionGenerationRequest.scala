@@ -26,10 +26,15 @@ class TransactionRequestDecoder(settings: ErgoSettings) extends Decoder[Transact
   val assetIssueRequestDecoder: AssetIssueRequestDecoder = new AssetIssueRequestDecoder(settings)
 
   def apply(cursor: HCursor): Decoder.Result[TransactionGenerationRequest] = {
-    Seq(paymentRequestDecoder, assetIssueRequestDecoder)
-      .map(_.apply(cursor))
-      .find(_.isRight)
-      .getOrElse(Left(DecodingFailure("Can not find suitable decoder", cursor.history)))
+    val paymentRequestDecoderResult = paymentRequestDecoder.apply(cursor)
+    val assetIssueRequestDecoderResult = assetIssueRequestDecoder.apply(cursor)
+    if(paymentRequestDecoderResult.isLeft && assetIssueRequestDecoderResult.isLeft) {
+      paymentRequestDecoderResult
+    } else {
+      Seq(paymentRequestDecoderResult,assetIssueRequestDecoderResult)
+        .find(_.isRight)
+        .get
+    }
   }
 
 }

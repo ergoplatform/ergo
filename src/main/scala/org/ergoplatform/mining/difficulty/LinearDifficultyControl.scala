@@ -1,6 +1,6 @@
 package org.ergoplatform.mining.difficulty
 
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, Height}
 import org.ergoplatform.settings.ChainSettings
 import scorex.util.ScorexLogging
@@ -36,6 +36,7 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
   @SuppressWarnings(Array("TraversableHead"))
   def calculate(previousHeaders: Seq[Header]): Difficulty = {
     require(previousHeaders.nonEmpty, "PreviousHeaders should always contain at least 1 element")
+
     val uncompressedDiff = {
       if (previousHeaders.lengthCompare(1) == 0 || previousHeaders.head.timestamp >= previousHeaders.last.timestamp) {
         previousHeaders.head.requiredDifficulty

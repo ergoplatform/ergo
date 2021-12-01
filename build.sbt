@@ -26,37 +26,62 @@ lazy val commonSettings = Seq(
   homepage := Some(url("http://ergoplatform.org/")),
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),
   publishTo := sonatypePublishToBundle.value,
+  scmInfo := Some(
+      ScmInfo(
+          url("https://github.com/ergoplatform/ergo"),
+          "scm:git@github.com:ergoplatform/ergo.git"
+      )
+  ),
 )
 
 val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
-val akkaHttpVersion = "10.2.1"
+val akkaHttpVersion = "10.2.4"
 
-val scorexVersion = "master-7d7d9bb7-SNAPSHOT"
 val sigmaStateVersion = "4.0.3"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 val effectiveSigma = "org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion
 
+val apiDependencies = Seq(
+  "io.circe" %% "circe-core" % circeVersion,
+  "io.circe" %% "circe-generic" % circeVersion,
+  "io.circe" %% "circe-parser" % circeVersion,
+  "de.heikoseeberger" %% "akka-http-circe" % "1.20.0"
+)
+
 libraryDependencies ++= Seq(
   effectiveSigma.force()
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
 
+  // network dependencies 
+  "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+  "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
+  "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
+  "com.typesafe.akka" %% "akka-parsing" % akkaHttpVersion,
+  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+  "org.bitlet" % "weupnp" % "0.1.4",
+  "commons-net" % "commons-net" % "3.6",
+  
+  // api dependencies 
+  "io.circe" %% "circe-core" % circeVersion,
+  "io.circe" %% "circe-generic" % circeVersion,
+  "io.circe" %% "circe-parser" % circeVersion,
+  "de.heikoseeberger" %% "akka-http-circe" % "1.20.0",
+  
   "org.ethereum" % "leveldbjni-all" % "1.18.3",
   //the following pure-java leveldb implementation is needed only on specific platforms, such as 32-bit Raspberry Pi
   //in future, it could be reasonable to have special builds with this Java db only, and for most of platforms use
   //jni wrapper over native library included in leveldbjni-all
   "org.iq80.leveldb" % "leveldb" % "0.12",
   
-  ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
-  
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "com.iheart" %% "ficus" % "1.4.7",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
-  "com.joefkelley" %% "argyle" % "1.0.0",
+  "com.github.scopt" %% "scopt" % "4.0.1",
 
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
@@ -64,7 +89,6 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.1.1" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
-  "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
 
   "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
   "io.circe" %% "circe-core" % circeVersion,
@@ -107,7 +131,7 @@ val opts = Seq(
 
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
-scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
+scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
@@ -139,6 +163,7 @@ assemblyMergeStrategy in assembly := {
 
 enablePlugins(sbtdocker.DockerPlugin)
 enablePlugins(JavaAppPackaging)
+enablePlugins(ReproducibleBuildsPlugin)
 
 mappings in Universal += {
   val sampleFile = (resourceDirectory in Compile).value / "samples" / "local.conf.sample"
@@ -249,9 +274,8 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
     scalacOptions in(Compile, compile) ++= (if(scalaBinaryVersion.value == "2.11")
         Seq.empty
       else
-        Seq("-release", "8") 
-      ) 
-  
+        Seq("-release", "8")
+      ),
   )
 
 lazy val It2Test = config("it2") extend (IntegrationTest, Test)
@@ -295,35 +319,6 @@ credentials ++= (for {
   password <- Option(System.getenv().get("SONATYPE_PASSWORD"))
 } yield Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)).toSeq
 
-enablePlugins(GitVersioning)
-
-version in ThisBuild := {
-  if (git.gitCurrentTags.value.nonEmpty) {
-    git.gitDescribedVersion.value.get
-  } else {
-    if (git.gitHeadCommit.value.contains(git.gitCurrentBranch.value)) {
-      // see https://docs.travis-ci.com/user/environment-variables/#default-environment-variables
-      if (Try(sys.env("TRAVIS")).getOrElse("false") == "true") {
-        // pull request number, "false" if not a pull request
-        if (Try(sys.env("TRAVIS_PULL_REQUEST")).getOrElse("false") != "false") {
-          // build is triggered by a pull request
-          val prBranchName = Try(sys.env("TRAVIS_PULL_REQUEST_BRANCH")).get
-          val prHeadCommitSha = Try(sys.env("TRAVIS_PULL_REQUEST_SHA")).get
-          prBranchName + "-" + prHeadCommitSha.take(8) + "-SNAPSHOT"
-        } else {
-          // build is triggered by a push
-          val branchName = Try(sys.env("TRAVIS_BRANCH")).get
-          branchName + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
-        }
-      } else {
-        git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
-      }
-    } else {
-      git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.getOrElse("").take(8) + "-SNAPSHOT"
-    }
-  }
-}
-
 def javacReleaseOption = {
   if (System.getProperty("java.version").startsWith("1.")) 
     // java <9 "--release" is not supported
@@ -331,3 +326,8 @@ def javacReleaseOption = {
   else
     Seq("--release", "8")
 }
+
+// prefix version with "-SNAPSHOT" for builds without a git tag
+dynverSonatypeSnapshots in ThisBuild := true
+// use "-" instead of default "+"
+dynverSeparator in ThisBuild := "-"

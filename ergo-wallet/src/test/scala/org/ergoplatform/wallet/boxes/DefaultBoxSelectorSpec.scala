@@ -1,18 +1,22 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.wallet.Constants.PaymentsScanId
-import org.ergoplatform.{ErgoLikeTransaction, ErgoBox}
-import scorex.crypto.hash.{Digest32, Blake2b256}
+import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.SigmaConstants.MaxBoxSize
+import org.ergoplatform.wallet.Constants.{MaxAssetsPerBox, PaymentsScanId}
+import org.ergoplatform.ErgoLikeTransaction
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
 import sigmastate.helpers.TestingHelpers._
-import scorex.util.{idToBytes, bytesToId}
+import scorex.util.{bytesToId, idToBytes}
 import org.scalatest.EitherValues
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughErgsError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughTokensError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsForChangeBoxesError
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
+
+import scala.util.Random
 
 class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {
   import DefaultBoxSelector.select
@@ -186,4 +190,32 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1)).left.value shouldBe a [NotEnoughCoinsForChangeBoxesError]
   }
 
+  property("Size of a box with MaxAssetsPerBox tokens should not cross MaxBoxSize") {
+    val tokens = (0 until MaxAssetsPerBox).map { _ =>
+      (Digest32 @@ scorex.util.Random.randomBytes(TokenId.size), Random.nextInt(100000000).toLong)
+    }
+    val box = testBox(1 * MinBoxValue, TrueLeaf, StartHeight, tokens)
+    assert(box.bytes.length <= MaxBoxSize.value)
+  }
+
+  property("Select boxes such that change boxes are grouped by MaxAssetsPerBox") {
+    def genTokens(count: Int) =
+      (0 until count).map { i => Digest32 @@ idToBytes(bytesToId(Blake2b256(i.toString))) -> i.toLong }
+
+    // make selection such that '2 * MaxAssetsPerBox + 1' tokens generates exactly 2 change boxes with MaxAssetsPerBox tokens
+    val box1 = testBox(3 * MinBoxValue, TrueLeaf, StartHeight, genTokens(2 * MaxAssetsPerBox + 1))
+    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
+    val s1 = select(Iterator(uBox1), noFilter, 1 * MinBoxValue, Map(bytesToId(Blake2b256("1")) -> 1))
+    s1 shouldBe 'right
+    s1.right.get.changeBoxes.size shouldBe 2
+    s1.right.get.changeBoxes.forall(_.tokens.size == MaxAssetsPerBox) shouldBe true
+
+    // make selection such that '2 * MaxAssetsPerBox + 2' tokens generates 3 change boxes, one with just a single token
+    val box2 = testBox(4 * MinBoxValue, TrueLeaf, StartHeight, genTokens(2 * MaxAssetsPerBox + 2))
+    val uBox2 = TrackedBox(parentTx, 0, Some(100), box2, Set(PaymentsScanId))
+    val s2 = select(Iterator(uBox2), noFilter, 1 * MinBoxValue, Map(bytesToId(Blake2b256("1")) -> 1))
+    s2 shouldBe 'right
+    s2.right.get.changeBoxes.size shouldBe 3
+    s2.right.get.changeBoxes.exists(_.tokens.size == 1) shouldBe true
+  }
 }

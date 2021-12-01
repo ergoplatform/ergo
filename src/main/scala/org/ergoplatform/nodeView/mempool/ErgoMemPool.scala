@@ -31,8 +31,6 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
 
-  override type NVCT = ErgoMemPool
-
   override def size: Int = pool.size
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = pool.get(modifierId)
@@ -117,14 +115,14 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
           case utxo: UtxoState =>
             // Allow proceeded transaction to spend outputs of pooled transactions.
             utxo.withTransactions(getAll).validate(tx).fold(
-              new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(_),
+              ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
               _ => acceptIfNoDoubleSpend(tx)
             )
-          case validator: TransactionValidation[ErgoTransaction@unchecked] =>
+          case validator: TransactionValidation =>
             // transaction validation currently works only for UtxoState, so this branch currently
             // will not be triggered probably
             validator.validate(tx).fold(
-              new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(_),
+              ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
               _ => acceptIfNoDoubleSpend(tx)
             )
           case _ =>
@@ -227,10 +225,6 @@ object ErgoMemPool {
     case class Invalidated(e: Throwable) extends ProcessingOutcome
 
   }
-
-  type MemPoolRequest = Seq[ModifierId]
-
-  type MemPoolResponse = Seq[ErgoTransaction]
 
   /**
     * Create empty mempool

@@ -7,14 +7,13 @@ import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
@@ -38,24 +37,21 @@ import scala.util.Try
   * transformations of UTXO set presented in form of authenticated dynamic dictionary are needed to check validity of
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
-trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
-  extends MinimalState[ErgoPersistentModifier, IState] with ErgoStateReader {
+trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   self: IState =>
 
+  def applyModifier(mod: ErgoPersistentModifier): Try[IState]
 
-  def closeStorage(): Unit = {
-    log.warn("Closing state's store.")
-    store.close()
-  }
-
-  override def applyModifier(mod: ErgoPersistentModifier): Try[IState]
-
-  override def rollbackTo(version: VersionTag): Try[IState]
+  def rollbackTo(version: VersionTag): Try[IState]
 
   def rollbackVersions: Iterable[VersionTag]
 
-  override type NVCT = this.type
+  /**
+    * @return read-only copy of this state
+    */
+  def getReader: ErgoStateReader = this
+
 }
 
 object ErgoState extends ScorexLogging {
@@ -67,8 +63,8 @@ object ErgoState extends ScorexLogging {
   /**
     * @param txs - sequence of transactions
     * @return ordered sequence of operations on UTXO set from this sequence of transactions
-    *         if some box was created and later spend in this sequence - it is not included in the result at all
-    *         if box was first spend and created after that - it is in both toInsert and toRemove
+    *         if some box was created and later spent in this sequence - it is not included in the result at all
+    *         if box was first spent and created after that - it is in both toInsert and toRemove
     */
   def stateChanges(txs: Seq[ErgoTransaction]): StateChanges = {
     val (toRemove, toInsert) = boxChanges(txs)
@@ -147,14 +143,20 @@ object ErgoState extends ScorexLogging {
     (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }
 
-  private def createBox(value: Long,
+  /**
+    * Helper method used to construct boxes for pre-genesis state (state before a genesis block)
+    */
+  private def createGenesisBox(value: Long,
                         ergoTree: ErgoTree,
-                        creationHeight: Int,
-                        additionalTokens: Seq[(TokenId, Long)] = Nil,
-                        additionalRegisters: AdditionalRegisters = Map.empty,
-                        transactionId: ModifierId = ErgoBox.allZerosModifierId,
-                        boxIndex: Short = 0): ErgoBox = {
+                        additionalTokens: Seq[(TokenId, Long)] = Seq.empty,
+                        additionalRegisters: AdditionalRegisters = Map.empty): ErgoBox = {
     import sigmastate.eval._
+
+    val creationHeight: Int = ErgoHistory.EmptyHistoryHeight
+
+    val transactionId: ModifierId = ErgoBox.allZerosModifierId
+    val boxIndex: Short = 0: Short
+
     new ErgoBox(value, ergoTree,
       CostingSigmaDslBuilder.Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
       additionalRegisters,
@@ -175,7 +177,7 @@ object ErgoState extends ScorexLogging {
     val protectionBytes = ValueSerializer.serialize(protection)
     val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
     val prop = ErgoScriptPredef.foundationScript(settings.monetary)
-    createBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> ByteArrayConstant(protectionBytes)))
+    createGenesisBox(value, prop, Seq.empty, Map(R4 -> ByteArrayConstant(protectionBytes)))
   }
 
   /**
@@ -185,7 +187,7 @@ object ErgoState extends ScorexLogging {
   private def genesisEmissionBox(chainSettings: ChainSettings): ErgoBox = {
     val value = chainSettings.emissionRules.minersCoinsTotal
     val prop = chainSettings.monetary.emissionBoxProposition
-    createBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
+    createGenesisBox(value, prop)
   }
 
   /**
@@ -195,7 +197,7 @@ object ErgoState extends ScorexLogging {
   private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
     val proofsBytes = chainSettings.noPremineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
     val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
-    createBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
+    createGenesisBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, Seq.empty, proofs)
   }
 
   /**

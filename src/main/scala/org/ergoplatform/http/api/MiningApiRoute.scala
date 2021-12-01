@@ -5,7 +5,8 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
-import org.ergoplatform.mining.{AutolykosSolution, ErgoMiner, WorkMessage}
+import org.ergoplatform.mining.CandidateGenerator.Candidate
+import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
@@ -36,8 +37,8 @@ case class MiningApiRoute(miner: ActorRef,
     * Get block candidate. Useful for external miners.
     */
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
-    val prepareCmd = ErgoMiner.PrepareCandidate(Seq.empty)
-    val candidateF = (miner ? prepareCmd).mapTo[Future[WorkMessage]].flatten
+    val prepareCmd = CandidateGenerator.GenerateCandidate(Seq.empty, reply = true)
+    val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
     ApiResponse(candidateF)
   }
 
@@ -48,14 +49,14 @@ case class MiningApiRoute(miner: ActorRef,
   def candidateWithTxsR: Route = (path("candidateWithTxs")
     & post & entity(as[Seq[ErgoTransaction]]) & withAuth) { txs =>
 
-    val prepareCmd = ErgoMiner.PrepareCandidate(txs)
-    val candidateF = (miner ? prepareCmd).mapTo[Future[WorkMessage]].flatten
+    val prepareCmd = CandidateGenerator.GenerateCandidate(txs, reply = true)
+    val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
     ApiResponse(candidateF)
   }
 
   def solutionR: Route = (path("solution") & post & entity(as[AutolykosSolution])) { solution =>
     val result = if (ergoSettings.nodeSettings.useExternalMiner) {
-      (miner ? solution).mapTo[Future[Unit]].flatten
+      miner.askWithStatus(solution).mapTo[Unit]
     } else {
       Future.failed(new Exception("External miner support is inactive"))
     }
@@ -63,18 +64,19 @@ case class MiningApiRoute(miner: ActorRef,
   }
 
   def rewardAddressR: Route = (path("rewardAddress") & get) {
-    val addressF = (miner ? ErgoMiner.ReadMinerPk).mapTo[Option[ProveDlog]]
-      .flatMap {
-        _.fold[Future[ErgoAddress]](Future.failed(new Exception("Miner PK not initialized")))(pk => {
+    val addressF: Future[ErgoAddress] =
+      miner.askWithStatus(ErgoMiner.ReadMinerPk)
+        .mapTo[ProveDlog]
+        .map { pk =>
           val script = ErgoScriptPredef.rewardOutputScript(ergoSettings.chainSettings.monetary.minerRewardDelay, pk)
-          Future.successful(Pay2SAddress(script)(ergoSettings.addressEncoder))
-        })
-      }
+          Pay2SAddress(script)(ergoSettings.addressEncoder)
+        }
+
     ApiResponse(addressF.map(address => Json.obj("rewardAddress" -> address.asJson)))
   }
 
   def rewardPublicKeyR: Route = (path("rewardPublicKey") & get) {
-    val pkF = (miner ? ErgoMiner.ReadMinerPk).mapTo[Option[ProveDlog]]
+    val pkF = miner.askWithStatus(ErgoMiner.ReadMinerPk).mapTo[ProveDlog]
     ApiResponse(pkF.map(pk => Json.obj("rewardPubkey" -> pk.asJson)))
   }
 

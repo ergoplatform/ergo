@@ -6,8 +6,9 @@ import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform._
 import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.PoPowAlgos._
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -23,7 +24,8 @@ import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.ProverResult
 import sigmastate.helpers.TestingHelpers._
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
 
 
@@ -190,7 +192,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     var us2 = createUtxoState(BoxHolder(Seq(genesisEmissionBox)))
     val stateReader = us2.getReader.asInstanceOf[UtxoState]
     // parallel thread that generates proofs
-    Future {
+    val f = Future {
       (0 until 1000) foreach { _ =>
         Try {
           val boxes = stateReader.randomBox().toSeq
@@ -203,6 +205,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     chain.foreach { fb =>
       us2 = us2.applyModifier(fb).get
     }
+    Await.result(f, Duration.Inf);
   }
 
   property("proofsForTransactions() to be deterministic") {
@@ -462,9 +465,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     }
   }
 
-
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {
-    interlinksToExtension(popowAlgos.updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)
+    popowAlgos.interlinksToExtension(popowAlgos.updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)
   }
 
 }

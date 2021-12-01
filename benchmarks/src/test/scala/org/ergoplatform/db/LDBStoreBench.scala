@@ -4,12 +4,12 @@ import com.google.common.primitives.Longs
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
+import org.ergoplatform.wallet.utils.TestFileUtils
 import org.iq80.leveldb.Options
 import org.scalameter.KeyValue
 import org.scalameter.api.{Bench, Gen, _}
 import org.scalameter.picklers.Implicits._
 import scorex.crypto.hash.Digest32
-import scorex.testkit.utils.FileUtils
 import scorex.util.idToBytes
 import scorex.db.LDBFactory.factory
 import scorex.db.{LDBKVStore, LDBVersionedStore}
@@ -19,7 +19,7 @@ import scala.util.Random
 object LDBStoreBench
   extends Bench.ForkedTime
     with ErgoTransactionGenerators
-    with FileUtils {
+    with TestFileUtils {
 
   private val options = new Options()
   options.createIfMissing(true)
@@ -39,7 +39,7 @@ object LDBStoreBench
   val txsWithDbGen: Gen[(Seq[BlockTransactions], LDBKVStore)] = txsGen.map { bts =>
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLDB()
-    toInsert.grouped(5).foreach(db.insert)
+    toInsert.grouped(5).foreach(db.insert(_).get)
     bts -> storeLDB
   }
 
@@ -55,7 +55,7 @@ object LDBStoreBench
   private def benchWriteLDB(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLDB()
-    toInsert.grouped(5).foreach(db.insert)
+    toInsert.grouped(5).foreach(db.insert(_).get)
   }
 
   private def benchReadLDB(bts: Seq[BlockTransactions], db: LDBKVStore): Unit = {
@@ -65,13 +65,13 @@ object LDBStoreBench
   private def benchWriteLVDB(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLVDB()
-    db.update(randomVersion, List.empty, toInsert)
+    db.update(randomVersion, List.empty, toInsert).get
   }
 
   private def benchWriteReadLVDB(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLVDB()
-    db.update(randomVersion, List.empty, toInsert)
+    db.update(randomVersion, List.empty, toInsert).get
     bts.foreach { bt => db.get(idToBytes(bt.headerId)) }
   }
 

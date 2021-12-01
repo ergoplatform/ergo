@@ -13,8 +13,6 @@ import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen
 import sigmastate.Values.ByteArrayConstant
 
-import scala.collection.mutable
-
 trait WalletGenerators extends ErgoTransactionGenerators with Generators {
 
   override def trackedBoxGen: Gen[TrackedBox] = {

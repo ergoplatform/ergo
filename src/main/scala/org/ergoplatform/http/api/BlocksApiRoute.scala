@@ -24,11 +24,12 @@ import scala.concurrent.Future
 case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
+  // Limit for requests returning headers, to avoid too heavy requests
+  private val MaxHeaders = 16384
+
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   val blocksPaging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 1, "limit".as[Int] ? 50)
-
-  val maxHeaders = 16384
 
   override val route: Route = pathPrefix("blocks") {
     getBlocksR ~
@@ -112,8 +113,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       BadRequest("offset is negative")
     } else if(limit < 0) {
       BadRequest("limit is negative")
-    } else if(limit > maxHeaders) {
-      BadRequest(s"No more than $maxHeaders can be requested")
+    } else if(limit > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders headers can be requested")
     } else {
       ApiResponse(getHeaderIds(offset, limit))
     }
@@ -137,8 +138,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   def getChainSliceR: Route = (pathPrefix("chainSlice") & chainPagination) { (fromHeight, toHeight) =>
     if(toHeight < fromHeight) {
       BadRequest("toHeight < fromHeight")
-    } else if(fromHeight - toHeight > maxHeaders) {
-      BadRequest(s"No more than $maxHeaders can be requested")
+    } else if(fromHeight - toHeight > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders headers can be requested")
     } else {
       ApiResponse(getChainSlice(fromHeight, toHeight))
     }
@@ -153,8 +154,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   }
 
   def getLastHeadersR: Route = (pathPrefix("lastHeaders" / IntNumber) & get) { count =>
-    if(count > maxHeaders) {
-      BadRequest(s"No more than $maxHeaders can be requested")
+    if(count > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders headers can be requested")
     } else {
       ApiResponse(getLastHeaders(count))
     }

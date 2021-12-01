@@ -106,7 +106,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     }
 
   private val chainPagination: Directive[(Int, Int)] =
-    parameters("fromHeight".as[Int] ? 0, "toHeight".as[Int] ? -1)
+    parameters("fromHeight".as[Int] ? 1, "toHeight".as[Int] ? MaxHeaders)
 
   def getBlocksR: Route = (pathEndOrSingleSlash & get & blocksPaging) { (offset, limit) =>
     if (offset < 0) {

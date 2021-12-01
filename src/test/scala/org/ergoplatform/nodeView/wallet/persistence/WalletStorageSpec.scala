@@ -62,7 +62,7 @@ class WalletStorageSpec
         externalScanReqs.foreach(req => storage.addScan(req))
         val storageApps = storage.allScans
         val storageRequests = storageApps.map { app =>
-          ScanRequest(app.scanName, app.trackingRule, Some(ScanWalletInteraction.Off), Some(false))
+          ScanRequest(app.scanName, app.trackingRule, Some(ScanWalletInteraction.Off), Some(true))
         }
         storageRequests.foreach(r => externalScanReqs.contains(r) shouldBe true)
         storageApps.map(_.scanId).foreach(storage.removeScan(_).get)

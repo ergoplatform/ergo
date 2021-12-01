@@ -39,15 +39,24 @@ case class OffChainRegistry(height: Int,
   /**
     * Update on receiving new off-chain transaction.
     */
-  def updateOnTransaction(newBoxes: Seq[TrackedBox], spentIds: Seq[EncodedBoxId], scans: Seq[Scan]): OffChainRegistry = {
-    val unspentCertain = offChainBoxes.flatMap{x: TrackedBox =>
+  def updateOnTransaction(newBoxes: Seq[TrackedBox],
+                          spentIds: Seq[EncodedBoxId],
+                          scans: Seq[Scan]): OffChainRegistry = {
+    val unspentCertain = offChainBoxes.flatMap { x: TrackedBox =>
       val spent = spentIds.contains(x.boxId)
-
-      if(x.scans.size > 1 || (x.scans.size == 1 && x.scans.head > Constants.PaymentsScanId)) {
-        val leave = scans.exists(s => x.scans.contains(s.scanId) && !s.removeOffchain)
-        if(leave) Some(x) else None
+      if (spent) {
+        if (x.scans.size > 1 || (x.scans.size == 1 && x.scans.head > Constants.PaymentsScanId)) {
+          val leave = scans.exists(s => x.scans.contains(s.scanId) && !s.removeOffchain)
+          if (leave) {
+            Some(x)
+          } else {
+            None
+          }
+        } else {
+          None
+        }
       } else {
-        if(spent) None else Some(x)
+        Some(x)
       }
     } ++ newBoxes
     val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIds.contains(x.id))

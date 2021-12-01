@@ -1,12 +1,16 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, Scan, ScanWalletInteraction}
 import org.ergoplatform.utils.WalletTestOps
 import org.ergoplatform.utils.generators.WalletGenerators
+import org.ergoplatform.wallet.Constants
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import sigmastate.Values.ByteArrayConstant
 
 import scala.util.Random
 
@@ -22,7 +26,7 @@ class OffChainRegistrySpec
 
   //registry.updateOnTransaction is called when offchain transaction comes
   it should "calculate indexes correctly on offchain transaction" in {
-  forAll(Gen.listOf(trackedBoxGen)) { boxes =>
+    forAll(Gen.listOf(trackedBoxGen)) { boxes =>
       //apply transaction outputs to empty offchain registry
       var registry = OffChainRegistry.empty.updateOnTransaction(boxes, Seq.empty, Seq.empty)
       val balance = balanceAmount(boxes.map(_.box))
@@ -34,6 +38,31 @@ class OffChainRegistrySpec
       registry = registry.updateOnTransaction(Seq.empty, boxes.map(EncodedBoxId @@ _.boxId), Seq.empty)
       registry.digest.walletBalance shouldEqual 0
       registry.digest.walletAssetBalances shouldEqual Seq.empty
+
+
+      //check remove-offchain flag
+      boxes.filter(_.scans.size > 1).flatMap(_.scans).find(_ != Constants.PaymentsScanId).map { scanId =>
+        val trueProp = org.ergoplatform.settings.Constants.TrueLeaf
+        val p = EqualsScanningPredicate(ErgoBox.R1, ByteArrayConstant(trueProp.bytes))
+        val scan = Scan(scanId, "_", p, ScanWalletInteraction.Off, removeOffchain = false)
+        val filtered = boxes.filter(tb => tb.scans.contains(scanId))
+
+        val fbalance = balanceAmount(filtered.map(_.box))
+        val fassetsBalance = assetAmount(filtered.map(_.box))
+
+        registry = registry.updateOnTransaction(filtered, Seq.empty, Seq.empty)
+        registry.digest.walletBalance shouldEqual fbalance
+        registry.digest.walletAssetBalances.toMap shouldEqual fassetsBalance.toMap
+
+        registry = registry.updateOnTransaction(Seq.empty, filtered.map(EncodedBoxId @@ _.boxId), Seq(scan))
+        registry.digest.walletBalance shouldEqual fbalance
+        registry.digest.walletAssetBalances.toMap shouldEqual fassetsBalance.toMap
+
+        val scan2 = Scan(scanId, "_", p, ScanWalletInteraction.Off, removeOffchain = true)
+        registry = registry.updateOnTransaction(Seq.empty, filtered.map(EncodedBoxId @@ _.boxId), Seq(scan2))
+        registry.digest.walletBalance shouldEqual 0
+        registry.digest.walletAssetBalances shouldEqual Seq.empty
+      }
     }
   }
 
@@ -57,5 +86,6 @@ class OffChainRegistrySpec
       registry2.digest.walletAssetBalances.toMap shouldEqual assetsBalance.toMap
     }
   }
+
 
 }

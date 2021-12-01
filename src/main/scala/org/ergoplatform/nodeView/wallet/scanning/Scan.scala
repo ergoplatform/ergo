@@ -19,6 +19,8 @@ import scala.util.{Failure, Success, Try}
   * @param scanName       - scan description (255 bytes in UTF-8 encoding max)
   * @param trackingRule  - a predicate to scan the blockchain for specific scan-related boxes
   * @param walletInteraction - a flag which is prescribing how the scan is interacting with the p2pk-wallet
+  * @param removeOffchain - a flag which prescribing whether box spent offchain should be removed from unspent boxes,
+  *                        see https://github.com/ergoplatform/ergo/issues/1314 , true by default
   */
 case class Scan(scanId: ScanId,
                 scanName: String,
@@ -81,6 +83,7 @@ object ScanSerializer extends ScorexSerializer[Scan] {
   * @param scanName       - scan description (255 bytes in UTF-8 encoding max)
   * @param trackingRule  - a predicate to scan the blockchain for specific scan-related boxes
   * @param walletInteraction - how scan should interact with (p2pk) wallet, see @ScanWalletInteraction for details
+  * @param removeOffchain - a flag which prescribing whether box spent offchain should be removed from unspent boxes
   *
   */
 case class ScanRequest(scanName: String,

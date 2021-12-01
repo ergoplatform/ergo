@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.16"
+  version: "4.0.17"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -2799,7 +2799,7 @@ paths:
 
   /peers/status:
     get:
-      summary: Get last incomming message timestamp and current network time
+      summary: Get last incoming message timestamp and current network time
       operationId: getPeersStatus
       tags:
         - peers

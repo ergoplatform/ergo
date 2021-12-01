@@ -14,6 +14,7 @@ import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequest
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoWalletServiceImpl}
 import org.ergoplatform.settings.{Args, ErgoSettings, LaunchParameters}
 import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.scalatest.wordspec.AsyncWordSpec
@@ -69,7 +70,7 @@ class WalletSpec extends AsyncWordSpec with IntegrationSuite with WalletTestOps 
 
   "it should generate unsigned transaction" in {
     import sigmastate.eval._
-    val mnemonic = walletAutoInitConfig.getString("ergo.wallet.testMnemonic")
+    val mnemonic = SecretString.create(walletAutoInitConfig.getString("ergo.wallet.testMnemonic"))
     val prover = new ErgoWalletServiceImpl().buildProverFromMnemonic(mnemonic, None, LaunchParameters)
     val pk = prover.hdPubKeys.head.key
     val ergoTree = ErgoTree.fromProposition(TrueLeaf)

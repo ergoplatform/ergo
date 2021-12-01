@@ -44,7 +44,7 @@ object TransactionBuilder {
     require(outputCandidates.size <= Short.MaxValue,
       s"too many outputCandidates - ${outputCandidates.size} (max ${Short.MaxValue})")
     require(outputCandidates.forall(_.value >= 0), s"outputCandidate.value must be >= 0")
-    val outputSumTry = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
+    val outputSumTry = Try(outputCandidates.map(_.value).reduce(java7.compat.Math.addExact(_, _)))
     require(outputSumTry.isSuccess, s"Sum of transaction output values should not exceed ${Long.MaxValue}")
     require(inputs.distinct.size == inputs.size, s"There should be no duplicate inputs")
   }

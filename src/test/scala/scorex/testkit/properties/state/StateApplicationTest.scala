@@ -1,13 +1,12 @@
 package scorex.testkit.properties.state
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.nodeView.state.DigestState
+import org.ergoplatform.nodeView.state.{DigestState, ErgoState}
 import org.scalacheck.Gen
-import scorex.core.transaction.state.MinimalState
-
 import scala.collection.mutable.ListBuffer
 
-trait StateApplicationTest[ST <: MinimalState[ST]] extends StateTests[ST] {
+
+trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
 
   lazy val stateGenWithValidModifier: Gen[(ST, ErgoPersistentModifier)] = {
     stateGen.map { s => (s, semanticallyValidModifier(s)) }

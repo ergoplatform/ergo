@@ -13,6 +13,7 @@ import org.ergoplatform.wallet.TokensMap
 import scala.util.{Success, Try}
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.utils.WalletTestHelpers
@@ -27,7 +28,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
   )
 
   val seedStr                       = "edge talent poet tortoise trumpet dose"
-  val seed: Array[Byte]             = Mnemonic.toSeed(seedStr)
+  val seed: Array[Byte]             = Mnemonic.toSeed(SecretString.create(seedStr))
   val rootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(seed)
 
   val currentHeight    = 0

@@ -3,6 +3,7 @@ package org.ergoplatform.wallet.secrets
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -30,7 +31,7 @@ class DerivationPathSpec
     val mnemonic = "liar exercise solve delay betray sheriff method empower disease river recall vacuum"
     val address = "9hAymcGaRfTX7bMADNdfWfk7CKzi2ZpvRBCmtEf6d92n8E26Ax7"
 
-    val seed = Mnemonic.toSeed(mnemonic, None)
+    val seed = Mnemonic.toSeed(SecretString.create(mnemonic), None)
 
     val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
     val dp = DerivationPath.nextPath(IndexedSeq(masterKey), usePreEip3Derivation = false).get
@@ -66,7 +67,7 @@ class DerivationPathSpec
     val mnemonic = "liar exercise solve delay betray sheriff method empower disease river recall vacuum"
     val address = "9h7f11AC9RMHkhFbXg46XfYHq3HNnb1A9UtMmMYo6hAuQzWxVWu"
 
-    val seed = Mnemonic.toSeed(mnemonic, None)
+    val seed = Mnemonic.toSeed(SecretString.create(mnemonic), None)
 
     val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
     val dp = DerivationPath.nextPath(IndexedSeq(masterKey), usePreEip3Derivation = true).get
@@ -103,7 +104,7 @@ class DerivationPathSpec
     val mnemonic = "liar exercise solve delay betray sheriff method empower disease river recall vacuum"
     val address = "9hXkYAHd1hWDroNMA3w9t6st2QyS3aTVe5w6GwWPKK5q4SmpUDL"
 
-    val seed = Mnemonic.toSeed(mnemonic, None)
+    val seed = Mnemonic.toSeed(SecretString.create(mnemonic), None)
 
     val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
     P2PKAddress(masterKey.publicKey.key).toString() shouldBe address

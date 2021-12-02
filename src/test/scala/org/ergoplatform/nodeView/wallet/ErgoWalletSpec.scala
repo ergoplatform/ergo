@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
@@ -75,7 +75,6 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           (req2, tx2)
         }
       log.info(s"Generated transaction $tx2")
-      wallet.scanOffchain(tx2)
 
       eventually {
         tx2.inputs.size should be < tx.outputs.size
@@ -226,7 +225,6 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
 
       val balance1 = Random.nextInt(1000) + 1
       val box1 = IndexedSeq(new ErgoBoxCandidate(balance1, pubKey, startHeight, randomNewAsset.toColl))
-      wallet.scanOffchain(ErgoTransaction(fakeInputs, box1))
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second, 100.millis)
       eventually {
@@ -237,7 +235,6 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
 
       val balance2 = Random.nextInt(1000) + 1
       val box2 = IndexedSeq(new ErgoBoxCandidate(balance2, pubKey, startHeight, randomNewAsset.toColl))
-      wallet.scanOffchain(ErgoTransaction(fakeInputs, IndexedSeq(), box2))
 
       eventually {
         val bs2 = getBalancesWithUnconfirmed
@@ -251,12 +248,11 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
     withFixture { implicit w =>
       val address = getPublicKeys.head
       val tx = makeGenesisTx(address.pubkey, randomNewAsset)
-      wallet.scanOffchain(tx)
       val boxesToSpend = boxesAvailable(tx, address.pubkey)
       val balanceToSpend = balanceAmount(boxesToSpend)
       log.info(s"Balance to spent: $balanceToSpend")
       implicit val patienceConfig: PatienceConfig = PatienceConfig(offchainScanTime(tx).millis, 100.millis)
-      val (spendingTx, balanceToReturn, assetsAfterSpending) =
+      val (_, balanceToReturn, assetsAfterSpending) =
         eventually {
           val totalBalance = getBalancesWithUnconfirmed.walletBalance
           totalBalance shouldEqual balanceToSpend
@@ -267,7 +263,6 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           assetsAfterSpending should not be empty
           (spendingTx, balanceToReturn, assetsAfterSpending)
         }
-      wallet.scanOffchain(spendingTx)
       eventually {
         val totalAfterSpending = getBalancesWithUnconfirmed
 
@@ -282,11 +277,10 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
     withFixture { implicit w =>
       val address = getPublicKeys.head
       val tx = makeGenesisTx(address.pubkey, randomNewAsset)
-      wallet.scanOffchain(tx)
       val boxesToSpend = boxesAvailable(tx, address.pubkey)
       val balanceToSpend = balanceAmount(boxesToSpend)
       implicit val patienceConfig: PatienceConfig = PatienceConfig((offchainScanTime(tx) * 3).millis, 100.millis)
-      val (spendingTx, totalBalance, balanceToReturn, assets) =
+      val (_, totalBalance, balanceToReturn, assets) =
         eventually {
           val totalBalance = getBalancesWithUnconfirmed.walletBalance
 
@@ -297,8 +291,6 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           assets should not be empty
           (spendingTx, totalBalance, balanceToReturn, assets)
         }
-      wallet.scanOffchain(Seq(spendingTx, spendingTx))
-      wallet.scanOffchain(spendingTx)
 
       log.info(s"Total with unconfirmed balance: $totalBalance")
       log.info(s"Balance to spent: $balanceToSpend")
@@ -322,7 +314,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
       val balanceToReturn = randomLong(sumBalance)
       applyBlock(genesisBlock) shouldBe 'success
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
-      val (spendingTx, assets) =
+      val (_, assets) =
         eventually {
           val totalBalance = getBalancesWithUnconfirmed.walletBalance
           val confirmedBalance = getConfirmedBalances.walletBalance
@@ -336,7 +328,6 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           log.info(s"Total with unconfirmed balance before spending: $totalBalance")
           (spendingTx, assets)
         }
-      wallet.scanOffchain(spendingTx)
       eventually {
         val confirmedAfterSpending = getConfirmedBalances.walletBalance
         val totalAfterSpending = getBalancesWithUnconfirmed
@@ -477,7 +468,6 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
     withFixture { implicit w =>
       val pubKey = getPublicKeys.head.pubkey
       val tx = makeGenesisTx(pubKey, randomNewAsset)
-      wallet.scanOffchain(tx)
       implicit val patienceConfig: PatienceConfig = PatienceConfig(offchainScanTime(tx).millis, 100.millis)
       val (initialBalance, sumBalance, sumAssets) =
         eventually {
@@ -539,8 +529,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         }
 
       val balanceToReturn = randomLong(balanceAmount(boxesToSpend))
-      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
-      wallet.scanOffchain(spendingTx)
+      // val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
 
       eventually {
         val confirmedAfterSpending = getConfirmedBalances.walletBalance

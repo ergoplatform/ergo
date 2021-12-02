@@ -2,14 +2,17 @@ package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
 import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
+import org.ergoplatform.nodeView.wallet.persistence.WalletRegistry
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.scalacheck.Gen
+import scorex.util.ModifierId
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, FalseLeaf, TrueLeaf}
 
 import scala.util.Random
@@ -105,115 +108,127 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
     }
   }
 
+  class FakeMempool(txs: Seq[ErgoTransaction]) extends ErgoMemPoolReader {
+
+    override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = ???
+
+    override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ???
+
+    override def size: Int = ???
+
+    override def weightedTransactionIds(limit: Int): Seq[OrderedTxPool.WeightedTxId] = ???
+
+    override def getAll: Seq[ErgoTransaction] = ???
+
+    override def getAllPrioritized: Seq[ErgoTransaction] = txs
+
+    override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
+
+    override def spentInputs: Iterator[BoxId] = txs.flatMap(_.inputs).map(_.boxId).toIterator
+
+    override def getRecommendedFee(expectedWaitTimeMinutes: Int, txSize: Int) : Long = 0
+
+    override def getExpectedWaitTime(txFee: Long, txSize: Int): Long = 0
+
+  }
+
   property("scanBlockTransactions") {
-    withVersionedStore(10) { store =>
-      val walletVars = walletVarsGen.sample.get
-      val emptyReg = new WalletRegistry(store)(settings.walletSettings)
-      val emptyOff = OffChainRegistry.empty
-      val blockId = modIdGen.sample.get
+    forAll(trackedTransactionGen) { trackedTransaction =>
+      withVersionedStore(10) { store =>
 
-      val height0 = 5
-      //simplest case - we're scanning an empty block
-      val (r0, o0, f0) =
-        scanBlockTransactions(emptyReg, emptyOff, walletVars, height0, blockId, Seq.empty, None).get
-      val r0digest = r0.fetchDigest()
-      r0digest.walletBalance shouldBe 0
-      r0digest.walletAssetBalances.size shouldBe 0
-      r0digest.height shouldBe height0
+        def state(txs: Seq[ErgoTransaction]) =
+          ErgoWalletState.initial(settings).get
+            .copy(registry = new WalletRegistry(store)(settings.walletSettings), mempoolReaderOpt = Some(new FakeMempool(txs)))
 
-      val o0digest = o0.digest
-      o0digest.walletBalance shouldBe 0
-      o0digest.walletAssetBalances.size shouldBe 0
-      o0digest.height shouldBe height0
+        val walletVars = walletVarsGen.sample.get
+        val blockId = modIdGen.sample.get
+        val s1 = state(Seq.empty)
 
-      var registry = r0
-      var off = o0
+        //simplest case - we're scanning an empty block
+        val (r0, _) =
+          scanBlockTransactions(s1.registry, walletVars, s1.getWalletHeight, blockId, Seq.empty, None).get
+        val r0digest = r0.fetchDigest()
+        r0digest.walletBalance shouldBe 0
+        r0digest.walletAssetBalances.size shouldBe 0
+        r0digest.height shouldBe 0
 
-      forAll(trackedTransactionGen) { trackedTransaction =>
+        val o0digest = s1.getWalletDigest
+        o0digest.walletBalance shouldBe 0
+        o0digest.walletAssetBalances.size shouldBe 0
+        o0digest.height shouldBe 0
+
         //applying one transaction creating boxes
         val creatingTx = trackedTransaction.tx
         val txs = Seq(creatingTx)
-        val height1 = 5
+        val s2 = state(txs)
 
-        val regDigestBefore = registry.fetchDigest().walletBalance
-        val offDigestBefore = off.digest.walletBalance
+        val offDigestBefore = s2.getWalletDigest.walletBalance
+        val regDigestBefore = s2.registry.fetchDigest().walletBalance
 
-        val (r1, o1, f1) =
-          scanBlockTransactions(registry, off, walletVars, height1, blockId, txs, Some(f0)).get
+        val (r1, f1) =
+          scanBlockTransactions(s2.registry, walletVars, s2.getWalletHeight, blockId, txs, None).get
         val r1digest = r1.fetchDigest()
-        r1digest.walletBalance shouldBe (regDigestBefore + trackedTransaction.paymentValues.sum)
+        r1digest.walletBalance shouldBe (offDigestBefore + trackedTransaction.paymentValues.sum)
         r1digest.walletAssetBalances.size shouldBe 0
-        r1digest.height shouldBe height1
+        r1digest.height shouldBe 0
 
-        val o1digest = o1.digest
+        val o1digest = s2.getWalletDigest
         o1digest.walletBalance shouldBe (offDigestBefore + trackedTransaction.paymentValues.sum)
         o1digest.walletAssetBalances.size shouldBe 0
-        o1digest.height shouldBe height1
-
-        registry = r1
-        off = o1
+        o1digest.height shouldBe 0
 
         //applying a transaction spending outputs of previous transaction and creating new one with the same outputs
         val tx = trackedTransaction.tx
         val inputs = tx.outputs.map(_.id).map(id => Input(id, emptyProverResult))
         val spendingTx = ErgoTransaction(inputs, IndexedSeq.empty, tx.outputCandidates)
 
-        val (r2, o2, f2) =
-          scanBlockTransactions(registry, off, walletVars, height1 + 1, blockId, Seq(spendingTx), Some(f1)).get
+        val (r2, f2) =
+          scanBlockTransactions(r1, walletVars, s2.getWalletHeight + 1, blockId, Seq(spendingTx), Some(f1)).get
 
         val r2digest = r2.fetchDigest()
         r2digest.walletBalance shouldBe (regDigestBefore + trackedTransaction.paymentValues.sum)
         r2digest.walletAssetBalances.size shouldBe 0
-        r2digest.height shouldBe height1 + 1
+        r2digest.height shouldBe 1
 
-        val o2digest = o2.digest
+        val o2digest = s2.getWalletDigest
         o2digest.walletBalance shouldBe (offDigestBefore + trackedTransaction.paymentValues.sum)
         o2digest.walletAssetBalances.size shouldBe 0
-        o2digest.height shouldBe height1 + 1
-
-        registry = r2
-        off = o2
+        o2digest.height shouldBe 0 // stateContext is updated elsewhere
 
         //applying a transaction spending outputs of the previous transaction
         val inputs2 = spendingTx.outputs.map(_.id).map(id => Input(id, emptyProverResult))
-        val outputs2 = IndexedSeq(new ErgoBoxCandidate(spendingTx.outputs.map(_.value).sum, FalseLeaf.toSigmaProp, height1))
+        val outputs2 = IndexedSeq(new ErgoBoxCandidate(spendingTx.outputs.map(_.value).sum, FalseLeaf.toSigmaProp, s2.getWalletHeight))
         val spendingTx2 = new ErgoTransaction(inputs2, IndexedSeq.empty, outputs2)
 
-        val (r3, o3, f3) =
-          scanBlockTransactions(registry, off, walletVars, height1 + 2, blockId, Seq(spendingTx2), Some(f2)).get
+        val (r3, f3) =
+          scanBlockTransactions(r2, walletVars, s2.getWalletHeight + 2, blockId, Seq(spendingTx2), Some(f2)).get
 
         val r3digest = r3.fetchDigest()
         r3digest.walletBalance shouldBe regDigestBefore
         r3digest.walletAssetBalances.size shouldBe 0
-        r3digest.height shouldBe height1 + 2
+        r3digest.height shouldBe 3
 
-        val o3digest = o3.digest
+        val o3digest = s2.getWalletDigest
         o3digest.walletBalance shouldBe offDigestBefore
         o3digest.walletAssetBalances.size shouldBe 0
-        o3digest.height shouldBe height1 + 2
-
-        registry = r3
-        off = o3
+        o3digest.height shouldBe 0 // stateContext is updated elsewhere
 
         //applying all the three previous transactions
         val threeTxs = Seq(creatingTx, spendingTx, spendingTx2)
 
-        val (r4, o4, _) =
-          scanBlockTransactions(registry, off, walletVars, height1 + 3, blockId, threeTxs, Some(f3)).get
+        val (r4, _) =
+          scanBlockTransactions(r3, walletVars, s2.getWalletHeight + 3, blockId, threeTxs, Some(f3)).get
 
         val r4digest = r4.fetchDigest()
         r4digest.walletBalance shouldBe regDigestBefore
         r4digest.walletAssetBalances.size shouldBe 0
-        r4digest.height shouldBe height1 + 3
+        r4digest.height shouldBe 6
         r4.walletUnspentBoxes() shouldBe Seq.empty
 
-        val o4digest = o4.digest
+        val o4digest = s2.getWalletDigest
         o4digest.walletBalance shouldBe offDigestBefore
         o4digest.walletAssetBalances.size shouldBe 0
-        o4digest.height shouldBe height1 + 3
-
-        registry = r4
-        off = o4
+        o4digest.height shouldBe 0 // stateContext is updated elsewhere
       }
     }
   }

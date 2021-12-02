@@ -4,12 +4,11 @@ import com.google.common.hash.BloomFilter
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
+import org.ergoplatform.nodeView.wallet.persistence.WalletRegistry
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanWalletInteraction}
 import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
-import scorex.util.{ModifierId, ScorexLogging}
-import scorex.util.bytesToId
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
 import scala.collection.mutable
 import scala.util.Try
@@ -40,21 +39,18 @@ object WalletScanLogic extends ScorexLogging {
                          relatedTransactions: Seq[WalletTransaction])
 
   def scanBlockTransactions(registry: WalletRegistry,
-                            offChainRegistry: OffChainRegistry,
                             walletVars: WalletVars,
                             block: ErgoFullBlock,
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
-                           ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
+                           ): Try[(WalletRegistry, BloomFilter[Array[Byte]])] = {
     scanBlockTransactions(
-      registry, offChainRegistry, walletVars,
-      block.height, block.id, block.transactions, cachedOutputsFilter)
+      registry, walletVars, block.height, block.id, block.transactions, cachedOutputsFilter)
   }
 
   /**
     * Updates wallet database by scanning and processing block transactions.
     *
     * @param registry            - versioned wallet database which is tracking on-chain state
-    * @param offChainRegistry    - in-memory snapshot of current state, including off-chain transactions
     * @param walletVars          - current wallet state
     * @param height              - block height
     * @param blockId             - block id
@@ -63,13 +59,12 @@ object WalletScanLogic extends ScorexLogging {
     * @return updated wallet database, offchain snapshot and the Bloom filter for wallet outputs
     */
   def scanBlockTransactions(registry: WalletRegistry,
-                            offChainRegistry: OffChainRegistry,
                             walletVars: WalletVars,
                             height: Int,
                             blockId: ModifierId,
                             transactions: Seq[ErgoTransaction],
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
-                           ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
+                           ): Try[(WalletRegistry, BloomFilter[Array[Byte]])] = {
 
     // Take unspent wallet outputs Bloom Filter from cache
     // or recreate it from unspent outputs stored in the database
@@ -162,15 +157,10 @@ object WalletScanLogic extends ScorexLogging {
       }
     }
 
-    // function effects: updating registry and offchainRegistry datasets
+    // function effects: updating registry dataset
     registry.updateOnBlock(scanRes, blockId, height)
       .map { _ =>
-        //data needed to update the offchain-registry
-        val walletUnspent = registry.walletUnspentBoxes()
-        val newOnChainIds = scanRes.outputs.map(x => encodedBoxId(x.box.id))
-        val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
-
-        (registry, updatedOffchainRegistry, outputsFilter)
+        (registry, outputsFilter)
       }
   }
 

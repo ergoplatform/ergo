@@ -5,7 +5,7 @@ import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
@@ -41,7 +41,6 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
       new WalletStorage(store, settings),
       secretStorageOpt = Option.empty,
       new WalletRegistry(versionedStore)(settings.walletSettings),
-      OffChainRegistry.empty,
       outputsFilter = Option.empty,
       WalletVars(Some(defaultProver), Seq.empty, None),
       stateReaderOpt = Option.empty,

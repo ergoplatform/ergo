@@ -7,19 +7,20 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
+import org.ergoplatform.nodeView.wallet.persistence.{Balance, WalletDigest, WalletRegistry, WalletStorage}
 import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import scorex.util.ScorexLogging
 
+import scala.collection.mutable
 import scala.util.Try
 
 case class ErgoWalletState(
     storage: WalletStorage,
     secretStorageOpt: Option[JsonSecretStorage],
     registry: WalletRegistry,
-    offChainRegistry: OffChainRegistry,
     outputsFilter: Option[BloomFilter[Array[Byte]]], // Bloom filter for boxes not being spent to the moment
     walletVars: WalletVars,
     stateReaderOpt: Option[ErgoStateReader],
@@ -36,7 +37,7 @@ case class ErgoWalletState(
     */
   val walletFilter: FilterFn = (trackedBox: TrackedBox) => {
     val preStatus = if (trackedBox.chainStatus.onChain) {
-      offChainRegistry.onChainBalances.exists(_.id == trackedBox.boxId)
+      getOffChainBoxesAndOnChainBalances._2.exists(_.id == trackedBox.boxId)
     } else {
       true
     }
@@ -79,6 +80,31 @@ case class ErgoWalletState(
     */
   def fullHeight: Int = stateContext.currentHeight
 
+  def getOffChainBoxesAndOnChainBalances: (Seq[TrackedBox], Seq[Balance]) =
+    mempoolReaderOpt.map { mempoolReader =>
+      mempoolReader
+        .getAllPrioritized
+        .foldLeft(Seq.empty[TrackedBox] -> registry.walletUnspentBoxes().map(Balance.apply)) { case ((offChainBoxesAcc, onChainBalancesAcc), tx) =>
+          val newBoxes = WalletScanLogic.extractWalletOutputs(tx, None, walletVars)
+          val spentIds = WalletScanLogic.extractInputBoxes(tx)
+          val newOffChainBoxes = offChainBoxesAcc.filterNot(x => spentIds.contains(x.boxId)) ++ newBoxes
+          val newOnChainBalances = onChainBalancesAcc.filterNot(x => spentIds.contains(x.id))
+          newOffChainBoxes -> newOnChainBalances
+        }
+    }.getOrElse(throw new IllegalStateException("MempoolReader not initialized"))
+
+  def getWalletDigest: WalletDigest = {
+    val (offChainBoxesAcc, onChainBalancesAcc) = getOffChainBoxesAndOnChainBalances
+    val offChainBalances = offChainBoxesAcc.map(Balance.apply)
+    val balance = offChainBalances.map(_.value).sum + onChainBalancesAcc.map(_.value).sum
+    val tokensBalance = (offChainBalances ++ onChainBalancesAcc)
+      .flatMap(_.assets)
+      .foldLeft(mutable.LinkedHashMap.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+        acc += id -> (acc.getOrElse(id, 0L) + amt)
+      }
+    WalletDigest(fullHeight, balance, tokensBalance.toSeq)
+  }
+
   def getChangeAddress(implicit addrEncoder: ErgoAddressEncoder): Option[P2PKAddress] = {
     walletVars.proverOpt.map { prover =>
       storage.readChangeAddress.getOrElse {
@@ -119,7 +145,7 @@ case class ErgoWalletState(
     */
   def getBoxesToSpend: Seq[TrackedBox] = {
     require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
-    (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
+    (registry.walletUnspentBoxes() ++ getOffChainBoxesAndOnChainBalances._1).distinct
   }
 
 }
@@ -136,13 +162,11 @@ object ErgoWalletState {
   def initial(ergoSettings: ErgoSettings): Try[ErgoWalletState] = {
     WalletRegistry.apply(ergoSettings).map { registry =>
       val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)(ergoSettings.addressEncoder)
-      val offChainRegistry = OffChainRegistry.init(registry)
       val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
       ErgoWalletState(
         ergoStorage,
         secretStorageOpt = None,
         registry,
-        offChainRegistry,
         outputsFilter = None,
         walletVars,
         stateReaderOpt = None,

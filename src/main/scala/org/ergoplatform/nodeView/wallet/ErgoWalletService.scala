@@ -359,7 +359,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
       val confirmed = state.registry.walletUnspentBoxes()
       if (considerUnconfirmed) {
         // We filter out spent boxes in the same way as wallet does when assembling a transaction
-        (confirmed ++ state.offChainRegistry.offChainBoxes).filter(state.walletFilter)
+        (confirmed ++ state.getOffChainBoxesAndOnChainBalances._1).filter(state.walletFilter)
       } else {
         confirmed
       }
@@ -367,7 +367,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
       val confirmed = state.registry.walletConfirmedBoxes()
       if (considerUnconfirmed) {
         // Just adding boxes created off-chain
-        confirmed ++ state.offChainRegistry.offChainBoxes
+        confirmed ++ state.getOffChainBoxesAndOnChainBalances._1
       } else {
         confirmed
       }
@@ -377,7 +377,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
 
   def getScanBoxes(state: ErgoWalletState, scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {
     val unconfirmed = if (considerUnconfirmed) {
-      state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
+      state.getOffChainBoxesAndOnChainBalances._1.filter(_.scans.contains(scanId))
     } else {
       Seq.empty
     }
@@ -522,8 +522,8 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     }
 
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState] =
-      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter)
-        .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
+      WalletScanLogic.scanBlockTransactions(state.registry, state.walletVars, block, state.outputsFilter)
+        .map { case (reg, updatedOutputsFilter) => state.copy(registry = reg, outputsFilter = Some(updatedOutputsFilter)) }
 
   def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

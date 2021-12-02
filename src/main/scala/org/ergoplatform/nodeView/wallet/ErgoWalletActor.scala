@@ -125,7 +125,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     /** READERS */
     case ReadBalances(chainStatus) =>
-      sender() ! (if (chainStatus.onChain) state.registry.fetchDigest() else state.offChainRegistry.digest)
+      sender() ! (if (chainStatus.onChain) state.registry.fetchDigest() else state.getWalletDigest)
 
     case ReadPublicKeys(from, until) =>
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)
@@ -190,12 +190,6 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     /** SCAN COMMANDS */
-    //scan mempool transaction
-    case ScanOffChain(tx) =>
-      val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars)
-      val inputs = WalletScanLogic.extractInputBoxes(tx)
-      val newState = state.copy(offChainRegistry = state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs))
-      context.become(loadedWallet(newState))
 
     case ScanInThePast(blockHeight) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
@@ -468,13 +462,6 @@ object ErgoWalletActor extends ScorexLogging {
 
 
   // Publicly available signals for the wallet actor
-
-  /**
-    * Command to scan offchain transaction
-    *
-    * @param tx - offchain transaction
-    */
-  final case class ScanOffChain(tx: ErgoTransaction)
 
   /**
     * Command to scan a block

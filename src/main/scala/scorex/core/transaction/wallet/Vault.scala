@@ -12,10 +12,6 @@ import scala.util.Try
 trait Vault[TX <: Transaction, PMOD <: PersistentNodeViewModifier, V <: Vault[TX, PMOD, V]] extends VaultReader {
   self: V =>
 
-  def scanOffchain(tx: TX): V
-
-  def scanOffchain(txs: Seq[TX]): V
-
   def scanPersistent(modifier: PMOD): V
 
   def scanPersistent(modifiers: Option[PMOD]): V = modifiers.foldLeft(this) { case (v, mod) =>

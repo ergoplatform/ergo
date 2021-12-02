@@ -31,16 +31,6 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   override val walletActor: ActorRef =
     ErgoWalletActor(settings, new ErgoWalletServiceImpl, boxSelector, historyReader)
 
-  override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
-    walletActor ! ScanOffChain(tx)
-    this
-  }
-
-  override def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = {
-    txs.foreach(tx => scanOffchain(tx))
-    this
-  }
-
   override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = {
     modifier match {
       case fb: ErgoFullBlock =>

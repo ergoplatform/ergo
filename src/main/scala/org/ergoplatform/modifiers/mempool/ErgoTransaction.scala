@@ -224,7 +224,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             case Failure(t) =>
               log.info(s"Tx $id verification failed: ${t.getMessage} : " , t)
               log.info(s"Tx $id verification context: " +
-                s"${JsonCodecsWrapper.ergoLikeContextEncoder.apply(ctx.stateContext)} " +
+                s"${JsonCodecsWrapper.ergoLikeContextEncoder.apply(ctx)} " +
                 s"input context: $inputContext " +
                 s"proof: $proof" +
                 s"messageToSign: $messageToSign")

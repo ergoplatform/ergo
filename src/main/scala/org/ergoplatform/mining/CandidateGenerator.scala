@@ -701,6 +701,7 @@ object CandidateGenerator extends ScorexLogging {
           if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
+            log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
             loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {
             val verifier: ErgoInterpreter = ErgoInterpreter(

@@ -91,7 +91,7 @@ case class ErgoWalletState(
           val newOnChainBalances = onChainBalancesAcc.filterNot(x => spentIds.contains(x.id))
           newOffChainBoxes -> newOnChainBalances
         }
-    }.getOrElse(throw new IllegalStateException("MempoolReader not initialized"))
+    }.getOrElse(Seq.empty -> Seq.empty)
 
   def getWalletDigest: WalletDigest = {
     val (offChainBoxesAcc, onChainBalancesAcc) = getOffChainBoxesAndOnChainBalances

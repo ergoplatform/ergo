@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, NewTransactions}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
@@ -50,6 +50,8 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
     nodeViewHolderRef ! LocallyGeneratedModifier(fullBlock.header)
     expectModificationOutcome(fullBlock.header).flatMap(_ => applyPayload(fullBlock, excludeExt))
   }
+
+  def applyTxs(txs: NewTransactions)(implicit ctx: Ctx): Unit = nodeViewHolderRef ! txs
 
   def applyPayload(fullBlock: ErgoFullBlock, excludeExt: Boolean = false)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()

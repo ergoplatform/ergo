@@ -27,10 +27,6 @@ trait MinimalState[MS <: MinimalState[MS]] extends StateReader {
 trait StateFeature
 
 trait TransactionValidation extends StateFeature {
-  def isValid(tx: ErgoTransaction): Boolean = validate(tx).isSuccess
-
-  def filterValid(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs.filter(isValid)
-
   def validate(tx: ErgoTransaction): Try[Unit]
 }
 

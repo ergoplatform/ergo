@@ -703,14 +703,15 @@ object CandidateGenerator extends ScorexLogging {
             //do these checks before validating the scripts to save time
             loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {
-            implicit val verifier: ErgoInterpreter = ErgoInterpreter(
+            val verifier: ErgoInterpreter = ErgoInterpreter(
               us.stateContext.currentParameters
             )
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
               tx,
               Some(upcomingContext),
-              maxTransactionComplexity
+              maxTransactionComplexity,
+              Some(verifier)
             ) match {
               case Success(costConsumed) =>
                 val newTxs   = acc :+ (tx -> costConsumed)
@@ -723,7 +724,7 @@ object CandidateGenerator extends ScorexLogging {
                     val boxesToSpend = feeTx.inputs.flatMap(i =>
                       newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
                     )
-                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
+                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
                       case Success(cost) =>
                         val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {

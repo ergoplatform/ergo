@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings}
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
 
 import scala.annotation.tailrec
@@ -24,7 +24,7 @@ import scala.util.Try
   *                 information about mempool's state and transactions in it.
   */
 class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val stats : MemPoolStatistics)(implicit settings: ErgoSettings)
-  extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
+  extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader with ScorexLogging {
 
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
@@ -116,10 +116,18 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
         state match {
           case utxo: UtxoState =>
             // Allow proceeded transaction to spend outputs of pooled transactions.
-            utxo.withTransactions(getAll).validate(tx).fold(
-              ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
-              _ => acceptIfNoDoubleSpend(tx)
-            )
+            if(tx.inputs.map(i => utxo.boxById(i.boxId)).length != tx.inputs.length) {
+              log.info(s"Transaction $tx spending non-existing inputs")
+              new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(new Exception(s"Transaction $tx spending non-existing inputs"))
+            } else {
+              utxo.withTransactions(getAll).validate(tx).fold(
+                ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
+                _ => {
+                  log.info(s"Transaction $tx with fee $fee is valid")
+                  acceptIfNoDoubleSpend(tx)
+                }
+              )
+            }
           case validator: TransactionValidation =>
             // transaction validation currently works only for UtxoState, so this branch currently
             // will not be triggered probably

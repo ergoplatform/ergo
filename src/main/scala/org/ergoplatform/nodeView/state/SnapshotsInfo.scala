@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.nodeView.state.UtxoState.ManifestId
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{ErgoAlgos, ErgoSettings}
 import org.ergoplatform.wallet.Constants
@@ -95,7 +95,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     store.get(id).flatMap(bs => serializer.manifestFromBytes(bs, Constants.ModifierIdLength).toOption)
   }
 
-  def readSubtreeBytes(id: ManifestId): Option[BatchAVLProverSubtree[Digest32]] = {
+  def readSubtreeBytes(id: SubtreeId): Option[BatchAVLProverSubtree[Digest32]] = {
     store.get(id).flatMap(bs => serializer.subtreeFromBytes(bs, Constants.ModifierIdLength).toOption)
   }
 }

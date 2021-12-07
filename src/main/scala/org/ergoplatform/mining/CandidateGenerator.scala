@@ -684,6 +684,8 @@ object CandidateGenerator extends ScorexLogging {
       s"Assembling a block candidate for block #$currentHeight from ${transactions.length} transactions available"
     )
 
+    val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
+
     @tailrec
     def loop(
       mempoolTxs: Iterable[ErgoTransaction],
@@ -704,9 +706,6 @@ object CandidateGenerator extends ScorexLogging {
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
             loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {
-            val verifier: ErgoInterpreter = ErgoInterpreter(
-              us.stateContext.currentParameters
-            )
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
               tx,

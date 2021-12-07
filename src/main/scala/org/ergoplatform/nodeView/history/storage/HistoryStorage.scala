@@ -75,13 +75,28 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
     }
   }
 
-  def remove(idsToRemove: Seq[ModifierId]): Try[Unit] =
-    objectsStore.remove(idsToRemove.map(idToBytes)).map { _ =>
-      idsToRemove.foreach { id =>
-        modifiersCache.invalidate(id)
+  /**
+    * Remove elements from stored indices and modifiers
+    *
+    * @param indicesToRemove - indices keys to remove
+    * @param idsToRemove - identifiers of modifiers to remove
+    * @return
+    */
+  def remove(indicesToRemove: Seq[ByteArrayWrapper],
+             idsToRemove: Seq[ModifierId]): Try[Unit] = {
+
+      objectsStore.remove(idsToRemove.map(idToBytes)).map { _ =>
+        idsToRemove.foreach { id =>
+          modifiersCache.invalidate(id)
+        }
+        indexStore.remove(indicesToRemove.map(_.data)).map { _ =>
+          idsToRemove.foreach { id =>
+            indexCache.invalidate(id)
+          }
+          ()
+        }
       }
-      ()
-    }
+  }
 
   override def close(): Unit = {
     log.warn("Closing history storage...")

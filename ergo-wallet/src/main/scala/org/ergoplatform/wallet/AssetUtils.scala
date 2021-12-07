@@ -10,7 +10,7 @@ object AssetUtils {
   def mergeAssetsMut(into: mutable.Map[ModifierId, Long], from: TokensMap*): Unit = {
     from.foreach(_.foreach {
       case (id, amount) =>
-        into.put(id, Math.addExact(into.getOrElse(id, 0L), amount))
+        into.put(id, java7.compat.Math.addExact(into.getOrElse(id, 0L), amount))
     })
   }
 
@@ -18,7 +18,7 @@ object AssetUtils {
   def mergeAssets(initialMap: TokensMap, maps: TokensMap*): TokensMap = {
     maps.foldLeft(initialMap) { case (to, map) =>
       map.foldLeft(to) { case (acc, (id, amount)) =>
-        acc.updated(id, Math.addExact(acc.getOrElse(id, 0L), amount))
+        acc.updated(id, java7.compat.Math.addExact(acc.getOrElse(id, 0L), amount))
       }
     }
   }

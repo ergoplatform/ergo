@@ -7,6 +7,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import scorex.core.validation.ModifierValidator
 import scorex.core.validation.ValidationResult.Invalid
 
@@ -48,7 +49,7 @@ object ValidationRules {
     txInputsUnique -> RuleStatus(s => fatal(s"There should be no duplicate inputs. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txAssetsInOneBox -> RuleStatus(s => fatal(s"A number of tokens within a box should not exceed ${ErgoTransaction.MaxAssetsPerBox}" +
+    txAssetsInOneBox -> RuleStatus(s => fatal(s"A number of tokens within a box should not exceed ${ErgoBoxAssetExtractor.MaxAssetsPerBox}" +
       s" and sum of assets of one type should not exceed ${Long.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),

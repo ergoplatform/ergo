@@ -7,8 +7,9 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, 
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestConstants}
+import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
+import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
@@ -25,9 +26,10 @@ import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
 import sigmastate.utxo.CostTable
 import sigmastate.helpers.TestingHelpers._
 
+import java.nio.ByteBuffer
 import scala.util.{Random, Try}
 
-class ErgoTransactionSpec extends ErgoPropertyTest {
+class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
@@ -352,7 +354,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         tx.outputs.size * LaunchParameters.outputCost +
         CostTable.interpreterInitCost
     val (outAssets, outAssetsNum) = tx.outAssetsTry.get
-    val (inAssets, inAssetsNum) = ErgoTransaction.extractAssets(from).get
+    val (inAssets, inAssetsNum) = ErgoBoxAssetExtractor.extractAssets(from).get
     val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * LaunchParameters.tokenAccessCost +
       (inAssets.size + outAssets.size) * LaunchParameters.tokenAccessCost
     val scriptsValidationCosts = tx.inputs.size * (CostTable.constCost + CostTable.logicCost + CostTable.logicCost + from.head.ergoTree.complexity)
@@ -408,11 +410,18 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
       val txCost = tx.statefulValidity(from, IndexedSeq(), emptyStateContext, accInitCost).get
 
-      val (inAssets, inAssetsNum): (Map[ByteArrayWrapper, Long], Int) = ErgoTransaction.extractAssets(from).get
-      val (outAssets, outAssetsNum): (Map[ByteArrayWrapper, Long], Int) = ErgoTransaction.extractAssets(tx.outputs).get
+      val (inAssets, inAssetsNum): (Map[ByteBuffer, Long], Int) = ErgoBoxAssetExtractor.extractAssets(from).get
+      val (outAssets, outAssetsNum): (Map[ByteBuffer, Long], Int) = ErgoBoxAssetExtractor.extractAssets(tx.outputs).get
 
       val assetsCost = inAssetsNum * tokenAccessCost + inAssets.size * tokenAccessCost +
         outAssetsNum * tokenAccessCost + outAssets.size * tokenAccessCost
+
+      val unsignedTx = UnsignedErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
+      val signerTxCost =
+        defaultProver.signInputs(unsignedTx, from, Vector.empty, emptyStateContext, TransactionHintsBag.empty).get._2
+
+      val signerTxCostWithInitCost = signerTxCost + accInitCost
+      signerTxCostWithInitCost shouldBe txCost // signer and verifier costs should be the same
 
       val initialCost: Long =
         tx.inputs.size * LaunchParameters.inputCost +

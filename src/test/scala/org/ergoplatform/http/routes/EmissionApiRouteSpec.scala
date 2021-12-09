@@ -2,13 +2,14 @@ package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.http.api.EmissionApiRoute
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.reemission.Reemission
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -26,23 +27,24 @@ class EmissionApiRouteSpec extends AnyFlatSpec
 
   val ergoSettings: ErgoSettings = ErgoSettings.read()
   val coinEmission: EmissionRules = ergoSettings.chainSettings.emissionRules
+  val coinReemission: Reemission = ergoSettings.chainSettings.reemission
 
   val route: Route = EmissionApiRoute(ergoSettings).route
 
   it should "get correct emission values" in {
     Get(prefix + "/1") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      EmissionApiRoute.emissionInfoAtHeight(1L, coinEmission).asJson shouldEqual responseAs[Json]
+      EmissionApiRoute.emissionInfoAtHeight(1L, coinEmission, coinReemission).asJson shouldEqual responseAs[Json]
     }
 
     Get(prefix + "/10000") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      EmissionApiRoute.emissionInfoAtHeight(10000L, coinEmission).asJson shouldEqual responseAs[Json]
+      EmissionApiRoute.emissionInfoAtHeight(10000L, coinEmission, coinReemission).asJson shouldEqual responseAs[Json]
     }
 
     Get(prefix + "/1000000") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      EmissionApiRoute.emissionInfoAtHeight(1000000L, coinEmission).asJson shouldEqual responseAs[Json]
+      EmissionApiRoute.emissionInfoAtHeight(1000000L, coinEmission, coinReemission).asJson shouldEqual responseAs[Json]
     }
   }
 

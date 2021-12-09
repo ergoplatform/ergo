@@ -4,6 +4,7 @@ import akka.actor.ActorRefFactory
 import akka.http.scaladsl.server.Route
 import io.circe.{Encoder, Json}
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.reemission.Reemission
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -15,31 +16,37 @@ case class EmissionApiRoute(ergoSettings: ErgoSettings)
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
+  private val emissionRules = ergoSettings.chainSettings.emissionRules
+
+  private val reemission = ergoSettings.chainSettings.reemission
+
   override def route: Route = pathPrefix("emission") {
     emissionAt
   }
 
   val emissionAt: Route = (pathPrefix("at" / LongNumber) & get) { height =>
-    ApiResponse(emissionInfoAtHeight(height, ergoSettings.chainSettings.emissionRules))
+    ApiResponse(emissionInfoAtHeight(height, emissionRules, reemission))
   }
 
 }
 
 object EmissionApiRoute {
 
-  def emissionInfoAtHeight(height: Long, emissionRules: EmissionRules): EmissionInfo = {
-    val minerReward = emissionRules.emissionAtHeight(height)
+  final case class EmissionInfo(minerReward: Long, totalCoinsIssued: Long, totalRemainCoins: Long, reemissionAmt: Long)
+
+  def emissionInfoAtHeight(height: Long, emissionRules: EmissionRules, reemission: Reemission): EmissionInfo = {
+    val reemissionAmt = reemission.reemissionForHeight(height.toInt)
+    val minerReward = emissionRules.emissionAtHeight(height) - reemissionAmt
     val totalCoinsIssued = emissionRules.issuedCoinsAfterHeight(height)
     val totalRemainCoins = emissionRules.coinsTotal - totalCoinsIssued
-    EmissionInfo(minerReward, totalCoinsIssued, totalRemainCoins)
+    EmissionInfo(minerReward, totalCoinsIssued, totalRemainCoins, reemissionAmt)
   }
-
-  final case class EmissionInfo(minerReward: Long, totalCoinsIssued: Long, totalRemainCoins: Long)
 
   implicit val encoder: Encoder[EmissionInfo] = (ei: EmissionInfo) => Json.obj(
     "minerReward" -> Json.fromLong(ei.minerReward),
     "totalCoinsIssued" -> Json.fromLong(ei.totalCoinsIssued),
-    "totalRemainCoins" -> Json.fromLong(ei.totalRemainCoins)
+    "totalRemainCoins" -> Json.fromLong(ei.totalRemainCoins),
+    "reemitted" -> Json.fromLong(ei.reemissionAmt)
   )
 
 }

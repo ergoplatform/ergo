@@ -25,6 +25,7 @@ import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
+import org.ergoplatform.reemission.Reemission
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -608,6 +609,8 @@ object CandidateGenerator extends ScorexLogging {
     emission: EmissionRules,
     assets: Coll[(TokenId, Long)] = Colls.emptyColl
   ): Seq[ErgoTransaction] = {
+    val reemission = new Reemission(emission.settings)
+    val reemissionTokenId = reemission.ReemissionTokenIdBinary
     val propositionBytes = emission.settings.feePropositionBytes
 
     val inputs = txs.flatMap(_.inputs)
@@ -623,10 +626,26 @@ object CandidateGenerator extends ScorexLogging {
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop           = emissionBox.ergoTree
       val emissionAmount = emission.minersRewardAtHeight(nextHeight)
+
+      val emissionBoxAssets = emissionBox.additionalTokens
+
+      val reemissionAmount = reemission.reemissionForHeight(nextHeight)
+
+      val updEmissionAssets = if(nextHeight >= reemission.ActivationHeight) {
+        val reemissionTokens = emissionBoxAssets.apply(1)._2
+        val updAmount = reemissionTokens - reemissionAmount
+        emissionBoxAssets.updated(1, reemissionTokenId -> updAmount)
+      } else {
+        emissionBoxAssets
+      }
+
       val newEmissionBox: ErgoBoxCandidate =
-        new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, nextHeight)
+        new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, nextHeight, updEmissionAssets)
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
 
+      if(nextHeight >= reemission.ActivationHeight) {
+        assets.append(Colls.fromItems(reemissionTokenId -> reemissionAmount))
+      }
       val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, nextHeight, assets)
 
       ErgoTransaction(

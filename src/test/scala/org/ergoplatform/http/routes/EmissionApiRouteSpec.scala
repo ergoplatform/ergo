@@ -25,7 +25,7 @@ class EmissionApiRouteSpec extends AnyFlatSpec
   implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
   val ergoSettings: ErgoSettings = ErgoSettings.read()
-  val coinEmission: EmissionRules = new EmissionRules(ergoSettings.chainSettings.monetary)
+  val coinEmission: EmissionRules = ergoSettings.chainSettings.emissionRules
 
   val route: Route = EmissionApiRoute(ergoSettings).route
 

@@ -206,9 +206,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def verifyReemission(boxesToSpend: IndexedSeq[ErgoBox],
                        outputCandidates: Seq[ErgoBoxCandidate],
                        stateContext: ErgoStateContext): Try[Unit] = Try {
-    // reemission logic below
-    import Reemission._
+    val reemission = stateContext.ergoSettings.chainSettings.reemission
+    val ReemissionTokenId = reemission.ReemissionTokenId
+    val EmissionNftId = reemission.EmissionNftId
 
+    // reemission logic below
     var reemissionSpending = false
     boxesToSpend.foreach { box =>
       if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
@@ -227,8 +229,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut)
 
           val height = stateContext.currentHeight
-          val ms = stateContext.ergoSettings.chainSettings.monetary
-          val reemission = new Reemission(ms)
           val properReemissionRewardPart = reemission.reemissionForHeight(height)
           require(rewardsTokensOut == properReemissionRewardPart)
         }
@@ -321,7 +321,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val currentTxCost = validation.result.payload.get
         verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
        }
-      .validate(txReemission, Reemission.checkReemissionRules &&
+      .validate(txReemission, stateContext.ergoSettings.chainSettings.reemission.checkReemissionRules &&
                                 verifyReemission(boxesToSpend, outputCandidates, stateContext).isSuccess)
   }
 

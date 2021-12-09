@@ -1,10 +1,12 @@
 package org.ergoplatform.reemission
 
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.{ErgoAddressEncoder, Height, MinerPubkey, Outputs, Self}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings}
+import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.{AND, EQ, GE, GT, Minus, OR}
 import sigmastate.Values.{ErgoTree, IntConstant}
@@ -12,11 +14,27 @@ import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractScriptBytes}
 
 
 class Reemission(monetarySettings: MonetarySettings) {
-  import Reemission._
 
   val emissionRules = new EmissionRules(monetarySettings)
 
   val basicChargeAmount = 18 // in ERG
+
+  // todo: move to settings
+  val checkReemissionRules = true
+
+  // todo: move to settings
+  val EmissionNftId = ModifierId @@ ""
+
+  // todo: move to settings
+  val ReemissionTokenId = ModifierId @@ ""
+  val ReemissionTokenIdBinary: TokenId = Digest32 @@ Array.emptyByteArray
+
+  // todo: move to settings
+  // if voting done before
+  val ActivationHeight = 700000
+
+  // todo: move to settings ?
+  val emissionPeriod = 2080800
 
   def reemissionForHeight(height: Height): Long = {
     val emission = emissionRules.emissionAtHeight(height)
@@ -81,16 +99,6 @@ class Reemission(monetarySettings: MonetarySettings) {
 
 object Reemission {
 
-  val checkReemissionRules = true
-
-  val EmissionNftId = ModifierId @@ ""
-
-  val ReemissionTokenId = ModifierId @@ ""
-
-  val ActivationHeight = 700000
-
-  val emissionPeriod = 2080800
-
   def main(args: Array[String]): Unit = {
     val settings = ErgoSettings.read()
     val ms = settings.chainSettings.monetary
@@ -102,7 +110,7 @@ object Reemission {
 
     var lowSet = false
 
-    val total = (ActivationHeight to emissionPeriod).map { h =>
+    val total = (reemission.ActivationHeight to reemission.emissionPeriod).map { h =>
       val e = reemission.emissionRules.emissionAtHeight(h) / EmissionRules.CoinsInOneErgo
       val r = reemission.reemissionForHeight(h) / EmissionRules.CoinsInOneErgo
 
@@ -110,7 +118,7 @@ object Reemission {
         println("Start of low emission period: " + h)
         lowSet = true
       }
-      if ((h % 65536 == 0) || h == ActivationHeight) {
+      if ((h % 65536 == 0) || h == reemission.ActivationHeight) {
         println(s"Emission at height $h : " + e)
         println(s"Reemission at height $h : " + r)
       }

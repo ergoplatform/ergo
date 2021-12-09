@@ -3,6 +3,7 @@ package org.ergoplatform.settings
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.reemission.Reemission
 import scorex.crypto.authds.ADDigest
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -32,6 +33,8 @@ case class ChainSettings(protocolVersion: Byte,
     .fold(_ => throw new Error(s"Failed to parse genesisStateDigestHex = $genesisStateDigestHex"), ADDigest @@ _)
 
   val emissionRules: EmissionRules = new EmissionRules(monetary)
+
+  val reemission = new Reemission(monetary)
 
   val initialDifficulty: BigInt = Base16.decode(initialDifficultyHex)
     .fold(_ => throw new Error(s"Failed to parse initialDifficultyHex = $initialDifficultyHex"), BigInt(_))

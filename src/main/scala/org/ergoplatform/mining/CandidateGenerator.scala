@@ -386,7 +386,7 @@ object CandidateGenerator extends ScorexLogging {
       CandidateGenerator.collectEmission(s, pk, ergoSettings.chainSettings.emissionRules)
 
     def chainSynced =
-      h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)
+      s.stateContext.lastHeaderOpt.exists(header => h.bestFullBlockOpt.map(_.id).contains(header.id))
 
     def hasAnyMemPoolOrMinerTx =
       poolTransactions.nonEmpty || unspentTxsToInclude.nonEmpty || emissionTxOpt.nonEmpty

@@ -8,7 +8,6 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.reemission.Reemission
 import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
@@ -206,9 +205,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def verifyReemission(boxesToSpend: IndexedSeq[ErgoBox],
                        outputCandidates: Seq[ErgoBoxCandidate],
                        stateContext: ErgoStateContext): Try[Unit] = Try {
-    val reemission = stateContext.ergoSettings.chainSettings.reemission
-    val ReemissionTokenId = reemission.ReemissionTokenId
-    val EmissionNftId = reemission.EmissionNftId
+    val reemission = stateContext.ergoSettings.chainSettings.reemissionRules
+    val ReemissionTokenId = ModifierId @@ stateContext.ergoSettings.chainSettings.reemission.reemissionTokenId
+    val EmissionNftId = ModifierId @@ stateContext.ergoSettings.chainSettings.reemission.emissionNftId
 
     // reemission logic below
     var reemissionSpending = false
@@ -238,9 +237,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     }
 
     if (reemissionSpending) {
-      val ms = stateContext.ergoSettings.chainSettings.monetary
-      val reemission = new Reemission(ms)
-
       val toBurn = boxesToSpend.map { box =>
         box.tokens.getOrElse(ReemissionTokenId, 0L)
       }.sum
@@ -321,7 +317,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val currentTxCost = validation.result.payload.get
         verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
        }
-      .validate(txReemission, stateContext.ergoSettings.chainSettings.reemission.checkReemissionRules &&
+      .validate(txReemission, !stateContext.ergoSettings.chainSettings.reemission.checkReemissionRules ||
                                 verifyReemission(boxesToSpend, outputCandidates, stateContext).isSuccess)
   }
 

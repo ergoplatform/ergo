@@ -5,29 +5,20 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.{ErgoAddressEncoder, Height, MinerPubkey, Outputs, Self}
-import org.ergoplatform.settings.{ErgoSettings, MonetarySettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings, ReemissionSettings}
 import scorex.crypto.hash.Digest32
-import scorex.util.ModifierId
 import sigmastate.{AND, EQ, GE, GT, Minus, OR}
 import sigmastate.Values.{ErgoTree, IntConstant}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractScriptBytes}
 
 
-class Reemission(monetarySettings: MonetarySettings) {
+class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: ReemissionSettings) {
 
   val emissionRules = new EmissionRules(monetarySettings)
 
   val basicChargeAmount = 18 // in ERG
 
-  // todo: move to settings
-  val checkReemissionRules = true
-
-  // todo: move to settings
-  val EmissionNftId = ModifierId @@ ""
-
-  // todo: move to settings
-  val ReemissionTokenId = ModifierId @@ ""
-  val ReemissionTokenIdBinary: TokenId = Digest32 @@ Array.emptyByteArray
+  val ReemissionTokenIdBinary: TokenId = Digest32 @@ Algos.decode(reemissionSettings.reemissionTokenId).get
 
   // todo: move to settings
   // if voting done before
@@ -97,13 +88,13 @@ class Reemission(monetarySettings: MonetarySettings) {
 }
 
 
-object Reemission {
+object ReemissionRules {
 
   def main(args: Array[String]): Unit = {
     val settings = ErgoSettings.read()
-    val ms = settings.chainSettings.monetary
-    println("Monetary settings: " + ms)
-    val reemission = new Reemission(ms)
+
+    println("Monetary settings: " + settings.chainSettings.monetary)
+    val reemission = new ReemissionRules(settings.chainSettings.monetary, settings.chainSettings.reemission)
     val et = reemission.reemissionBoxProp
     val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
     println("p2s address: " + enc.fromProposition(et))

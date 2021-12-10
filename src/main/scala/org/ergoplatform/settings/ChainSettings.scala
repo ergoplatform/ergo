@@ -4,7 +4,7 @@ import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.reemission.Reemission
+import org.ergoplatform.reemission.ReemissionRules
 import scorex.crypto.authds.ADDigest
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -24,6 +24,7 @@ case class ChainSettings(protocolVersion: Byte,
                          voting: VotingSettings,
                          powScheme: AutolykosPowScheme,
                          monetary: MonetarySettings,
+                         reemission: ReemissionSettings,
                          noPremineProof: Seq[String],
                          foundersPubkeys: Seq[String],
                          genesisStateDigestHex: String,
@@ -35,7 +36,7 @@ case class ChainSettings(protocolVersion: Byte,
 
   val emissionRules: EmissionRules = new EmissionRules(monetary)
 
-  val reemission = new Reemission(monetary)
+  val reemissionRules = new ReemissionRules(monetary, reemission)
 
   val addressEncoder = new ErgoAddressEncoder(addressPrefix)
 
@@ -48,3 +49,8 @@ case class ChainSettings(protocolVersion: Byte,
     .fold(_ => throw new Error(s"Failed to parse initialDifficultyVersion2 = $initialDifficultyHex"), BigInt(_))
 
 }
+
+
+case class ReemissionSettings(checkReemissionRules: Boolean,
+                              emissionNftId: String,
+                              reemissionTokenId: String)

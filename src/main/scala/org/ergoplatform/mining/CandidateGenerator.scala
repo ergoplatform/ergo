@@ -6,7 +6,6 @@ import com.google.common.primitives.Longs
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -20,12 +19,12 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, ErgoValidationSettingsUpdate}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
-import org.ergoplatform.reemission.Reemission
+
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -344,7 +343,7 @@ object CandidateGenerator extends ScorexLogging {
     lazy val poolTransactions = m.getAllPrioritized
 
     lazy val emissionTxOpt =
-      CandidateGenerator.collectEmission(s, pk, ergoSettings.chainSettings.emissionRules)
+      CandidateGenerator.collectEmission(s, pk, ergoSettings.chainSettings)
 
     def chainSynced =
       h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)
@@ -576,14 +575,14 @@ object CandidateGenerator extends ScorexLogging {
   def collectEmission(
     state: UtxoStateReader,
     minerPk: ProveDlog,
-    emission: EmissionRules
+    chainSettings: ChainSettings
   ): Option[ErgoTransaction] = {
     collectRewards(
       state.emissionBoxOpt,
       state.stateContext.currentHeight,
       Seq.empty,
       minerPk,
-      emission,
+      chainSettings,
       Colls.emptyColl
     ).headOption
   }
@@ -592,9 +591,9 @@ object CandidateGenerator extends ScorexLogging {
     currentHeight: Int,
     txs: Seq[ErgoTransaction],
     minerPk: ProveDlog,
-    emission: EmissionRules
+    chainSettings: ChainSettings
   ): Option[ErgoTransaction] = {
-    collectRewards(None, currentHeight, txs, minerPk, emission, Colls.emptyColl).headOption
+    collectRewards(None, currentHeight, txs, minerPk, chainSettings, Colls.emptyColl).headOption
   }
 
   /**
@@ -606,12 +605,13 @@ object CandidateGenerator extends ScorexLogging {
     currentHeight: Int,
     txs: Seq[ErgoTransaction],
     minerPk: ProveDlog,
-    emission: EmissionRules,
+    chainSettings: ChainSettings,
     assets: Coll[(TokenId, Long)] = Colls.emptyColl
   ): Seq[ErgoTransaction] = {
-    val reemission = new Reemission(emission.settings)
+    val reemission = chainSettings.reemissionRules
     val reemissionTokenId = reemission.ReemissionTokenIdBinary
-    val propositionBytes = emission.settings.feePropositionBytes
+    val propositionBytes = chainSettings.monetary.feePropositionBytes
+    val emission = chainSettings.emissionRules
 
     val inputs = txs.flatMap(_.inputs)
     val feeBoxes: Seq[ErgoBox] = ErgoState
@@ -733,9 +733,8 @@ object CandidateGenerator extends ScorexLogging {
                 val newTxs   = acc :+ (tx -> costConsumed)
                 val newBoxes = newTxs.flatMap(_._1.outputs)
 
-                val emissionRules =
-                  stateWithTxs.constants.settings.chainSettings.emissionRules
-                collectFees(currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
+                val chainSettings = stateWithTxs.constants.settings.chainSettings
+                collectFees(currentHeight, newTxs.map(_._1), minerPk, chainSettings) match {
                   case Some(feeTx) =>
                     val boxesToSpend = feeTx.inputs.flatMap(i =>
                       newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))

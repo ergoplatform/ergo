@@ -261,36 +261,34 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
   property("off-chain box spending") {
     withFixture { implicit w =>
       val walletAddress = getPublicKeys.head
-      val foreignAddress = ergoAddressGen.sample.get
       val genesisTx = makeGenesisTx(walletAddress.pubkey, randomNewAsset)
-      applyTxs(LocallyGeneratedTransaction(genesisTx))
+      val genesisBlock = makeNextBlock(getUtxoState, Seq(genesisTx))
+      applyBlock(genesisBlock) shouldBe 'success //scan by wallet happens during apply
 
       val boxesToSpend = boxesAvailable(genesisTx, walletAddress.pubkey)
       val balanceToSpend = balanceAmount(boxesToSpend)
+      val assetsAmount = assetsByTokenId(boxesToSpend)
       log.info(s"Balance to spent: $balanceToSpend")
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
-      val nanoErgsToSpend = 500000
-      val assetValueToSpend = 500000L
-      val availableAssets = assetsByTokenId(boxesToSpend)
-      val assetsToSpend = availableAssets.mapValues(_ => assetValueToSpend).toSeq
       val (totalBalance, spendingTx) =
         eventually {
           val totalBalance = getBalancesWithUnconfirmed.walletBalance
           totalBalance shouldEqual balanceToSpend
           log.info(s"Total balance with unconfirmed: $totalBalance")
           // generate transaction
-          val req = PaymentRequest(foreignAddress, nanoErgsToSpend, assetsToSpend, Map.empty)
+          val req = PaymentRequest(walletAddress, totalBalance, assetsByTokenId(boxesToSpend).toSeq, Map.empty)
           val spendingTx = await(wallet.generateTransaction(Seq(req))).get
           totalBalance -> spendingTx
         }
-      val remainingAssets = availableAssets.map { case (k, v) => bytesToId(k) -> (v - assetValueToSpend) }.toSeq
+      val remainingAssets = assetsAmount.map { case (k, v) => bytesToId(k) -> v }.toSeq
       // apply an off-chain transaction
       applyTxs(LocallyGeneratedTransaction(spendingTx))
-      // check that effect of that transaction has been reflected in wallet balances
+      Thread.sleep(500)
+      // check that ergs and assets transferred by that transaction are still available in wallet balances
       eventually {
         val totalAfterSpending = getBalancesWithUnconfirmed
-        val balanceToReturn = totalBalance - nanoErgsToSpend
+        val balanceToReturn = totalBalance
         log.info(s"Balance to return back: $balanceToReturn")
         totalAfterSpending.walletBalance shouldEqual balanceToReturn
         totalAfterSpending.walletAssetBalances shouldEqual remainingAssets
@@ -302,7 +300,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
     withFixture { implicit w =>
       val address = getPublicKeys.head
       val genesisTx = makeGenesisTx(address.pubkey, randomNewAsset)
-      applyTxs(LocallyGeneratedTransaction(genesisTx))
+      val genesisBlock = makeNextBlock(getUtxoState, Seq(genesisTx))
+      applyBlock(genesisBlock) shouldBe 'success //scan by wallet happens during apply
 
       val boxesToSpend = boxesAvailable(genesisTx, address.pubkey)
       val balanceToSpend = balanceAmount(boxesToSpend)
@@ -346,9 +345,10 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
 
   property("spending of the on-chain box") {
     withFixture { implicit w =>
-      val address = getPublicKeys.head
-      val genesisBlock = makeGenesisBlock(address.pubkey, randomNewAsset)
-      val boxesToSpend = boxesAvailable(genesisBlock, address.pubkey)
+      val walletAddress = getPublicKeys.head
+      val foreignAddress = ergoAddressGen.sample.get
+      val genesisBlock = makeGenesisBlock(walletAddress.pubkey, randomNewAsset)
+      val boxesToSpend = boxesAvailable(genesisBlock, walletAddress.pubkey)
       val sumBalance = balanceAmount(boxesToSpend)
       log.info(s"Sum balance: $sumBalance")
       val balanceToReturn = randomLong(sumBalance)
@@ -360,13 +360,13 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           val totalBalance = getBalancesWithUnconfirmed.walletBalance
           val confirmedBalance = getConfirmedBalances.walletBalance
 
-          val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsWithRandom(boxesToSpend))
-          val assets = assetAmount(boxesAvailable(spendingTx, address.pubkey))
+          val spendingTx = makeSpendingTx(boxesToSpend, foreignAddress, balanceToReturn, assetsWithRandom(boxesToSpend))
+          val assets = assetAmount(boxesAvailable(spendingTx, walletAddress.pubkey))
           assets should not be empty
-          confirmedBalance shouldBe sumBalance
           totalBalance shouldBe sumBalance
-          log.info(s"Balance before spending: $confirmedBalance")
+          confirmedBalance shouldBe sumBalance
           log.info(s"Total with unconfirmed balance before spending: $totalBalance")
+          log.info(s"Balance before spending: $confirmedBalance")
           (spendingTx, assets)
         }
       applyTxs(LocallyGeneratedTransaction(spendingTx))

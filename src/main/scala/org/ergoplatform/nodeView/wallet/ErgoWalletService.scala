@@ -31,6 +31,8 @@ import scala.util.{Failure, Success, Try}
   */
 trait ErgoWalletService {
 
+  val ergoSettings: ErgoSettings
+
   /**
     * Read encrypted wallet json file or bypass it by providing mnemonic directly (test mode only)
     * @param state current wallet state
@@ -55,7 +57,7 @@ trait ErgoWalletService {
   def initWallet(state: ErgoWalletState,
                  settings: ErgoSettings,
                  walletPass: SecretString,
-                 mnemonicPassOpt: Option[SecretString])(implicit addrEncoder: ErgoAddressEncoder): Try[(SecretString, ErgoWalletState)]
+                 mnemonicPassOpt: Option[SecretString]): Try[(SecretString, ErgoWalletState)]
 
   /**
     * @param state current wallet state
@@ -69,7 +71,7 @@ trait ErgoWalletService {
                     settings: ErgoSettings,
                     mnemonic: SecretString,
                     mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
+                    walletPass: SecretString): Try[ErgoWalletState]
 
   /**
     * Decrypt underlying encrypted storage using `walletPass` and update public keys
@@ -78,7 +80,7 @@ trait ErgoWalletService {
     * @param usePreEip3Derivation if true, the first key is the master key
     * @return Try of new wallet state
     */
-  def unlockWallet(state: ErgoWalletState, walletPass: SecretString, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
+  def unlockWallet(state: ErgoWalletState, walletPass: SecretString, usePreEip3Derivation: Boolean): Try[ErgoWalletState]
 
   /**
     * Clear secret from previously decrypted json storage and reset prover
@@ -101,7 +103,7 @@ trait ErgoWalletService {
     * @param settings settings read from config file
     * @return Try of new wallet state
     */
-  def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
+  def recreateStorage(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState]
 
   def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
 
@@ -145,7 +147,7 @@ trait ErgoWalletService {
     * @param encodedPath derivation path from the master key
     * @return Try of pay-to-public-key-address and new wallet state
     */
-  def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String)(implicit addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)]
+  def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String, addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)]
 
   /**
     * Derive next key from master key
@@ -153,7 +155,7 @@ trait ErgoWalletService {
     * @param usePreEip3Derivation whether to use pre-EIP3 derivation or not
     * @return Try of the derived key and new wallet state
     */
-  def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)]
+  def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean): Try[(DeriveNextKeyResult, ErgoWalletState)]
 
   /**
     * @param scanId to get transactions for
@@ -202,7 +204,7 @@ trait ErgoWalletService {
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
-                          sign: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoLikeTransactionTemplate[_]]
+                          sign: Boolean): Try[ErgoLikeTransactionTemplate[_]]
 
   /**
     * Generate commitments to be used then to sign a transaction.
@@ -227,7 +229,7 @@ trait ErgoWalletService {
 
 }
 
-class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport with FileUtils {
+class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends ErgoWalletService with ErgoWalletSupport with FileUtils {
 
 
   def readWallet(state: ErgoWalletState,
@@ -257,8 +259,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
   def initWallet(state: ErgoWalletState,
                  settings: ErgoSettings,
                  walletPass: SecretString,
-                 mnemonicPassOpt: Option[SecretString]
-              )(implicit addrEncoder: ErgoAddressEncoder): Try[(SecretString, ErgoWalletState)] = {
+                 mnemonicPassOpt: Option[SecretString]): Try[(SecretString, ErgoWalletState)] = {
     val walletSettings = settings.walletSettings
     //Read high-quality random bits from Java's SecureRandom
     val entropy = scorex.utils.Random.randomBytes(walletSettings.seedStrengthBits / 8)
@@ -289,7 +290,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
                     settings: ErgoSettings,
                     mnemonic: SecretString,
                     mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
+                    walletPass: SecretString): Try[ErgoWalletState] =
     if (settings.nodeSettings.isFullBlocksPruned)
       Failure(new IllegalArgumentException("Unable to restore wallet when pruning is enabled"))
     else
@@ -306,7 +307,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
 
   def unlockWallet(state: ErgoWalletState,
                    walletPass: SecretString,
-                   usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] = {
+                   usePreEip3Derivation: Boolean): Try[ErgoWalletState] = {
     if (state.walletVars.proverOpt.isEmpty) {
       state.secretStorageOpt match {
         case Some(secretStorage) =>
@@ -344,7 +345,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     }
   }
 
-  def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
+  def recreateStorage(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
     Try {
       val storageFolder = WalletStorage.storageFolder(settings)
       log.info(s"Removing the wallet storage folder $storageFolder")
@@ -420,7 +421,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
-                          sign: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoLikeTransactionTemplate[_]] = {
+                          sign: Boolean): Try[ErgoLikeTransactionTemplate[_]] = {
     val tx = generateUnsignedTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw)
     if (sign) {
       tx.flatMap { case (unsignedTx, inputs, dataInputs) =>
@@ -486,7 +487,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     prover.bagForTransaction(tx, inputBoxes, dataBoxes, state.stateContext, real, simulated)
   }
 
-  def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String)(implicit addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)] =
+  def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String, addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)] =
     state.secretStorageOpt match {
       case Some(secretStorage) if !secretStorage.isLocked =>
         val rootSecret = secretStorage.secret.get // unlocked means Some(secret)
@@ -495,7 +496,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
             val secret = rootSecret.derive(path)
             addSecretToStorage(state, secret) match {
               case Success(newState) =>
-                Success(P2PKAddress(secret.publicKey.key) -> newState)
+                Success(P2PKAddress(secret.publicKey.key)(addrEncoder) -> newState)
               case Failure(t) =>
                 Failure(t)
             }
@@ -510,7 +511,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
         Failure(new Exception("Unable to derive key from path, wallet is not initialized"))
     }
 
-  def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)] =
+  def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean): Try[(DeriveNextKeyResult, ErgoWalletState)] =
     state.secretStorageOpt match {
       case Some(secretStorage) if !secretStorage.isLocked =>
         val masterKey = secretStorage.secret.get // unlocked means Some(secret)

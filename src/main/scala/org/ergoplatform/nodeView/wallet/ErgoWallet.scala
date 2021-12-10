@@ -29,7 +29,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
 
   override val walletActor: ActorRef =
-    ErgoWalletActor(settings, new ErgoWalletServiceImpl, boxSelector, historyReader)
+    ErgoWalletActor(settings, new ErgoWalletServiceImpl(settings), boxSelector, historyReader)
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)

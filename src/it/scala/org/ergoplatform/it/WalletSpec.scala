@@ -71,7 +71,7 @@ class WalletSpec extends AsyncWordSpec with IntegrationSuite with WalletTestOps 
   "it should generate unsigned transaction" in {
     import sigmastate.eval._
     val mnemonic = SecretString.create(walletAutoInitConfig.getString("ergo.wallet.testMnemonic"))
-    val prover = new ErgoWalletServiceImpl().buildProverFromMnemonic(mnemonic, None, LaunchParameters)
+    val prover = new ErgoWalletServiceImpl(settings).buildProverFromMnemonic(mnemonic, None, LaunchParameters)
     val pk = prover.hdPubKeys.head.key
     val ergoTree = ErgoTree.fromProposition(TrueLeaf)
     val transactionId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))

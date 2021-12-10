@@ -1,5 +1,6 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
@@ -35,6 +36,8 @@ case class ChainSettings(protocolVersion: Byte,
   val emissionRules: EmissionRules = new EmissionRules(monetary)
 
   val reemission = new Reemission(monetary)
+
+  val addressEncoder = new ErgoAddressEncoder(addressPrefix)
 
   val initialDifficulty: BigInt = Base16.decode(initialDifficultyHex)
     .fold(_ => throw new Error(s"Failed to parse initialDifficultyHex = $initialDifficultyHex"), BigInt(_))

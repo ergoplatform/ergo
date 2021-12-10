@@ -83,23 +83,8 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   property("proofForInterlinkVector") {
     val blockIds = Gen.listOfN(255, modifierIdGen).sample.get
     val extension = popowAlgos.interlinksToExtension(blockIds)
-    val blockIdToProve = blockIds.head
-    val proof = NipopowAlgos.proofForInterlinkVector(extension)
-
+    val proof = popowAlgos.proofForInterlinkVector(extension)
     proof.get.valid(extension.digest) shouldBe true
-
-
-//    proof shouldBe defined
-//    val encodedField = proof.get.leafData
-//    val numBytesKey = encodedField.head
-//    val key = encodedField.tail.take(numBytesKey)
-//    val prefix = key.head
-//    val value = encodedField.drop(numBytesKey + 1)
-//    val blockId = value.tail
-//    numBytesKey shouldBe 2
-//    prefix shouldBe Extension.InterlinksVectorPrefix
-//    bytesToId(blockId) shouldBe blockIdToProve
-//    proof.get.valid(extension.digest) shouldBe true
   }
 
   property("0 level is always valid for any block") {

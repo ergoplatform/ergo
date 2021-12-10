@@ -4,13 +4,13 @@ import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.settings.{Algos, ErgoAlgos}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.authds.merkle.{BatchMerkleProof, MerkleTree}
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
-import scorex.crypto.hash.{Blake2b256, Digest, Digest32, Keccak256}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -52,9 +52,11 @@ object PoPowHeader {
   import io.circe.syntax._
 
   implicit val hf = Blake2b256
+  val powScheme: AutolykosPowScheme = new AutolykosPowScheme(32, 26)
+  val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
 
   def fromBlock(b: ErgoFullBlock): Try[PoPowHeader] = {
-    val proof = NipopowAlgos.proofForInterlinkVector(b.extension).get
+    val proof = nipopowAlgos.proofForInterlinkVector(b.extension).get
     NipopowAlgos.unpackInterlinks(b.extension.fields).map { interlinkVector =>
       PoPowHeader(b.header, interlinkVector, proof)
     }

@@ -267,6 +267,16 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
       .find({ case (key, value) => key.head == InterlinksVectorPrefix && (value.tail sameElements idToBytes(blockId)) })
       .flatMap({ case (key, _) => ext.proofFor(key) })
   }
+
+  /**
+   * Proves the inclusion of the complete interlink vector in the Merkle Tree of the given extension.
+   */
+  def proofForInterlinkVector(ext: ExtensionCandidate): Option[BatchMerkleProof[Digest32]] = {
+    val x = ext.fields
+      .filter({ case (key, _) => key.head == InterlinksVectorPrefix })
+      .flatMap(_._1)
+    ext.batchProofFor(x.toArray)
+  }
 }
 
 
@@ -299,13 +309,4 @@ object NipopowAlgos {
   }
 
 
-  /**
-   * Proves the inclusion of the complete interlink vector in the Merkle Tree of the given extension.
-   */
-  def proofForInterlinkVector(ext: ExtensionCandidate): Option[BatchMerkleProof[Digest32]] = {
-    val x = ext.fields
-      .filter({ case (key, _) => key.head == InterlinksVectorPrefix })
-      .flatMap(_._1)
-    ext.batchProofFor(x.toArray)
-  }
 }

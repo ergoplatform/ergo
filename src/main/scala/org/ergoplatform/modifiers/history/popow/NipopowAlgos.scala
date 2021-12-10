@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPr
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.Constants
-import scorex.crypto.authds.merkle.MerkleProof
+import scorex.crypto.authds.merkle.{BatchMerkleProof, MerkleProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
@@ -267,7 +267,6 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
       .find({ case (key, value) => key.head == InterlinksVectorPrefix && (value.tail sameElements idToBytes(blockId)) })
       .flatMap({ case (key, _) => ext.proofFor(key) })
   }
-
 }
 
 
@@ -297,5 +296,16 @@ object NipopowAlgos {
       }
 
     loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
+  }
+
+
+  /**
+   * Proves the inclusion of the complete interlink vector in the Merkle Tree of the given extension.
+   */
+  def proofForInterlinkVector(ext: ExtensionCandidate): Option[BatchMerkleProof[Digest32]] = {
+    val x = ext.fields
+      .filter({ case (key, _) => key.head == InterlinksVectorPrefix })
+      .flatMap(_._1)
+    ext.batchProofFor(x.toArray)
   }
 }

@@ -2,10 +2,11 @@ package org.ergoplatform.modifiers.history.extension
 
 import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.LeafData
-import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
+import scorex.crypto.authds.merkle.{BatchMerkleProof, Leaf, MerkleProof, MerkleTree}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 
+import scala.collection.mutable
 /**
   * Extension block section with header id not provided
   *
@@ -29,6 +30,16 @@ class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
     fields.find(_._1 sameElements key)
       .map(Extension.kvToLeaf)
       .flatMap(kv => merkleTree.proofByElement(Leaf[Digest32](LeafData @@ kv)(Algos.hash)))
+
+  def batchProofFor(keys: Array[Byte]): Option[BatchMerkleProof[Digest32]] = {
+    val indices = keys.grouped(2)
+      .map(key => fields.find(_._1 sameElements key)
+        .map(Extension.kvToLeaf)
+        .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
+        .flatMap(leafData => merkleTree.elementsHashIndex.get(new mutable.WrappedArray.ofByte(leafData)))
+      ).toSeq.flatten
+    merkleTree.proofByIndices(indices)(Algos.hash)
+  }
 }
 
 object ExtensionCandidate {

@@ -86,6 +86,16 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
       case (prev, next) => next.parentId == prev.id
     })
   }
+
+  /**
+   * Checks the interlink vector proofs of the blocks in the proof.
+   *
+   * @return true if all interlink proofs are valid
+   */
+  def hasValidProofs: Boolean = {
+    prefix.forall(x => x.checkProof()) &&
+      suffixHead.checkProof()
+  }
 }
 
 object NipopowProof {

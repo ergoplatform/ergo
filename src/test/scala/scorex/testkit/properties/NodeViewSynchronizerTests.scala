@@ -13,14 +13,14 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeV
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.state.{ErgoState}
 import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
-import scorex.util.ScorexLogging
+import scorex.util.{ScorexLogging}
 import scorex.util.serialization._
 
 import scala.concurrent.Await
@@ -226,4 +226,28 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: GetSnapshotInfo") {
+    withFixture { ctx =>
+      import ctx._
+
+      /* First store snapshots info in DB
+      val m = (0 until 100).map { _ =>
+        Random.nextInt(1000000) -> (Digest32 @@ idToBytes(mod))
+      }.toMap;
+      val si = SnapshotsInfo(m)
+      val dir = createTempDir.getAbsolutePath
+      val db = SnapshotsDb.create(dir)
+      db.writeSnapshotsInfo(si)
+      */
+
+      // Then send message to request it
+      node ! Message[Unit](GetSnapshotsInfoSpec, Right(Unit), None)
+      pchProbe.fishForMessage(5 seconds) {
+        case _: SnapshotsInfoSpec => true
+        case _ => false
+      }
+
+
+    }
+  }
 }

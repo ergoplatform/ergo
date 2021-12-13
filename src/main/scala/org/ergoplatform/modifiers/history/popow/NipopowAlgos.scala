@@ -274,8 +274,8 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
   def proofForInterlinkVector(ext: ExtensionCandidate): Option[BatchMerkleProof[Digest32]] = {
     val x = ext.fields
       .filter({ case (key, _) => key.head == InterlinksVectorPrefix })
-      .flatMap(_._1)
-    ext.batchProofFor(x.toArray)
+      .map(_._1)
+    ext.batchProofFor(x: _*)
   }
 }
 

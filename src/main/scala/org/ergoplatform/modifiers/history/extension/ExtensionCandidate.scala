@@ -31,9 +31,9 @@ class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
       .map(Extension.kvToLeaf)
       .flatMap(kv => merkleTree.proofByElement(Leaf[Digest32](LeafData @@ kv)(Algos.hash)))
 
-  def batchProofFor(keys: Array[Byte]): Option[BatchMerkleProof[Digest32]] = {
-    val indices = keys.grouped(2)
-      .map(key => fields.find(_._1 sameElements key)
+  def batchProofFor(keys: Array[Byte]*): Option[BatchMerkleProof[Digest32]] = {
+    val indices = keys
+        .map(key => fields.find(_._1 sameElements key)
         .map(Extension.kvToLeaf)
         .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
         .flatMap(leafData => merkleTree.elementsHashIndex.get(new mutable.WrappedArray.ofByte(leafData)))

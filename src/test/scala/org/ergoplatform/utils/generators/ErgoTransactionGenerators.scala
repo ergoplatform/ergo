@@ -19,7 +19,7 @@ import org.ergoplatform.UnsignedInput
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.utils.Generators
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
+import org.ergoplatform.{DataInput, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.ByteArrayWrapper
@@ -49,7 +49,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     value <- validValueGen
   } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
 
-  def ergoAddressGen: Gen[ErgoAddress] = proveDlogGen.map(P2PKAddress.apply)
+  def ergoAddressGen: Gen[P2PKAddress] = proveDlogGen.map(P2PKAddress.apply)
 
   def ergoBoxCandidateGen(prop: ProveDlog): Gen[ErgoBoxCandidate] = for {
     h <- creationHeightGen

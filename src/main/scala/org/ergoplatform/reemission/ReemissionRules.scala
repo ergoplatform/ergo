@@ -4,11 +4,15 @@ import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.{ErgoAddressEncoder, Height, MinerPubkey, Outputs, Self}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Height, Input, MinerPubkey, Outputs, Self}
 import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings, ReemissionSettings}
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.crypto.hash.Digest32
+import scorex.util.encode.Base16
 import sigmastate.{AND, EQ, GE, GT, Minus, OR}
 import sigmastate.Values.{ErgoTree, IntConstant}
+import sigmastate.interpreter.ProverResult
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractScriptBytes}
 
 
@@ -89,6 +93,32 @@ class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: Re
 
 
 object ReemissionRules {
+
+  val Inject = false
+
+  /*
+    box to be protected by the following script:
+
+    {
+      INPUTS(0).value > 20000000L * 1000000000L
+    }
+
+   */
+  val InjectionBoxBytes: Array[Byte] = Base16.decode("").get
+
+  lazy val injectionBox: ErgoBox = ErgoBoxSerializer.parseBytes(InjectionBoxBytes)
+
+  def injectTransaction(emissionTx: ErgoTransaction): ErgoTransaction = {
+
+    val inputsModified = emissionTx.inputs ++ IndexedSeq(new Input(injectionBox.id, ProverResult.empty))
+    val emissionOut = emissionTx.outputCandidates.head
+    val emissionOutModified = new ErgoBoxCandidate(emissionOut.value, emissionOut.ergoTree, emissionOut.creationHeight,
+                                                    injectionBox.additionalTokens)
+    val minerOut = emissionTx.outputCandidates(1)
+    val minerOutModified = new ErgoBoxCandidate(minerOut.value + injectionBox.value,
+                                                  minerOut.ergoTree, minerOut.creationHeight)
+    new ErgoTransaction(inputsModified, IndexedSeq.empty, IndexedSeq(emissionOutModified, minerOutModified))
+  }
 
   def main(args: Array[String]): Unit = {
     val settings = ErgoSettings.read()

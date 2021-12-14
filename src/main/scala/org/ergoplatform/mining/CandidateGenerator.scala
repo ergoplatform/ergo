@@ -24,7 +24,7 @@ import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
-
+import org.ergoplatform.reemission.ReemissionRules
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -584,7 +584,13 @@ object CandidateGenerator extends ScorexLogging {
       minerPk,
       chainSettings,
       Colls.emptyColl
-    ).headOption
+    ).headOption.map { tx =>
+      if (ReemissionRules.Inject && state.boxById(ReemissionRules.injectionBox.id).isDefined) {
+        ReemissionRules.injectTransaction(tx)
+      } else {
+        tx
+      }
+    }
   }
 
   def collectFees(

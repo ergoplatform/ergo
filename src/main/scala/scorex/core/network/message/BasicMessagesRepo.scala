@@ -281,10 +281,10 @@ class HandshakeSpec(featureSerializers: PeerFeature.Serializers, sizeLimit: Int)
 /**
   * The `GetSnapshotsInfo` message requests an `SnapshotsInfo` message from the receiving node
   */
-class GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
+object GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
   private val SizeLimit = 100
 
-  override val messageCode: Message.MessageCode = 76: Byte
+  override val messageCode: MessageCode = 76: Byte
 
   override val messageName: String = "GetSnapshotsInfo"
 
@@ -299,10 +299,10 @@ class GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
 /**
   * The `SnapshotsInfo` message is a reply to a `GetSnapshotsInfo` message.
   */
-class SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
+object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
   private val SizeLimit = 1000
 
-  override val messageCode: Message.MessageCode = 77: Byte
+  override val messageCode: MessageCode = 77: Byte
 
   override val messageName: String = "SnapshotsInfo"
 

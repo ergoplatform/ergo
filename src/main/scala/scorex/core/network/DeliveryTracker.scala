@@ -39,12 +39,15 @@ import scala.util.{Failure, Try}
   * @param deliveryTimeout of a single check for transition of modifier from Requested to Received
   * @param maxDeliveryChecks how many times to check whether modifier was delivered in given timeout
   * @param invalidModifierBF Bloom Filter with invalid modifier ids
+  * @param desiredSizeOfExpectingModifierQueue Approximate number of modifiers to be downloaded simultaneously,
+  *                                            headers are much faster to process
   * @param nvsRef nodeViewSynchronizer actor reference
   */
 class DeliveryTracker(system: ActorSystem,
                       deliveryTimeout: FiniteDuration,
                       maxDeliveryChecks: Int,
                       invalidModifierBF: ApproximateCacheLike[String],
+                      desiredSizeOfExpectingModifierQueue: Int,
                       nvsRef: ActorRef) extends ScorexLogging with ScorexEncoding {
 
   protected case class RequestedInfo(peer: Option[ConnectedPeer], cancellable: Cancellable, checks: Int)
@@ -55,8 +58,17 @@ class DeliveryTracker(system: ActorSystem,
   // when our node received a modifier we put it to `received`
   protected val received: mutable.Map[ModifierId, ConnectedPeer] = mutable.Map()
 
-  /** how many Requested modifiers DeliveryTracker holds */
-  def requestedSize: Int = requested.size
+  private val desiredSizeOfExpectingHeaderQueue: Int = desiredSizeOfExpectingModifierQueue * 5
+
+  /**
+    * @return how many header modifiers to download
+    */
+  def headersToDownload: Int = Math.max(0, desiredSizeOfExpectingHeaderQueue - requested.size)
+
+  /**
+    * @return how many non-header modifiers to download
+    */
+  def modifiersToDownload: Int = Math.max(0, desiredSizeOfExpectingModifierQueue - requested.size)
 
   /**
     * @return status of modifier `id`.
@@ -196,7 +208,7 @@ class DeliveryTracker(system: ActorSystem,
     oldStatus match {
       case Requested =>
         requested(id).cancellable.cancel()
-        requested.remove(id).flatMap(_.peer)
+        requested.remove(id)
       case Received =>
         received.remove(id)
       case _ =>
@@ -233,6 +245,7 @@ object DeliveryTracker {
       deliveryTimeout,
       maxDeliveryChecks,
       ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration),
+      settings.scorexSettings.network.desiredInvObjects,
       nvsRef
     )
   }

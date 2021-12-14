@@ -82,12 +82,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected var historyReaderOpt: Option[ErgoHistory] = None
   protected var mempoolReaderOpt: Option[ErgoMemPool] = None
 
-  /**
-    * Approximate number of modifiers to be downloaded simultaneously, headers are much faster to process
-    */
-  private val desiredSizeOfExpectingModifierQueue: Int = networkSettings.desiredInvObjects
-  private val desiredSizeOfExpectingHeaderQueue: Int = desiredSizeOfExpectingModifierQueue * 5
-
   private val minModifiersPerBucket = 5 // minimum of persistent modifiers (excl. headers) to download by single peer
   private val maxModifiersPerBucket = 20 // maximum of persistent modifiers (excl. headers) to download by single peer
 
@@ -235,10 +229,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             val ids = syncInfo.lastHeaderIds.reverse
             val headerIds = ids.takeWhile(hId => !historyReader.isInBestChain(hId))
             if (headerIds.nonEmpty) {
-              val maxModifiers = desiredSizeOfExpectingHeaderQueue - deliveryTracker.requestedSize
-              log.debug(s"Requesting $maxModifiers headers from older peers after getting sync info from $remote")
+              val maxHeadersToDownload = deliveryTracker.headersToDownload
+              log.debug(s"Requesting $maxHeadersToDownload headers from older peers after getting sync info from $remote")
               requestDownload(
-                maxModifiers,
+                maxHeadersToDownload,
                 minHeadersPerBucket,
                 maxHeadersPerBucket
               )(Option(getPeersForDownloadingHeaders(remote))) { howManyPerType =>
@@ -695,10 +689,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
-        val maxModifiers = desiredSizeOfExpectingModifierQueue - deliveryTracker.requestedSize
-        log.debug(s"Going to download $maxModifiers non-header modifiers")
+        val maxModifiersToDownload = deliveryTracker.modifiersToDownload
+        log.debug(s"Going to download $maxModifiersToDownload non-header modifiers")
         requestDownload(
-          maxModifiers,
+          maxModifiersToDownload,
           minModifiersPerBucket,
           maxModifiersPerBucket
         )(getPeersForDownloadingBlocks) { howManyPerType =>

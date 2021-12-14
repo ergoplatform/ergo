@@ -119,6 +119,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
     context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
 
+    context.system.eventStream.subscribe(self, classOf[ChangedState])
+
     // subscribe for history and mempool changes
     viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
 
@@ -746,8 +748,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case ChangedMempool(reader: ErgoMemPool) =>
       mempoolReaderOpt = Some(reader)
 
-    case ChangedUtxoState(reader: UtxoStateReader) =>
-      utxoStateReaderOpt = Some(reader)
+    case ChangedState(reader: ErgoStateReader) =>
+      reader match {
+        case utxoStateReader: UtxoStateReader => utxoStateReaderOpt = Some(utxoStateReader)
+        case _ =>
+      }
 
     case ModifiersProcessingResult(applied: Seq[BlockSection], cleared: Seq[BlockSection]) =>
       // stop processing for cleared modifiers
@@ -839,8 +844,6 @@ object ErgoNodeViewSynchronizer {
     case class ChangedVault[VR <: VaultReader](reader: VR) extends NodeViewChange
 
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
-
-    case class ChangedUtxoState(reader: UtxoStateReader) extends NodeViewChange
 
     //todo: consider sending info on the rollback
 

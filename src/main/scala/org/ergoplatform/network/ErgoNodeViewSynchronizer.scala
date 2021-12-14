@@ -56,6 +56,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                               )(implicit ex: ExecutionContext)
   extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
 
+  import ErgoNodeViewSynchronizer.syncV2Supported
+
   // bloom filters with transaction ids that were already applied to history
   private var blockAppliedTxsCache: FixedSizeBloomFilterQueue =
     FixedSizeBloomFilterQueue.empty(bloomFilterQueueSize = 5)
@@ -137,15 +139,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def downloadRequired(historyReader: ErgoHistory)(id: ModifierId): Boolean = {
     deliveryTracker.status(id, Array(historyReader)) == ModifiersStatus.Unknown
-  }
-
-  /**
-    * Whether neighbour peer `remote` supports sync protocol V2.
-    */
-  def syncV2Supported(remote: ConnectedPeer): Boolean = {
-    // If neighbour version is >= 4.0.16, the neighbour supports sync V2
-    val syncV2Version = Version(4, 0, 16)
-    remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
   }
 
   /**
@@ -761,24 +754,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
 object ErgoNodeViewSynchronizer {
 
-  def props(networkControllerRef: ActorRef,
-            viewHolderRef: ActorRef,
-            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
-            syncTracker: ErgoSyncTracker)
-           (implicit ex: ExecutionContext): Props =
-    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
-      timeProvider, syncTracker))
+  val UtxoSnapsnotActivationVersion = Version(4, 0, 20)
+  val SyncV2ActivationVersion = Version(4, 0, 16)
 
-  def apply(networkControllerRef: ActorRef,
-            viewHolderRef: ActorRef,
-            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
-            syncTracker: ErgoSyncTracker)
-           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker))
+
+  def utxoNetworkingSupported(remote: ConnectedPeer): Boolean = {
+    // If neighbour version is >= 4.0.20, the neighbour supports utxo snapshots exchange
+    remote.peerInfo.exists(_.peerSpec.protocolVersion >= UtxoSnapsnotActivationVersion)
+  }
+
+  /**
+    * Whether neighbour peer `remote` supports sync protocol V2.
+    */
+  def syncV2Supported(remote: ConnectedPeer): Boolean = {
+    // If neighbour version is >= 4.0.16, the neighbour supports sync V2
+    remote.peerInfo.exists(_.peerSpec.protocolVersion >= SyncV2ActivationVersion)
+  }
 
   case object CheckModifiersToDownload
 
@@ -872,6 +863,18 @@ object ErgoNodeViewSynchronizer {
     case object OlderCalling extends PeerSyncState
     /** Better Unknown or Fork than no peers */
     case object UnknownOrFork extends PeerSyncState
+  }
+
+  def apply(networkControllerRef: ActorRef,
+            viewHolderRef: ActorRef,
+            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
+            settings: ErgoSettings,
+            timeProvider: NetworkTimeProvider,
+            syncTracker: ErgoSyncTracker)
+           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef = {
+    val props = Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
+      timeProvider, syncTracker))
+    context.actorOf(props)
   }
 
 }

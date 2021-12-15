@@ -1,7 +1,6 @@
 package org.ergoplatform.network
 
 import java.net.InetSocketAddress
-
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -39,7 +38,7 @@ import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.annotation.tailrec
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
@@ -475,9 +474,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def processSpam(remote: ConnectedPeer,
                           typeId: ModifierTypeId,
                           modifiers: Map[ModifierId, Array[Byte]]): Map[ModifierId, Array[Byte]] = {
-    val (requested, spam) = modifiers.partition { case (id, _) =>
-      deliveryTracker.status(id, typeId) == Requested
-    }
+    val modifiersByStatus =
+      modifiers
+        .groupBy { case (id, _) => deliveryTracker.status(id, typeId) }
+        .view.force
+
+    val spam = modifiersByStatus.filterKeys(_ != Requested)
 
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
@@ -487,12 +489,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           penalizeSpammingPeer(remote)
         }
       } else {
-        log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
-          s": ${spam.keys.map(encoder.encodeId)}")
+        spam.foreach { case (status, mods) =>
+          log.info(s"Spam attempt: non-requested modifiers of type $typeId and status $status " +
+            s"with ids ${mods.keys.map(encoder.encodeId)} sent by peer $remote")
+        }
         penalizeSpammingPeer(remote)
       }
     }
-    requested
+    modifiersByStatus.getOrElse(Requested, Map.empty)
   }
 
   /**

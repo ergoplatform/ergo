@@ -137,8 +137,8 @@ class DeliveryTracker(system: ActorSystem,
     * Modified with id `id` is permanently invalid - set its status to `Invalid`
     * and return [[ConnectedPeer]] which sent bad modifier.
     */
-  def setInvalid(modifierId: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
-    val oldStatus: ModifiersStatus = status(modifierId, modifierTypeId)
+  def setInvalid(id: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
+    val oldStatus: ModifiersStatus = status(id, modifierTypeId)
     val transitionCheck = tryWithLogging {
       require(isCorrectTransition(oldStatus, Invalid), s"Illegal status transition: $oldStatus -> Invalid")
     }
@@ -147,18 +147,32 @@ class DeliveryTracker(system: ActorSystem,
       .flatMap { _ =>
         val senderOpt = oldStatus match {
           case Requested =>
-            val connectedPeer = requested(modifierTypeId)(modifierId)
-            connectedPeer.cancellable.cancel()
-            requested.flatAdjust(modifierTypeId)(_.map(_ - modifierId))
-            connectedPeer.peer
+            requested.get(modifierTypeId).flatMap { infoById =>
+              infoById.get(id) match {
+                case None =>
+                  log.warn(s"Requested modifier $id of type $modifierTypeId not found while invalidating it")
+                  None
+                case Some(info) =>
+                  info.cancellable.cancel()
+                  requested.flatAdjust(modifierTypeId)(_.map(_ - id))
+                  info.peer
+              }
+            }
           case Received =>
-            val senderOpt = received.get(modifierTypeId).flatMap(_.get(modifierId))
-            received.flatAdjust(modifierTypeId)(_.map(_ - modifierId))
-            senderOpt
+            received.get(modifierTypeId).flatMap { peerById =>
+              peerById.get(id) match {
+                case None =>
+                  log.warn(s"Received modifier $id of type $modifierTypeId not found while invalidating it")
+                  None
+                case Some(sender) =>
+                  received.flatAdjust(modifierTypeId)(_.map(_ - id))
+                  Option(sender)
+              }
+            }
           case _ =>
             None
         }
-        invalidModifierBF.put(modifierId)
+        invalidModifierBF.put(id)
         senderOpt
       }
   }
@@ -196,8 +210,16 @@ class DeliveryTracker(system: ActorSystem,
       val oldStatus: ModifiersStatus = status(id, modifierTypeId)
       require(isCorrectTransition(oldStatus, Invalid), s"Illegal status transition: $oldStatus -> Received")
       if (oldStatus != Received) {
-        requested(modifierTypeId)(id).cancellable.cancel()
-        requested.flatAdjust(modifierTypeId)(_.map(_ - id))
+        requested.flatAdjust(modifierTypeId)(_.map { infoById =>
+          infoById.get(id) match {
+            case None =>
+              log.warn(s"Requested modifier $id of type $modifierTypeId not found while receiving it")
+              infoById
+            case Some(info) =>
+              info.cancellable.cancel()
+              infoById - id
+          }
+        })
         received.adjust(modifierTypeId)(_.fold(Map(id -> sender))(_.updated(id, sender)))
       }
     }
@@ -224,10 +246,26 @@ class DeliveryTracker(system: ActorSystem,
   def clearStatusForModifier(id: ModifierId, modifierTypeId: ModifierTypeId, oldStatus: ModifiersStatus): Unit =
     oldStatus match {
       case Requested =>
-        requested(modifierTypeId)(id).cancellable.cancel()
-        requested.flatAdjust(modifierTypeId)(_.map(_ - id))
+        requested.flatAdjust(modifierTypeId)(_.map { infoById =>
+          infoById.get(id) match {
+            case None =>
+              log.warn(s"Requested modifier $id of type $modifierTypeId not found while clearing status")
+              infoById
+            case Some(info) =>
+              info.cancellable.cancel()
+              infoById - id
+          }
+        })
       case Received =>
-        received.flatAdjust(modifierTypeId)(_.map(_ - id))
+        received.flatAdjust(modifierTypeId)(_.map { peerById =>
+          peerById.get(id) match {
+            case None =>
+              log.warn(s"Received modifier $id of type $modifierTypeId not found while clearing status")
+              peerById
+            case Some(_) =>
+              peerById - id
+          }
+        })
       case _ =>
         ()
     }

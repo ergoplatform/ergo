@@ -38,7 +38,7 @@ import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.annotation.tailrec
-import scala.collection.{immutable, mutable}
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}

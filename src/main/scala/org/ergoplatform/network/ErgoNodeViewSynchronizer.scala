@@ -528,8 +528,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, history) == ModifiersStatus.Unknown)
         }
 
-        log.info(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
         if (newModifierIds.nonEmpty) {
+          log.info(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
           val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
           peer.handlerRef ! msg
           deliveryTracker.setRequested(newModifierIds, modifierTypeId, Some(peer))

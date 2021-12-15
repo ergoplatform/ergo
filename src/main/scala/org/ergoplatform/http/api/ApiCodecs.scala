@@ -325,7 +325,7 @@ trait ApiCodecs extends JsonCodecs {
       "hint" -> proofType.asJson,
       "challenge" -> Base16.encode(sp.challenge).asJson,
       "pubkey" -> sp.image.asJson,
-      "proof" -> SigSerializer.toBytes(sp.uncheckedTree).asJson,
+      "proof" -> SigSerializer.toProofBytes(sp.uncheckedTree).asJson,
       "position" -> sp.position.asJson
     )
   }

@@ -26,7 +26,7 @@ import org.ergoplatform.wallet.Constants.ScanId
 case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                        (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
-  import org.ergoplatform.nodeView.wallet.scanning.ScanJsonCodecs._
+  import org.ergoplatform.nodeView.wallet.scanning.ScanJsonCodecs.{scanReqDecoder, scanEncoder}
 
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   implicit val walletBoxEncoder: Encoder[WalletBox] = WalletBox.encoder

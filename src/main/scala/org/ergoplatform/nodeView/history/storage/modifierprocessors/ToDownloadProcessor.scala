@@ -98,7 +98,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     }
   }
 
-  private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
+  def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
       Seq.empty
     } else if (nodeSettings.stateType.requireProofs) {

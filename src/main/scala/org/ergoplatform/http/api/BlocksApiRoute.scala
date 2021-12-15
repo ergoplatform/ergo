@@ -24,6 +24,9 @@ import scala.concurrent.Future
 case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
+  // Limit for requests returning headers, to avoid too heavy requests
+  private val MaxHeaders = 16384
+
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   val blocksPaging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 1, "limit".as[Int] ? 50)
@@ -58,7 +61,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   private def getHeaderIds(offset: Int, limit: Int): Future[Json] =
     getHistory.map { history =>
-      history.headerIdsAt(offset, limit).toList.asJson
+      history.headerIdsAt(offset, limit).asJson
     }
 
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] =
@@ -103,10 +106,18 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     }
 
   private val chainPagination: Directive[(Int, Int)] =
-    parameters("fromHeight".as[Int] ? 0, "toHeight".as[Int] ? -1)
+    parameters("fromHeight".as[Int] ? 1, "toHeight".as[Int] ? MaxHeaders)
 
   def getBlocksR: Route = (pathEndOrSingleSlash & get & blocksPaging) { (offset, limit) =>
-    ApiResponse(getHeaderIds(offset, limit))
+    if (offset < 0) {
+      BadRequest("offset is negative")
+    } else if (limit < 0) {
+      BadRequest("limit is negative")
+    } else if (limit > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders headers can be requested")
+    } else {
+      ApiResponse(getHeaderIds(offset, limit))
+    }
   }
 
   def postBlocksR: Route = (post & entity(as[ErgoFullBlock])) { block =>
@@ -125,7 +136,13 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   }
 
   def getChainSliceR: Route = (pathPrefix("chainSlice") & chainPagination) { (fromHeight, toHeight) =>
-    ApiResponse(getChainSlice(fromHeight, toHeight))
+    if (toHeight < fromHeight) {
+      BadRequest("toHeight < fromHeight")
+    } else if (fromHeight - toHeight > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders headers can be requested")
+    } else {
+      ApiResponse(getChainSlice(fromHeight, toHeight))
+    }
   }
 
   def getModifierByIdR: Route = (pathPrefix("modifier") & modifierId & get) { id =>
@@ -137,7 +154,11 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   }
 
   def getLastHeadersR: Route = (pathPrefix("lastHeaders" / IntNumber) & get) { count =>
-    ApiResponse(getLastHeaders(count))
+    if (count > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders headers can be requested")
+    } else {
+      ApiResponse(getLastHeaders(count))
+    }
   }
 
   def getBlockIdsAtHeightR: Route = (pathPrefix("at" / IntNumber) & get) { height =>

@@ -218,7 +218,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val (isCostValid, scriptCost) =
           costTry match {
             case Failure(t) =>
-              log.debug(s"Tx verification failed: ${t.getMessage}")
+              log.info(s"Transaction $id verification failed: ${t.getMessage} : ", t)
               (false, maxCost + 1)
             case Success(result) =>
               result

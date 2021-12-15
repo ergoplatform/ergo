@@ -17,7 +17,7 @@ object ArithUtils {
     */
   @inline def multiplyExact(e1: Long, e2: Long): Long = {
     try {
-      Math.multiplyExact(e1, e2)
+      java7.compat.Math.multiplyExact(e1, e2)
     } catch {
       case _: Throwable => Long.MaxValue
     }

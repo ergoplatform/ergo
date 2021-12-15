@@ -11,6 +11,7 @@ import scorex.core.{ModifierTypeId, NodeViewModifier}
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.collection.mutable
+import scala.collection.immutable.Set
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Try}
@@ -105,7 +106,7 @@ class DeliveryTracker(system: ActorSystem,
       requested.put(id, RequestedInfo(supplierOpt, cancellable, checksDone))
     }
 
-  def setRequested(ids: Seq[ModifierId], typeId: ModifierTypeId, cp: Option[ConnectedPeer])
+  def setRequested(ids: Set[ModifierId], typeId: ModifierTypeId, cp: Option[ConnectedPeer])
                   (implicit ec: ExecutionContext): Unit = ids.foreach(setRequested(_, typeId, cp))
 
   /**

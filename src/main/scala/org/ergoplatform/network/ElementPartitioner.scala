@@ -1,5 +1,7 @@
 package org.ergoplatform.network
 
+import collection.immutable.Set
+
 /**
   * Allows for partitioning elements into arbitrarily sized buckets given min/max limits
   */
@@ -15,11 +17,11 @@ object ElementPartitioner {
     * @return elements evenly grouped under unique bucket-type keys
     */
   def distribute[B, T, I](
-    buckets: Iterable[B],
+    buckets: Set[B],
     maxElements: Int,
     minElementsPerBucket: Int,
     maxElementsPerBucket: Int
-  )(fetchMaxElems: Int => Map[T, Seq[I]]): Map[(B, T), Seq[I]] = {
+  )(fetchMaxElems: Int => Map[T, Seq[I]]): Map[(B, T), Set[I]] = {
 
     if (buckets.isEmpty) {
       Map.empty
@@ -29,7 +31,7 @@ object ElementPartitioner {
       if (maxElementsToFetch <= 0) {
         Map.empty
       } else {
-        fetchMaxElems(maxElementsToFetch).foldLeft(Map.empty[(B, T), Seq[I]]) {
+        fetchMaxElems(maxElementsToFetch).foldLeft(Map.empty[(B, T), Set[I]]) {
           case (acc, (elemType, elements)) =>
             val elementsSize = elements.size
             if (elementsSize < 1) {
@@ -45,7 +47,7 @@ object ElementPartitioner {
               val (smaller, bigger) = elements.splitAt(elementsSize - rem * (quot + 1))
               acc ++ lessBuckets
                 .zip((smaller.grouped(quot) ++ bigger.grouped(quot + 1)).toSeq)
-                .map { case (p, elems) => (p, elemType) -> elems }
+                .map { case (p, elems) => (p, elemType) -> elems.toSet }
             }
         }
       }

@@ -6,7 +6,6 @@ import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfiguration
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.{ModifierId, ScorexLogging}
-
 import scala.annotation.tailrec
 
 /**

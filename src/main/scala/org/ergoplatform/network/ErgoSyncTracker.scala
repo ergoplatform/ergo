@@ -1,7 +1,6 @@
 package org.ergoplatform.network
 
 import java.net.InetSocketAddress
-
 import akka.actor.ActorSystem
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -14,6 +13,7 @@ import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
 
 import scala.collection.mutable
+import scala.collection.immutable.Set
 import scala.concurrent.duration._
 
 
@@ -84,8 +84,8 @@ final case class ErgoSyncTracker(system: ActorSystem,
     lastSyncSentTime.filter(t => (timeProvider.time() - t._2).millis > SyncThreshold).keys.toSeq
 
 
-  def peersByStatus: Map[HistoryComparisonResult, Iterable[ConnectedPeer]] =
-    statuses.groupBy(_._2.status).mapValues(_.keys).view.force
+  def peersByStatus: Map[HistoryComparisonResult, Set[ConnectedPeer]] =
+    statuses.groupBy(_._2.status).mapValues(_.keys.toSet).view.force
 
   protected def numOfSeniors(): Int = statuses.count(_._2.status == Older)
 

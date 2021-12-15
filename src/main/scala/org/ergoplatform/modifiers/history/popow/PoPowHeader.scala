@@ -29,22 +29,13 @@ case class PoPowHeader(header: Header, interlinks: Seq[ModifierId], proof: Batch
 
   override type M = PoPowHeader
 
-  implicit val hf = Blake2b256
-  val powScheme: AutolykosPowScheme = new AutolykosPowScheme(32, 26)
-  val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
-
   override def serializer: ScorexSerializer[M] = PoPowHeaderSerializer
 
   def id: ModifierId = header.id
 
   def height: Int = header.height
 
-  def checkProof(): Boolean = {
-    val packed = nipopowAlgos.packInterlinks(interlinks)
-    val leafData = packed.map(_._2).map(LeafData @@ _)
-    val treeRoot = MerkleTree(leafData)(hf).rootHash
-    proof.valid(treeRoot)
-  }
+  def checkProof(): Boolean = PoPowHeader.checkProof(interlinks, proof)
 }
 
 object PoPowHeader {
@@ -54,6 +45,13 @@ object PoPowHeader {
   implicit val hf = Blake2b256
   val powScheme: AutolykosPowScheme = new AutolykosPowScheme(32, 26)
   val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
+
+  def checkProof(interlinks: Seq[ModifierId], proof: BatchMerkleProof[Digest32]): Boolean = {
+    val packed = nipopowAlgos.packInterlinks(interlinks)
+    val leafData = packed.map(_._2).map(LeafData @@ _)
+    val treeRoot = MerkleTree(leafData)(hf).rootHash
+    proof.valid(treeRoot)
+  }
 
   def fromBlock(b: ErgoFullBlock): Try[PoPowHeader] = {
     val proof = nipopowAlgos.proofForInterlinkVector(b.extension).get

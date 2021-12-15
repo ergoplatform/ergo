@@ -5,7 +5,8 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
-import org.ergoplatform.http.api.UtxoApiRoute
+import io.circe.syntax._
+import org.ergoplatform.http.api.{UtxoApiRoute, ApiCodecs}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalatest.flatspec.AnyFlatSpec
@@ -17,7 +18,8 @@ class UtxoApiRouteSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs
-  with FailFastCirceSupport {
+  with FailFastCirceSupport
+  with ApiCodecs {
 
   val prefix = "/utxo"
 
@@ -95,4 +97,10 @@ class UtxoApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "get erialized proof for given boxes" in {
+    val boxes = utxoState.takeBoxes(10).map(box => Base16.encode(box.id))
+    Post(prefix + s"/getBoxesBinaryProof", boxes.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
 }

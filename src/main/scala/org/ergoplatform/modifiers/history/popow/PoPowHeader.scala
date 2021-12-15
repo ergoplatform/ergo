@@ -3,7 +3,6 @@ package org.ergoplatform.modifiers.history.popow
 import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
@@ -26,9 +25,10 @@ import scala.util.Try
   * Not used in the consensus protocol
   *
   */
-case class PoPowHeader(header: Header, interlinks: Seq[ModifierId]) extends BytesSerializable {
+case class PoPowHeader(header: Header, interlinks: Seq[ModifierId], proof: BatchMerkleProof[Digest32]) extends BytesSerializable {
 
   override type M = PoPowHeader
+
   implicit val hf = Blake2b256
   val powScheme: AutolykosPowScheme = new AutolykosPowScheme(32, 26)
   val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
@@ -38,8 +38,6 @@ case class PoPowHeader(header: Header, interlinks: Seq[ModifierId]) extends Byte
   def id: ModifierId = header.id
 
   def height: Int = header.height
-
-  lazy val proof: BatchMerkleProof[Digest32] = nipopowAlgos.proofForInterlinkVector(ExtensionCandidate(nipopowAlgos.packInterlinks(interlinks))).get
 
   def checkProof(): Boolean = {
     val packed = nipopowAlgos.packInterlinks(interlinks)
@@ -53,11 +51,14 @@ object PoPowHeader {
 
   import io.circe.syntax._
 
-  implicit val hf: HF = Blake2b256
+  implicit val hf = Blake2b256
+  val powScheme: AutolykosPowScheme = new AutolykosPowScheme(32, 26)
+  val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
 
   def fromBlock(b: ErgoFullBlock): Try[PoPowHeader] = {
+    val proof = nipopowAlgos.proofForInterlinkVector(b.extension).get
     NipopowAlgos.unpackInterlinks(b.extension.fields).map { interlinkVector =>
-      PoPowHeader(b.header, interlinkVector)
+      PoPowHeader(b.header, interlinkVector, proof)
     }
   }
 

@@ -511,8 +511,10 @@ trait ErgoHistoryReader
   def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
     typedModifierById[Header](headerId).flatMap(h =>
       typedModifierById[Extension](h.extensionId).flatMap { ext =>
-        NipopowAlgos.unpackInterlinks(ext.fields).toOption.map { interlinks =>
-          PoPowHeader(h, interlinks)
+        NipopowAlgos.unpackInterlinks(ext.fields).toOption.map { interlinks => {
+          val proof = nipopowAlgos.proofForInterlinkVector(ext).get
+          PoPowHeader(h, interlinks, proof)
+        }
         }
       }
     )

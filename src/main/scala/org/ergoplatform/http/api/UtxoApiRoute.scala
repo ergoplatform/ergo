@@ -24,7 +24,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
 
   override val route: Route = pathPrefix("utxo") {
-    byId ~ serializedById ~ genesis ~ withPoolById ~ withPoolSerializedById
+    byId ~ serializedById ~ genesis ~ withPoolById ~ withPoolSerializedById ~ getBoxesBinaryProof
   }
 
   def withPoolById: Route = (get & path("withPool" / "byId" / Segment)) { id =>

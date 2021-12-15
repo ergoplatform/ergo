@@ -97,7 +97,7 @@ class UtxoApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "get erialized proof for given boxes" in {
+  it should "get serialized proof for given boxes" in {
     val boxes = utxoState.takeBoxes(10).map(box => Base16.encode(box.id))
     Post(prefix + s"/getBoxesBinaryProof", boxes.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK

@@ -1,10 +1,13 @@
 package org.ergoplatform.nodeView.mempool
 
+import org.scalactic.TripleEqualsSupport
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import java.util.UUID
 import scala.concurrent.duration._
 
-class ExpiringApproximateCacheSpec extends AnyFlatSpec with Matchers {
+class ExpiringApproximateCacheSpec extends AnyFlatSpec with Matchers with TripleEqualsSupport {
 
   it should "behave as fixed sized FIFO collection of bloom filters" in {
     val cache = ExpiringApproximateCache.empty(
@@ -67,5 +70,27 @@ class ExpiringApproximateCacheSpec extends AnyFlatSpec with Matchers {
     // test that all elements in front cache expire
     Thread.sleep(550)
     updatedCache.put("102").frontCache.size shouldBe 1
+  }
+
+  it should "handle millions of realistic elements" in {
+    import org.scalactic._
+
+    val cache = ExpiringApproximateCache.empty(
+      bloomFilterCapacity       = 10000000,
+      bloomFilterExpirationRate = 0.1,
+      frontCacheSize                 = 10000,
+      frontCacheExpiration           = 1.hour
+    )
+    // let's add 2 millions of realistic elems to cache
+    val elemCount = 2000000
+    val uuids = (1 to elemCount).map(_ => UUID.randomUUID().toString)
+    val fullCache = uuids.foldLeft(cache) { case (acc, n) => acc.put(n) }
+
+    val notIncludedUuids = uuids.filterNot(fullCache.mightContain)
+    notIncludedUuids shouldBe empty
+
+    implicit val approxEquality: Equality[Int] = TolerantNumerics.tolerantIntEquality(tolerance = 5000)
+
+    fullCache.approximateElementCount.toInt === elemCount
   }
 }

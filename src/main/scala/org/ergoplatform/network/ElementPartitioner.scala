@@ -33,7 +33,8 @@ object ElementPartitioner {
       } else {
         fetchMaxElems(maxElementsToFetch).foldLeft(Map.empty[(B, T), Set[I]]) {
           case (acc, (elemType, elements)) =>
-            val elementsSize = elements.size
+            val uniqueElems = elements.toSet
+            val elementsSize = uniqueElems.size
             if (elementsSize < 1) {
               acc
             } else {
@@ -44,10 +45,10 @@ object ElementPartitioner {
               // now let's distribute elements evenly into buckets
               val (quot, rem) =
                 (elementsSize / lessBuckets.size, elementsSize % lessBuckets.size)
-              val (smaller, bigger) = elements.splitAt(elementsSize - rem * (quot + 1))
+              val (smaller, bigger) = uniqueElems.splitAt(elementsSize - rem * (quot + 1))
               acc ++ lessBuckets
                 .zip((smaller.grouped(quot) ++ bigger.grouped(quot + 1)).toSeq)
-                .map { case (p, elems) => (p, elemType) -> elems.toSet }
+                .map { case (p, elems) => (p, elemType) -> elems }
             }
         }
       }

@@ -1,11 +1,13 @@
 package scorex.core.network
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable}
-import org.ergoplatform.nodeView.mempool.{ApproximateCacheLike, ExpiringApproximateCache}
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.consensus.ContainsModifiers
-import scorex.core.network.ModifiersStatus._
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.CheckDelivery
+import org.ergoplatform.nodeView.mempool.ExpiringApproximateCache
+import org.ergoplatform.settings.{ErgoSettings, NetworkCacheSettings}
+import scorex.core.consensus.ContainsModifiers
+import scorex.core.network.DeliveryTracker._
+import scorex.core.network.ModifiersStatus._
 import scorex.core.utils.ScorexEncoding
 import scorex.core.{ModifierTypeId, NodeViewModifier}
 import scorex.util.{ModifierId, ScorexLogging}
@@ -14,8 +16,6 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Try}
-import DeliveryTracker._
-import org.ergoplatform.modifiers.history.header.Header
 
 /**
   * This class tracks modifier statuses.
@@ -40,7 +40,7 @@ import org.ergoplatform.modifiers.history.header.Header
 
   * @param deliveryTimeout of a single check for transition of modifier from Requested to Received
   * @param maxDeliveryChecks how many times to check whether modifier was delivered in given timeout
-  * @param invalidModifierBF Bloom Filter with invalid modifier ids
+  * @param cacheSettings network cache settings
   * @param desiredSizeOfExpectingModifierQueue Approximate number of modifiers to be downloaded simultaneously,
   *                                            headers are much faster to process
   * @param nvsRef nodeViewSynchronizer actor reference
@@ -48,7 +48,7 @@ import org.ergoplatform.modifiers.history.header.Header
 class DeliveryTracker(system: ActorSystem,
                       deliveryTimeout: FiniteDuration,
                       maxDeliveryChecks: Int,
-                      invalidModifierBF: ApproximateCacheLike[String],
+                      cacheSettings: NetworkCacheSettings,
                       desiredSizeOfExpectingModifierQueue: Int,
                       nvsRef: ActorRef) extends ScorexLogging with ScorexEncoding {
 
@@ -61,6 +61,15 @@ class DeliveryTracker(system: ActorSystem,
   protected val received: mutable.Map[ModifierTypeId, Map[ModifierId, ConnectedPeer]] = mutable.Map()
 
   private val desiredSizeOfExpectingHeaderQueue: Int = desiredSizeOfExpectingModifierQueue * 5
+
+  /** Bloom Filter with invalid modifier ids */
+  private var invalidModifierBF = {
+    val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
+    val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
+    val frontCacheSize = cacheSettings.invalidModifiersCacheSize
+    val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
+    ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration)
+  }
 
   /**
     * @return how many header modifiers to download
@@ -172,7 +181,7 @@ class DeliveryTracker(system: ActorSystem,
           case _ =>
             None
         }
-        invalidModifierBF.put(id)
+        invalidModifierBF = invalidModifierBF.put(id)
         senderOpt
       }
   }
@@ -290,16 +299,11 @@ object DeliveryTracker {
             maxDeliveryChecks: Int,
             nvsRef: ActorRef,
             settings: ErgoSettings): DeliveryTracker = {
-    val cacheSettings = settings.cacheSettings.network
-    val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
-    val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
-    val frontCacheSize = cacheSettings.invalidModifiersCacheSize
-    val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
     new DeliveryTracker(
       system,
       deliveryTimeout,
       maxDeliveryChecks,
-      ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration),
+      settings.cacheSettings.network,
       settings.scorexSettings.network.desiredInvObjects,
       nvsRef
     )

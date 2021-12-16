@@ -13,7 +13,8 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, SemanticallySuccessfulModifier}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
+import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, SemanticallySuccessfulModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -23,7 +24,7 @@ import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
-import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -495,12 +496,13 @@ object CandidateGenerator extends ScorexLogging {
         )
       }
 
-      def deriveWorkMessage(block: CandidateBlock) =
+      def deriveWorkMessage(block: CandidateBlock) = {
         ergoSettings.chainSettings.powScheme.deriveExternalCandidate(
           block,
           minerPk,
           prioritizedTransactions.map(_.id)
         )
+      }
 
       state.proofsForTransactions(txs) match {
         case Success((adProof, adDigest)) =>
@@ -516,10 +518,9 @@ object CandidateGenerator extends ScorexLogging {
             votes
           )
           val ext = deriveWorkMessage(candidate)
-          log.info(s"New candidate with msg ${Base16.encode(ext.msg)} generated")
-          log.debug(
+          log.info(
             s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
-            s" with ${candidate.transactions.size} transactions"
+            s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
           )
           Success(
             Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions

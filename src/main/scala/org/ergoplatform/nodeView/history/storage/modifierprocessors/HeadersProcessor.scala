@@ -43,8 +43,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings)
 
-  def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
-
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
   // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
@@ -256,7 +254,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   private def bestHeadersChainScore: BigInt = bestHeaderIdOpt.flatMap(id => scoreOf(id)).getOrElse(0)
 
-  private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
+  protected def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
   /**
     * Calculate difficulty for the next block

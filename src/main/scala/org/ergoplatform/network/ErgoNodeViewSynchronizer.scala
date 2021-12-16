@@ -9,11 +9,12 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
-import scorex.core.NodeViewHolder._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.app.Version
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.consensus.{HistoryReader, SyncInfo}
@@ -21,6 +22,7 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
@@ -34,7 +36,6 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
-import scorex.core.transaction.state.StateReader
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.annotation.tailrec
@@ -54,6 +55,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncTracker: ErgoSyncTracker
                               )(implicit ex: ExecutionContext)
   extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
+
+  // bloom filters with transaction ids that were already applied to history
+  private var blockAppliedTxsCache: FixedSizeBloomFilterQueue =
+    FixedSizeBloomFilterQueue.empty(bloomFilterQueueSize = 5)
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -108,6 +113,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPoolReader]])
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
+    context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
     context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
 
     // subscribe for history and mempool changes
@@ -369,6 +375,31 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
   /**
+    * Local node sending out objects requested to remote
+    */
+  protected def responseFromLocal: Receive = {
+    case ResponseFromLocal(peer, modType, modifiers: Seq[(ModifierId, Array[Byte])]) =>
+
+      @tailrec
+      def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
+        var size = 5 //message type id + message size
+        val batch = mods.takeWhile { case (_, modBytes) =>
+          size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
+          size < networkSettings.maxPacketSize
+        }
+        peer.handlerRef ! Message(modifiersSpec, Right(ModifiersData(modType, batch.toMap)), None)
+        val remaining = mods.drop(batch.length)
+        if (remaining.nonEmpty) {
+          sendByParts(remaining)
+        }
+      }
+
+      if (modifiers.nonEmpty) {
+        sendByParts(modifiers)
+      }
+  }
+
+  /**
     * Logic to process block parts got from another peer.
     * Filter out non-requested block parts (with a penalty to spamming peer),
     * parse block parts and send valid modifiers to NodeViewHolder
@@ -443,16 +474,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return ids and bytes of modifiers that were requested by our node
     */
   def processSpam(remote: ConnectedPeer,
-                          typeId: ModifierTypeId,
-                          modifiers: Map[ModifierId, Array[Byte]]): Map[ModifierId, Array[Byte]] = {
+                  typeId: ModifierTypeId,
+                  modifiers: Map[ModifierId, Array[Byte]]): Map[ModifierId, Array[Byte]] = {
     val (requested, spam) = modifiers.partition { case (id, _) =>
       deliveryTracker.status(id) == Requested
     }
 
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
-        log.info(s"Got spammy transactions: $modifiers")
-        // todo: consider rules for penalizing peers for spammy transactions
+        val spammyTxs = modifiers.filterKeys(id => !blockAppliedTxsCache.mightContain(id))
+        if (spammyTxs.nonEmpty) {
+          log.info(s"Got spammy transactions: $spammyTxs")
+          penalizeSpammingPeer(remote)
+        }
       } else {
         log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
           s": ${spam.keys.map(encoder.encodeId)}")
@@ -480,7 +514,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (!settings.nodeSettings.stateType.requireProofs &&
               history.isHeadersChainSynced &&
               history.fullBlockHeight == history.headersHeight) {
-              invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
+              val unknownMods =
+                invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
+              // filter out transactions that were already applied to history
+              unknownMods.filterNot(blockAppliedTxsCache.mightContain)
             } else {
               Seq.empty
             }
@@ -519,19 +556,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   //other node asking for objects by their ids
   protected def modifiersReq(invData: InvData, remote: ConnectedPeer): Unit = {
-      val objs: Seq[NodeViewModifier] = invData.typeId match {
+      val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
         case typeId: ModifierTypeId if typeId == Transaction.ModifierTypeId =>
           mempoolReaderOpt.toSeq.flatMap {mp =>
             mp.getAll(invData.ids)
-          }
+          }.map(tx => tx.id -> tx.bytes)
         case _: ModifierTypeId =>
           historyReaderOpt.toSeq.flatMap { h =>
-            invData.ids.flatMap(id => h.modifierById(id))
+            invData.ids.flatMap(id => h.modifierBytesById(id).map(bytes => (id, bytes)))
           }
       }
 
-      log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
-        s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_.id))} ")
+      log.whenDebugEnabled {
+        log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
+          s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_._1))} ")
+      }
       self ! ResponseFromLocal(remote, invData.typeId, objs)
   }
 
@@ -590,37 +629,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
-
-  /**
-    * Local node sending out objects requested to remote
-    */
-  protected def responseFromLocal: Receive = {
-    case ResponseFromLocal(peer, _, modifiers: Seq[NodeViewModifier]) =>
-      modifiers.headOption.foreach { head =>
-        val modType = head.modifierTypeId
-
-        @tailrec
-        def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
-          var size = 5 //message type id + message size
-          val batch = mods.takeWhile { case (_, modBytes) =>
-            size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
-            size < networkSettings.maxPacketSize
-          }
-          peer.handlerRef ! Message(modifiersSpec, Right(ModifiersData(modType, batch.toMap)), None)
-          val remaining = mods.drop(batch.length)
-          if (remaining.nonEmpty) {
-            sendByParts(remaining)
-          }
-        }
-
-        Constants.modifierSerializers.get(modType) match {
-          case Some(serializer: ScorexSerializer[NodeViewModifier]) =>
-            sendByParts(modifiers.map(m => m.id -> serializer.toBytes(m)))
-          case _ =>
-            log.error(s"Undefined serializer for modifier of type $modType")
-        }
-      }
-  }
 
   /**
     * Our node needs modifiers of type `modifierTypeId` with ids `modifierIds`
@@ -731,8 +739,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       cleared.foreach(m => deliveryTracker.setUnknown(m.id))
       requestMoreModifiers(applied)
-  }
 
+    case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
+      // We collect applied TXs in order to avoid banning peers that sent these afterwards
+      logger.info("Caching applied transactions")
+      blockAppliedTxsCache = blockAppliedTxsCache.putAll(transactionIds)
+  }
 
   override def receive: Receive =
     processDataFromPeer orElse
@@ -785,7 +797,7 @@ object ErgoNodeViewSynchronizer {
     // getLocalSyncInfo messages
     case object SendLocalSyncInfo
 
-    case class ResponseFromLocal[M <: NodeViewModifier](source: ConnectedPeer, modifierTypeId: ModifierTypeId, localObjects: Seq[M])
+    case class ResponseFromLocal(source: ConnectedPeer, modifierTypeId: ModifierTypeId, localObjects: Seq[(ModifierId, Array[Byte])])
 
     /**
       * Check delivery of modifier with type `modifierTypeId` and id `modifierId`.
@@ -813,7 +825,7 @@ object ErgoNodeViewSynchronizer {
 
     case class ChangedVault[VR <: VaultReader](reader: VR) extends NodeViewChange
 
-    case class ChangedState[SR <: StateReader](reader: SR) extends NodeViewChange
+    case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
 
     //todo: consider sending info on the rollback
 

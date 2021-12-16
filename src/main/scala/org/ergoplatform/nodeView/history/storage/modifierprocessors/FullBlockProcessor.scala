@@ -232,7 +232,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     val toRemove: Seq[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
       .flatMap(id => typedModifierById[Header](id))
       .flatMap(_.sectionIds.map(_._2))
-    historyStorage.remove(toRemove)
+    historyStorage.remove(Seq.empty, toRemove)
   }
 
   private def updateStorage(newModRow: ErgoPersistentModifier,

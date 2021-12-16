@@ -3,11 +3,11 @@ package org.ergoplatform.db
 import com.google.common.primitives.Ints
 import org.ergoplatform.Utils
 import org.ergoplatform.settings.Algos
-import scorex.testkit.utils.FileUtils
+import org.ergoplatform.wallet.utils.TestFileUtils
 import scorex.util.Random
 import scorex.db.LDBVersionedStore
 
-object LDBVersionedStoreRollbackBench extends App with FileUtils {
+object LDBVersionedStoreRollbackBench extends App with TestFileUtils {
 
   private val store = new LDBVersionedStore(createTempDir, keepVersions = 400)
 

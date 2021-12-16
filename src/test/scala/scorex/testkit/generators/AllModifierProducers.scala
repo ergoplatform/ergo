@@ -1,9 +1,9 @@
 package scorex.testkit.generators
 
-import scorex.core.transaction.state.MinimalState
+import org.ergoplatform.nodeView.state.ErgoState
 
 
-trait AllModifierProducers[ST <: MinimalState[ST]]
+trait AllModifierProducers[ST <: ErgoState[ST]]
   extends SemanticallyValidModifierProducer[ST]
     with SyntacticallyTargetedModifierProducer
     with ArbitraryTransactionsCarryingModifierProducer

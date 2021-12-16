@@ -7,18 +7,22 @@ import org.scalatest.matchers.should.Matchers
 import java.util.UUID
 import scala.concurrent.duration._
 
-class ExpiringApproximateCacheSpec extends AnyFlatSpec with Matchers with TripleEqualsSupport {
+class ExpiringApproximateCacheSpec
+  extends AnyFlatSpec
+  with Matchers
+  with TripleEqualsSupport {
 
   it should "behave as fixed sized FIFO collection of bloom filters" in {
     val cache = ExpiringApproximateCache.empty(
       bloomFilterCapacity       = 500,
       bloomFilterExpirationRate = 0.2,
-      frontCacheSize                 = 0,
-      frontCacheExpiration           = 1.hour
+      frontCacheSize            = 0,
+      frontCacheExpiration      = 1.hour
     )
     cache.bloomFilterQueueSize shouldBe 5
     cache.bloomFilterApproxElemCount shouldBe 100
-    val fullCache = (1 to 500).map(_.toString).foldLeft(cache) { case (acc, n) => acc.put(n) }
+    val fullCache =
+      (1 to 500).map(_.toString).foldLeft(cache) { case (acc, n) => acc.put(n) }
 
     (1 to 400).foreach { n =>
       assert(fullCache.mightContain(n.toString), s"$n should be in bloom filter")
@@ -29,7 +33,10 @@ class ExpiringApproximateCacheSpec extends AnyFlatSpec with Matchers with Triple
       fullCache.bloomFilterQueue.map(_._1) == Vector(4, 3, 2, 1, 0),
       "BF indexes must be 4-0"
     )
-    assert(fullCache.approximateElementCount > 430, "At least 430 elements must be present")
+    assert(
+      fullCache.approximateElementCount > 430,
+      "At least 430 elements must be present"
+    )
 
     // add some more elements over limit
     val newCache =
@@ -50,11 +57,12 @@ class ExpiringApproximateCacheSpec extends AnyFlatSpec with Matchers with Triple
     val cache = ExpiringApproximateCache.empty(
       bloomFilterCapacity       = 500,
       bloomFilterExpirationRate = 0.2,
-      frontCacheSize                 = 100,
-      frontCacheExpiration           = 500.millis
+      frontCacheSize            = 100,
+      frontCacheExpiration      = 500.millis
     )
     // let's add 100 elems directly to front cache
-    val fullCache = (1 to 100).map(_.toString).foldLeft(cache) { case (acc, n) => acc.put(n) }
+    val fullCache =
+      (1 to 100).map(_.toString).foldLeft(cache) { case (acc, n) => acc.put(n) }
 
     (1 to 100).foreach { n =>
       assert(fullCache.mightContain(n.toString), s"$n should be in front cache")
@@ -78,18 +86,19 @@ class ExpiringApproximateCacheSpec extends AnyFlatSpec with Matchers with Triple
     val cache = ExpiringApproximateCache.empty(
       bloomFilterCapacity       = 10000000,
       bloomFilterExpirationRate = 0.1,
-      frontCacheSize                 = 10000,
-      frontCacheExpiration           = 1.hour
+      frontCacheSize            = 10000,
+      frontCacheExpiration      = 1.hour
     )
     // let's add 2 millions of realistic elems to cache
     val elemCount = 2000000
-    val uuids = (1 to elemCount).map(_ => UUID.randomUUID().toString)
+    val uuids     = (1 to elemCount).map(_ => UUID.randomUUID().toString)
     val fullCache = uuids.foldLeft(cache) { case (acc, n) => acc.put(n) }
 
     val notIncludedUuids = uuids.filterNot(fullCache.mightContain)
     notIncludedUuids shouldBe empty
 
-    implicit val approxEquality: Equality[Int] = TolerantNumerics.tolerantIntEquality(tolerance = 5000)
+    implicit val approxEquality: Equality[Int] =
+      TolerantNumerics.tolerantIntEquality(tolerance = 5000)
 
     fullCache.approximateElementCount.toInt === elemCount
   }

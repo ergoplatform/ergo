@@ -16,7 +16,7 @@ object ErgoBoxAssetExtractor {
     * amount for an asset) and then summarize and group their corresponding amounts.
     *
     * @param boxes - boxes to check and extract assets from
-    * @return a mapping from asset id to to balance and total assets number
+    * @return a mapping from asset id to balance and total assets number
     */
   def extractAssets(
     boxes: IndexedSeq[ErgoBoxCandidate]

@@ -1,9 +1,9 @@
 package org.ergoplatform.wallet.boxes
 
+import akka.util.ByteString
 import org.ergoplatform.ErgoBoxCandidate
 import sigmastate.eval.Extensions._
 
-import java.nio.ByteBuffer
 import scala.collection.mutable
 import scala.util.Try
 
@@ -20,8 +20,8 @@ object ErgoBoxAssetExtractor {
     */
   def extractAssets(
     boxes: IndexedSeq[ErgoBoxCandidate]
-  ): Try[(Map[ByteBuffer, Long], Int)] = Try {
-    val map: mutable.Map[ByteBuffer, Long] = mutable.Map[ByteBuffer, Long]()
+  ): Try[(Map[ByteString, Long], Int)] = Try {
+    val map: mutable.Map[ByteString, Long] = mutable.Map[ByteString, Long]()
     val assetsNum = boxes.foldLeft(0) {
       case (acc, box) =>
         require(
@@ -30,7 +30,7 @@ object ErgoBoxAssetExtractor {
         )
         box.additionalTokens.foreach {
           case (assetId, amount) =>
-            val aiWrapped = ByteBuffer.wrap(assetId)
+            val aiWrapped = ByteString.fromArray(assetId)
             val total     = map.getOrElse(aiWrapped, 0L)
             map.put(aiWrapped, Math.addExact(total, amount))
         }

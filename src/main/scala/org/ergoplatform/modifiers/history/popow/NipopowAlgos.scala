@@ -298,6 +298,4 @@ object NipopowAlgos {
 
     loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
   }
-
-
 }

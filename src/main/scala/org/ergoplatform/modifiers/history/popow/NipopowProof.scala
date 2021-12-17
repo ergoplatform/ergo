@@ -93,7 +93,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
    * @return true if all interlink proofs are valid
    */
   def hasValidProofs: Boolean = {
-    prefix.forall(x => x.checkProof()) &&
+    prefix.forall(_.checkProof()) &&
       suffixHead.checkProof()
   }
 }

@@ -3,12 +3,14 @@ package org.ergoplatform.modifiers.history.popow
 import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.extension.Extension.merkleTree
+//import org.ergoplatform.modifiers.history.extension.Extension.kvToLeaf
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
-import scorex.crypto.authds.{LeafData, Side}
-import scorex.crypto.authds.merkle.{BatchMerkleProof, MerkleTree}
+import scorex.crypto.authds.Side
+import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.Extensions._
@@ -25,7 +27,7 @@ import scala.util.Try
   * Not used in the consensus protocol
   *
   */
-case class PoPowHeader(header: Header, interlinks: Seq[ModifierId], proof: BatchMerkleProof[Digest32]) extends BytesSerializable {
+case class PoPowHeader(header: Header, interlinks: Seq[ModifierId], interlinksProof: BatchMerkleProof[Digest32]) extends BytesSerializable {
 
   override type M = PoPowHeader
 
@@ -35,7 +37,7 @@ case class PoPowHeader(header: Header, interlinks: Seq[ModifierId], proof: Batch
 
   def height: Int = header.height
 
-  def checkProof(): Boolean = PoPowHeader.checkProof(interlinks, proof)
+  def checkProof(): Boolean = PoPowHeader.checkProof(interlinks, interlinksProof)
 }
 
 object PoPowHeader {
@@ -47,10 +49,9 @@ object PoPowHeader {
   val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
 
   def checkProof(interlinks: Seq[ModifierId], proof: BatchMerkleProof[Digest32]): Boolean = {
-    val packed = nipopowAlgos.packInterlinks(interlinks)
-    val leafData = packed.map(_._2).map(LeafData @@ _)
-    val treeRoot = MerkleTree(leafData)(hf).rootHash
-    proof.valid(treeRoot)
+    val fields = nipopowAlgos.packInterlinks(interlinks)
+    val tree = merkleTree(fields)
+    proof.valid(tree.rootHash)
   }
 
   def fromBlock(b: ErgoFullBlock): Try[PoPowHeader] = {
@@ -95,7 +96,7 @@ object PoPowHeader {
       "header" -> p.header.asJson,
       //order in JSON array is preserved according to RFC 7159
       "interlinks" -> p.interlinks.asJson,
-      "proof" -> p.proof.asJson
+      "interlinksProof" -> p.interlinksProof.asJson
     ).asJson
   }
 
@@ -103,7 +104,7 @@ object PoPowHeader {
     for {
       header <- c.downField("header").as[Header]
       interlinks <- c.downField("interlinks").as[Seq[String]]
-      proof <- c.downField("proof").as[BatchMerkleProof[Digest32]]
+      proof <- c.downField("interlinksProof").as[BatchMerkleProof[Digest32]]
     } yield PoPowHeader(header, interlinks.map(s => ModifierId @@ s), proof)
   }
 }
@@ -120,7 +121,7 @@ object PoPowHeaderSerializer extends ScorexSerializer[PoPowHeader] {
     w.putBytes(headerBytes)
     w.putUInt(obj.interlinks.size)
     obj.interlinks.foreach(x => w.putBytes(idToBytes(x)))
-    val proofBytes = merkleSerializer.serialize(obj.proof)
+    val proofBytes = merkleSerializer.serialize(obj.interlinksProof)
     w.putUInt(proofBytes.length)
     w.putBytes(proofBytes)
   }
@@ -130,9 +131,9 @@ object PoPowHeaderSerializer extends ScorexSerializer[PoPowHeader] {
     val header = HeaderSerializer.parseBytes(r.getBytes(headerSize))
     val linksQty = r.getUInt().toIntExact
     val interlinks = (0 until linksQty).map(_ => bytesToId(r.getBytes(ModifierIdLength)))
-    val proofSize = r.getUInt().toIntExact
-    val proof = merkleSerializer.deserialize(r.getBytes(proofSize)).get
-    PoPowHeader(header, interlinks, proof)
+    val interlinksProofSize = r.getUInt().toIntExact
+    val interlinksProof = merkleSerializer.deserialize(r.getBytes(interlinksProofSize)).get
+    PoPowHeader(header, interlinks, interlinksProof)
   }
 
 }

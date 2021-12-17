@@ -2,13 +2,12 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.generators.ChainGenerator
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.ModifierId
 import org.ergoplatform.utils.HistoryTestHelpers
 
 class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers with ChainGenerator {
@@ -59,25 +58,6 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     NipopowAlgos.unpackInterlinks(improperlyPacked) shouldBe 'failure
 
     unpackedTry.get shouldEqual interlinks
-  }
-
-  property("proofForInterlink") {
-    val blockIds = Gen.listOfN(255, modifierIdGen).sample.get
-    val extension = popowAlgos.interlinksToExtension(blockIds)
-    val blockIdToProve = blockIds.head
-    val proof = popowAlgos.proofForInterlink(extension, blockIdToProve)
-
-    proof shouldBe defined
-    val encodedField = proof.get.leafData
-    val numBytesKey = encodedField.head
-    val key = encodedField.tail.take(numBytesKey)
-    val prefix = key.head
-    val value = encodedField.drop(numBytesKey + 1)
-    val blockId = value.tail
-    numBytesKey shouldBe 2
-    prefix shouldBe Extension.InterlinksVectorPrefix
-    bytesToId(blockId) shouldBe blockIdToProve
-    proof.get.valid(extension.digest) shouldBe true
   }
 
   property("proofForInterlinkVector") {

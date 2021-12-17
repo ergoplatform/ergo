@@ -12,4 +12,11 @@ class PoPowHeaderSpec extends ErgoPropertyTest {
       checkProof(interlinks, interlinksProof) shouldBe true
     }
   }
+
+  property("Check invalid interlinks proof should be false") {
+    forAll(Gen.nonEmptyListOf(modifierIdGen), Gen.nonEmptyListOf(modifierIdGen)) { (interlinks1, interlinks2) =>
+        val interlinksProof = nipopowAlgos.proofForInterlinkVector(nipopowAlgos.interlinksToExtension(interlinks2)).get
+        checkProof(interlinks1, interlinksProof) shouldBe false
+    }
+  }
 }

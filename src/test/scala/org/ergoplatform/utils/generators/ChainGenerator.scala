@@ -72,9 +72,9 @@ trait ChainGenerator extends ErgoTestConstants {
           bestHeaderOpt.map(_.header),
           bestHeaderOpt.map(ph => popowAlgos.interlinksToExtension(ph.interlinks).toExtension(ph.id))
         )
-        val proof = popowAlgos.proofForInterlinkVector(ExtensionCandidate(popowAlgos.packInterlinks(links))).get
-
-        val poPowH = PoPowHeader(h, links, proof)
+        val interlinkProof = popowAlgos.proofForInterlinkVector(ExtensionCandidate(popowAlgos.packInterlinks(links)))
+          .getOrElse(throw new Error(s"Failed to build interlink proof."))
+        val poPowH = PoPowHeader(h, links, interlinkProof)
         (acc :+ poPowH, Some(poPowH))
     }._1
   }

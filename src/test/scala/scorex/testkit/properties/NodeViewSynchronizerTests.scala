@@ -241,7 +241,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       */
 
       // Then send message to request it
-      node ! Message[Unit](GetSnapshotsInfoSpec, Right(Unit), None)
+      node ! Message[Unit](GetSnapshotsInfoSpec, Left(Array.empty[Byte]), Option(peer))
       pchProbe.fishForMessage(5 seconds) {
         case _: SnapshotsInfoSpec.type => true
         case _ => false

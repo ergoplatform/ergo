@@ -9,7 +9,7 @@ import scorex.core.consensus.ContainsModifiers
 import scorex.core.network.DeliveryTracker._
 import scorex.core.network.ModifiersStatus._
 import scorex.core.utils.ScorexEncoding
-import scorex.core.{ModifierTypeId, NodeViewModifier}
+import scorex.core.ModifierTypeId
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.collection.mutable
@@ -103,12 +103,8 @@ class DeliveryTracker(system: ActorSystem,
     else if (modifierKeepers.exists(_.contains(modifierId))) Held
     else Unknown
 
-  def status(modifierId: ModifierId, modifierTypeId: ModifierTypeId, mk: ContainsModifiers[_ <: NodeViewModifier]): ModifiersStatus = {
-    status(modifierId, modifierTypeId, Seq(mk))
-  }
-
-  def status(modifierId: ModifierId, modifierTypeId: ModifierTypeId): ModifiersStatus = {
-    status(modifierId, modifierTypeId, Seq())
+  def requireStatus(oldStatus: ModifiersStatus, expectedStatues: ModifiersStatus): Unit = {
+    require(isCorrectTransition(oldStatus, expectedStatues), s"Illegal status transition: $oldStatus -> $expectedStatues")
   }
 
   /**
@@ -133,7 +129,7 @@ class DeliveryTracker(system: ActorSystem,
   def setRequested(id: ModifierId, typeId: ModifierTypeId, supplierOpt: Option[ConnectedPeer], checksDone: Int = 0)
                   (implicit ec: ExecutionContext): Unit =
     tryWithLogging {
-      require(isCorrectTransition(status(id, typeId), Requested), s"Illegal status transition: ${status(id, typeId)} -> Requested")
+      requireStatus(status(id, typeId, Seq.empty), Requested)
       val cancellable = system.scheduler.scheduleOnce(deliveryTimeout, nvsRef, CheckDelivery(supplierOpt, typeId, id))
       val requestedInfo = RequestedInfo(supplierOpt, cancellable, checksDone)
       requested.adjust(typeId)(_.fold(Map(id -> requestedInfo))(_.updated(id, requestedInfo)))
@@ -147,9 +143,9 @@ class DeliveryTracker(system: ActorSystem,
     * and return [[ConnectedPeer]] which sent bad modifier.
     */
   def setInvalid(id: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
-    val oldStatus: ModifiersStatus = status(id, modifierTypeId)
+    val oldStatus: ModifiersStatus = status(id, modifierTypeId, Seq.empty)
     val transitionCheck = tryWithLogging {
-      require(isCorrectTransition(oldStatus, Invalid), s"Illegal status transition: $oldStatus -> Invalid")
+      requireStatus(oldStatus, Invalid)
     }
     transitionCheck
       .toOption
@@ -191,8 +187,8 @@ class DeliveryTracker(system: ActorSystem,
     */
   def setHeld(id: ModifierId, modifierTypeId: ModifierTypeId): Unit =
     tryWithLogging {
-      val oldStatus: ModifiersStatus = status(id, modifierTypeId)
-      require(isCorrectTransition(oldStatus, Held), s"Illegal status transition: $oldStatus -> Held")
+      val oldStatus = status(id, modifierTypeId, Seq.empty)
+      requireStatus(oldStatus, Held)
       clearStatusForModifier(id, modifierTypeId, oldStatus) // clear old status
     }
 
@@ -206,8 +202,8 @@ class DeliveryTracker(system: ActorSystem,
     */
   def setUnknown(id: ModifierId, modifierTypeId: ModifierTypeId): Unit =
     tryWithLogging {
-      val oldStatus: ModifiersStatus = status(id, modifierTypeId)
-      require(isCorrectTransition(oldStatus, Unknown), s"Illegal status transition: $oldStatus -> Unknown")
+      val oldStatus = status(id, modifierTypeId, Seq.empty)
+      requireStatus(oldStatus, Unknown)
       clearStatusForModifier(id, modifierTypeId, oldStatus) // clear old status
     }
 
@@ -216,8 +212,8 @@ class DeliveryTracker(system: ActorSystem,
     */
   def setReceived(id: ModifierId, modifierTypeId: ModifierTypeId, sender: ConnectedPeer): Unit =
     tryWithLogging {
-      val oldStatus: ModifiersStatus = status(id, modifierTypeId)
-      require(isCorrectTransition(oldStatus, Invalid), s"Illegal status transition: $oldStatus -> Received")
+      val oldStatus = status(id, modifierTypeId, Seq.empty)
+      requireStatus(oldStatus, Received)
       if (oldStatus != Received) {
         requested.flatAdjust(modifierTypeId)(_.map { infoById =>
           infoById.get(id) match {

@@ -25,7 +25,7 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
 
   private val peersSpec = new PeersSpec(featureSerializers, settings.maxPeerSpecObjects)
 
-  protected override val msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
+  private val msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: PeersSpec, peers: Seq[PeerSpec]@unchecked, _) if peers.cast[Seq[PeerSpec]].isDefined =>
       addNewPeers(peers)
 
@@ -46,7 +46,7 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
   override def receive: Receive = {
 
     // data received from a remote peer
-    case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(spec, msgBytes, source)
+    case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
 
     // fall-through method for reporting unhandled messages
     case nonsense: Any => log.warn(s"PeerSynchronizer: got unexpected input $nonsense from ${sender()}")

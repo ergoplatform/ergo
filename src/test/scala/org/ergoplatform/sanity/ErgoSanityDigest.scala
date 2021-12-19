@@ -3,19 +3,18 @@ package org.ergoplatform.sanity
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.header.HeaderSerializer
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.header.HeaderSerializer
 import org.ergoplatform.network.ErgoSyncTracker
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import scorex.core.idToBytes
-import scorex.core.network.peer.PeerInfo
 import scorex.core.network.ConnectedPeer
+import scorex.core.network.peer.PeerInfo
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 
@@ -59,7 +58,6 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
     val settings = ErgoSettings.read()
-    val pool = ErgoMemPool.empty(settings)
     val v = h.bestFullBlockIdOpt.orElse(h.bestHeaderIdOpt).get
     s.store.update(idToBytes(v), Seq(), Seq()).get
     implicit val ec: ExecutionContextExecutor = system.dispatcher
@@ -76,8 +74,6 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
         ErgoSyncInfoMessageSpec,
         settings,
         tp,
-        h,
-        pool,
         syncTracker
       )
     ))

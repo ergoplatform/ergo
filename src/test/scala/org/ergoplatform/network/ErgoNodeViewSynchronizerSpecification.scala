@@ -48,8 +48,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
                         syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                         settings: ErgoSettings,
                         timeProvider: NetworkTimeProvider,
-                        history: ErgoHistory,
-                        pool: ErgoMemPool,
                         syncTracker: ErgoSyncTracker)
                        (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
     networkControllerRef,
@@ -60,9 +58,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     syncTracker)(ec) {
 
     override def preStart(): Unit = {
-      this.historyReaderOpt = Some(history)
-      this.mempoolReaderOpt = Some(pool)
-
       // register as a handler for synchronization-specific types of messages
       val messageSpecs: Seq[MessageSpec[_]] = Seq(invSpec, requestModifierSpec, modifiersSpec, syncInfoSpec)
       networkControllerRef ! RegisterMessageSpecs(messageSpecs, self)
@@ -139,7 +134,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = localStateGen.sample.get
     val settings = ErgoSettings.read()
-    val pool = ErgoMemPool.empty(settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")
@@ -154,8 +148,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         ErgoSyncInfoMessageSpec,
         settings,
         tp,
-        h,
-        pool,
         syncTracker)
     ))
     val m = totallyValidModifier(h, s)

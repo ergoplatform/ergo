@@ -1,6 +1,5 @@
 package org.ergoplatform.modifiers.mempool
 
-import akka.util.ByteString
 import io.circe.syntax._
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
@@ -28,6 +27,7 @@ import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -71,7 +71,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
 
 
-  lazy val outAssetsTry: Try[(Map[ByteString, Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
+  lazy val outAssetsTry: Try[(Map[Seq[Byte], Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
 
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -173,7 +173,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
         ErgoBoxAssetExtractor.extractAssets(boxesToSpend) match {
           case Success((inAssets, inAssetsNum)) =>
-            lazy val newAssetId = ByteString.fromArray(inputs.head.boxId)
+            lazy val newAssetId = mutable.WrappedArray.make(inputs.head.boxId)
             val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
             val currentTxCost = validation.result.payload.get
 

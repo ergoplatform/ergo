@@ -134,6 +134,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = localStateGen.sample.get
     val settings = ErgoSettings.read()
+    val pool = ErgoMemPool.empty(settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")
@@ -162,6 +163,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       lastMessage = 0,
       Some(peerInfo)
     )
+    ref ! ChangedHistory(history)
+    ref ! ChangedMempool(pool)
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
     (ref, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener, serializer)
   }

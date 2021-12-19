@@ -4,6 +4,10 @@ import java.io.File
 import scala.util.Try
 import org.ergoplatform.wallet.interface4j.SecretString
 
+/**
+  * Secret storage trait.
+  * Using SecretString for critical parts to be erased after use
+  */
 trait SecretStorage {
 
   val secretFile: File
@@ -16,6 +20,9 @@ trait SecretStorage {
 
   def lock(): Unit
 
+  /**
+    * @param mnemonic - SecretString to be erased after use
+    */
   def checkSeed(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString]): Boolean
 
 }

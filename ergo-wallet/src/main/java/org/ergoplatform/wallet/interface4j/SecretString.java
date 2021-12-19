@@ -3,6 +3,7 @@ package org.ergoplatform.wallet.interface4j;
 import java.util.Arrays;
 
 /**
+ * Direct copy from https://github.com/aslesarenko/ergo-appkit SecretString class
  * Encapsulates secret array of characters (char[]) with proper equality.
  * The secret data can be {@link SecretString#erase() erased} in memory and not leaked to GC.
  * Using this class is more secure and safe than using char[] directly.

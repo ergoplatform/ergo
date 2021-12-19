@@ -1,9 +1,8 @@
 package org.ergoplatform.wallet.boxes
 
-import akka.util.ByteString
 import org.ergoplatform.ErgoBoxCandidate
 import sigmastate.eval.Extensions._
-
+import java7.compat.Math
 import scala.collection.mutable
 import scala.util.Try
 
@@ -20,8 +19,8 @@ object ErgoBoxAssetExtractor {
     */
   def extractAssets(
     boxes: IndexedSeq[ErgoBoxCandidate]
-  ): Try[(Map[ByteString, Long], Int)] = Try {
-    val map: mutable.Map[ByteString, Long] = mutable.Map[ByteString, Long]()
+  ): Try[(Map[Seq[Byte], Long], Int)] = Try {
+    val map: mutable.Map[Seq[Byte], Long] = mutable.Map[Seq[Byte], Long]()
     val assetsNum = boxes.foldLeft(0) {
       case (acc, box) =>
         require(
@@ -30,7 +29,7 @@ object ErgoBoxAssetExtractor {
         )
         box.additionalTokens.foreach {
           case (assetId, amount) =>
-            val aiWrapped = ByteString.fromArray(assetId)
+            val aiWrapped = mutable.WrappedArray.make(assetId)
             val total     = map.getOrElse(aiWrapped, 0L)
             map.put(aiWrapped, Math.addExact(total, amount))
         }
@@ -57,8 +56,11 @@ object ErgoBoxAssetExtractor {
     outAssetsNum: Int,
     outAssetsSize: Int,
     tokenAccessCost: Int
-  ): Int =
-    (outAssetsNum + inAssetsNum) * tokenAccessCost + (inAssetsSize + outAssetsSize) * tokenAccessCost
+  ): Int = {
+    val allAssetsCost = Math.multiplyExact(Math.addExact(outAssetsNum, inAssetsNum), tokenAccessCost)
+    val uniqueAssetsCost = Math.multiplyExact(Math.addExact(inAssetsSize, outAssetsSize), tokenAccessCost)
+    Math.addExact(allAssetsCost, uniqueAssetsCost)
+  }
 
   /**
     * Extract total assets access cost from in/out boxes

@@ -1,6 +1,5 @@
 package org.ergoplatform.modifiers.mempool
 
-import akka.util.ByteString
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.ErgoContext
@@ -404,8 +403,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
       val txCost = tx.statefulValidity(from, IndexedSeq(), emptyStateContext, accInitCost).get
 
-      val (inAssets, inAssetsNum): (Map[ByteString, Long], Int) = ErgoBoxAssetExtractor.extractAssets(from).get
-      val (outAssets, outAssetsNum): (Map[ByteString, Long], Int) = ErgoBoxAssetExtractor.extractAssets(tx.outputs).get
+      val (inAssets, inAssetsNum): (Map[Seq[Byte], Long], Int) = ErgoBoxAssetExtractor.extractAssets(from).get
+      val (outAssets, outAssetsNum): (Map[Seq[Byte], Long], Int) = ErgoBoxAssetExtractor.extractAssets(tx.outputs).get
 
       val assetsCost = inAssetsNum * tokenAccessCost + inAssets.size * tokenAccessCost +
         outAssetsNum * tokenAccessCost + outAssets.size * tokenAccessCost

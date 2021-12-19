@@ -406,7 +406,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def modifiersFromRemote(data: ModifiersData, remote: ConnectedPeer): Unit = {
     val typeId = data.typeId
     val modifiers = data.modifiers
-    log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: $remote")
+    log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
     log.debug("Modifier ids: " + modifiers.keys)
 
     // filter out non-requested modifiers
@@ -491,7 +491,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       } else {
         spam.foreach { case (status, mods) =>
           log.info(s"Spam attempt: non-requested modifiers of type $typeId and status $status " +
-            s"with ids ${mods.keys.map(encoder.encodeId)} sent by peer $remote")
+            s"with ${mods.size} ids sent by peer $remote")
         }
         penalizeSpammingPeer(remote)
       }
@@ -699,7 +699,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
         val maxModifiersToDownload = deliveryTracker.modifiersToDownload
-        log.debug(s"Going to download $maxModifiersToDownload non-header modifiers")
         requestDownload(
           maxModifiersToDownload,
           minModifiersPerBucket,

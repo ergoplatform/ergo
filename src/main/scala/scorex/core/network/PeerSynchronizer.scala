@@ -1,6 +1,7 @@
 package scorex.core.network
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor.SupervisorStrategy.{Restart, Stop}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorSystem, DeathPactException, OneForOneStrategy, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
@@ -22,6 +23,20 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
                        settings: NetworkSettings,
                        featureSerializers: PeerFeature.Serializers)
                       (implicit ec: ExecutionContext) extends Actor with Synchronizer with ScorexLogging {
+
+
+  override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
+    maxNrOfRetries = 10,
+    withinTimeRange = 1.minute) {
+    case _: ActorKilledException => Stop
+    case _: DeathPactException => Stop
+    case e: ActorInitializationException =>
+      log.warn(s"Stopping actor due to : $e")
+      Stop
+    case e: Exception =>
+      log.warn(s"Restarting actor due to : $e")
+      Restart
+  }
 
   private val peersSpec = new PeersSpec(featureSerializers, settings.maxPeerSpecObjects)
 

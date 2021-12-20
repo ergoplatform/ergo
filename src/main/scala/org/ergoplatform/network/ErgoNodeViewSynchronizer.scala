@@ -63,10 +63,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case _: ActorKilledException => Stop
     case _: DeathPactException => Stop
     case e: ActorInitializationException =>
-      log.warn(s"Stopping child actor failed with: $e")
+      log.warn(s"Stopping actor due to : $e")
       Stop
     case e: Exception =>
-      log.warn(s"Restarting child actor failed with: $e")
+      log.warn(s"Restarting actor due to : $e")
       Restart
   }
 

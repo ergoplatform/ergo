@@ -3,7 +3,7 @@ package scorex.core.network
 import scorex.core.network.message.MessageSpec
 import scorex.util.ScorexLogging
 
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 trait Synchronizer extends ScorexLogging {
 
@@ -21,22 +21,25 @@ trait Synchronizer extends ScorexLogging {
     spec: MessageSpec[Any],
     msgBytes: Array[Byte],
     source: ConnectedPeer
-  ): Unit = {
+  ): Try[Unit] = {
     // attempt to parse the message
     spec.parseBytesTry(msgBytes) match {
       // if a message could be parsed, match the type of content found and ensure a handler is defined
       case Success(content) =>
         val parsedMsg = (spec, content, source)
         if (msgHandlers.isDefinedAt(parsedMsg)) {
-          msgHandlers.apply(parsedMsg)
+          Try(msgHandlers.apply(parsedMsg))
         } else {
-          log.error(s"Function handler not found for the parsed message: $parsedMsg")
+          val msg = s"Function handler not found for the parsed message: $parsedMsg"
+          log.error(msg)
+          Failure(new IllegalStateException(msg))
         }
 
       // if a message could not be parsed, penalize the remote peer
       case Failure(e) =>
         log.error(s"Failed to deserialize data from $source: ", e)
         penalizeMaliciousPeer(source)
+        Failure(e)
     }
   }
 

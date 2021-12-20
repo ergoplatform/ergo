@@ -712,6 +712,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       blockAppliedTxsCache = blockAppliedTxsCache.putAll(transactionIds)
   }
 
+  /** get handlers of messages coming from peers */
   private def msgHandlers(hr: ErgoHistory, mp: ErgoMemPool): PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: ErgoSyncInfoMessageSpec.type @unchecked, data: ErgoSyncInfo @unchecked, remote) =>
       processSync(hr, data, remote)
@@ -735,28 +736,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  protected var historyROpt: Option[ErgoHistory] = None
-  protected var mempoolROpt: Option[ErgoMemPool] = None
-
-  override def receive: Receive = {
-    case ChangedHistory(reader: ErgoHistory) =>
-      historyROpt = Option(reader)
-      (historyROpt, mempoolROpt) match {
-        case (Some(historyReader), Some(mempoolReader)) =>
+  /** Wait until both historyReader and mempoolReader instances are received so actor can be operational */
+  def initializing(hr: Option[ErgoHistory], mp: Option[ErgoMemPool]): PartialFunction[Any, Unit] = {
+    case ChangedHistory(historyReader: ErgoHistory) =>
+      mp match {
+        case Some(mempoolReader) =>
           context.become(initialized(historyReader, mempoolReader))
         case _ =>
+          context.become(initializing(Option(historyReader), mp))
       }
-    case ChangedMempool(reader: ErgoMemPool) =>
-      mempoolROpt = Option(reader)
-      (historyROpt, mempoolROpt) match {
-        case (Some(historyReader), Some(mempoolReader)) =>
+    case ChangedMempool(mempoolReader: ErgoMemPool) =>
+      hr match {
+        case Some(historyReader) =>
           context.become(initialized(historyReader, mempoolReader))
         case _ =>
+          context.become(initializing(hr, Option(mempoolReader)))
       }
     case msg =>
-      log.info(s"Actor not initialized yet, scheduling message until it is")
+      // Actor not initialized yet, scheduling message until it is
       context.system.scheduler.scheduleOnce(1.second, self, msg)
   }
+
+  override def receive: Receive = initializing(None, None)
 
 }
 

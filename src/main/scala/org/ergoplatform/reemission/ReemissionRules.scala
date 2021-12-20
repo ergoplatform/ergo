@@ -10,10 +10,10 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings, Reemiss
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import sigmastate.{AND, EQ, GE, GT, Minus, OR}
+import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR}
 import sigmastate.Values.{ErgoTree, IntConstant}
 import sigmastate.interpreter.ProverResult
-import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractScriptBytes}
+import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractScriptBytes, SizeOf}
 
 
 class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: ReemissionSettings) {
@@ -72,13 +72,17 @@ class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: Re
     val coinsToIssue = monetarySettings.oneEpochReduction // 3 ERG
     val correctCoinsIssued = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
 
-    val sponsored = GT(ExtractAmount(reemissionOut), ExtractAmount(Self))
+    val sponsored = AND(
+      GT(ExtractAmount(reemissionOut), ExtractAmount(Self)),
+      LE(ExtractAmount(ByIndex(Outputs, IntConstant(1))), 10000000),  // 0.01 ERG
+      EQ(SizeOf(Outputs), 2)
+    )
 
     AND(
       sameScriptRule,
       heightCorrect,
       OR(
-        AND(sponsored),
+        sponsored,
         AND(
           correctMinerOutput,
           afterEmission,

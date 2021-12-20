@@ -73,9 +73,8 @@ class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: Re
     val correctCoinsIssued = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
 
     val sponsored = AND(
-      GT(ExtractAmount(reemissionOut), ExtractAmount(Self)),
-      LE(ExtractAmount(ByIndex(Outputs, IntConstant(1))), 10000000),  // 0.01 ERG
-      EQ(SizeOf(Outputs), 2)
+      GT(ExtractAmount(reemissionOut)),
+      EQ(SizeOf(Outputs), 1)
     )
 
     AND(

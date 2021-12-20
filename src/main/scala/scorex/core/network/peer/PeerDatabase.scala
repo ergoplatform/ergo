@@ -14,7 +14,7 @@ import scala.concurrent.duration._
   * In-memory peer database implementation supporting temporal blacklisting.
   */
 final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) extends ScorexLogging {
-
+  private val peerOblivionTime = settings.scorexSettings.network.peerOblivionTime
   private val objectStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
 
   private var peers = loadPeers()
@@ -53,10 +53,15 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
    */
   private def loadPeers(): Map[InetSocketAddress, PeerInfo] = {
     var peers = Map.empty[InetSocketAddress, PeerInfo]
+    val now = timeProvider.time()
     for ((addr,peer) <- objectStore.getAll) {
       val address = deserialize(addr).asInstanceOf[InetSocketAddress]
       val peerInfo = PeerInfoSerializer.parseBytes(peer)
-      peers += address -> peerInfo
+      if (now - peerInfo.lastHandshake > peerOblivionTime.toMillis) {
+        objectStore.remove(Seq(addr))
+      } else {
+        peers += address -> peerInfo
+      }
     }
     peers
   }

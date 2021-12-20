@@ -70,10 +70,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       Restart
   }
 
-  // bloom filters with transaction ids that were already applied to history
-  private var blockAppliedTxsCache: FixedSizeBloomFilterQueue =
-    FixedSizeBloomFilterQueue.empty(bloomFilterQueueSize = 5)
-
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   protected val deliveryTimeout: FiniteDuration = networkSettings.deliveryTimeout
@@ -389,16 +385,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Logic to process block parts got from another peer.
     * Filter out non-requested block parts (with a penalty to spamming peer),
     * parse block parts and send valid modifiers to NodeViewHolder
-    *
     */
-  protected def modifiersFromRemote(hr: ErgoHistory, data: ModifiersData, remote: ConnectedPeer): Unit = {
+  protected def modifiersFromRemote(
+                                     hr: ErgoHistory,
+                                     data: ModifiersData,
+                                     remote: ConnectedPeer,
+                                     blockAppliedTxsCache: FixedSizeBloomFilterQueue): Unit = {
     val typeId = data.typeId
     val modifiers = data.modifiers
     log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
     log.debug("Modifier ids: " + modifiers.keys)
 
     // filter out non-requested modifiers
-    val requestedModifiers = processSpam(remote, typeId, modifiers)
+    val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
 
     Constants.modifierSerializers.get(typeId) match {
       case Some(serializer: ScorexSerializer[ErgoTransaction]@unchecked) if typeId == Transaction.ModifierTypeId =>
@@ -459,8 +458,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return ids and bytes of modifiers that were requested by our node
     */
   def processSpam(remote: ConnectedPeer,
-                          typeId: ModifierTypeId,
-                          modifiers: Map[ModifierId, Array[Byte]]): Map[ModifierId, Array[Byte]] = {
+                  typeId: ModifierTypeId,
+                  modifiers: Map[ModifierId, Array[Byte]],
+                  blockAppliedTxsCache: FixedSizeBloomFilterQueue): Map[ModifierId, Array[Byte]] = {
     val modifiersByStatus =
       modifiers
         .groupBy { case (id, _) => deliveryTracker.status(id, typeId, Seq.empty) }
@@ -491,7 +491,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Filter out modifier ids that are already in process (requested, received or applied),
     * request unknown ids from peer and set this ids to requested state.
     */
-  protected def processInv(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, peer: ConnectedPeer): Unit = {
+  protected def processInv(hr: ErgoHistory,
+                           mp: ErgoMemPool,
+                           invData: InvData,
+                           peer: ConnectedPeer,
+                           blockAppliedTxsCache: FixedSizeBloomFilterQueue): Unit = {
     val modifierTypeId = invData.typeId
     val newModifierIds = modifierTypeId match {
       case Transaction.ModifierTypeId =>
@@ -658,7 +662,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
   }
 
-  protected def viewHolderEvents(historyReader: ErgoHistory, mempoolReader: ErgoMemPool): Receive = {
+  protected def viewHolderEvents(historyReader: ErgoHistory, mempoolReader: ErgoMemPool, blockAppliedTxsCache: FixedSizeBloomFilterQueue): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
 
@@ -695,10 +699,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.setInvalid(mod.id, mod.modifierTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
-      context.become(initialized(newHistoryReader, mempoolReader))
+      context.become(initialized(newHistoryReader, mempoolReader, blockAppliedTxsCache))
 
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
-      context.become(initialized(historyReader, newMempoolReader))
+      context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
 
     case ModifiersProcessingResult(_: Seq[ErgoPersistentModifier], cleared: Seq[ErgoPersistentModifier]) =>
       // stop processing for cleared modifiers
@@ -707,29 +711,32 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       requestMoreModifiers(historyReader)
 
     case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
-      // We collect applied TXs in order to avoid banning peers that sent these afterwards
+      // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
       logger.info("Caching applied transactions")
-      blockAppliedTxsCache = blockAppliedTxsCache.putAll(transactionIds)
+      context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache.putAll(transactionIds)))
   }
 
   /** get handlers of messages coming from peers */
-  private def msgHandlers(hr: ErgoHistory, mp: ErgoMemPool): PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
+  private def msgHandlers(hr: ErgoHistory,
+                          mp: ErgoMemPool,
+                          blockAppliedTxsCache: FixedSizeBloomFilterQueue
+                         ): PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: ErgoSyncInfoMessageSpec.type @unchecked, data: ErgoSyncInfo @unchecked, remote) =>
       processSync(hr, data, remote)
     case (_: InvSpec, data: InvData, remote) =>
-      processInv(hr, mp, data, remote)
+      processInv(hr, mp, data, remote, blockAppliedTxsCache)
     case (_: RequestModifierSpec, data: InvData, remote) =>
       modifiersReq(hr, mp, data, remote)
     case (_: ModifiersSpec, data: ModifiersData, remote) =>
-      modifiersFromRemote(hr, data, remote)
+      modifiersFromRemote(hr, data, remote, blockAppliedTxsCache)
   }
 
-  def initialized(hr: ErgoHistory, mp: ErgoMemPool): PartialFunction[Any, Unit] = {
-    processDataFromPeer(msgHandlers(hr, mp)) orElse
+  def initialized(hr: ErgoHistory, mp: ErgoMemPool, blockAppliedTxsCache: FixedSizeBloomFilterQueue): PartialFunction[Any, Unit] = {
+    processDataFromPeer(msgHandlers(hr, mp, blockAppliedTxsCache)) orElse
       onDownloadRequest(hr) orElse
       getLocalSyncInfo(hr) orElse
       responseFromLocal orElse
-      viewHolderEvents(hr, mp) orElse
+      viewHolderEvents(hr, mp, blockAppliedTxsCache) orElse
       peerManagerEvents orElse
       checkDelivery orElse {
       case a: Any => log.error("Strange input: " + a)
@@ -737,27 +744,27 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /** Wait until both historyReader and mempoolReader instances are received so actor can be operational */
-  def initializing(hr: Option[ErgoHistory], mp: Option[ErgoMemPool]): PartialFunction[Any, Unit] = {
+  def initializing(hr: Option[ErgoHistory], mp: Option[ErgoMemPool], blockAppliedTxsCache: FixedSizeBloomFilterQueue): PartialFunction[Any, Unit] = {
     case ChangedHistory(historyReader: ErgoHistory) =>
       mp match {
         case Some(mempoolReader) =>
-          context.become(initialized(historyReader, mempoolReader))
+          context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache))
         case _ =>
-          context.become(initializing(Option(historyReader), mp))
+          context.become(initializing(Option(historyReader), mp, blockAppliedTxsCache))
       }
     case ChangedMempool(mempoolReader: ErgoMemPool) =>
       hr match {
         case Some(historyReader) =>
-          context.become(initialized(historyReader, mempoolReader))
+          context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache))
         case _ =>
-          context.become(initializing(hr, Option(mempoolReader)))
+          context.become(initializing(hr, Option(mempoolReader), blockAppliedTxsCache))
       }
     case msg =>
       // Actor not initialized yet, scheduling message until it is
       context.system.scheduler.scheduleOnce(1.second, self, msg)
   }
 
-  override def receive: Receive = initializing(None, None)
+  override def receive: Receive = initializing(None, None, FixedSizeBloomFilterQueue.empty(bloomFilterQueueSize = 5))
 
 }
 

@@ -34,7 +34,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     */
   def validateWithCost(tx: ErgoTransaction,
                        stateContextOpt: Option[ErgoStateContext],
-                       costLimit: Int): Try[Long] = {
+                       costLimit: Long): Try[Long] = {
     val verifier = ErgoInterpreter(stateContext.currentParameters)
     val context = stateContextOpt.getOrElse(stateContext)
     tx.statelessValidity().flatMap { _ =>

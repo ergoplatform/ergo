@@ -70,6 +70,18 @@ Reemission Contract
 ```scala
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
+
+    // output to pay miner
+    val minerOut = ByIndex(Outputs, IntConstant(1))
+
+    val rOutTokens = OptionGet(ExtractRegisterAs(reemissionOut, R2)(SCollection(STuple(SCollection(SByte), SLong))))
+
+    val firstTokenId = SelectField(ByIndex(rOutTokens, IntConstant(0)), 0.toByte)
+
+    val correctNftId = EQ(firstTokenId, ByteArrayConstant(reemissionNftId))
+    
+    // output of the reemission contract
+    val reemissionOut = ByIndex(Outputs, IntConstant(0))
     
     // output to pay miner
     val minerOut = ByIndex(Outputs, IntConstant(1))
@@ -105,6 +117,7 @@ Reemission Contract
     )
     
     AND(
+        correctNftId,
         sameScriptRule,
         heightCorrect,
         OR(
@@ -132,6 +145,8 @@ Emission contract NFT id: *not set yet*
 
 Re-emission token id: *not set yet*
 
+Reemission contract NFT id: *not set yet*
+
 
 Mainnet Data
 ------------
@@ -139,6 +154,8 @@ Mainnet Data
 Emission contract NFT id: *not set yet*
 
 Re-emission token id: *not set yet*
+
+Reemission contract NFT id: *not set yet*
 
 
 References

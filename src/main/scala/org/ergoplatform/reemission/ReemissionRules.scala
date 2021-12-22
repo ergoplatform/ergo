@@ -46,6 +46,10 @@ class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: Re
     }
   }
 
+  /**
+    * Contract for boxes miners paying to according to EIP-27. Then anyone can merge multiple boxes locked by this
+    * contract with reemission box
+    */
   val payToReemission: ErgoTree = {
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
@@ -57,6 +61,9 @@ class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: Re
     EQ(firstTokenId, ByteArrayConstant(reemissionNftId))
   }.toSigmaProp.treeWithSegregation
 
+  /**
+    * Reemission box contract
+    */
   val reemissionBoxProp: ErgoTree = {
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
@@ -94,11 +101,14 @@ class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: Re
     val correctCoinsIssued = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
 
     // when reemission contract box got merged with other boxes
-    val sponsored = AND(
-      GT(ExtractAmount(reemissionOut), ExtractAmount(Self)),
-      LE(ExtractAmount(ByIndex(Outputs, IntConstant(1))), LongConstant(10000000)), // 0.01 ERG
-      EQ(SizeOf(Outputs), 2)
-    )
+    val sponsored = {
+      val feeOut = ByIndex(Outputs, IntConstant(1))
+      AND(
+        GT(ExtractAmount(reemissionOut), ExtractAmount(Self)),
+        LE(ExtractAmount(feeOut), LongConstant(10000000)), // 0.01 ERG
+        EQ(SizeOf(Outputs), 2)
+      )
+    }
 
     AND(
       correctNftId,

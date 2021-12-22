@@ -28,7 +28,7 @@ import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
 
-import java.nio.ByteBuffer
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -72,7 +72,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
 
 
-  lazy val outAssetsTry: Try[(Map[ByteBuffer, Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
+  lazy val outAssetsTry: Try[(Map[Seq[Byte], Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
 
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -165,7 +165,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   }
 
   private def verifyAssets(validationBefore: ValidationState[Long],
-                           outAssets: Map[ByteBuffer, Long],
+                           outAssets: Map[Seq[Byte], Long],
                            outAssetsNum: Int,
                            boxesToSpend: IndexedSeq[ErgoBox],
                            stateContext: ErgoStateContext): ValidationResult[Long] = {
@@ -174,7 +174,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     ErgoBoxAssetExtractor.extractAssets(boxesToSpend) match {
       case Success((inAssets, inAssetsNum)) =>
-        lazy val newAssetId = ByteBuffer.wrap(inputs.head.boxId)
+        lazy val newAssetId = mutable.WrappedArray.make(inputs.head.boxId)
         val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
         val currentTxCost = validationBefore.result.payload.get
 

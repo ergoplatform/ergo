@@ -206,18 +206,21 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        outputCandidates: Seq[ErgoBoxCandidate],
                        stateContext: ErgoStateContext): Try[Unit] = Try {
     val reemission = stateContext.ergoSettings.chainSettings.reemissionRules
+
     val ReemissionTokenId = ModifierId @@ stateContext.ergoSettings.chainSettings.reemission.reemissionTokenId
     val EmissionNftId = ModifierId @@ stateContext.ergoSettings.chainSettings.reemission.emissionNftId
 
     // reemission logic below
     var reemissionSpending = false
     boxesToSpend.foreach { box =>
-      if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
+      if (box.value > 100000 * EmissionRules.CoinsInOneErgo) { // for efficiency
         if (box.tokens.contains(EmissionNftId)) {
-          val reemissionTokensIn = box.tokens.getOrElse(ReemissionTokenId, 0L)
-          require(reemissionTokensIn > 0)
+          //we're checking how emission box is paying reemission tokens below
 
-          // positions guaranteed by emission contract
+          val reemissionTokensIn = box.tokens.getOrElse(ReemissionTokenId, 0L)
+          require(reemissionTokensIn > 0) // todo check only after some height only
+
+          // output positions guaranteed by emission contract
           val emissionOut = outputCandidates(0)
           val rewardsOut = outputCandidates(1)
 
@@ -236,13 +239,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
     }
 
+    // if box with reemission tokens spent
     if (reemissionSpending) {
       val toBurn = boxesToSpend.map { box =>
         box.tokens.getOrElse(ReemissionTokenId, 0L)
       }.sum
       val reemissionOutputs = outputCandidates.filter { out =>
         require(!out.tokens.contains(ReemissionTokenId), "outputs contain reemission token")
-        out.ergoTree == reemission.reemissionBoxProp
+        out.ergoTree == reemission.payToReemission
       }
       require(reemissionOutputs.map(_.value).sum == toBurn)
     }

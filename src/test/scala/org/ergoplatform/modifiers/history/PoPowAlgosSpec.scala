@@ -67,6 +67,13 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     proof.get.valid(extension.digest) shouldBe true
   }
 
+  property("empty proofForInterlinkVector should be None") {
+    val blockIds = Seq.empty[ModifierId]
+    val extension = popowAlgos.interlinksToExtension(blockIds)
+    val proof = popowAlgos.proofForInterlinkVector(extension)
+    proof shouldBe None
+  }
+
   property("0 level is always valid for any block") {
     val chain = genChain(10)
     chain.foreach(x => popowAlgos.maxLevelOf(x.header) >= 0 shouldBe true)

@@ -1,10 +1,11 @@
 package org.ergoplatform.modifiers.history.popow
 
+import cats.Traverse
+import cats.implicits.{catsStdInstancesForEither, catsStdInstancesForList}
 import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.Extension.merkleTree
-//import org.ergoplatform.modifiers.history.extension.Extension.kvToLeaf
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
@@ -44,7 +45,7 @@ object PoPowHeader {
 
   import io.circe.syntax._
 
-  implicit val hf = Blake2b256
+  implicit val hf: HF = Blake2b256
   val powScheme: AutolykosPowScheme = new AutolykosPowScheme(32, 26)
   val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
 
@@ -65,7 +66,7 @@ object PoPowHeader {
     interlinksVector.map(id => id: String).asJson
   }
 
-  implicit val proofEncoder: Encoder[BatchMerkleProof[Digest32]] = { proof: BatchMerkleProof[Digest32] =>
+  implicit val interlinkProofEncoder: Encoder[BatchMerkleProof[Digest32]] = { proof: BatchMerkleProof[Digest32] =>
 
     val indicesAsJson = proof.indices.map(i => Json.obj(fields =
       "index" -> i._1.asJson,
@@ -81,14 +82,26 @@ object PoPowHeader {
     )
   }
 
-  implicit val proofDecoder: Decoder[BatchMerkleProof[Digest32]] = { p =>
+  implicit val interlinkProofDecoder: Decoder[BatchMerkleProof[Digest32]] = { p =>
 
     for {
-      indices <- p.downField("indices").as[Seq[(Int, Array[Byte])]]
-      proofs <- p.downField("proofs").as[Seq[(Array[Byte], Byte)]]
+      indicesJson <- p.downField("indices").as[List[Json]]
+      indices <- Traverse[List].traverse(indicesJson)(
+        indexJson => indexJson.hcursor.downField("index").as[Int]
+      )
+      indexDigests <- Traverse[List].traverse(indicesJson)(
+        indexJson => indexJson.hcursor.downField("digest").as[Array[Byte]]
+      )
+      proofsJson <- p.downField("proofs").as[List[Json]]
+      proofBytes <- Traverse[List].traverse(proofsJson)(
+        proofsJson => proofsJson.hcursor.downField("digest").as[Array[Byte]]
+      )
+      proofSides <- Traverse[List].traverse(proofsJson)(
+        proofsJson => proofsJson.hcursor.downField("side").as[Byte]
+      )
     } yield BatchMerkleProof(
-        indices.map(i => (i._1, Digest32 @@ i._2)),
-        proofs.map(p => (Digest32 @@ p._1, Side @@ p._2)))
+      indices zip indexDigests.map(i => Digest32 @@ i),
+      proofBytes.map(p => Digest32 @@ p) zip proofSides.map(s => Side @@ s))
   }
 
   implicit val popowHeaderJsonEncoder: Encoder[PoPowHeader] = { p: PoPowHeader =>

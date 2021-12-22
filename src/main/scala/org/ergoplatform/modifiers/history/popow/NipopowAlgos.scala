@@ -266,7 +266,7 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
     val keys = ext.fields
       .filter({ case (key, _) => key.head == InterlinksVectorPrefix })
       .map(_._1)
-    ext.batchProofFor(keys: _*)
+    if (keys.isEmpty) None else ext.batchProofFor(keys: _*)
   }
 }
 

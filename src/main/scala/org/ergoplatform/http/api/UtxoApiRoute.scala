@@ -74,4 +74,11 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     ApiResponse(getState.map(_.genesisBoxes))
   }
 
+  def getSnapshotsInfo: Route = (get & path("getSnapshotsInfo")) {
+    ApiResponse(getState.map {
+      case usr: UtxoStateReader =>
+        usr.getSnapshotInfo()
+      case _ => None
+    })
+  }
 }

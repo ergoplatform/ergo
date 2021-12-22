@@ -51,7 +51,8 @@ trait Application extends ScorexLogging {
       new PeersSpec(featureSerializers, settings.network.maxPeerSpecObjects),
       invSpec,
       requestModifierSpec,
-      modifiersSpec
+      modifiersSpec,
+      GetSnapshotsInfoSpec
     )
   }
 

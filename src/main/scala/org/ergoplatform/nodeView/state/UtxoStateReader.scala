@@ -33,9 +33,12 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     */
   def validateWithCost(tx: ErgoTransaction,
                        stateContextOpt: Option[ErgoStateContext],
-                       complexityLimit: Int): Try[Long] = {
-    val verifier = ErgoInterpreter(stateContext.currentParameters)
+                       complexityLimit: Int,
+                       interpreterOpt: Option[ErgoInterpreter]): Try[Long] = {
     val context = stateContextOpt.getOrElse(stateContext)
+
+    val verifier = interpreterOpt.getOrElse(ErgoInterpreter(context.currentParameters))
+
     tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
       val txComplexity = boxesToSpend.map(_.ergoTree.complexity).sum
@@ -54,8 +57,11 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * This validation does not guarantee that transaction will be valid in future
     * as soon as state (both UTXO set and state context) will change.
     *
+    * Used in mempool.
     */
-  override def validate(tx: ErgoTransaction): Try[Unit] = validateWithCost(tx, None, Int.MaxValue).map(_ => Unit)
+  override def validate(tx: ErgoTransaction): Try[Unit] = {
+    validateWithCost(tx, None, Int.MaxValue, None).map(_ => Unit)
+  }
 
   /**
     *

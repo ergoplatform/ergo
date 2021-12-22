@@ -433,6 +433,10 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     }
   }
 
+  ignore("re-emission - valid flow") {
+    //todo: implement
+  }
+
   private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
     new ErgoBoxCandidate(
       boxCandidate.value + delta,

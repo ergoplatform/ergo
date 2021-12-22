@@ -101,7 +101,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     validateStateless().result.toTry
   }
 
-
   private def verifyInput(validationBefore: ValidationState[Long],
                           boxesToSpend: IndexedSeq[ErgoBox],
                           dataBoxes: IndexedSeq[ErgoBox],

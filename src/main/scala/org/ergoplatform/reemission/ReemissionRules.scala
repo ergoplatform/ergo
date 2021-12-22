@@ -1,6 +1,6 @@
 package org.ergoplatform.reemission
 
-import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.ErgoBox.{R2, TokenId}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
 import org.ergoplatform.mining.emission.EmissionRules
@@ -10,10 +10,11 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings, Reemiss
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR}
-import sigmastate.Values.{ErgoTree, IntConstant}
+import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SByte, SCollection, SLong, STuple}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant}
 import sigmastate.interpreter.ProverResult
-import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractScriptBytes, SizeOf}
+import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes, OptionGet, SelectField, SizeOf}
+
 
 
 class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: ReemissionSettings) {
@@ -31,6 +32,9 @@ class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: Re
   // todo: move to settings ?
   val emissionPeriod = 2080800
 
+  //todo: fix, move to settings
+  val reemissionNftId = Array.fill(32)(0: Byte)
+
   def reemissionForHeight(height: Height): Long = {
     val emission = emissionRules.emissionAtHeight(height)
     if (height >= ActivationHeight && emission >= (basicChargeAmount + 3) * EmissionRules.CoinsInOneErgo) {
@@ -42,12 +46,29 @@ class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: Re
     }
   }
 
+  val payToReemission: ErgoTree = {
+    // output of the reemission contract
+    val reemissionOut = ByIndex(Outputs, IntConstant(0))
+
+    val rOutTokens = OptionGet(ExtractRegisterAs(reemissionOut, R2)(SCollection(STuple(SCollection(SByte), SLong))))
+
+    val firstTokenId = SelectField(ByIndex(rOutTokens, IntConstant(0)), 0.toByte)
+
+    EQ(firstTokenId, ByteArrayConstant(reemissionNftId))
+  }.toSigmaProp.treeWithSegregation
+
   val reemissionBoxProp: ErgoTree = {
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
 
     // output to pay miner
     val minerOut = ByIndex(Outputs, IntConstant(1))
+
+    val rOutTokens = OptionGet(ExtractRegisterAs(reemissionOut, R2)(SCollection(STuple(SCollection(SByte), SLong))))
+
+    val firstTokenId = SelectField(ByIndex(rOutTokens, IntConstant(0)), 0.toByte)
+
+    val correctNftId = EQ(firstTokenId, ByteArrayConstant(reemissionNftId))
 
     // miner's output must have script which is time-locking reward for miner's pubkey
     // box height must be the same as block height
@@ -72,12 +93,15 @@ class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: Re
     val coinsToIssue = monetarySettings.oneEpochReduction // 3 ERG
     val correctCoinsIssued = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
 
+    // when reemission contract box got merged with other boxes
     val sponsored = AND(
-      GT(ExtractAmount(reemissionOut)),
-      EQ(SizeOf(Outputs), 1)
+      GT(ExtractAmount(reemissionOut), ExtractAmount(Self)),
+      LE(ExtractAmount(ByIndex(Outputs, IntConstant(1))), LongConstant(10000000)), // 0.01 ERG
+      EQ(SizeOf(Outputs), 2)
     )
 
     AND(
+      correctNftId,
       sameScriptRule,
       heightCorrect,
       OR(
@@ -91,7 +115,6 @@ class ReemissionRules(monetarySettings: MonetarySettings, reemissionSettings: Re
       )
     ).toSigmaProp.treeWithSegregation
   }
-
 }
 
 
@@ -107,7 +130,7 @@ object ReemissionRules {
     }
 
    */
-  val InjectionBoxBytes: Array[Byte] = Base16.decode("").get
+  lazy val InjectionBoxBytes: Array[Byte] = Base16.decode("").get
 
   lazy val injectionBox: ErgoBox = ErgoBoxSerializer.parseBytes(InjectionBoxBytes)
 
@@ -123,6 +146,7 @@ object ReemissionRules {
     new ErgoTransaction(inputsModified, IndexedSeq.empty, IndexedSeq(emissionOutModified, minerOutModified))
   }
 
+
   def main(args: Array[String]): Unit = {
     val settings = ErgoSettings.read()
 
@@ -131,6 +155,8 @@ object ReemissionRules {
     val et = reemission.reemissionBoxProp
     val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
     println("p2s address: " + enc.fromProposition(et))
+
+    // reemission.tokenPreservation(Array.fill(32)(0: Byte), 0: Byte)
 
     var lowSet = false
 

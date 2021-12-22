@@ -97,23 +97,25 @@ Reemission Contract
     val coinsToIssue = monetarySettings.oneEpochReduction // 3 ERG
     val correctCoinsIssued = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
     
+    // when reemission contract box got merged with other boxes
     val sponsored = AND(
-      GT(ExtractAmount(reemissionOut)),
-      EQ(SizeOf(Outputs), 1)
+        GT(ExtractAmount(reemissionOut), ExtractAmount(Self)),
+        LE(ExtractAmount(ByIndex(Outputs, IntConstant(1))), LongConstant(10000000)), // 0.01 ERG
+        EQ(SizeOf(Outputs), 2)
     )
     
     AND(
-      sameScriptRule,
-      heightCorrect,
-      OR(
-        sponsored,
-        AND(
-          correctMinerOutput,
-          afterEmission,
-          heightIncreased,
-          correctCoinsIssued
+        sameScriptRule,
+        heightCorrect,
+        OR(
+          sponsored,
+          AND(
+            correctMinerOutput,
+            afterEmission,
+            heightIncreased,
+            correctCoinsIssued
+          )
         )
-      )
     )
 ```
 

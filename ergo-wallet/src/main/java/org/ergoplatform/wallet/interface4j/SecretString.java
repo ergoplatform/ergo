@@ -1,11 +1,15 @@
 package org.ergoplatform.wallet.interface4j;
 
+import sigmastate.serialization.SelectFieldSerializer;
+
 import java.util.Arrays;
 
 /**
- * Direct copy from https://github.com/aslesarenko/ergo-appkit SecretString class
+ * Modified copy from https://github.com/aslesarenko/ergo-appkit SecretString class
  * Encapsulates secret array of characters (char[]) with proper equality.
  * The secret data can be {@link SecretString#erase() erased} in memory and not leaked to GC.
+ * Note that {@link SecretString#getData()} and {@link SecretString#toStringUnsecure()}
+ * will throw a runtime exception, if already erased
  * Using this class is more secure and safe than using char[] directly.
  */
 public final class SecretString {
@@ -15,10 +19,16 @@ public final class SecretString {
     private final char[] _data;
 
     /**
+     * Erased flag, should not be copied outside of this instance.
+     */
+    private boolean _erased;
+
+    /**
      * Use static methods to construct new instances.
      */
     SecretString(char[] data) {
         _data = data;
+        _erased = false;
     }
 
     /**
@@ -28,16 +38,23 @@ public final class SecretString {
 
     /**
      * Extracts secret characters as an array.
+     * Throws an exception if {@link SecretString#_erased} flag is true
      */
     public char[] getData() {
-        return _data;
+        if (_erased) {
+            throw new RuntimeException("SecretString already erased");
+        } else {
+            return _data;
+        }
     }
 
     /**
      * Erases secret characters stored in this instance so that they are no longer reside in memory.
+     * Sets a flag _erased to true
      */
     public void erase() {
         Arrays.fill(_data, ' ');
+        _erased = true;
     }
 
     @Override
@@ -90,8 +107,13 @@ public final class SecretString {
      * So they leak to GC and may remain in memory until overwritten by new data.
      * Usage of this method is discouraged and the method is provided solely to interact with
      * legacy code which keeps secret characters in String.
+     * Throws an exception if {@link SecretString#_erased} flag is true
      */
     public String toStringUnsecure() {
-        return String.valueOf(_data);
+        if (_erased) {
+            throw new RuntimeException("SecretString already erased");
+        } else {
+            return String.valueOf(_data);
+        }
     }
 }

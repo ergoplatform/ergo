@@ -16,6 +16,7 @@ import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.EphemerealNodeViewModifier
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
@@ -134,6 +135,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       costTry match {
         case Failure(t) =>
           log.info(s"Tx verification failed: ${t.getMessage}")
+          log.info(s"Tx $id verification context: " +
+            s"${JsonCodecsWrapper.ergoLikeContextEncoder.apply(ctx)} " +
+            s"input context: $inputContext " +
+            s"proof: $proof" +
+            s"messageToSign: $messageToSign")
           (false, maxCost + 1)
         case Success(result) =>
           result

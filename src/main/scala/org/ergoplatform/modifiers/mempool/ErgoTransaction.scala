@@ -8,6 +8,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.reemission.ReemissionRules
 import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
@@ -210,10 +211,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def verifyReemission(boxesToSpend: IndexedSeq[ErgoBox],
                        outputCandidates: Seq[ErgoBoxCandidate],
                        stateContext: ErgoStateContext): Try[Unit] = Try {
-    val reemission = stateContext.ergoSettings.chainSettings.reemissionRules
 
     val ReemissionTokenId = ModifierId @@ stateContext.ergoSettings.chainSettings.reemission.reemissionTokenId
     val EmissionNftId = ModifierId @@ stateContext.ergoSettings.chainSettings.reemission.emissionNftId
+    val reemissionNftIdBytes = stateContext.ergoSettings.chainSettings.reemission.reemissionNftIdBytes
+    val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
 
     // reemission logic below
     var reemissionSpending = false
@@ -236,7 +238,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut)
 
           val height = stateContext.currentHeight
-          val properReemissionRewardPart = reemission.reemissionForHeight(height)
+          val properReemissionRewardPart = ReemissionRules.reemissionForHeight(height, emissionRules)
           require(rewardsTokensOut == properReemissionRewardPart)
         }
       } else if (box.tokens.contains(ReemissionTokenId)) {
@@ -251,7 +253,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }.sum
       val reemissionOutputs = outputCandidates.filter { out =>
         require(!out.tokens.contains(ReemissionTokenId), "outputs contain reemission token")
-        out.ergoTree == reemission.payToReemission
+        out.ergoTree == ReemissionRules.payToReemission(reemissionNftIdBytes)
       }
       require(reemissionOutputs.map(_.value).sum == toBurn)
     }

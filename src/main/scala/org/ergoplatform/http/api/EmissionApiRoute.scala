@@ -18,14 +18,12 @@ case class EmissionApiRoute(ergoSettings: ErgoSettings)
 
   private val emissionRules = ergoSettings.chainSettings.emissionRules
 
-  private val reemission = ergoSettings.chainSettings.reemissionRules
-
   override def route: Route = pathPrefix("emission") {
     emissionAt
   }
 
   val emissionAt: Route = (pathPrefix("at" / LongNumber) & get) { height =>
-    ApiResponse(emissionInfoAtHeight(height, emissionRules, reemission))
+    ApiResponse(emissionInfoAtHeight(height, emissionRules))
   }
 
 }
@@ -34,8 +32,8 @@ object EmissionApiRoute {
 
   final case class EmissionInfo(minerReward: Long, totalCoinsIssued: Long, totalRemainCoins: Long, reemissionAmt: Long)
 
-  def emissionInfoAtHeight(height: Long, emissionRules: EmissionRules, reemission: ReemissionRules): EmissionInfo = {
-    val reemissionAmt = reemission.reemissionForHeight(height.toInt)
+  def emissionInfoAtHeight(height: Long, emissionRules: EmissionRules): EmissionInfo = {
+    val reemissionAmt = ReemissionRules.reemissionForHeight(height.toInt, emissionRules)
     val minerReward = emissionRules.emissionAtHeight(height) - reemissionAmt
     val totalCoinsIssued = emissionRules.issuedCoinsAfterHeight(height)
     val totalRemainCoins = emissionRules.coinsTotal - totalCoinsIssued

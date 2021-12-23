@@ -4,7 +4,6 @@ import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.reemission.ReemissionRules
 import scorex.crypto.authds.ADDigest
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -36,8 +35,6 @@ case class ChainSettings(protocolVersion: Byte,
 
   val emissionRules: EmissionRules = new EmissionRules(monetary)
 
-  val reemissionRules = new ReemissionRules(monetary, reemission)
-
   val addressEncoder = new ErgoAddressEncoder(addressPrefix)
 
   val initialDifficulty: BigInt = Base16.decode(initialDifficultyHex)
@@ -53,4 +50,9 @@ case class ChainSettings(protocolVersion: Byte,
 
 case class ReemissionSettings(checkReemissionRules: Boolean,
                               emissionNftId: String,
-                              reemissionTokenId: String)
+                              reemissionTokenId: String,
+                              reemissionNftId: String,
+                              reemissionStartHeight: Int) {
+  val reemissionNftIdBytes: Array[Byte] = Algos.decode(reemissionNftId).get
+  val reemissionTokenIdBytes: Array[Byte] = Algos.decode(reemissionTokenId).get
+}

@@ -1,8 +1,8 @@
 package org.ergoplatform.reemission
 
-import sigmastate.helpers.SigmaTestingCommons
+import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestConstants}
 
-class ReemissionRulesSpec extends SigmaTestingCommons {
+class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
 
   ignore("payToReemission") {
 
@@ -11,6 +11,5 @@ class ReemissionRulesSpec extends SigmaTestingCommons {
   ignore("reemissionBoxProp") {
 
   }
-
 
 }

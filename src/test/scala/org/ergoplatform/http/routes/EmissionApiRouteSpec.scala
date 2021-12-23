@@ -9,7 +9,6 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.http.api.EmissionApiRoute
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.reemission.ReemissionRules
 import org.ergoplatform.settings.ErgoSettings
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -27,24 +26,23 @@ class EmissionApiRouteSpec extends AnyFlatSpec
 
   val ergoSettings: ErgoSettings = ErgoSettings.read()
   val coinEmission: EmissionRules = ergoSettings.chainSettings.emissionRules
-  val coinReemission: ReemissionRules = ergoSettings.chainSettings.reemissionRules
 
   val route: Route = EmissionApiRoute(ergoSettings).route
 
   it should "get correct emission values" in {
     Get(prefix + "/1") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      EmissionApiRoute.emissionInfoAtHeight(1L, coinEmission, coinReemission).asJson shouldEqual responseAs[Json]
+      EmissionApiRoute.emissionInfoAtHeight(1L, coinEmission).asJson shouldEqual responseAs[Json]
     }
 
     Get(prefix + "/10000") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      EmissionApiRoute.emissionInfoAtHeight(10000L, coinEmission, coinReemission).asJson shouldEqual responseAs[Json]
+      EmissionApiRoute.emissionInfoAtHeight(10000L, coinEmission).asJson shouldEqual responseAs[Json]
     }
 
     Get(prefix + "/1000000") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      EmissionApiRoute.emissionInfoAtHeight(1000000L, coinEmission, coinReemission).asJson shouldEqual responseAs[Json]
+      EmissionApiRoute.emissionInfoAtHeight(1000000L, coinEmission).asJson shouldEqual responseAs[Json]
     }
   }
 

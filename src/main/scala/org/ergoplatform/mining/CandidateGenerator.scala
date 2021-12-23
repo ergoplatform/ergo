@@ -614,8 +614,7 @@ object CandidateGenerator extends ScorexLogging {
     chainSettings: ChainSettings,
     assets: Coll[(TokenId, Long)] = Colls.emptyColl
   ): Seq[ErgoTransaction] = {
-    val reemission = chainSettings.reemissionRules
-    val reemissionTokenId = reemission.ReemissionTokenIdBinary
+    val reemissionTokenId = Digest32 @@ chainSettings.reemission.reemissionTokenIdBytes
     val propositionBytes = chainSettings.monetary.feePropositionBytes
     val emission = chainSettings.emissionRules
 
@@ -635,9 +634,9 @@ object CandidateGenerator extends ScorexLogging {
 
       val emissionBoxAssets = emissionBox.additionalTokens
 
-      val reemissionAmount = reemission.reemissionForHeight(nextHeight)
+      val reemissionAmount = ReemissionRules.reemissionForHeight(nextHeight, emission)
 
-      val updEmissionAssets = if(nextHeight >= reemission.ActivationHeight) {
+      val updEmissionAssets = if(nextHeight >= ReemissionRules.ActivationHeight) {
         val reemissionTokens = emissionBoxAssets.apply(1)._2
         val updAmount = reemissionTokens - reemissionAmount
         emissionBoxAssets.updated(1, reemissionTokenId -> updAmount)
@@ -649,7 +648,7 @@ object CandidateGenerator extends ScorexLogging {
         new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, nextHeight, updEmissionAssets)
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
 
-      if(nextHeight >= reemission.ActivationHeight) {
+      if(nextHeight >= ReemissionRules.ActivationHeight) {
         assets.append(Colls.fromItems(reemissionTokenId -> reemissionAmount))
       }
       val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, nextHeight, assets)

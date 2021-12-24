@@ -34,7 +34,13 @@ public final class SecretString {
     /**
      * Returns true if the string doesn't have characters.
      */
-    public boolean isEmpty() { return _data == null || _data.length == 0; }
+    public boolean isEmpty() {
+        if (_erased) {
+            throw new RuntimeException("SecretString already erased");
+        } else {
+            return _data == null || _data.length == 0;
+        }
+    }
 
     /**
      * Extracts secret characters as an array.
@@ -59,12 +65,19 @@ public final class SecretString {
 
     @Override
     public int hashCode() {
-        return Arrays.hashCode(_data);
+        if (_erased) {
+            throw new RuntimeException("SecretString already erased");
+        } else {
+            return Arrays.hashCode(_data);
+        }
     }
 
     @Override
     public boolean equals(Object obj) {
         // this implementation is copied from java.lang.String
+        if (_erased) {
+            throw new RuntimeException("SecretString already erased");
+        }
         if (this == obj) {
             return true;
         }

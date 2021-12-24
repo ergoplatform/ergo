@@ -25,12 +25,19 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
 
   private var unlockedSecret: Option[ExtendedSecretKey] = None
 
+  /**
+    * Tells if `secretsIndices` were locked and destroyed.
+    */
   override def isLocked: Boolean = unlockedSecret.isEmpty
 
+  /**
+    * Returns the `secretsIndices` if already unlocked, or nothing.
+    */
   override def secret: Option[ExtendedSecretKey] = unlockedSecret
 
   /**
-    * @param mnemonic - SecretString to be erased after use
+    * @param mnemonic - SecretString mnemonic string to be erased after use.
+    * @param mnemonicPassOpt - optional SecretString mnemonic password to be erased after use.
     */
   override def checkSeed(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString]): Boolean = {
     val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
@@ -39,6 +46,7 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
   }
 
   /**
+    * Checks the seed can be decrypted, provided mnemonic with optional mnemonic password.
     * Makes secrets with `secretsIndices` available through `secrets` call.
     * @param pass - password to be used to decrypt secret, also SecretString to be erased after use
     */

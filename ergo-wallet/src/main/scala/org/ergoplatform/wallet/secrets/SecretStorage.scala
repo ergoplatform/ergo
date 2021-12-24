@@ -7,7 +7,8 @@ import org.ergoplatform.wallet.interface4j.SecretString
 /**
   * Secret storage trait.
   * All keys dedicated to a wallet are being derived from
-  * a single seed which is stored in a file system in encrypted form.
+  * a single seed which is stored in a file system in encrypted form
+  * in a file which can be accessed through this interface.
   * Using SecretString for critical parts to be erased after use.
   */
 trait SecretStorage {

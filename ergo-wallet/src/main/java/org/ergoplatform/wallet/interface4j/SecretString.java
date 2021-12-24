@@ -5,7 +5,7 @@ import sigmastate.serialization.SelectFieldSerializer;
 import java.util.Arrays;
 
 /**
- * Modified copy from https://github.com/aslesarenko/ergo-appkit SecretString class
+ * Modified copy from https://github.com/ergoplatform/ergo-appkit SecretString class
  * Encapsulates secret array of characters (char[]) with proper equality.
  * The secret data can be {@link SecretString#erase() erased} in memory and not leaked to GC.
  * Note that {@link SecretString#getData()} and {@link SecretString#toStringUnsecure()}

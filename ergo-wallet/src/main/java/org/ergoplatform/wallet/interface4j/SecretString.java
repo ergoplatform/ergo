@@ -33,6 +33,7 @@ public final class SecretString {
 
     /**
      * Returns true if the string doesn't have characters.
+     * Throws an exception if {@link SecretString#_erased} flag is true
      */
     public boolean isEmpty() {
         if (_erased) {
@@ -63,6 +64,16 @@ public final class SecretString {
         _erased = true;
     }
 
+    /**
+     * Returns true if the string has been erased.
+     */
+    public boolean isErased() {
+        return _erased;
+    }
+
+    /**
+      *Throws an exception if {@link SecretString#_erased} flag is true
+      */
     @Override
     public int hashCode() {
         if (_erased) {
@@ -72,6 +83,9 @@ public final class SecretString {
         }
     }
 
+    /**
+     *Throws an exception if {@link SecretString#_erased} flag is true
+     */
     @Override
     public boolean equals(Object obj) {
         // this implementation is copied from java.lang.String

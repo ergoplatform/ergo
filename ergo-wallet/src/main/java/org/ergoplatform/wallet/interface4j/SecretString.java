@@ -24,6 +24,15 @@ public final class SecretString {
     private boolean _erased;
 
     /**
+     * Throws exception if SecretString is erased
+     */
+    private void checkErased() {
+        if (_erased) {
+            throw new RuntimeException("SecretString already erased");
+        }
+    }
+
+    /**
      * Use static methods to construct new instances.
      */
     SecretString(char[] data) {
@@ -36,11 +45,8 @@ public final class SecretString {
      * Throws an exception if {@link SecretString#_erased} flag is true
      */
     public boolean isEmpty() {
-        if (_erased) {
-            throw new RuntimeException("SecretString already erased");
-        } else {
-            return _data == null || _data.length == 0;
-        }
+        checkErased();
+        return _data == null || _data.length == 0;
     }
 
     /**
@@ -48,11 +54,8 @@ public final class SecretString {
      * Throws an exception if {@link SecretString#_erased} flag is true
      */
     public char[] getData() {
-        if (_erased) {
-            throw new RuntimeException("SecretString already erased");
-        } else {
-            return _data;
-        }
+        checkErased();
+        return _data;
     }
 
     /**
@@ -72,26 +75,21 @@ public final class SecretString {
     }
 
     /**
-      *Throws an exception if {@link SecretString#_erased} flag is true
-      */
+     * Throws an exception if {@link SecretString#_erased} flag is true
+     */
     @Override
     public int hashCode() {
-        if (_erased) {
-            throw new RuntimeException("SecretString already erased");
-        } else {
-            return Arrays.hashCode(_data);
-        }
+        checkErased();
+        return Arrays.hashCode(_data);
     }
 
     /**
-     *Throws an exception if {@link SecretString#_erased} flag is true
+     * Throws an exception if {@link SecretString#_erased} flag is true
      */
     @Override
     public boolean equals(Object obj) {
         // this implementation is copied from java.lang.String
-        if (_erased) {
-            throw new RuntimeException("SecretString already erased");
-        }
+        checkErased();
         if (this == obj) {
             return true;
         }
@@ -137,10 +135,7 @@ public final class SecretString {
      * Throws an exception if {@link SecretString#_erased} flag is true
      */
     public String toStringUnsecure() {
-        if (_erased) {
-            throw new RuntimeException("SecretString already erased");
-        } else {
-            return String.valueOf(_data);
-        }
+        checkErased();
+        return String.valueOf(_data);
     }
 }

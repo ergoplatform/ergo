@@ -24,11 +24,20 @@ class ExtensionCandidateTest extends ErgoPropertyTest {
 
   property("batchProofFor should return a valid proof for a set of existing values") {
     forAll { fields: Seq[KV] =>
+      whenever(fields.nonEmpty) {
 
-      val ext = ExtensionCandidate(fields)
-      val proof = ext.batchProofFor(fields.flatMap(_._1.clone).toArray)
-      proof shouldBe defined
-      proof.get.valid(ext.digest) shouldBe true
+        val ext = ExtensionCandidate(fields)
+        val proof = ext.batchProofFor(fields.map(_._1.clone).toArray: _*)
+        proof shouldBe defined
+        proof.get.valid(ext.digest) shouldBe true
+      }
     }
+  }
+
+  property("batchProofFor should return None for a empty fields") {
+    val fields: Seq[KV] = Seq.empty
+    val ext = ExtensionCandidate(fields)
+    val proof = ext.batchProofFor(fields.map(_._1.clone).toArray: _*)
+    proof shouldBe None
   }
 }

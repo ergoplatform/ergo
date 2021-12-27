@@ -146,6 +146,7 @@ object ReemissionRules {
     val settings = ErgoSettings.read()
 
     println("Monetary settings: " + settings.chainSettings.monetary)
+    println("Reemission settings: " + settings.chainSettings.reemission)
     val ms = settings.chainSettings.monetary
     val rs = settings.chainSettings.reemission
     val emissionRules = settings.chainSettings.emissionRules

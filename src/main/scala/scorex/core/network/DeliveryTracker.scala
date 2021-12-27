@@ -318,7 +318,7 @@ object DeliveryTracker {
       * One liner for updating a Map with the possibility to handle case of missing Key
       * @param k map key
       * @param f function that is passed Option depending on Key being present or missing,
-      *          returning Option signaling whether to update o not
+      *          returning Option signaling whether to update or not
       * @return new Map with value updated under given key
       */
     def flatAdjust(k: K)(f: Option[V] => Option[V]): Option[V] =

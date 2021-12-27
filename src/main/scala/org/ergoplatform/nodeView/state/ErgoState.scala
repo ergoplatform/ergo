@@ -48,7 +48,7 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
   def rollbackVersions: Iterable[VersionTag]
 
   /**
-    * @return read-only copy of this state
+    * @return read-only view of this state
     */
   def getReader: ErgoStateReader = this
 

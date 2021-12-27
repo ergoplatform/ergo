@@ -8,6 +8,7 @@ import io.circe.parser._
 import io.circe.syntax._
 import org.ergoplatform.wallet.crypto
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.settings.{EncryptionSettings, SecretStorageSettings}
 import scorex.util.encode.Base16
 
@@ -24,21 +25,32 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
 
   private var unlockedSecret: Option[ExtendedSecretKey] = None
 
+  /**
+    * Tells if `secretsIndices` were locked and destroyed.
+    */
   override def isLocked: Boolean = unlockedSecret.isEmpty
 
+  /**
+    * Returns the `secretsIndices` if already unlocked, or nothing.
+    */
   override def secret: Option[ExtendedSecretKey] = unlockedSecret
 
-  override def checkSeed(mnemonic: String, mnemonicPassOpt: Option[String]): Boolean = {
+  /**
+    * @param mnemonic - SecretString mnemonic string to be erased after use.
+    * @param mnemonicPassOpt - optional SecretString mnemonic password to be erased after use.
+    */
+  override def checkSeed(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString]): Boolean = {
     val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
     val secret = ExtendedSecretKey.deriveMasterKey(seed)
     unlockedSecret.fold(false)(s => secret.equals(s))
   }
 
   /**
+    * Checks the seed can be decrypted, provided mnemonic with optional mnemonic password.
     * Makes secrets with `secretsIndices` available through `secrets` call.
-    * @param pass - password to be used to decrypt secret
+    * @param pass - password to be used to decrypt secret, also SecretString to be erased after use
     */
-  override def unlock(pass: String): Try[Unit] = {
+  override def unlock(pass: SecretString): Try[Unit] = {
     val secretFileRaw = scala.io.Source.fromFile(secretFile, "UTF-8").getLines().mkString
     decode[EncryptedSecret](secretFileRaw)
       .right
@@ -51,8 +63,11 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
               )
             )
           )
-          .flatMap { case (cipherText, salt, iv, tag) =>
-            crypto.AES.decrypt(cipherText, pass, salt, iv, tag)(encryptionSettings)
+          .flatMap { case (cipherText, salt, iv, tag) => {
+              val res = crypto.AES.decrypt(cipherText, pass.getData(), salt, iv, tag)(encryptionSettings)
+              pass.erase()
+              res
+            }
           }
       }
       .fold(Failure(_), Success(_))
@@ -75,10 +90,10 @@ object JsonSecretStorage {
   /**
     * Initializes storage instance with new wallet file encrypted with the given `pass`.
     */
-  def init(seed: Array[Byte], pass: String)(settings: SecretStorageSettings): JsonSecretStorage = {
+  def init(seed: Array[Byte], pass: SecretString)(settings: SecretStorageSettings): JsonSecretStorage = {
     val iv = scorex.utils.Random.randomBytes(crypto.AES.NonceBitsLen / 8)
     val salt = scorex.utils.Random.randomBytes(32)
-    val (ciphertext, tag) = crypto.AES.encrypt(seed, pass, salt, iv)(settings.encryption)
+    val (ciphertext, tag) = crypto.AES.encrypt(seed, pass.getData(), salt, iv)(settings.encryption)
     val encryptedSecret = EncryptedSecret(ciphertext, salt, iv, tag, settings.encryption)
     val uuid = UUID.nameUUIDFromBytes(ciphertext)
     new File(settings.secretDir).mkdirs()
@@ -88,6 +103,7 @@ object JsonSecretStorage {
 
     outWriter.write(jsonRaw)
     outWriter.close()
+    pass.erase()
 
     util.Arrays.fill(seed, 0: Byte)
 
@@ -97,9 +113,9 @@ object JsonSecretStorage {
   /**
     * Initializes storage with the seed derived from an existing mnemonic phrase.
     */
-  def restore(mnemonic: String,
-              mnemonicPassOpt: Option[String],
-              encryptionPass: String,
+  def restore(mnemonic: SecretString,
+              mnemonicPassOpt: Option[SecretString],
+              encryptionPass: SecretString,
               settings: SecretStorageSettings): JsonSecretStorage = {
     val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
     init(seed, encryptionPass)(settings)

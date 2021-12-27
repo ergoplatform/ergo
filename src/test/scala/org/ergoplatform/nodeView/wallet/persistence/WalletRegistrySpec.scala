@@ -11,7 +11,6 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.VersionTag
-import scorex.testkit.utils.FileUtils
 import scorex.util.encode.Base16
 
 import scala.util.Success
@@ -21,8 +20,7 @@ class WalletRegistrySpec
     with Matchers
     with DBSpec
     with ScalaCheckPropertyChecks
-    with WalletGenerators
-    with FileUtils {
+    with WalletGenerators {
 
   implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 10)
 

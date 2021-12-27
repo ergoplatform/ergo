@@ -14,7 +14,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
@@ -38,23 +37,21 @@ import scala.util.Try
   * transformations of UTXO set presented in form of authenticated dynamic dictionary are needed to check validity of
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
-trait ErgoState[IState <: MinimalState[IState]] extends MinimalState[IState] with ErgoStateReader {
+trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   self: IState =>
 
+  def applyModifier(mod: ErgoPersistentModifier): Try[IState]
 
-  def closeStorage(): Unit = {
-    log.warn("Closing state's store.")
-    store.close()
-  }
-
-  override def applyModifier(mod: ErgoPersistentModifier): Try[IState]
-
-  override def rollbackTo(version: VersionTag): Try[IState]
+  def rollbackTo(version: VersionTag): Try[IState]
 
   def rollbackVersions: Iterable[VersionTag]
 
-  override type NVCT = this.type
+  /**
+    * @return read-only view of this state
+    */
+  def getReader: ErgoStateReader = this
+
 }
 
 object ErgoState extends ScorexLogging {
@@ -66,8 +63,8 @@ object ErgoState extends ScorexLogging {
   /**
     * @param txs - sequence of transactions
     * @return ordered sequence of operations on UTXO set from this sequence of transactions
-    *         if some box was created and later spend in this sequence - it is not included in the result at all
-    *         if box was first spend and created after that - it is in both toInsert and toRemove
+    *         if some box was created and later spent in this sequence - it is not included in the result at all
+    *         if box was first spent and created after that - it is in both toInsert and toRemove
     */
   def stateChanges(txs: Seq[ErgoTransaction]): StateChanges = {
     val (toRemove, toInsert) = boxChanges(txs)
@@ -86,7 +83,7 @@ object ErgoState extends ScorexLogging {
                        currentStateContext: ErgoStateContext)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     import cats.implicits._
-    implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
+    val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
     @tailrec
     def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {

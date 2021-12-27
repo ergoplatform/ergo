@@ -13,7 +13,8 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, SemanticallySuccessfulModifier}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
+import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, SemanticallySuccessfulModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -23,7 +24,7 @@ import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
-import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -495,12 +496,13 @@ object CandidateGenerator extends ScorexLogging {
         )
       }
 
-      def deriveWorkMessage(block: CandidateBlock) =
+      def deriveWorkMessage(block: CandidateBlock) = {
         ergoSettings.chainSettings.powScheme.deriveExternalCandidate(
           block,
           minerPk,
           prioritizedTransactions.map(_.id)
         )
+      }
 
       state.proofsForTransactions(txs) match {
         case Success((adProof, adDigest)) =>
@@ -516,10 +518,9 @@ object CandidateGenerator extends ScorexLogging {
             votes
           )
           val ext = deriveWorkMessage(candidate)
-          log.info(s"New candidate with msg ${Base16.encode(ext.msg)} generated")
-          log.debug(
+          log.info(
             s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
-            s" with ${candidate.transactions.size} transactions"
+            s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
           )
           Success(
             Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions
@@ -684,6 +685,8 @@ object CandidateGenerator extends ScorexLogging {
       s"Assembling a block candidate for block #$currentHeight from ${transactions.length} transactions available"
     )
 
+    val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
+
     @tailrec
     def loop(
       mempoolTxs: Iterable[ErgoTransaction],
@@ -701,16 +704,15 @@ object CandidateGenerator extends ScorexLogging {
           if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
+            log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
             loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {
-            implicit val verifier: ErgoInterpreter = ErgoInterpreter(
-              us.stateContext.currentParameters
-            )
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
               tx,
               Some(upcomingContext),
-              maxTransactionComplexity
+              maxTransactionComplexity,
+              Some(verifier)
             ) match {
               case Success(costConsumed) =>
                 val newTxs   = acc :+ (tx -> costConsumed)
@@ -723,7 +725,7 @@ object CandidateGenerator extends ScorexLogging {
                     val boxesToSpend = feeTx.inputs.flatMap(i =>
                       newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
                     )
-                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
+                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
                       case Success(cost) =>
                         val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {

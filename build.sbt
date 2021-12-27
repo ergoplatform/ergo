@@ -1,8 +1,6 @@
 import sbt.Keys.{licenses, _}
 import sbt._
 
-import scala.util.Try
-
 logLevel := Level.Debug
 
 // this values should be in sync with ergo-wallet/build.sbt
@@ -38,7 +36,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "4.0.3"
+val sigmaStateVersion = "4.0.5"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -132,6 +130,8 @@ val opts = Seq(
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
 scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
+
+version := "4.0.17"
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
@@ -274,9 +274,8 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
     scalacOptions in(Compile, compile) ++= (if(scalaBinaryVersion.value == "2.11")
         Seq.empty
       else
-        Seq("-release", "8") 
-      ) 
-  
+        Seq("-release", "8")
+      ),
   )
 
 lazy val It2Test = config("it2") extend (IntegrationTest, Test)

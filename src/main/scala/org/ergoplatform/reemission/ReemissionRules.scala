@@ -65,7 +65,7 @@ object ReemissionRules {
 
     val rOutTokens = OptionGet(ExtractRegisterAs(reemissionOut, R2)(SCollection(STuple(SCollection(SByte), SLong))))
 
-    val firstTokenId = SelectField(ByIndex(rOutTokens, IntConstant(0)), 0.toByte)
+    val firstTokenId = SelectField(ByIndex(rOutTokens, IntConstant(0)), 1.toByte)
 
     val correctNftId = EQ(firstTokenId, ByteArrayConstant(rs.reemissionNftIdBytes))
 

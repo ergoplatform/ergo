@@ -38,7 +38,7 @@ case class PoPowHeader(header: Header, interlinks: Seq[ModifierId], interlinksPr
 
   def height: Int = header.height
 
-  def checkProof(): Boolean = PoPowHeader.checkProof(interlinks, interlinksProof)
+  def checkInterlinksProof(): Boolean = PoPowHeader.checkInterlinksProof(interlinks, interlinksProof)
 }
 
 object PoPowHeader {
@@ -49,12 +49,18 @@ object PoPowHeader {
   val powScheme: AutolykosPowScheme = new AutolykosPowScheme(32, 26)
   val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
 
-  def checkProof(interlinks: Seq[ModifierId], proof: BatchMerkleProof[Digest32]): Boolean = {
+  /**
+    * Validates interlinks merkle root against provided proof
+    */
+  def checkInterlinksProof(interlinks: Seq[ModifierId], proof: BatchMerkleProof[Digest32]): Boolean = {
     val fields = nipopowAlgos.packInterlinks(interlinks)
     val tree = merkleTree(fields)
     proof.valid(tree.rootHash)
   }
 
+  /**
+    * Create PoPowHeader from a given block
+    */
   def fromBlock(b: ErgoFullBlock): Try[PoPowHeader] = {
     val proof = nipopowAlgos.proofForInterlinkVector(b.extension).get
     NipopowAlgos.unpackInterlinks(b.extension.fields).map { interlinkVector =>
@@ -66,7 +72,7 @@ object PoPowHeader {
     interlinksVector.map(id => id: String).asJson
   }
 
-  implicit val interlinkProofEncoder: Encoder[BatchMerkleProof[Digest32]] = { proof: BatchMerkleProof[Digest32] =>
+  implicit val batchMerkleProofEncoder: Encoder[BatchMerkleProof[Digest32]] = { proof: BatchMerkleProof[Digest32] =>
 
     val indicesAsJson = proof.indices.map(i => Json.obj(fields =
       "index" -> i._1.asJson,
@@ -82,7 +88,7 @@ object PoPowHeader {
     )
   }
 
-  implicit val interlinkProofDecoder: Decoder[BatchMerkleProof[Digest32]] = { p =>
+  implicit val batchMerkleProofDecoder: Decoder[BatchMerkleProof[Digest32]] = { p =>
 
     for {
       indicesJson <- p.downField("indices").as[List[Json]]
@@ -122,11 +128,14 @@ object PoPowHeader {
   }
 }
 
+/**
+  * Binary serializer for PoPowHeader,
+  */
 object PoPowHeaderSerializer extends ScorexSerializer[PoPowHeader] {
   import org.ergoplatform.wallet.Constants.ModifierIdLength
 
   implicit val hf: HF = Algos.hash
-  val merkleSerializer = new BatchMerkleProofSerializer[Digest32, HF]
+  val merkleProofSerializer = new BatchMerkleProofSerializer[Digest32, HF]
 
   override def serialize(obj: PoPowHeader, w: Writer): Unit = {
     val headerBytes = obj.header.bytes
@@ -134,7 +143,7 @@ object PoPowHeaderSerializer extends ScorexSerializer[PoPowHeader] {
     w.putBytes(headerBytes)
     w.putUInt(obj.interlinks.size)
     obj.interlinks.foreach(x => w.putBytes(idToBytes(x)))
-    val proofBytes = merkleSerializer.serialize(obj.interlinksProof)
+    val proofBytes = merkleProofSerializer.serialize(obj.interlinksProof)
     w.putUInt(proofBytes.length)
     w.putBytes(proofBytes)
   }
@@ -145,7 +154,7 @@ object PoPowHeaderSerializer extends ScorexSerializer[PoPowHeader] {
     val linksQty = r.getUInt().toIntExact
     val interlinks = (0 until linksQty).map(_ => bytesToId(r.getBytes(ModifierIdLength)))
     val interlinksProofSize = r.getUInt().toIntExact
-    val interlinksProof = merkleSerializer.deserialize(r.getBytes(interlinksProofSize)).get
+    val interlinksProof = merkleProofSerializer.deserialize(r.getBytes(interlinksProofSize)).get
     PoPowHeader(header, interlinks, interlinksProof)
   }
 

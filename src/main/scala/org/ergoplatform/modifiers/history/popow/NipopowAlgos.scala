@@ -260,7 +260,7 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
   }
 
   /**
-   * Proves the inclusion of the complete interlink vector in the Merkle Tree of the given extension.
+   * Proves the inclusion of the interlink vector in the Merkle Tree of the given extension.
    */
   def proofForInterlinkVector(ext: ExtensionCandidate): Option[BatchMerkleProof[Digest32]] = {
     val keys = ext.fields

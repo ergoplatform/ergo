@@ -506,15 +506,17 @@ trait ErgoHistoryReader
     * Constructs popow header against given header identifier
     *
     * @param headerId - identifier of the header
-    * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
+    * @return PoPowHeader(header + interlinks + interlinkProof) or
+    *         None if header of extension of a corresponding block are not available
     */
   def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
     typedModifierById[Header](headerId).flatMap(h =>
       typedModifierById[Extension](h.extensionId).flatMap { ext =>
-        NipopowAlgos.unpackInterlinks(ext.fields).toOption.map { interlinks => {
-          val proof = nipopowAlgos.proofForInterlinkVector(ext).get
-          PoPowHeader(h, interlinks, proof)
-        }
+        val interlinks = NipopowAlgos.unpackInterlinks(ext.fields).toOption
+        val interlinkProof = nipopowAlgos.proofForInterlinkVector(ext)
+        (interlinks, interlinkProof) match {
+          case (Some(links), Some(proof)) => Some(PoPowHeader(h, links, proof))
+          case _ => None
         }
       }
     )

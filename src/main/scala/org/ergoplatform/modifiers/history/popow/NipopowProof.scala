@@ -88,13 +88,11 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
   }
 
   /**
-   * Checks the interlink vector proofs of the blocks in the proof.
-   *
-   * @return true if all interlink proofs are valid
+   * Checks the interlink proofs of the blocks in the proof.
    */
   def hasValidProofs: Boolean = {
-    prefix.forall(_.checkProof()) &&
-      suffixHead.checkProof()
+    prefix.forall(_.checkInterlinksProof()) &&
+      suffixHead.checkInterlinksProof()
   }
 }
 

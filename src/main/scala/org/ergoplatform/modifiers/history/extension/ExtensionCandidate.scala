@@ -31,6 +31,12 @@ class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
       .map(Extension.kvToLeaf)
       .flatMap(kv => merkleTree.proofByElement(Leaf[Digest32](LeafData @@ kv)(Algos.hash)))
 
+  /**
+    * Constructs BatchMerkleProof for a list of keys
+    *
+    * @param keys - array of 2-byte keys
+    * @return BatchMerkleProof or None if keys not found
+    */
   def batchProofFor(keys: Array[Byte]*): Option[BatchMerkleProof[Digest32]] = {
     val indices = keys.flatMap(key => fields.find(_._1 sameElements key)
       .map(Extension.kvToLeaf)

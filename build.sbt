@@ -131,8 +131,6 @@ val opts = Seq(
 javaOptions in run ++= opts
 scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 
-version := "4.0.18"
-
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
   IO.write(versionFile,

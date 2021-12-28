@@ -1,7 +1,5 @@
 package org.ergoplatform.wallet.interface4j;
 
-import sigmastate.serialization.SelectFieldSerializer;
-
 import java.util.Arrays;
 
 /**

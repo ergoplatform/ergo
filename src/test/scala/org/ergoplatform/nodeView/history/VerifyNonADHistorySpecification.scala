@@ -138,7 +138,12 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     val header = genHeaderChain(1, history, diffBitsOpt = None, useRealTs = false).head
     val updHistory = history.append(header).get._1
     updHistory.bestHeaderOpt shouldBe Some(header)
-    updHistory.modifierById(header.id) shouldBe Some(header)
+    val restoredHeader = updHistory.modifierById(header.id)
+    restoredHeader shouldBe Some(header)
+
+    val bytesFromSerializer = HeaderSerializer.toBytes(header)
+    val bytesFromDb = updHistory.modifierBytesById(header.id).get
+    bytesFromSerializer.sameElements(bytesFromDb) shouldBe true
   }
 
   property("append header as genesis - via applyHeaderChain") {

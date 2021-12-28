@@ -106,7 +106,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
     if(tx.id == "f31acb8230d0a4fe2a7d47fad4fa4758cad7d318f0030e1059c5ccef3c3f949e") {
-      new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Declined("blacklisted tx")
+      new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Declined(new Exception("blacklisted tx"))
     } else {
       val fee = extractFee(tx)
       val minFee = settings.nodeSettings.minimalFeeAmount

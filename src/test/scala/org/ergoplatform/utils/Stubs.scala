@@ -241,7 +241,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   object WalletActorStub {
 
     val seed: String = "walletstub"
-    val mnemonic: String = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
+    val mnemonic: String = SecretString.create("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon")
     val path = DerivationPath(List(0, 1, 2), publicBranch = false)
     val secretKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create(mnemonic))).derive(path)
     val address = P2PKAddress(proveDlogGen.sample.get)

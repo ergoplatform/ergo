@@ -478,7 +478,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           history.getFullBlock(h)
             .fold(throw new Error(s"Failed to get full block for header $h"))(fb => fb)
         }
-        toApply.foldLeft[Try[State]](Success(initState))((acc, m) => acc.flatMap(_.applyModifier(m)))
+        toApply.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
+          log.info(s"Applying modifier during node start-up to restore consistent state: ${m.id}")
+          acc.flatMap(_.applyModifier(m))
+        }
     }
   }
 

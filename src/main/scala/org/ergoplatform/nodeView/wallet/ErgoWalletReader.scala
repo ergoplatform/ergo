@@ -36,8 +36,8 @@ trait ErgoWalletReader extends VaultReader {
     * @param mnemonicPassOpt  mnemonic encription password
     * @return  menmonic phrase for the new wallet
     */
-  def initWallet(pass: SecretString, mnemonicPassOpt: Option[SecretString]): Future[Try[String]] =
-    (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[String]]
+  def initWallet(pass: SecretString, mnemonicPassOpt: Option[SecretString]): Future[Try[SecretString]] =
+    (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[SecretString]]
 
   def restoreWallet(encryptionPass: SecretString, mnemonic: SecretString,
                     mnemonicPassOpt: Option[SecretString] = None): Future[Try[Unit]] =
@@ -53,7 +53,9 @@ trait ErgoWalletReader extends VaultReader {
   def getWalletStatus: Future[WalletStatus] =
     (walletActor ? GetWalletStatus).mapTo[WalletStatus]
 
-  def checkSeed(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString] = None): Future[Boolean] = (walletActor ? CheckSeed(mnemonic, mnemonicPassOpt)).mapTo[Boolean]
+  def checkSeed(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString] = None): Future[Boolean] = {
+    (walletActor ? CheckSeed(mnemonic, mnemonicPassOpt)).mapTo[Boolean]
+  }
 
   def deriveKey(path: String): Future[Try[P2PKAddress]] =
     (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]

@@ -159,7 +159,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     def receive: Receive = {
 
-      case _: InitWallet => sender() ! Success(WalletActorStub.mnemonic)
+      case _: InitWallet => sender() ! Success(SecretString.create(WalletActorStub.mnemonic))
 
       case _: RestoreWallet => sender() ! Success(())
 

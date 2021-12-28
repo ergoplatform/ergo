@@ -480,7 +480,7 @@ object CandidateGenerator extends ScorexLogging {
       val emissionTxs = emissionTxOpt.toSeq
       val (txs, toEliminate) = collectTxs(
         minerPk,
-        state.stateContext.currentParameters.maxBlockCost,
+        state.stateContext.currentParameters.maxBlockCost - 500000, //todo: fix
         state.stateContext.currentParameters.maxBlockSize,
         ergoSettings.nodeSettings.maxTransactionComplexity,
         state,

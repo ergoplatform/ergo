@@ -478,9 +478,19 @@ object CandidateGenerator extends ScorexLogging {
       )
 
       val emissionTxs = emissionTxOpt.toSeq
+
+      // todo: remove in 5.0
+      // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
+      // differently due to bugs in AOT costing
+      val safeGap = if(state.stateContext.currentParameters.maxBlockCost < 1000000) {
+        0
+      } else {
+        150000
+      }
+
       val (txs, toEliminate) = collectTxs(
         minerPk,
-        state.stateContext.currentParameters.maxBlockCost - 500000, //todo: fix
+        state.stateContext.currentParameters.maxBlockCost - safeGap,
         state.stateContext.currentParameters.maxBlockSize,
         ergoSettings.nodeSettings.maxTransactionComplexity,
         state,

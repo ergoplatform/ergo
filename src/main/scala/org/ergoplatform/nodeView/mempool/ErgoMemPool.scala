@@ -31,6 +31,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
 
+  private val nodeSettings = settings.nodeSettings
+
   override def size: Int = pool.size
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = pool.get(modifierId)
@@ -105,7 +107,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
   }
 
   def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
-    if(tx.id == "f31acb8230d0a4fe2a7d47fad4fa4758cad7d318f0030e1059c5ccef3c3f949e") {
+    val blacklistedTransactions = nodeSettings.blacklistedTransactions
+    if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
       new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Declined(new Exception("blacklisted tx"))
     } else {
       val fee = extractFee(tx)

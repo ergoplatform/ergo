@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.17"
+  version: "4.0.19"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1540,7 +1540,7 @@ components:
     PeersStatus:
       type: object
       required:
-        - lastInomingMessage
+        - lastIncomingMessage
         - currentNetworkTime
       properties:
         lastIncomingMessage:
@@ -2825,7 +2825,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PeersInfo'
+                  $ref: '#/components/schemas/PeersStatus'
         default:
           description: Error
           content:
@@ -2847,7 +2847,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PeersInfo'
+                  $ref: '#/components/schemas/PeerInfo'
         default:
           description: Error
           content:
@@ -3614,7 +3614,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /wallet/boxes/collect:
-    get:
+    post:
       security:
         - ApiKeyAuth: [ api_key ]
       summary: Get a list of collected boxes.

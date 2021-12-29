@@ -2,8 +2,8 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoAddressEncoder.TestnetNetworkPrefix
 import org.ergoplatform.ErgoScriptPredef.boxCreationHeight
-import org.ergoplatform.{Height, ErgoBox, Self, ErgoScriptPredef}
-import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState, ErgoState}
+import org.ergoplatform.{ErgoBox, ErgoScriptPredef, Height, Self}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.ADKey
@@ -11,15 +11,17 @@ import sigmastate._
 import sigmastate.Values._
 import sigmastate.lang.Terms._
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.{IRContext, CompiletimeIRContext}
+import sigmastate.eval.{CompiletimeIRContext, IRContext}
 import sigmastate.interpreter.CryptoConstants.dlogGroup
-import sigmastate.lang.{TransformingSigmaBuilder, SigmaCompiler}
+import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
 
 import scala.util.{Random, Try}
 
 class ScriptsSpec extends ErgoPropertyTest {
 
-  val compiler = SigmaCompiler(TestnetNetworkPrefix, TransformingSigmaBuilder)
+  val compiler = SigmaCompiler(
+    CompilerSettings(TestnetNetworkPrefix, TransformingSigmaBuilder, lowerMethodCalls = true)
+  )
   val delta = emission.settings.minerRewardDelay
   val fixedBox: ErgoBox = ergoBoxGen(fromString("1 == 1"), heightGen = 0).sample.get
   implicit lazy val context: IRContext = new CompiletimeIRContext

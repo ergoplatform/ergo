@@ -18,7 +18,7 @@ import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
 import scorex.db.LDBFactory
-import scorex.util.{ScorexLogging, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
 
@@ -184,6 +184,25 @@ trait ErgoHistory
     case _ => None
   }
 
+  /**
+    * Remove header, corresponding block parts, and corresponding indexes from storage and caches
+    * @param headerId - header id
+    * @return
+    */
+  def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
+    typedModifierById[Header](headerId).foreach { h =>
+      historyStorage.remove(
+        indicesToRemove = Seq(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
+        idsToRemove = Seq(headerId)
+      ).get
+      requiredModifiersForHeader(h).foreach { case (_, mId) =>
+        historyStorage.remove(
+          indicesToRemove = Seq(validityKey(mId)),
+          idsToRemove = Seq(mId)
+        ).get
+      }
+    }
+  }
 }
 
 object ErgoHistory extends ScorexLogging {
@@ -204,6 +223,21 @@ object ErgoHistory extends ScorexLogging {
     val dir = new File(s"${settings.directory}/history")
     dir.mkdirs()
     dir
+  }
+
+  // check if there is possible database corruption when there is header after
+  // recognized blockchain tip marked as invalid
+  private def repairIfNeeded(history: ErgoHistory): Unit = {
+    val bestHeaderHeight = history.headersHeight
+    val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
+
+    if (afterHeaders.nonEmpty) {
+      log.warn("Found suspicious continuation, clearing it...")
+      afterHeaders.map { hId =>
+        history.forgetHeader(hId)
+      }
+      history.historyStorage.remove(Seq(history.heightIdsKey(bestHeaderHeight + 1)), Seq.empty)
+    }
   }
 
   def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
@@ -249,6 +283,10 @@ object ErgoHistory extends ScorexLogging {
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
     }
+
+    repairIfNeeded(history)
+
+    log.info("History database read")
     history
   }
 

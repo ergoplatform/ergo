@@ -255,7 +255,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   private def bestHeadersChainScore: BigInt = bestHeaderIdOpt.flatMap(id => scoreOf(id)).getOrElse(0)
 
-  private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
+  protected def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
   /**
     * Calculate difficulty for the next block

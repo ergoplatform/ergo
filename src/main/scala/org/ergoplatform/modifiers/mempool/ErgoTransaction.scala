@@ -15,6 +15,7 @@ import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.EphemerealNodeViewModifier
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
@@ -27,7 +28,7 @@ import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
 
-import java.nio.ByteBuffer
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -71,7 +72,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
 
 
-  lazy val outAssetsTry: Try[(Map[ByteBuffer, Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
+  lazy val outAssetsTry: Try[(Map[Seq[Byte], Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
 
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -173,7 +174,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
         ErgoBoxAssetExtractor.extractAssets(boxesToSpend) match {
           case Success((inAssets, inAssetsNum)) =>
-            lazy val newAssetId = ByteBuffer.wrap(inputs.head.boxId)
+            lazy val newAssetId = mutable.WrappedArray.make(inputs.head.boxId)
             val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
             val currentTxCost = validation.result.payload.get
 
@@ -218,7 +219,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val (isCostValid, scriptCost) =
           costTry match {
             case Failure(t) =>
-              log.debug(s"Tx verification failed: ${t.getMessage}")
+              log.info(s"Tx $id verification failed: ${t.getMessage} : " , t)
+              log.info(s"Tx $id verification context: " +
+                s"${JsonCodecsWrapper.ergoLikeContextEncoder.apply(ctx)} " +
+                s"input context: $inputContext " +
+                s"proof: $proof" +
+                s"messageToSign: $messageToSign")
               (false, maxCost + 1)
             case Success(result) =>
               result

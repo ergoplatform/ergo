@@ -11,6 +11,7 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -232,7 +233,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     val toRemove: Seq[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
       .flatMap(id => typedModifierById[Header](id))
       .flatMap(_.sectionIds.map(_._2))
-    historyStorage.remove(toRemove)
+    historyStorage.remove(mutable.WrappedArray.empty, toRemove)
   }
 
   private def updateStorage(newModRow: BlockSection,

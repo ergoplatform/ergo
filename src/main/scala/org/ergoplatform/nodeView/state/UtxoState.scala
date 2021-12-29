@@ -8,10 +8,10 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, ErgoAlgos}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
@@ -23,6 +23,7 @@ import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest,
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
@@ -179,7 +180,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
 }
 
-object UtxoState {
+object UtxoState extends ScorexLogging {
 
   type Manifest = BatchAVLProverManifest[Digest32]
   type Subtree = BatchAVLProverSubtree[Digest32]
@@ -243,6 +244,34 @@ object UtxoState {
     ).get
 
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
+  }
+
+  def fromLatestSnapshot(dir: File,
+                         snapshotDb: SnapshotsDb,
+                         constants: StateConstants): Try[UtxoState] = Try {
+    snapshotDb.readSnapshotsInfo match {
+      case Some(snapshotsInfo) =>
+        val (h, manifestId) = snapshotsInfo.availableManifests.maxBy(_._1)
+        log.info(s"Reading snapshot from height $h")
+        val manifest = snapshotDb.readManifestBytes(manifestId).get
+        val subtreeIds = manifest.subtreesIds
+        val subtrees = subtreeIds.map(sid => snapshotDb.readSubtreeBytes(sid).get)
+        val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
+        val prover = serializer.combine(manifest -> subtrees, Algos.hash.DigestSize, None).get
+
+        //todo: code below is mostly copied from .create, unify ? 
+        val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+        val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
+          .getOrElse(ErgoState.genesisStateVersion)
+        val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
+          val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
+          val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+          PersistentBatchAVLProver.create(prover, storage).get
+        }
+        new UtxoState(persistentProver, version, store, constants)
+
+      case None => ???
+    }
   }
 
 }

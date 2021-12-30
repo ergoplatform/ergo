@@ -30,15 +30,15 @@ object TransactionExecutionBenchmark extends HistoryTestHelpers with NVBenchmark
     val startTs = System.currentTimeMillis()
 
     val bh = BoxHolder(genesisBoxes)
-    val txs = (1 to 5000).foldLeft(mutable.WrappedArray.empty[ErgoTransaction]) { case (txAcc, _) =>
+    val txs = (1 to 5000).foldLeft(mutable.WrappedArray.newBuilder[ErgoTransaction]) { case (txAcc, _) =>
       val (transactions, _) = validTransactionsFromBoxes(10000, bh.boxes.values.toVector, new RandomWrapper)
       val allBoxIds = bh.boxes.keys.toSet
       val txsFromBoxesOnly = transactions.filter { tx =>
         tx.inputs.map(i => ByteArrayWrapper(i.boxId)).forall(allBoxIds.contains) &&
           tx.dataInputs.map(i => ByteArrayWrapper(i.boxId)).forall(allBoxIds.contains)
       }
-      txAcc ++ txsFromBoxesOnly
-    }
+      txAcc ++= txsFromBoxesOnly
+    }.result()
 
     val boxes = bh.boxes
     val stateContext = stateContextWithMaxCost(Int.MaxValue)

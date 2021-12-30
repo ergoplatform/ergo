@@ -4,6 +4,8 @@ import org.ergoplatform.Utils
 import org.ergoplatform.Utils.BenchReport
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.NVBenchmark
+import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
+import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.utils.{HistoryTestHelpers, RandomWrapper}
 import scorex.core.validation.ValidationResult.Valid
 import scorex.db.ByteArrayWrapper
@@ -14,6 +16,14 @@ import scala.util.Try
 object TransactionExecutionBenchmark extends HistoryTestHelpers with NVBenchmark {
 
   val WarmupRuns = 3
+
+  def stateContextWithMaxCost(manualCost: Int): UpcomingStateContext = {
+    val table2: Map[Byte, Int] = Parameters.DefaultParameters + (MaxBlockCostIncrease -> manualCost)
+    val params2 = new Parameters(height = 0,
+      parametersTable = table2,
+      proposedUpdate = ErgoValidationSettingsUpdate.empty)
+    emptyStateContext.copy(currentParameters = params2)(settings)
+  }
 
   def main(args: Array[String]): Unit = {
 
@@ -31,10 +41,10 @@ object TransactionExecutionBenchmark extends HistoryTestHelpers with NVBenchmark
     }
 
     val boxes = bh.boxes
-    val stateContext = emptyStateContext
+    val stateContext = stateContextWithMaxCost(Int.MaxValue)
     def bench: Long =
       Utils.time {
-        assert(ErgoState.execTransactions(txs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))) == Valid(893325))
+        assert(ErgoState.execTransactions(txs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))) == Valid(178665000))
       }.toLong
 
     (0 to WarmupRuns).foreach(_ => bench)

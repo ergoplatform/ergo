@@ -148,15 +148,15 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   property("ErgoState.execTransactions()") {
     val bh = BoxHolder(genesisBoxes)
     def generateTxs =
-      (1 to 15).foldLeft(mutable.WrappedArray.empty[ErgoTransaction]) { case (txAcc, _) =>
+      (1 to 15).foldLeft(mutable.WrappedArray.newBuilder[ErgoTransaction]) { case (txAcc, _) =>
         val (transactions, _) = validTransactionsFromBoxes(10000, bh.boxes.values.toSeq, new RandomWrapper())
         val allBoxIds = bh.boxes.keys.toSet
         val txsFromBoxesOnly = transactions.filter { tx =>
           tx.inputs.map(i => ByteArrayWrapper(i.boxId)).forall(allBoxIds.contains) &&
             tx.dataInputs.map(i => ByteArrayWrapper(i.boxId)).forall(allBoxIds.contains)
         }
-        txAcc ++ txsFromBoxesOnly
-      }
+        txAcc ++= txsFromBoxesOnly
+      }.result()
 
     val txs = generateTxs
     val boxes = bh.boxes

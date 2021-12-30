@@ -1,11 +1,14 @@
 package scorex.core.network.message
 
 
+import org.ergoplatform.nodeView.state.SnapshotsInfo
+import org.ergoplatform.wallet.Constants
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.{ModifierTypeId, NodeViewModifier}
+import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
@@ -271,5 +274,54 @@ class HandshakeSpec(featureSerializers: PeerFeature.Serializers, sizeLimit: Int)
     val t = r.getULong()
     val data = peersDataSerializer.parse(r)
     Handshake(data, t)
+  }
+}
+
+
+/**
+  * The `GetSnapshotsInfo` message requests an `SnapshotsInfo` message from the receiving node
+  */
+object GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
+  private val SizeLimit = 100
+
+  override val messageCode: MessageCode = 76: Byte
+
+  override val messageName: String = "GetSnapshotsInfo"
+
+  override def serialize(obj: Unit, w: Writer): Unit = {
+  }
+
+  override def parse(r: Reader): Unit = {
+    require(r.remaining < SizeLimit, "Too big GetSnapshotsInfo message")
+  }
+}
+
+/**
+  * The `SnapshotsInfo` message is a reply to a `GetSnapshotsInfo` message.
+  */
+object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
+  private val SizeLimit = 1000
+
+  override val messageCode: MessageCode = 77: Byte
+
+  override val messageName: String = "SnapshotsInfo"
+
+  override def serialize(si: SnapshotsInfo, w: Writer): Unit = {
+    w.putUInt(si.availableManifests.size)
+    for ((height, manifest) <- si.availableManifests) {
+      w.putInt(height)
+      w.putBytes(manifest)
+    }
+  }
+
+  override def parse(r: Reader): SnapshotsInfo = {
+    require(r.remaining <= SizeLimit, s"Too big SnapshotsInfo message.")
+
+    val length = r.getUInt().toIntExact
+    SnapshotsInfo((0 until length).map { _ =>
+      val height = r.getInt()
+      val manifest = Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+      height -> manifest
+    }.toMap)
   }
 }

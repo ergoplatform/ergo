@@ -145,4 +145,8 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     */
   def withMempool(mp: ErgoMemPoolReader): UtxoState = withTransactions(mp.getAll)
 
+  def getSnapshotInfo(): Option[SnapshotsInfo] = {
+    val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
+    snapshotsDb.readSnapshotsInfo
+  }
 }

@@ -6,7 +6,7 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
@@ -23,11 +23,10 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.state.ErgoStateReader
-import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import scorex.core.network.message._
 import scorex.core.network._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.message.{InvData, Message, ModifiersData}
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
@@ -95,7 +94,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   override def preStart(): Unit = {
     // subscribe for history and mempool changes
-    viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
+    viewHolderRef ! GetNodeViewChanges(history = true, state = true, vault = false, mempool = true)
 
     val toDownloadCheckInterval = networkSettings.syncInterval
 
@@ -110,6 +109,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // subscribe for all the node view holder events involving modifiers and transactions
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[ErgoHistoryReader]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPoolReader]])
+    context.system.eventStream.subscribe(self, classOf[ChangedState])
+
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
@@ -291,6 +292,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
     * Headers should be downloaded from an Older node, it is triggered by received sync message from an older node
+    *
     * @param callingPeer that can be used to download headers, it must be Older
     * @return available peers to download headers from together with the state/origin of the peer
     */
@@ -303,6 +305,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
     * Other persistent modifiers besides headers should be downloaded from either Older or Equal node, with fallback to Unknown or Fork
+    *
     * @return available peers to download persistent modifiers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingBlocks: Option[(PeerSyncState, Iterable[ConnectedPeer])] = {
@@ -320,11 +323,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Modifier download method that is given min/max constraints for modifiers to download from peers.
     * It sends requests for modifiers to given peers in optimally sized batches.
-    * @param maxModifiers maximum modifiers to download
+    *
+    * @param maxModifiers          maximum modifiers to download
     * @param minModifiersPerBucket minimum modifiers to download per bucket
     * @param maxModifiersPerBucket maximum modifiers to download per bucket
-    * @param getPeersOpt optionally get peers to download from, all peers have the same PeerSyncState
-    * @param fetchMax function that fetches modifiers, it is passed how many of them tops
+    * @param getPeersOpt           optionally get peers to download from, all peers have the same PeerSyncState
+    * @param fetchMax              function that fetches modifiers, it is passed how many of them tops
     */
   protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
                                (getPeersOpt: => Option[(PeerSyncState, Iterable[ConnectedPeer])])
@@ -477,6 +481,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
     }
     modifiersByStatus.getOrElse(Requested, Map.empty)
+  }
+
+  protected def sendSnapshotsInfo(peer: ConnectedPeer): Unit = {
+    utxoStateReaderOpt match {
+      case Some(reader) => {
+        reader.getSnapshotInfo() match {
+          case Some(snapInfo) => {
+            val msg = Message(SnapshotsInfoSpec, Right(snapInfo), None)
+            networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+          }
+          case _ => log.warn(s"No snapshots avaialble")
+        }
+      }
+      case _ => log.warn(s"Got data from peer while readers are not ready")
+    }
   }
 
   /**
@@ -696,6 +715,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
       context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
+
+    case ChangedState(reader: ErgoStateReader) =>
+      reader match {
+        case utxoStateReader: UtxoStateReader => utxoStateReaderOpt = Some(utxoStateReader)
+        case _ =>
+      }
 
     case ModifiersProcessingResult(_: Seq[BlockSection], cleared: Seq[BlockSection]) =>
       // stop processing for cleared modifiers

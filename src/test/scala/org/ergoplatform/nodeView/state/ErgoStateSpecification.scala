@@ -147,22 +147,32 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("ErgoState.execTransactions()") {
     val bh = BoxHolder(genesisBoxes)
-    val txs = (1 to 15).foldLeft(mutable.WrappedArray.empty[ErgoTransaction]) { case (txAcc, _) =>
-      val (transactions, _) = validTransactionsFromBoxes(10000, bh.boxes.values.toSeq, new RandomWrapper())
-      val allBoxIds = bh.boxes.keys.toSet
-      val txsFromBoxesOnly = transactions.filter { tx =>
-        tx.inputs.map(i => ByteArrayWrapper(i.boxId)).forall(allBoxIds.contains) &&
-          tx.dataInputs.map(i => ByteArrayWrapper(i.boxId)).forall(allBoxIds.contains)
+    def generateTxs =
+      (1 to 15).foldLeft(mutable.WrappedArray.empty[ErgoTransaction]) { case (txAcc, _) =>
+        val (transactions, _) = validTransactionsFromBoxes(10000, bh.boxes.values.toSeq, new RandomWrapper())
+        val allBoxIds = bh.boxes.keys.toSet
+        val txsFromBoxesOnly = transactions.filter { tx =>
+          tx.inputs.map(i => ByteArrayWrapper(i.boxId)).forall(allBoxIds.contains) &&
+            tx.dataInputs.map(i => ByteArrayWrapper(i.boxId)).forall(allBoxIds.contains)
+        }
+        txAcc ++ txsFromBoxesOnly
       }
-      txAcc ++ txsFromBoxesOnly
-    }
 
+    val txs = generateTxs
     val boxes = bh.boxes
     val stateContext = emptyStateContext
     val expectedCost = 535995
 
     // successful validation
     ErgoState.execTransactions(txs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe Valid(expectedCost)
+
+    // cost limit exception expected when crossing MaxBlockCost
+    val tooManyTxs = txs ++ generateTxs
+    assert(
+      ErgoState.execTransactions(tooManyTxs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))).errors.head.message.contains(
+        "Estimated execution cost 23533 exceeds the limit 23009"
+      )
+    )
 
     // missing box in state
     ErgoState.execTransactions(txs, stateContext)(_ => Failure(new RuntimeException)).errors.head.message shouldBe

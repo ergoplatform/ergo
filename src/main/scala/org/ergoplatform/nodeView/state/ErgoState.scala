@@ -26,8 +26,9 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
 
 import scala.annotation.tailrec
+import scala.collection.immutable.VectorBuilder
 import scala.collection.mutable
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Implementation of minimal state concept in Scorex. Minimal state (or just state from now) is some data structure
@@ -76,39 +77,31 @@ object ErgoState extends ScorexLogging {
 
   /**
     * Tries to validate and execute transactions.
-    *
+    * @param transactions to be validated and executed
+    * @param currentStateContext to be used for tx execution
+    * @param checkBoxExistence function to provide ErgoBox by BoxId
     * @return Result of transactions execution with total cost inside
     */
   def execTransactions(transactions: Seq[ErgoTransaction],
                        currentStateContext: ErgoStateContext)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
-    import cats.implicits._
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
     @tailrec
-    def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {
-      case (tx :: tail, r: Valid[Long]) =>
-        val boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
-          .map(in => checkBoxExistence(in.boxId))
-          .sequence
-
-        lazy val dataBoxesTry: Try[List[ErgoBox]] = tx.dataInputs.toList
-          .map(in => checkBoxExistence(in.boxId))
-          .sequence
-
-        lazy val boxes: Try[(List[ErgoBox], List[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
-
-        val vs = tx.validateStateless()
-          .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
-          .validateNoFailure(txDataBoxes, dataBoxesTry)
-          .payload[Long](r.value)
-          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
-            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value)(verifier).result
-          }
-
-        execTx(tail, vs)
-      case _ =>
-        accCostTry
+    def collectBoxesById(
+                 remainingBoxIds: Iterator[ErgoBox.BoxId],
+                 resultingBoxes: Try[VectorBuilder[ErgoBox]] = Success(new VectorBuilder[ErgoBox])
+               ): Try[IndexedSeq[ErgoBox]] = {
+      if (!remainingBoxIds.hasNext) {
+        resultingBoxes.map(_.result())
+      } else {
+        checkBoxExistence(remainingBoxIds.next()) match {
+          case Success(box) =>
+            collectBoxesById(remainingBoxIds, resultingBoxes.map(_ += box))
+          case Failure(ex) =>
+            Failure(ex)
+        }
+      }
     }
 
     // Skip v1 block transactions validation if corresponding setting is on
@@ -116,7 +109,23 @@ object ErgoState extends ScorexLogging {
           currentStateContext.ergoSettings.nodeSettings.skipV1TransactionsValidation) {
       Valid(0L)
     } else {
-      execTx(transactions.toList, Valid[Long](0L))
+      import spire.syntax.all.cfor
+      var costResult: ValidationResult[Long] = Valid[Long](0L)
+      cfor(0)(_ < transactions.length && costResult.isValid, _ + 1) { i =>
+        val validCostResult = costResult.asInstanceOf[Valid[Long]]
+        val tx = transactions(i)
+        val boxesToSpendTry: Try[IndexedSeq[ErgoBox]] = collectBoxesById(tx.inputs.iterator.map(_.boxId))
+        lazy val dataBoxesTry: Try[IndexedSeq[ErgoBox]] = collectBoxesById(tx.dataInputs.iterator.map(_.boxId))
+        lazy val boxes: Try[(IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
+        costResult = tx.validateStateless()
+          .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
+          .validateNoFailure(txDataBoxes, dataBoxesTry)
+          .payload[Long](validCostResult.value)
+          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
+            tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value)(verifier).result
+          }
+      }
+      costResult
     }
   }
 

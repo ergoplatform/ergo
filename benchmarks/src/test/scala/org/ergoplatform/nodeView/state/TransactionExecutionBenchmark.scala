@@ -5,6 +5,7 @@ import org.ergoplatform.Utils.BenchReport
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.NVBenchmark
 import org.ergoplatform.utils.{HistoryTestHelpers, RandomWrapper}
+import scorex.core.validation.ValidationResult.Valid
 import scorex.db.ByteArrayWrapper
 
 import scala.collection.mutable
@@ -19,7 +20,7 @@ object TransactionExecutionBenchmark extends HistoryTestHelpers with NVBenchmark
     val startTs = System.currentTimeMillis()
 
     val bh = BoxHolder(genesisBoxes)
-    val txs = (1 to 25).foldLeft(mutable.WrappedArray.empty[ErgoTransaction]) { case (txAcc, _) =>
+    val txs = (1 to 5000).foldLeft(mutable.WrappedArray.empty[ErgoTransaction]) { case (txAcc, _) =>
       val (transactions, _) = validTransactionsFromBoxes(10000, bh.boxes.values.toVector, new RandomWrapper)
       val allBoxIds = bh.boxes.keys.toSet
       val txsFromBoxesOnly = transactions.filter { tx =>
@@ -33,7 +34,7 @@ object TransactionExecutionBenchmark extends HistoryTestHelpers with NVBenchmark
     val stateContext = emptyStateContext
     def bench: Long =
       Utils.time {
-        assert(ErgoState.execTransactions(txs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))).isValid)
+        assert(ErgoState.execTransactions(txs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))) == Valid(893325))
       }.toLong
 
     (0 to WarmupRuns).foreach(_ => bench)

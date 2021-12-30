@@ -237,7 +237,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
 
       val s = stateGen.sample.get
 
-      if(s.isInstanceOf[UtxoStateReader]) {
+      if (s.isInstanceOf[UtxoStateReader]) {
         // To initialize utxoStateReaderOpt in ErgoNodeView Synchronizer
         node ! ChangedState(s)
 

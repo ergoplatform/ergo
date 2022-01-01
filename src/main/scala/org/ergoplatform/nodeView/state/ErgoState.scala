@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
@@ -26,7 +25,6 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
 
 import scala.annotation.tailrec
-import scala.collection.immutable.VectorBuilder
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -90,7 +88,7 @@ object ErgoState extends ScorexLogging {
     @tailrec
     def collectBoxesById(
                  remainingBoxIds: Iterator[ErgoBox.BoxId],
-                 resultingBoxes: Try[VectorBuilder[ErgoBox]] = Success(new VectorBuilder[ErgoBox])
+                 resultingBoxes: Try[mutable.ArrayBuilder[ErgoBox]] = Success(mutable.ArrayBuilder.make())
                ): Try[IndexedSeq[ErgoBox]] = {
       if (!remainingBoxIds.hasNext) {
         resultingBoxes.map(_.result())

@@ -6,6 +6,7 @@ import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.util.ScorexLogging
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -32,7 +33,7 @@ class ErgoMiningThread(
       1.second,
       ergoSettings.nodeSettings.internalMinerPollingInterval,
       candidateGenerator,
-      GenerateCandidate(Seq.empty, reply = true)
+      GenerateCandidate(mutable.WrappedArray.empty, reply = true)
     )(context.dispatcher, self)
   }
 

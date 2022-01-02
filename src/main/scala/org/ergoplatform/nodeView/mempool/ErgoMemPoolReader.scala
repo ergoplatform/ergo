@@ -19,18 +19,12 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
     */
   def spentInputs: Iterator[BoxId]
 
-  def getAll: Seq[ErgoTransaction]
+  def take(limit: Int): IndexedSeq[ErgoTransaction]
 
   /**
     * Returns all transactions resided in pool sorted by weight in descending order
     */
-  def getAllPrioritized: Seq[ErgoTransaction]
-
-
-  /**
-    * Returns given number of transactions resided in pool sorted by weight in descending order
-    */
-  def take(limit: Int): Iterable[ErgoTransaction]
+  def getAllPrioritized: IndexedSeq[ErgoTransaction]
 
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 

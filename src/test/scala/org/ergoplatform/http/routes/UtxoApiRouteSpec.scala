@@ -34,7 +34,7 @@ class UtxoApiRouteSpec extends AnyFlatSpec
   }
 
   it should "get mempool box with withPool/byId" in {
-    val box = memPool.getAll.flatMap(_.outputs).head
+    val box = memPool.getAllPrioritized.flatMap(_.outputs).head
     val boxId = Base16.encode(box.id)
     Get(prefix + s"/byId/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.NotFound
@@ -73,7 +73,7 @@ class UtxoApiRouteSpec extends AnyFlatSpec
   }
 
   it should "get pool box with /withPool/byIdBinary" in {
-    val box = memPool.getAll.flatMap(_.outputs).head
+    val box = memPool.getAllPrioritized.flatMap(_.outputs).head
     val boxId = Base16.encode(box.id)
     Get(prefix + s"/byIdBinary/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.NotFound

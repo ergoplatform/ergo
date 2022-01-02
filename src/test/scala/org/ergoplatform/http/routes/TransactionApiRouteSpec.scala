@@ -110,7 +110,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     val offset = 20
     Get(prefix + s"/unconfirmed?limit=$limit&offset=$offset") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      memPool.getAll.slice(offset, offset + limit) shouldBe responseAs[Seq[ErgoTransaction]]
+      memPool.getAllPrioritized.slice(offset, offset + limit) shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
 }

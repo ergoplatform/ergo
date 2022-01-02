@@ -99,9 +99,12 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   }
 
   private def rebroadcastTransactions(): Unit = {
+    import spire.implicits.cfor
     log.debug("Rebroadcasting transactions")
     poolReaderOpt.foreach { pr =>
-      pr.take(settings.nodeSettings.rebroadcastCount).foreach { tx =>
+      val txs = pr.take(settings.nodeSettings.rebroadcastCount)
+      cfor(0)(_ < txs.length, _ + 1) { idx =>
+        val tx = txs(idx)
         log.info(s"Rebroadcasting $tx")
         val msg = Message(
           new InvSpec(settings.scorexSettings.network.maxInvObjects),
@@ -110,7 +113,6 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
         )
         networkControllerRef ! SendToNetwork(msg, Broadcast)
       }
-
     }
 
   }

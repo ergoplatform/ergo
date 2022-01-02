@@ -37,6 +37,7 @@ import sigmastate.interpreter.ProverResult
 import special.collection.Coll
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
@@ -101,7 +102,7 @@ class CandidateGenerator(
           )
         )
       )
-      self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+      self ! GenerateCandidate(txsToInclude = mutable.WrappedArray.empty, reply = false)
       context.system.eventStream
         .subscribe(self, classOf[SemanticallySuccessfulModifier])
       context.system.eventStream.subscribe(self, classOf[NodeViewChange])
@@ -146,7 +147,7 @@ class CandidateGenerator(
           context.become(initialized(state.copy(cachedCandidate = None, solvedBlock = None)))
         else
           context.become(initialized(state.copy(cachedCandidate = None)))
-        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+        self ! GenerateCandidate(txsToInclude = mutable.WrappedArray.empty, reply = false)
       } else {
         context.become(initialized(state))
       }
@@ -252,11 +253,11 @@ object CandidateGenerator extends ScorexLogging {
   case class Candidate(
     candidateBlock: CandidateBlock,
     externalVersion: WorkMessage,
-    txsToInclude: Seq[ErgoTransaction]
+    txsToInclude: IndexedSeq[ErgoTransaction]
   )
 
   case class GenerateCandidate(
-    txsToInclude: Seq[ErgoTransaction],
+    txsToInclude: IndexedSeq[ErgoTransaction],
     reply: Boolean
   )
 
@@ -293,10 +294,10 @@ object CandidateGenerator extends ScorexLogging {
   /** checks that current candidate block is cached with given `txs` */
   def cachedFor(
     candidateOpt: Option[Candidate],
-    txs: Seq[ErgoTransaction]
+    txs: IndexedSeq[ErgoTransaction]
   ): Boolean = {
     candidateOpt.isDefined && candidateOpt.exists { c =>
-      txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(
+      txs.isEmpty || (txs.length == c.txsToInclude.length && txs.forall(
         c.txsToInclude.contains
       ))
     }
@@ -372,7 +373,7 @@ object CandidateGenerator extends ScorexLogging {
     m: ErgoMemPoolReader,
     timeProvider: NetworkTimeProvider,
     pk: ProveDlog,
-    txsToInclude: Seq[ErgoTransaction],
+    txsToInclude: IndexedSeq[ErgoTransaction],
     ergoSettings: ErgoSettings
   ): Try[Option[(Candidate, EliminateTransactions)]] = {
     //mandatory transactions to include into next block taken from the previous candidate
@@ -436,9 +437,9 @@ object CandidateGenerator extends ScorexLogging {
     proposedUpdate: ErgoValidationSettingsUpdate,
     state: UtxoStateReader,
     timeProvider: NetworkTimeProvider,
-    poolTxs: Seq[ErgoTransaction],
+    poolTxs: IndexedSeq[ErgoTransaction],
     emissionTxOpt: Option[ErgoTransaction],
-    prioritizedTransactions: Seq[ErgoTransaction],
+    prioritizedTransactions: IndexedSeq[ErgoTransaction],
     ergoSettings: ErgoSettings
   ): Try[Option[(Candidate, EliminateTransactions)]] =
     Try {
@@ -516,7 +517,7 @@ object CandidateGenerator extends ScorexLogging {
         version
       )
 
-      val emissionTxs = emissionTxOpt.toSeq
+      val emissionTxs = emissionTxOpt.fold(mutable.WrappedArray.empty)(tx => mutable.WrappedArray.make(Array(tx)))
 
       // todo: remove in 5.0
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
@@ -724,7 +725,7 @@ object CandidateGenerator extends ScorexLogging {
     maxTransactionComplexity: Int,
     us: UtxoStateReader,
     upcomingContext: ErgoStateContext,
-    transactions: Seq[ErgoTransaction]
+    transactions: IndexedSeq[ErgoTransaction]
   ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
 
     val currentHeight = us.stateContext.currentHeight

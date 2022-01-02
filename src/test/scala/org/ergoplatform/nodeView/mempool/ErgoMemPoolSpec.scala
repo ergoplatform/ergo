@@ -164,10 +164,10 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool = pool.putWithoutCheck(lessPrioritizedTxs)
 
     pool.size shouldBe 4
-    pool.getAll should contain only (lessPrioritizedTxs: _*)
+    pool.getAllPrioritized should contain only (lessPrioritizedTxs: _*)
     pool = pool.putWithoutCheck(Seq(mostPrioritizedTx))
     pool.size shouldBe 4
-    pool.getAll should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)
+    pool.getAllPrioritized should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)
   }
 
   it should "Accept output of pooled transactions" in {
@@ -283,7 +283,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val ids = weights.map(_.id)
 
     pool.take(11).toSeq.map(_.id) shouldBe ids
-    pool.getAll.map(_.id) shouldBe ids
+    pool.getAllPrioritized.map(_.id) shouldBe ids
     pool.getAllPrioritized.map(_.id) shouldBe ids
 
     val conformingTxs = pool.take(3).toSeq

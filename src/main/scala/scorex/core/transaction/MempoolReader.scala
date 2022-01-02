@@ -26,6 +26,4 @@ trait MempoolReader[TX <: Transaction] extends NodeViewComponent with ContainsMo
 
   def size: Int
 
-  def take(limit: Int): Iterable[TX]
-
 }

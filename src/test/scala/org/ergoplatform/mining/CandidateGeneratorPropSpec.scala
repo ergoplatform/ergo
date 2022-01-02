@@ -11,6 +11,7 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.util.Random
 import concurrent.duration._
+import scala.collection.mutable
 
 class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
@@ -150,7 +151,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
           Int.MaxValue,
           us,
           upcomingContext,
-          Seq(head)
+          mutable.WrappedArray.make(Array((head)))
         )
         ._1
       fromSmallMempool.size shouldBe 2

@@ -103,7 +103,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def receive: Receive = {
       case CandidateGenerator.GenerateCandidate(_, reply) =>
         if (reply) {
-          val candidate = Candidate(null, externalWorkMessage, Seq.empty) // API does not use CandidateBlock
+          val candidate = Candidate(null, externalWorkMessage, mutable.WrappedArray.empty) // API does not use CandidateBlock
           sender() ! StatusReply.success(candidate)
         }
       case _: AutolykosSolution => sender() ! StatusReply.success(())

@@ -15,6 +15,7 @@ import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import sigmastate.basics.DLogProtocol.ProveDlog
 
+import scala.collection.mutable
 import scala.concurrent.Future
 
 case class MiningApiRoute(miner: ActorRef,
@@ -37,7 +38,7 @@ case class MiningApiRoute(miner: ActorRef,
     * Get block candidate. Useful for external miners.
     */
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
-    val prepareCmd = CandidateGenerator.GenerateCandidate(Seq.empty, reply = true)
+    val prepareCmd = CandidateGenerator.GenerateCandidate(mutable.WrappedArray.empty, reply = true)
     val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
     ApiResponse(candidateF)
   }
@@ -47,7 +48,7 @@ case class MiningApiRoute(miner: ActorRef,
     * Useful for external miners when they want to insert certain transactions.
     */
   def candidateWithTxsR: Route = (path("candidateWithTxs")
-    & post & entity(as[Seq[ErgoTransaction]]) & withAuth) { txs =>
+    & post & entity(as[mutable.WrappedArray[ErgoTransaction]]) & withAuth) { txs =>
 
     val prepareCmd = CandidateGenerator.GenerateCandidate(txs, reply = true)
     val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)

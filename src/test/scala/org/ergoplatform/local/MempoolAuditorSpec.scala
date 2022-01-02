@@ -8,22 +8,24 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
-import org.ergoplatform.utils.{NodeViewTestOps, ErgoTestHelpers}
+import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestOps}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction, ChangedState, ChangedMempool}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FailedTransaction, SuccessfulTransaction}
 import scorex.util.ModifierId
 import sigmastate.Values.ErgoTree
-import sigmastate.eval.{RuntimeIRContext, IRContext}
+import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
 
 import scala.concurrent.duration._
 import scala.util.Random
 import sigmastate.lang.Terms.ValueOps
 import sigmastate.serialization.ErgoTreeSerializer
+
+import scala.collection.mutable
 
 class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers {
   implicit lazy val context: IRContext = new RuntimeIRContext
@@ -109,11 +111,9 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
       override def weightedTransactionIds(limit: Int): Seq[OrderedTxPool.WeightedTxId] = ???
 
-      override def getAll: Seq[ErgoTransaction] = ???
+      override def take(limit: Int): IndexedSeq[ErgoTransaction] = ???
 
-      override def getAllPrioritized: Seq[ErgoTransaction] = txs
-
-      override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
+      override def getAllPrioritized: IndexedSeq[ErgoTransaction] = mutable.WrappedArray.make(txs.toArray)
 
       override def spentInputs: Iterator[BoxId] = txs.flatMap(_.inputs).map(_.boxId).toIterator
 

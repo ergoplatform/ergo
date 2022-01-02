@@ -12,6 +12,7 @@ import scorex.util.{ModifierId, bytesToId}
 import OrderedTxPool.weighted
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.Try
 
 
@@ -37,16 +38,16 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = pool.get(modifierId)
 
-  override def take(limit: Int): Iterable[ErgoTransaction] = pool.orderedTransactions.values.take(limit)
-
-  override def getAll: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
+  override def take(limit: Int): IndexedSeq[ErgoTransaction] =
+    mutable.WrappedArray.make(pool.orderedTransactions.values.take(limit).toArray)
 
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(pool.get)
 
   /**
     * Returns all transactions resided in pool sorted by weight in descending order
     */
-  override def getAllPrioritized: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
+  override def getAllPrioritized: IndexedSeq[ErgoTransaction] =
+    mutable.WrappedArray.make(pool.orderedTransactions.values.toArray)
 
   override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
@@ -120,7 +121,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
           state match {
             case utxo: UtxoState =>
               // Allow proceeded transaction to spend outputs of pooled transactions.
-              utxo.withTransactions(getAll).validate(tx).fold(
+              utxo.withTransactions(getAllPrioritized).validate(tx).fold(
                 ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
                 _ => acceptIfNoDoubleSpend(tx)
               )

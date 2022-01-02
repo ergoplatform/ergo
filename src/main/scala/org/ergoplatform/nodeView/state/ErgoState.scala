@@ -26,6 +26,7 @@ import sigmastate.serialization.ValueSerializer
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -85,10 +86,16 @@ object ErgoState extends ScorexLogging {
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
+    def preAllocatedBuilder[T: ClassTag](sizeHint: Int): mutable.ArrayBuilder[T] = {
+      val b = mutable.ArrayBuilder.make[T]()
+      b.sizeHint(sizeHint)
+      b
+    }
+
     @tailrec
     def collectBoxesById(
                  remainingBoxIds: Iterator[ErgoBox.BoxId],
-                 resultingBoxes: Try[mutable.ArrayBuilder[ErgoBox]] = Success(mutable.ArrayBuilder.make())
+                 resultingBoxes: Try[mutable.ArrayBuilder[ErgoBox]]
                ): Try[IndexedSeq[ErgoBox]] = {
       if (!remainingBoxIds.hasNext) {
         resultingBoxes.map(_.result())
@@ -112,8 +119,10 @@ object ErgoState extends ScorexLogging {
       cfor(0)(_ < transactions.length && costResult.isValid, _ + 1) { i =>
         val validCostResult = costResult.asInstanceOf[Valid[Long]]
         val tx = transactions(i)
-        val boxesToSpendTry: Try[IndexedSeq[ErgoBox]] = collectBoxesById(tx.inputs.iterator.map(_.boxId))
-        lazy val dataBoxesTry: Try[IndexedSeq[ErgoBox]] = collectBoxesById(tx.dataInputs.iterator.map(_.boxId))
+        val boxesToSpendTry: Try[IndexedSeq[ErgoBox]] =
+          collectBoxesById(tx.inputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
+        lazy val dataBoxesTry: Try[IndexedSeq[ErgoBox]] =
+          collectBoxesById(tx.dataInputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
         lazy val boxes: Try[(IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
         costResult = tx.validateStateless()
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry)

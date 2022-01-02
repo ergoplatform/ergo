@@ -68,8 +68,7 @@ object Mnemonic {
   def toSeed(mnemonic: SecretString, passOpt: Option[SecretString] = None): Array[Byte] = {
     val normalizedMnemonic = normalize(mnemonic.getData(), NFKD).toCharArray
     val normalizedPass = normalize(("mnemonic".toCharArray ++ passOpt.fold("".toCharArray())(_.getData())), NFKD)
-    
-    mnemonic.erase()
+
     passOpt.fold(())(_.erase())
     
     val spec = new PBEKeySpec(

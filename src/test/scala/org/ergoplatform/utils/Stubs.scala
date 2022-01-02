@@ -159,7 +159,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     def receive: Receive = {
 
-      case _: InitWallet => sender() ! Success(WalletActorStub.mnemonic)
+      case _: InitWallet => sender() ! Success(SecretString.create(WalletActorStub.mnemonic))
 
       case _: RestoreWallet => sender() ! Success(())
 
@@ -239,9 +239,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   object WalletActorStub {
-
-    val seed: String = "walletstub"
-    val mnemonic: String = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
+    val mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
     val path = DerivationPath(List(0, 1, 2), publicBranch = false)
     val secretKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create(mnemonic))).derive(path)
     val address = P2PKAddress(proveDlogGen.sample.get)

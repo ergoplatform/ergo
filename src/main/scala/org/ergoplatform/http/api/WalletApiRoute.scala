@@ -336,7 +336,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       withWalletOp(_.initWallet(SecretString.create(pass), mnemonicPassOpt.map(SecretString.create(_)))) {
         _.fold(
           e => BadRequest(e.getMessage),
-          mnemonic => ApiResponse(Json.obj("mnemonic" -> mnemonic.asJson))
+          mnemonic => {
+            val responseJson = Json.obj("mnemonic" -> mnemonic.asJson)
+            mnemonic.erase()
+            ApiResponse(responseJson)
+          }
         )
       }
   }

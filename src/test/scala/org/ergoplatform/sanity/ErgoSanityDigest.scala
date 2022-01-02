@@ -3,8 +3,9 @@ package org.ergoplatform.sanity
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.header.HeaderSerializer
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.header.HeaderSerializer
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedHistory, ChangedMempool}
 import org.ergoplatform.network.ErgoSyncTracker
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -14,8 +15,8 @@ import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import scorex.core.idToBytes
-import scorex.core.network.peer.PeerInfo
 import scorex.core.network.ConnectedPeer
+import scorex.core.network.peer.PeerInfo
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 
@@ -76,8 +77,6 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
         ErgoSyncInfoMessageSpec,
         settings,
         tp,
-        h,
-        pool,
         syncTracker
       )
     ))
@@ -95,6 +94,8 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
       lastMessage = 0,
       Some(peerInfo)
     )
+    ref ! ChangedHistory(h)
+    ref ! ChangedMempool(pool)
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
     (ref, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener, serializer)
   }

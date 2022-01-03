@@ -2,6 +2,7 @@ package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -58,8 +59,8 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     val expectedReward = emission.minersRewardAtHeight(us.stateContext.currentHeight)
 
     val incorrectTxs =
-      CandidateGenerator.collectEmission(us, proveDlogGen.sample.get, emission).toSeq
-    val txs = CandidateGenerator.collectEmission(us, defaultMinerPk, emission).toSeq
+      CandidateGenerator.collectEmission(us, proveDlogGen.sample.get, emission).toIndexedSeq
+    val txs = CandidateGenerator.collectEmission(us, defaultMinerPk, emission).toIndexedSeq
 
     txs.size shouldBe 1
     val emissionTx = txs.head
@@ -83,10 +84,10 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     )
 
     val txs =
-      CandidateGenerator.collectFees(height, Seq(blockTx), defaultMinerPk, emission).toSeq
+      CandidateGenerator.collectFees(height, mutable.WrappedArray.make(Array(blockTx)), defaultMinerPk, emission).toIndexedSeq
     val incorrect = CandidateGenerator
-      .collectFees(height, Seq(blockTx), proveDlogGen.sample.get, emission)
-      .toSeq
+      .collectFees(height, mutable.WrappedArray.make(Array(blockTx)), proveDlogGen.sample.get, emission)
+      .toIndexedSeq
     txs.length shouldBe 1
     val feeTx = txs.head
     feeTx.outputs.length shouldBe 1
@@ -215,8 +216,8 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     val blockTx =
       validTransactionFromBoxes(txBoxes.head, outputsProposition = feeProposition)
     val txs = CandidateGenerator
-      .collectFees(height, Seq(blockTx), defaultMinerPk, emissionRules)
-      .toSeq
+      .collectFees(height, mutable.WrappedArray.make(Array(blockTx)), defaultMinerPk, emissionRules)
+      .toIndexedSeq
     val block = validFullBlock(None, us, blockTx +: txs)
 
     us = us.applyModifier(block).get
@@ -253,7 +254,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     forAll(
       Gen.nonEmptyListOf(validErgoTransactionGenTemplate(minAssets = 0, propositionGen = feeProp))
     ) { btxs =>
-      val blockTxs = btxs.map(_._2)
+      val blockTxs = mutable.WrappedArray.make[ErgoTransaction](btxs.map(_._2).toArray)
       val height   = ErgoHistory.EmptyHistoryHeight
       val txs = CandidateGenerator.collectRewards(
         us.emissionBoxOpt,

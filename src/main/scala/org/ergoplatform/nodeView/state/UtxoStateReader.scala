@@ -112,7 +112,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * @param txs - transactions to generate proofs
     * @return proof for specified transactions and new state digest
     */
-  def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = persistentProver.synchronized {
+  def proofsForTransactions(txs: IndexedSeq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = persistentProver.synchronized {
     val rootHash = persistentProver.digest
     log.trace(s"Going to create proof for ${txs.length} transactions at root ${Algos.encode(rootHash)}")
     if (txs.isEmpty) {

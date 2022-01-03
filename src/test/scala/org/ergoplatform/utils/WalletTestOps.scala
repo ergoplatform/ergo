@@ -22,6 +22,8 @@ import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
 
+import scala.collection.mutable
+
 trait WalletTestOps extends NodeViewBaseOps {
 
   def newAssetIdStub: TokenId = Blake2b256.hash("new_asset")
@@ -72,7 +74,7 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def makeGenesisBlock(script: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty)
                       (implicit ctx: Ctx): ErgoFullBlock = {
-    makeNextBlock(getUtxoState, Seq(makeGenesisTx(script, assets)))
+    makeNextBlock(getUtxoState, mutable.WrappedArray.make(Array(makeGenesisTx(script, assets))))
   }
 
   def makeGenesisTx(publicKey: ProveDlog, assetsIn: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
@@ -80,7 +82,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     val assets: Seq[(TokenId, Long)] = replaceNewAssetStub(assetsIn, inputs)
     CandidateGenerator.collectRewards(Some(genesisEmissionBox),
       ErgoHistory.EmptyHistoryHeight,
-      Seq.empty,
+      mutable.WrappedArray.empty,
       publicKey,
       emission,
       Colls.fromArray(assets.toArray)).head

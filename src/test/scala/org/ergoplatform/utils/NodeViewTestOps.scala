@@ -94,7 +94,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
   /** Creates next block in chain from transactions, works only for UTXO configurations
     */
   def makeNextBlock(utxoState: UtxoState,
-                    txs: Seq[ErgoTransaction])
+                    txs: IndexedSeq[ErgoTransaction])
                    (implicit ctx: Ctx): ErgoFullBlock = {
     val time = timeProvider.time()
     val parent = getHistory.bestFullBlockOpt

@@ -76,7 +76,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, nodeViewHolderRef, settingsToTest)
 
     // include first transaction in the block
-    val block = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))
+    val block = validFullBlock(Some(genesis), wusAfterGenesis, mutable.WrappedArray.make(Array(validTx)))
 
     applyBlock(block) shouldBe 'success
 
@@ -111,7 +111,8 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
       override def weightedTransactionIds(limit: Int): Seq[OrderedTxPool.WeightedTxId] = ???
 
-      override def take(limit: Int): IndexedSeq[ErgoTransaction] = ???
+      override def take(limit: Int): IndexedSeq[ErgoTransaction] =
+        mutable.WrappedArray.make(txs.take(limit).toArray)
 
       override def getAllPrioritized: IndexedSeq[ErgoTransaction] = mutable.WrappedArray.make(txs.toArray)
 

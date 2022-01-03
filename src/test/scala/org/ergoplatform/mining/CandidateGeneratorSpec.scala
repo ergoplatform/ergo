@@ -201,7 +201,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
 
     // generate block to use reward as our tx input
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(mutable.WrappedArray.empty, reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = settingsWithShortRegeneration.chainSettings.powScheme
@@ -243,13 +243,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     )
 
     // candidate should be regenerated immediately after a mempool change
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(mutable.WrappedArray.empty, reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         // this triggers mempool change that triggers candidate regeneration
         viewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx))
         expectNoMessage(candidateGenDelay)
-        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+        candidateGenerator.tell(GenerateCandidate(mutable.WrappedArray.empty, reply = true), testProbe.ref)
         testProbe.expectMsgPF(candidateGenDelay) {
           case StatusReply.Success(regeneratedCandidate: Candidate) =>
             // regeneratedCandidate now contains new transaction

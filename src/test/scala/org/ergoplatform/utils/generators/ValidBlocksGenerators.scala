@@ -20,6 +20,7 @@ import scorex.db.ByteArrayWrapper
 import scorex.testkit.TestkitHelpers
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.{Failure, Random, Success, Try}
 
 trait ValidBlocksGenerators
@@ -40,12 +41,12 @@ trait ValidBlocksGenerators
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, stateConstants)
 
-  def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
+  def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (IndexedSeq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
 
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
-                                           rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+                                           rnd: Random): (IndexedSeq[ErgoTransaction], IndexedSeq[ErgoBox]) = {
     validTransactionsFromBoxes(sizeLimit, stateBoxesIn, Seq(), rnd)
   }
 
@@ -53,15 +54,15 @@ trait ValidBlocksGenerators
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
                                            dataBoxesIn: Seq[ErgoBox],
-                                           rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+                                           rnd: Random): (IndexedSeq[ErgoTransaction], IndexedSeq[ErgoBox]) = {
     var createdEmissionBox: Seq[ErgoBox] = Seq()
 
     @tailrec
     def loop(remainingCost: Long,
              stateBoxes: Seq[ErgoBox],
-             selfBoxes: Seq[ErgoBox],
-             acc: Seq[ErgoTransaction],
-             rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+             selfBoxes: IndexedSeq[ErgoBox],
+             acc: IndexedSeq[ErgoTransaction],
+             rnd: Random): (IndexedSeq[ErgoTransaction], IndexedSeq[ErgoBox]) = {
 
       lazy val dataBoxesToUse: IndexedSeq[ErgoBox] = {
         rnd.shuffle(dataBoxesIn ++ stateBoxesIn ++ selfBoxes).take(rnd.nextInt(10)).toIndexedSeq
@@ -77,7 +78,7 @@ trait ValidBlocksGenerators
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
           val currentHeight: Int = emissionBox.creationHeight.toInt
-          val rewards = CandidateGenerator.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, emission)
+          val rewards = CandidateGenerator.collectRewards(Some(emissionBox), currentHeight, mutable.WrappedArray.empty, defaultMinerPk, emission)
           val outs = rewards.flatMap(_.outputs)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = outs.filter(b => isEmissionBox(b))
@@ -118,7 +119,7 @@ trait ValidBlocksGenerators
       }
     }
 
-    loop(emptyStateContext.currentParameters.maxBlockCost, stateBoxesIn, Seq.empty, Seq.empty, rnd)
+    loop(emptyStateContext.currentParameters.maxBlockCost, stateBoxesIn, mutable.WrappedArray.empty, mutable.WrappedArray.empty, rnd)
   }
 
   protected def getTxCost(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxesToUse: Seq[ErgoBox]): Long = {
@@ -137,7 +138,7 @@ trait ValidBlocksGenerators
   /** @param txSizeLimit maximum transactions size in bytes */
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder,
                                      rnd: Random,
-                                     txSizeLimit: Int = 10 * 1024): (Seq[ErgoTransaction], BoxHolder) = {
+                                     txSizeLimit: Int = 10 * 1024): (IndexedSeq[ErgoTransaction], BoxHolder) = {
     val (emissionBox, boxHolderWithoutEmission) = boxHolder.take(b => isEmissionBox(b))
     val (_, bhWithoutGenesis) = boxHolderWithoutEmission.take(b => genesisBoxes.contains(b))
     val (regularBoxes, drainedBh) = bhWithoutGenesis.take(rnd.nextInt(txSizeLimit / 100) + 1)
@@ -196,7 +197,7 @@ trait ValidBlocksGenerators
 
   def validFullBlock(parentOpt: Option[ErgoFullBlock],
                      utxoState: UtxoState,
-                     transactions: Seq[ErgoTransaction],
+                     transactions: IndexedSeq[ErgoTransaction],
                      timeOpt: Option[Long] = None): ErgoFullBlock = {
     checkPayload(transactions, utxoState)
 

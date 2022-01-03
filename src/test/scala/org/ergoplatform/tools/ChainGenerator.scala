@@ -19,6 +19,7 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 
 import java.io.File
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -189,9 +190,9 @@ object ChainGenerator extends App with ErgoTestHelpers {
     }.getOrElse((interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion))
 
     val emissionTxOpt = CandidateGenerator.collectEmission(state, minerPk, cs.emissionRules)
-    val txs = emissionTxOpt.toSeq ++ txsFromPool
+    val txs = emissionTxOpt.toArray ++ txsFromPool
 
-    state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
+    state.proofsForTransactions(mutable.WrappedArray.make(txs)).map { case (adProof, adDigest) =>
       CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes)
     }
   }.flatten

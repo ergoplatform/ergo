@@ -13,6 +13,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeSet
+import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success}
 
@@ -46,7 +47,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     val (newCleanupState, toEliminate) =
       CleanupWorker.validatePool(state, validator, txsToValidate, nodeSettings.mempoolCleanupDuration)
     if (toEliminate.nonEmpty) {
-      log.info(s"${toEliminate.size} transactions from mempool were invalidated")
+      log.info(s"${toEliminate.length} transactions from mempool were invalidated")
       nodeViewHolderRef ! EliminateTransactions(toEliminate)
     }
     newCleanupState
@@ -76,24 +77,24 @@ object CleanupWorker extends ScorexLogging {
     * @param cleanupState actor's state
     * @param validator supports stateful validation of any transaction
     * @param txsToValidate Check transactions sorted by priority. Parent transaction comes before its children.
-    * @param mempoolCleanupDuration Time window within which a node performs mempool cleanup in between blocks application
+    * @param cleanupDuration Time window within which a node performs mempool cleanup in between blocks application
     * @return new CleanupState and invalidated transaction ids
     */
   def validatePool(
     cleanupState: CleanupState,
     validator: TransactionValidation,
     txsToValidate: IndexedSeq[ErgoTransaction],
-    mempoolCleanupDuration: FiniteDuration
-  ): (CleanupState, Seq[ModifierId]) = {
+    cleanupDuration: FiniteDuration
+  ): (CleanupState, IndexedSeq[ModifierId]) = {
     // internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
-    def validationLoop(txs: Seq[ErgoTransaction],
-                       validated: Seq[ModifierId],
-                       invalidated: Seq[ModifierId],
-                       etAcc: Long): (Seq[ModifierId], Seq[ModifierId]) = {
-      txs match {
-        case head :: tail if etAcc < mempoolCleanupDuration.toNanos && !cleanupState.validatedIndex.contains(head.id) =>
-
+    def validationLoop(index: Int,
+                       validated: mutable.ArrayBuilder[ModifierId],
+                       invalidated: mutable.ArrayBuilder[ModifierId],
+                       etAcc: Long): (IndexedSeq[ModifierId], IndexedSeq[ModifierId]) = {
+      if (index < txsToValidate.length && etAcc < cleanupDuration.toNanos) {
+        val tx = txsToValidate(index)
+        if (!cleanupState.validatedIndex.contains(tx.id)) {
           // Take into account previously validated transactions from the pool.
           // This provides possibility to validate transactions which are spending off-chain outputs.
           val state = validator match {
@@ -102,27 +103,29 @@ object CleanupWorker extends ScorexLogging {
           }
 
           val t0 = System.nanoTime()
-          val validationResult = state.validate(head)
+          val validationResult = state.validate(tx)
           val t1 = System.nanoTime()
           val accumulatedTime = etAcc + (t1 - t0)
 
-          val txId = head.id
+          val txId = tx.id
           validationResult match {
             case Success(_) =>
-              validationLoop(tail, validated :+ txId, invalidated, accumulatedTime)
+              validationLoop(index+1, validated += txId, invalidated, accumulatedTime)
             case Failure(e) =>
               log.info(s"Transaction $txId invalidated: ${e.getMessage}")
-              validationLoop(tail, validated, invalidated :+ txId, accumulatedTime)
+              validationLoop(index+1, validated, invalidated += txId, accumulatedTime)
           }
-        case _ :: tail if etAcc < mempoolCleanupDuration.toNanos =>
+        } else {
           // this transaction was validated earlier, skip it
-          validationLoop(tail, validated, invalidated, etAcc)
-        case _ =>
-          validated -> invalidated
+          validationLoop(index+1, validated, invalidated, etAcc)
+        }
+      } else {
+        mutable.WrappedArray.make(validated.result()) -> mutable.WrappedArray.make(invalidated.result())
       }
     }
 
-    val (validatedIds, invalidatedIds) = validationLoop(txsToValidate.toList, Seq.empty, Seq.empty, 0L)
+    val (validatedIds, invalidatedIds) =
+      validationLoop(index = 0, mutable.ArrayBuilder.make(), mutable.ArrayBuilder.make(), 0L)
 
     val newEpochNr = cleanupState.epochNr + 1
     val newValidatedIndex =

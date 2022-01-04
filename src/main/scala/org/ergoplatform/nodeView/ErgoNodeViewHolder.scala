@@ -595,7 +595,7 @@ object ErgoNodeViewHolder {
 
     case class LocallyGeneratedModifier(pmod: ErgoPersistentModifier)
 
-    case class EliminateTransactions(ids: Seq[scorex.util.ModifierId])
+    case class EliminateTransactions(ids: IndexedSeq[scorex.util.ModifierId])
 
   }
 

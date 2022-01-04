@@ -5,12 +5,11 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
 import sigmastate.basics.DLogProtocol.ProveDlog
 
-import scala.util.Random
 import concurrent.duration._
 import scala.collection.mutable
 
@@ -125,7 +124,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     ): Unit = {
 
       val bh          = boxesHolderGen.sample.get
-      val rnd: Random = new Random
+      val rnd         = new RandomWrapper
       val us          = createUtxoState(bh)
       val inputs      = bh.boxes.values.toIndexedSeq.takeRight(100)
       val txsWithFees = inputs.map(i =>

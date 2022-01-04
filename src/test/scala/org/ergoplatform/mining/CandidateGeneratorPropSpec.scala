@@ -10,7 +10,6 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
 import sigmastate.basics.DLogProtocol.ProveDlog
 
-import scala.util.Random
 import concurrent.duration._
 import scala.collection.mutable
 

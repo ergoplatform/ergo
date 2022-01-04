@@ -31,6 +31,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
 
+  private val nodeSettings = settings.nodeSettings
+
   override def size: Int = pool.size
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = pool.get(modifierId)
@@ -105,40 +107,45 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
   }
 
   def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
-    val fee = extractFee(tx)
-    val minFee = settings.nodeSettings.minimalFeeAmount
-    val canAccept = pool.canAccept(tx)
+    val blacklistedTransactions = nodeSettings.blacklistedTransactions
+    if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
+      new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Declined(new Exception("blacklisted tx"))
+    } else {
+      val fee = extractFee(tx)
+      val minFee = settings.nodeSettings.minimalFeeAmount
+      val canAccept = pool.canAccept(tx)
 
-    if (fee >= minFee) {
-      if (canAccept) {
-        state match {
-          case utxo: UtxoState =>
-            // Allow proceeded transaction to spend outputs of pooled transactions.
-            utxo.withTransactions(getAll).validate(tx).fold(
-              ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
-              _ => acceptIfNoDoubleSpend(tx)
-            )
-          case validator: TransactionValidation =>
-            // transaction validation currently works only for UtxoState, so this branch currently
-            // will not be triggered probably
-            validator.validate(tx).fold(
-              ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
-              _ => acceptIfNoDoubleSpend(tx)
-            )
-          case _ =>
-            // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
-            // peers though, so such transactions can come from the local wallet only.
-            acceptIfNoDoubleSpend(tx)
+      if (fee >= minFee) {
+        if (canAccept) {
+          state match {
+            case utxo: UtxoState =>
+              // Allow proceeded transaction to spend outputs of pooled transactions.
+              utxo.withTransactions(getAll).validate(tx).fold(
+                ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
+                _ => acceptIfNoDoubleSpend(tx)
+              )
+            case validator: TransactionValidation =>
+              // transaction validation currently works only for UtxoState, so this branch currently
+              // will not be triggered probably
+              validator.validate(tx).fold(
+                ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
+                _ => acceptIfNoDoubleSpend(tx)
+              )
+            case _ =>
+              // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
+              // peers though, so such transactions can come from the local wallet only.
+              acceptIfNoDoubleSpend(tx)
+          }
+        } else {
+          this -> ProcessingOutcome.Declined(
+            new Exception(s"Pool can not accept transaction ${tx.id}, it is invalidated earlier or the pool is full"))
         }
       } else {
         this -> ProcessingOutcome.Declined(
-          new Exception(s"Pool can not accept transaction ${tx.id}, it is invalidated earlier or the pool is full"))
+          new Exception(s"Min fee not met: ${minFee.toDouble / CoinsInOneErgo} ergs required, " +
+            s"${fee.toDouble / CoinsInOneErgo} ergs given")
+        )
       }
-    } else {
-      this -> ProcessingOutcome.Declined(
-        new Exception(s"Min fee not met: ${minFee.toDouble / CoinsInOneErgo} ergs required, " +
-          s"${fee.toDouble / CoinsInOneErgo} ergs given")
-      )
     }
   }
 

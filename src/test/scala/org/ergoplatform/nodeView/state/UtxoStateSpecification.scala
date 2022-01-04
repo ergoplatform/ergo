@@ -48,7 +48,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
       val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
-      us.validateWithCost(tx, None, complexityLimit).get should be <= 100000L
+      us.validateWithCost(tx, None, complexityLimit, None).get should be <= 100000L
       val block1 = validFullBlock(Some(lastBlock), us, Seq(ErgoTransaction(tx)))
       us = us.applyModifier(block1).get
       foundersBox = tx.outputs.head

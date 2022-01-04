@@ -266,7 +266,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       def applyFromCacheLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
         modifiersCache.popCandidate(history()) match {
           case Some(mod) =>
-            pmodModify(mod)
+            pmodModify(mod, local = false)
             applyFromCacheLoop(mod +: applied)
           case None =>
             applied
@@ -287,7 +287,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             cfor(0)(_ < sorted.length, _ + 1) { idx =>
               val header = sorted(idx).asInstanceOf[Header]
               if (!linkBroken && header.height == expectedHeight) {
-                pmodModify(header)
+                pmodModify(header, local = false)
                 header +=: appliedBuffer // prepend header, to be consistent with applyFromCacheLoop
                 expectedHeight += 1
               } else {
@@ -388,7 +388,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * which also needs to be propagated to mempool and wallet
     * @param pmod Remote or local persistent modifier
     */
-  protected def pmodModify(pmod: ErgoPersistentModifier): Unit =
+  protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit =
     if (!history().contains(pmod.id)) {
       context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 
@@ -477,7 +477,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           history.getFullBlock(h)
             .fold(throw new Error(s"Failed to get full block for header $h"))(fb => fb)
         }
-        toApply.foldLeft[Try[State]](Success(initState))((acc, m) => acc.flatMap(_.applyModifier(m)))
+        toApply.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
+          log.info(s"Applying modifier during node start-up to restore consistent state: ${m.id}")
+          acc.flatMap(_.applyModifier(m))
+        }
     }
   }
 
@@ -537,7 +540,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def processLocallyGeneratedModifiers: Receive = {
     case lm: LocallyGeneratedModifier =>
       log.info(s"Got locally generated modifier ${lm.pmod.encodedId} of type ${lm.pmod.modifierTypeId}")
-      pmodModify(lm.pmod)
+      pmodModify(lm.pmod, local = true)
   }
 
   protected def getCurrentInfo: Receive = {

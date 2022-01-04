@@ -190,7 +190,8 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
         |        }
         |      ]
         |    },
-        |    "walletInteraction": "off"
+        |    "walletInteraction": "off",
+        |    "removeOffchain": true
         |  }
       """.stripMargin
 

@@ -122,13 +122,13 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
       newAcc.adjust(mType)(_.fold(Seq(mId))(_ :+ mId))
     }
 
-    history.nextModifiersToDownload(1, id => !history.contains(id))
+    history.nextModifiersToDownload(1, (_, id) => !history.contains(id))
       .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS.mapValues(_.take(1)).view.force
 
-    history.nextModifiersToDownload(2 * (BlocksToKeep - 1), id => !history.contains(id))
+    history.nextModifiersToDownload(2 * (BlocksToKeep - 1), (_, id) => !history.contains(id))
       .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS
 
-    history.nextModifiersToDownload(2, id => !history.contains(id) && (id != missedChain.head.blockTransactions.id))
+    history.nextModifiersToDownload(2, (_, id) => !history.contains(id) && (id != missedChain.head.blockTransactions.id))
       .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS.mapValues(_.take(2).filter( _ != missedChain.head.blockTransactions.id)).view.force
   }
 
@@ -138,7 +138,12 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     val header = genHeaderChain(1, history, diffBitsOpt = None, useRealTs = false).head
     val updHistory = history.append(header).get._1
     updHistory.bestHeaderOpt shouldBe Some(header)
-    updHistory.modifierById(header.id) shouldBe Some(header)
+    val restoredHeader = updHistory.modifierById(header.id)
+    restoredHeader shouldBe Some(header)
+
+    val bytesFromSerializer = HeaderSerializer.toBytes(header)
+    val bytesFromDb = updHistory.modifierBytesById(header.id).get
+    bytesFromSerializer.sameElements(bytesFromDb) shouldBe true
   }
 
   property("append header as genesis - via applyHeaderChain") {

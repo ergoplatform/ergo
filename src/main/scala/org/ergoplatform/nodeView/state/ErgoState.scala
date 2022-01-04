@@ -48,7 +48,7 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
   def rollbackVersions: Iterable[VersionTag]
 
   /**
-    * @return read-only copy of this state
+    * @return read-only view of this state
     */
   def getReader: ErgoStateReader = this
 
@@ -83,7 +83,7 @@ object ErgoState extends ScorexLogging {
                        currentStateContext: ErgoStateContext)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     import cats.implicits._
-    implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
+    val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
     @tailrec
     def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {

@@ -142,6 +142,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
   }
 
+  def blockDownloadingSupported(remote: ConnectedPeer): Boolean = {
+    val mostRecentOldVersion = Version(4, 0, 16)
+    val oldestNewVersion = Version(4, 0, 19)
+    remote.peerInfo.exists { pi =>
+      pi.peerSpec.protocolVersion <= mostRecentOldVersion || pi.peerSpec.protocolVersion >= oldestNewVersion
+    }
+  }
+
+
   /**
     * Send synchronization statuses to neighbour peers
     *
@@ -157,7 +166,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
     if (peersV1.nonEmpty) {
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfoV1), None), SendToPeers(peersV1))
+      val v1SyncInfo = history.syncInfoV1
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v1SyncInfo), None), SendToPeers(peersV1))
     }
     if (peersV2.nonEmpty) {
       //todo: send only last header to peers which are equal or younger

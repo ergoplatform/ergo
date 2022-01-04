@@ -45,7 +45,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     * @param condition filter only ModifierIds that pass this condition
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
-  def nextModifiersToDownload(howManyPerType: Int, condition: ModifierId => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
+  def nextModifiersToDownload(howManyPerType: Int, condition: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
     @tailrec
     def continuation(height: Int, acc: Map[ModifierTypeId, Vector[ModifierId]]): Map[ModifierTypeId, Vector[ModifierId]] = {
       // return if at least one of Modifier types reaches howManyPerType limit for modifier ids
@@ -55,7 +55,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         val headersAtThisHeight = headerIdsAtHeight(height).flatMap(id => typedModifierById[Header](id))
 
         if (headersAtThisHeight.nonEmpty) {
-          val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter(m => condition(m._2))
+          val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter{ case (mtid, mid) => condition(mtid, mid) }
           // add new modifiers to download to accumulator
           val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) =>
             newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId))
@@ -101,7 +101,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     }
   }
 
-  private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
+  def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
       Seq.empty
     } else if (nodeSettings.stateType.requireProofs) {

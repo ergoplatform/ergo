@@ -4,12 +4,12 @@ import org.ergoplatform.{DataInput, Input}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import scorex.core._
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ProverResult
 
-import scala.util.{Random, Try}
+import scala.util.Try
 
 class DigestStateSpecification extends ErgoPropertyTest {
 
@@ -39,7 +39,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
     var parentOpt: Option[ErgoFullBlock] = None
 
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new RandomWrapper(Some(seed)))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
@@ -109,8 +109,8 @@ class DigestStateSpecification extends ErgoPropertyTest {
       val ds = createDigestState(us.version, us.rootHash)
 
       // generate 2 independent transactions spending state boxes only
-      val headTx = validTransactionsFromBoxes(1, bh.boxes.take(10).values.toSeq, new Random())._1.head
-      val nextTx = validTransactionsFromBoxes(1, bh.boxes.takeRight(10).values.toSeq, new Random())._1.head
+      val headTx = validTransactionsFromBoxes(1, bh.boxes.take(10).values.toSeq, new RandomWrapper())._1.head
+      val nextTx = validTransactionsFromBoxes(1, bh.boxes.takeRight(10).values.toSeq, new RandomWrapper())._1.head
       headTx.inputs.intersect(nextTx.inputs) shouldBe empty
 
       // trying to apply transactions with data inputs same as inputs of the next tx

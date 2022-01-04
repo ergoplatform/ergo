@@ -1,6 +1,7 @@
 package scorex.core.network
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor.SupervisorStrategy.{Restart, Stop}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorSystem, DeathPactException, OneForOneStrategy, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
@@ -23,9 +24,23 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
                        featureSerializers: PeerFeature.Serializers)
                       (implicit ec: ExecutionContext) extends Actor with Synchronizer with ScorexLogging {
 
+
+  override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
+    maxNrOfRetries = 10,
+    withinTimeRange = 1.minute) {
+    case _: ActorKilledException => Stop
+    case _: DeathPactException => Stop
+    case e: ActorInitializationException =>
+      log.warn(s"Stopping actor due to : $e")
+      Stop
+    case e: Exception =>
+      log.warn(s"Restarting actor due to : $e")
+      Restart
+  }
+
   private val peersSpec = new PeersSpec(featureSerializers, settings.maxPeerSpecObjects)
 
-  protected override val msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
+  private val msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: PeersSpec, peers: Seq[PeerSpec]@unchecked, _) if peers.cast[Seq[PeerSpec]].isDefined =>
       addNewPeers(peers)
 
@@ -46,7 +61,7 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
   override def receive: Receive = {
 
     // data received from a remote peer
-    case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(spec, msgBytes, source)
+    case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
 
     // fall-through method for reporting unhandled messages
     case nonsense: Any => log.warn(s"PeerSynchronizer: got unexpected input $nonsense from ${sender()}")

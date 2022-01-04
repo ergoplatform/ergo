@@ -15,19 +15,20 @@ import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.EphemerealNodeViewModifier
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
-import scorex.db.{ByteArrayUtils, ByteArrayWrapper}
+import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
 
-import java.nio.ByteBuffer
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -71,7 +72,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
 
 
-  lazy val outAssetsTry: Try[(Map[ByteBuffer, Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
+  lazy val outAssetsTry: Try[(Map[Seq[Byte], Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
 
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -148,6 +149,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       costTry match {
         case Failure(t) =>
           log.info(s"Tx verification failed: ${t.getMessage}")
+          log.info(s"Tx $id verification context: " +
+            s"${JsonCodecsWrapper.ergoLikeContextEncoder.apply(ctx)} " +
+            s"input context: $inputContext " +
+            s"proof: $proof" +
+            s"messageToSign: $messageToSign")
           (false, maxCost + 1)
         case Success(result) =>
           result
@@ -196,7 +202,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @return
     */
   private def verifyAssets(validationBefore: ValidationState[Long],
-                           outAssets: Map[ByteBuffer, Long],
+                           outAssets: Map[Seq[Byte], Long],
                            outAssetsNum: Int,
                            boxesToSpend: IndexedSeq[ErgoBox],
                            stateContext: ErgoStateContext): ValidationResult[Long] = {
@@ -205,7 +211,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     ErgoBoxAssetExtractor.extractAssets(boxesToSpend) match {
       case Success((inAssets, inAssetsNum)) =>
-        lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+        lazy val newAssetId = mutable.WrappedArray.make(inputs.head.boxId)
         val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
         val currentTxCost = validationBefore.result.payload.get
 

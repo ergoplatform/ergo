@@ -29,7 +29,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
 
   def generateBatchProofForBoxes(boxes: Seq[ErgoBox.BoxId]): SerializedAdProof = persistentProver.synchronized {
     boxes.map { box => persistentProver.performOneOperation(Lookup(ADKey @@ box)) }
-    persistentProver.generateProofAndUpdateStorage()
+    persistentProver.prover().generateProof()
   }
 
   /**

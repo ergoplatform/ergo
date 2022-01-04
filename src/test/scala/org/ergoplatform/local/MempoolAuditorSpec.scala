@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
-import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestOps}
+import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
@@ -97,7 +97,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val us = us0.applyModifier(b1).get
 
     val bxs = bh1.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
-    val txs = validTransactionsFromBoxes(200000, bxs, new Random())._1
+    val txs = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1
 
     // mempool reader stub specifically for this test
     // only take is defined as only this method is used in rebroadcasting

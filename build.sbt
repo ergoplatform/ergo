@@ -134,8 +134,6 @@ scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-un
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
   
-  version := "4.0.19"
-  
   IO.write(versionFile,
     s"""package org.ergoplatform
        |

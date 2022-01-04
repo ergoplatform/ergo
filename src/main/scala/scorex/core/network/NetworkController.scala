@@ -241,10 +241,11 @@ class NetworkController(settings: NetworkSettings,
     * It is needed to prevent eclipsing (https://www.usenix.org/system/files/conference/usenixsecurity15/sec15-paper-heilman.pdf)
     */
   private def scheduleEvictRandomConnections(): Unit = {
+   val evictionThreshold = 5
    context.system.scheduler.scheduleWithFixedDelay(settings.peerEvictionInterval, settings.peerEvictionInterval) {
      () =>
        val connectedPeers = connections.values.filter(_.peerInfo.nonEmpty).toSeq
-       if (!connectedPeers.isEmpty) {
+       if (connectedPeers.length >= evictionThreshold) {
          val victim = Random.nextInt(connectedPeers.size)
          val cp = connectedPeers(victim)
          log.info(s"Evict connection to ${cp.peerInfo}")

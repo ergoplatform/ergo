@@ -514,6 +514,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (!settings.nodeSettings.stateType.requireProofs &&
           hr.isHeadersChainSynced &&
           hr.fullBlockHeight == hr.headersHeight) {
+          log.info(s"Processing ${invData.ids.length} tx invs")
           val unknownMods =
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history
@@ -522,6 +523,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         }
       case _ =>
+        log.info(s"Processing ${invData.ids.length} non-tx invs")
         invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
     }
 

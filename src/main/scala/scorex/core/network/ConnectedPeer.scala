@@ -23,5 +23,7 @@ case class ConnectedPeer(connectionId: ConnectionId,
     case _ => false
   }
 
-  override def toString: String = s"ConnectedPeer($connectionId)"
+  override def toString: String = s"ConnectedPeer(connection: $connectionId , " +
+                                    s"remote version: ${peerInfo.map(_.peerSpec.protocolVersion)})"
+
 }

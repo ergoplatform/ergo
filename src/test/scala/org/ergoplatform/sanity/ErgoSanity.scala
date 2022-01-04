@@ -90,8 +90,6 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends HistoryTests
                         syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                         settings: ErgoSettings,
                         timeProvider: NetworkTimeProvider,
-                        history: ErgoHistory,
-                        pool: ErgoMemPool,
                         syncTracker: ErgoSyncTracker)
                        (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
     networkControllerRef,
@@ -100,12 +98,6 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends HistoryTests
     settings,
     timeProvider,
     syncTracker)(ec) {
-
-    override def preStart(): Unit = {
-      this.historyReaderOpt = Some(history)
-      this.mempoolReaderOpt = Some(pool)
-      super.preStart()
-    }
 
     override protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
       mod match {

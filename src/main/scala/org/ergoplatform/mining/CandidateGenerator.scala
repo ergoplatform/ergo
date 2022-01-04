@@ -478,9 +478,19 @@ object CandidateGenerator extends ScorexLogging {
       )
 
       val emissionTxs = emissionTxOpt.toSeq
+
+      // todo: remove in 5.0
+      // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
+      // differently due to bugs in AOT costing
+      val safeGap = if(state.stateContext.currentParameters.maxBlockCost < 1000000) {
+        0
+      } else {
+        150000
+      }
+
       val (txs, toEliminate) = collectTxs(
         minerPk,
-        state.stateContext.currentParameters.maxBlockCost,
+        state.stateContext.currentParameters.maxBlockCost - safeGap,
         state.stateContext.currentParameters.maxBlockSize,
         ergoSettings.nodeSettings.maxTransactionComplexity,
         state,
@@ -685,6 +695,8 @@ object CandidateGenerator extends ScorexLogging {
       s"Assembling a block candidate for block #$currentHeight from ${transactions.length} transactions available"
     )
 
+    val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
+
     @tailrec
     def loop(
       mempoolTxs: Iterable[ErgoTransaction],
@@ -702,13 +714,15 @@ object CandidateGenerator extends ScorexLogging {
           if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
+            log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
             loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
               tx,
               Some(upcomingContext),
-              maxTransactionComplexity
+              maxTransactionComplexity,
+              Some(verifier)
             ) match {
               case Success(costConsumed) =>
                 val newTxs   = acc :+ (tx -> costConsumed)
@@ -721,10 +735,7 @@ object CandidateGenerator extends ScorexLogging {
                     val boxesToSpend = feeTx.inputs.flatMap(i =>
                       newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
                     )
-                    implicit val verifier: ErgoInterpreter = ErgoInterpreter(
-                      us.stateContext.currentParameters
-                    )
-                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
+                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
                       case Success(cost) =>
                         val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {

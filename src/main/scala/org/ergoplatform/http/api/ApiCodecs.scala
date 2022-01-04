@@ -29,6 +29,7 @@ import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
+import org.ergoplatform.wallet.interface4j.SecretString
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest
@@ -56,6 +57,10 @@ trait ApiCodecs extends JsonCodecs {
       "leafData" -> proof.leafData.asJson,
       "levels" -> proof.levels.asJson,
     )
+  }
+
+  implicit val secretStringEncoder: Encoder[SecretString] = { secret =>
+    secret.toStringUnsecure.asJson
   }
 
   implicit val bigIntEncoder: Encoder[BigInt] = { bigInt =>

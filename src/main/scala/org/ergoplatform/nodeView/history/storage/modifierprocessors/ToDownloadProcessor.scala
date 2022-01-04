@@ -65,7 +65,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     }
 
     bestFullBlockOpt match {
-      case _ if !isHeadersChainSynced || !nodeSettings.verifyTransactions =>
+      case _ if (nodeSettings.blocksToKeep != -1 && !isHeadersChainSynced) || !nodeSettings.verifyTransactions =>
         // do not download full blocks if no headers-chain synced yet or SPV mode
         Map.empty
       case Some(fb) =>

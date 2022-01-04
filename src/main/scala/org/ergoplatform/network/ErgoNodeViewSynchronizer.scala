@@ -209,15 +209,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     status match {
       case Unknown =>
         // we do not know what to send to a peer with unknown status
-        log.info(s"Peer status is still unknown for $remote")
+        log.debug(s"Peer status is still unknown for $remote")
       case Nonsense =>
         // we do not know what to send to a peer with such status
-        log.info(s"Got nonsense status for $remote")
+        log.debug(s"Got nonsense status for $remote")
       case Younger | Fork =>
         // send extension (up to 400 header ids) to a peer which chain is less developed or forked
         val ext = hr.continuationIds(syncInfo, size = 400)
         if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-        log.info(s"Sending extension of length ${ext.length}")
+        log.debug(s"Sending extension of length ${ext.length}")
         log.debug(s"Extension ids: ${idsToString(ext)}")
         sendExtension(remote, ext)
       case Older =>
@@ -275,7 +275,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // send extension (up to 400 header ids) to a peer which chain is less developed or forked
         val ext = hr.continuationIds(syncInfo, size = 400)
         if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-        log.info(s"Sending extension of length ${ext.length}")
+        log.debug(s"Sending extension of length ${ext.length}")
         log.debug(s"Extension ids: ${idsToString(ext)}")
         sendExtension(remote, ext)
 
@@ -283,7 +283,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.info(s"Fork detected with peer $remote, its sync message $syncInfo")
 
       case Older =>
-        log.info(s"Peer $remote is older, its height ${syncInfo.height}")
+        log.debug(s"Peer $remote is older, its height ${syncInfo.height}")
 
       case Equal =>
         // does nothing for `Equal`
@@ -516,7 +516,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
 
     if (newModifierIds.nonEmpty) {
-      log.info(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
+      log.debug(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
       val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
       peer.handlerRef ! msg
       deliveryTracker.setRequested(newModifierIds, modifierTypeId, Some(peer))
@@ -712,7 +712,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
       // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
-      logger.info("Caching applied transactions")
+      logger.debug("Caching applied transactions")
       context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache.putAll(transactionIds)))
   }
 

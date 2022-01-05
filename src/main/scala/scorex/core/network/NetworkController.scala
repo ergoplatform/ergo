@@ -246,6 +246,7 @@ class NetworkController(settings: NetworkSettings,
      () =>
        val connectedPeers = connections.values.filter(_.peerInfo.nonEmpty).toSeq
        if (connectedPeers.length >= evictionThreshold) {
+         // if we hava at least `evictionThreshold` connection, we drop a random one
          val victim = Random.nextInt(connectedPeers.size)
          val cp = connectedPeers(victim)
          log.info(s"Evict connection to ${cp.peerInfo}")

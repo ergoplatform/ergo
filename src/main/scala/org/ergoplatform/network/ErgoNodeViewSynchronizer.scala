@@ -142,15 +142,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
   }
 
-  def blockDownloadingSupported(remote: ConnectedPeer): Boolean = {
-    val mostRecentOldVersion = Version(4, 0, 16)
-    val oldestNewVersion = Version(4, 0, 19)
-    remote.peerInfo.exists { pi =>
-      pi.peerSpec.protocolVersion <= mostRecentOldVersion || pi.peerSpec.protocolVersion >= oldestNewVersion
-    }
-  }
-
-
   /**
     * Send synchronization statuses to neighbour peers
     *
@@ -523,7 +514,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         }
       case _ =>
-        log.info(s"Processing ${invData.ids.length} non-tx invs frpm $peer")
+        log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) frpm $peer")
         invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
     }
 

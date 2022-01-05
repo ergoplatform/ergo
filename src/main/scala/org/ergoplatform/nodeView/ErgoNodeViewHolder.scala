@@ -414,7 +414,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   vault().rollback(idToVersion(progressInfo.branchPoint.get)).get
                 } else vault()
 
-                if(newHistory.fullBlockHeight == newHistory.headersHeight) {
+                if((newHistory.headersHeight - newHistory.fullBlockHeight) < 20) {
                   blocksApplied.foreach(newVault.scanPersistent)
                 }
 

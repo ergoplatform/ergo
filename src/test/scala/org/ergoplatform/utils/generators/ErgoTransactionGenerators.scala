@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionSig
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction}
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
-import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.utils.{BoxUtils, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.Constants.{MaxAssetsPerBox, ScanId}
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.UnsignedInput
@@ -111,7 +111,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     * - number of assets exceeds MaxAssetsPerBox
     */
   def validUnsignedTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
-                                        rnd: Random = new Random,
+                                        rnd: RandomLike = new RandomWrapper,
                                         issueNew: Boolean = true,
                                         outputsProposition: ErgoTree = Constants.TrueLeaf,
                                         dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): UnsignedErgoTransaction = {
@@ -197,7 +197,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   }
 
   def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
-                                rnd: Random = new Random,
+                                rnd: RandomLike = new RandomWrapper,
                                 issueNew: Boolean = true,
                                 outputsProposition: ErgoTree = Constants.TrueLeaf,
                                 stateCtxOpt: Option[ErgoStateContext] = None,

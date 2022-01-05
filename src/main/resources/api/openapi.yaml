@@ -4059,6 +4059,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /utxo/getBoxesBinaryProof:
+    post:
+      security:
+        -  ApiKeyAuth: [api_key]
+      summary: Get serialized batch proof for given set of boxes
+      operationId: getBoxesBinaryProof
+      tags:
+        - utxo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/TransactionBoxId'
+      responses:
+        '200':
+          description: Serialized batch proof
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerializedAdProof:
+        '400':
+          description: Prove error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /utxo/byId/{boxId}:
     get:
       summary: Get box contents for a box by a unique identifier.

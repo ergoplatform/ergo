@@ -3,12 +3,16 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.{Args, ErgoSettings}
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.scalacheck.Gen
 import scorex.core.bytesToVersion
+import scorex.core.validation.ValidationResult.Valid
+import scorex.db.ByteArrayWrapper
 
-import scala.util.Random
+import scala.collection.mutable
+import scala.util.{Failure, Try}
 
 class ErgoStateSpecification extends ErgoPropertyTest {
 
@@ -52,7 +56,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     var ds = createDigestState(us.version, us.rootHash)
     var lastBlocks: Seq[ErgoFullBlock] = Seq()
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBoxHolder(lastBlocks.headOption, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(lastBlocks.headOption, us, bh, new RandomWrapper(Some(seed)))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
@@ -75,7 +79,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     var parentOpt: Option[ErgoFullBlock] = None
 
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new RandomWrapper(Some(seed)))
       val block = blBh._1
       parentOpt = Some(block)
       bh = blBh._2
@@ -93,7 +97,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     val emissionBox = genesisBoxes.head
 
     forAll { seed: Int =>
-      val txs = validTransactionsFromBoxHolder(bh, new Random(seed))._1
+      val txs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(seed)))._1
       whenever(txs.lengthCompare(2) > 0) {
         // valid transaction should spend the only existing genesis box
         ErgoState.boxChanges(txs)._1.length shouldBe 1
@@ -117,7 +121,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     val emissionBox = genesisBoxes.head
 
     forAll { seed: Int =>
-      val txs = validTransactionsFromBoxHolder(bh, new Random(seed))._1
+      val txs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(seed)))._1
       whenever(txs.lengthCompare(1) > 0) {
         val changes = ErgoState.stateChanges(txs)
         val removals = changes.toRemove
@@ -141,4 +145,47 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     }
   }
 
+  property("ErgoState.execTransactions()") {
+    val bh = BoxHolder(genesisBoxes)
+    def generateTxs =
+      (1 to 15).foldLeft(mutable.WrappedArray.newBuilder[ErgoTransaction]) { case (txAcc, _) =>
+        val (transactions, _) = validTransactionsFromBoxes(10000, bh.boxes.values.toSeq, new RandomWrapper())
+        val allBoxIds = bh.boxes.keys.toSet
+        val txsFromBoxesOnly = transactions.filter { tx =>
+          tx.inputs.map(i => ByteArrayWrapper(i.boxId)).forall(allBoxIds.contains) &&
+            tx.dataInputs.map(i => ByteArrayWrapper(i.boxId)).forall(allBoxIds.contains)
+        }
+        txAcc ++= txsFromBoxesOnly
+      }.result()
+
+    val txs = generateTxs
+    val boxes = bh.boxes
+    val stateContext = emptyStateContext
+    val expectedCost = 535995
+
+    // successful validation
+    ErgoState.execTransactions(txs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe Valid(expectedCost)
+
+    // cost limit exception expected when crossing MaxBlockCost
+    val tooManyTxs = txs ++ generateTxs
+    assert(
+      ErgoState.execTransactions(tooManyTxs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))).errors.head.message.contains(
+        "Estimated execution cost 23533 exceeds the limit 23009"
+      )
+    )
+
+    // missing box in state
+    ErgoState.execTransactions(txs, stateContext)(_ => Failure(new RuntimeException)).errors.head.message shouldBe
+      "Every input of the transaction should be in UTXO. null"
+
+    // tx validation should kick in and detect block height violation
+    val invalidTx = invalidErgoTransactionGen.sample.get
+    assert(
+      ErgoState.execTransactions(txs :+ invalidTx, stateContext)(id => Try(boxes.getOrElse(ByteArrayWrapper(id), invalidTx.outputs.head)))
+        .errors.head.message.startsWith("Transaction outputs should have creationHeight not exceeding block height.")
+    )
+
+    // no transactions are valid
+    assert(ErgoState.execTransactions(Seq.empty, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))).isValid)
+  }
 }

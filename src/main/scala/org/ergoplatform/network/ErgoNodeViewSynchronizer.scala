@@ -82,8 +82,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val deliveryTracker: DeliveryTracker =
     DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
-  private val minModifiersPerBucket = 5 // minimum of persistent modifiers (excl. headers) to download by single peer
-  private val maxModifiersPerBucket = 20 // maximum of persistent modifiers (excl. headers) to download by single peer
+  private val minModifiersPerBucket = 20 // minimum of persistent modifiers (excl. headers) to download by single peer
+  private val maxModifiersPerBucket = 50 // maximum of persistent modifiers (excl. headers) to download by single peer
 
   private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
@@ -514,7 +514,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (!settings.nodeSettings.stateType.requireProofs &&
           hr.isHeadersChainSynced &&
           hr.fullBlockHeight == hr.headersHeight) {
-          log.info(s"Processing ${invData.ids.length} tx invs")
+          log.info(s"Processing ${invData.ids.length} tx invs frpm $peer")
           val unknownMods =
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history
@@ -523,7 +523,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         }
       case _ =>
-        log.info(s"Processing ${invData.ids.length} non-tx invs")
+        log.info(s"Processing ${invData.ids.length} non-tx invs frpm $peer")
         invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
     }
 

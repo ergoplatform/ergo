@@ -413,7 +413,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 val newVault = if (progressInfo.chainSwitchingNeeded) {
                   vault().rollback(idToVersion(progressInfo.branchPoint.get)).get
                 } else vault()
-                blocksApplied.foreach(newVault.scanPersistent)
+
+                if(newHistory.fullBlockHeight == newHistory.headersHeight) {
+                  blocksApplied.foreach(newVault.scanPersistent)
+                }
 
                 log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
                 updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))

@@ -2,7 +2,7 @@ package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
+import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen

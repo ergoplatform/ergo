@@ -409,16 +409,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 val newMemPool = updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool(), newMinState)
 
                 @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+                val v = vault()
                 val newVault = if (progressInfo.chainSwitchingNeeded) {
-                  val v = vault()
                   v.rollback(idToVersion(progressInfo.branchPoint.get)) match {
                     case Success(nv) => nv
                     case Failure(e) => log.warn("Wallet rollback failed: ", e); v
                   }
                 } else {
-                  vault()
+                  v
                 }
 
+                // we assume that wallet scan may be started if fullblocks-chain is no more
+                // than 20 blocks behind headers-chain
                 val almostSyncedGap = 20
 
                 if((newHistory.headersHeight - newHistory.fullBlockHeight) < almostSyncedGap) {

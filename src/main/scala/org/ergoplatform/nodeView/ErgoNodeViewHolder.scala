@@ -267,7 +267,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       def applyFromCacheLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
         modifiersCache.popCandidate(history()) match {
           case Some(mod) =>
-            pmodModify(mod)
+            pmodModify(mod, local = false)
             applyFromCacheLoop(mod +: applied)
           case None =>
             applied
@@ -288,7 +288,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             cfor(0)(_ < sorted.length, _ + 1) { idx =>
               val header = sorted(idx).asInstanceOf[Header]
               if (!linkBroken && header.height == expectedHeight) {
-                pmodModify(header)
+                pmodModify(header, local = false)
                 header +=: appliedBuffer // prepend header, to be consistent with applyFromCacheLoop
                 expectedHeight += 1
               } else {
@@ -389,7 +389,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * which also needs to be propagated to mempool and wallet
     * @param pmod Remote or local persistent modifier
     */
-  protected def pmodModify(pmod: ErgoPersistentModifier): Unit =
+  protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit =
     if (!history().contains(pmod.id)) {
       context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 
@@ -408,12 +408,24 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
               case Success(newMinState) =>
                 val newMemPool = updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool(), newMinState)
 
-                //we consider that vault always able to perform a rollback needed
                 @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+                val v = vault()
                 val newVault = if (progressInfo.chainSwitchingNeeded) {
-                  vault().rollback(idToVersion(progressInfo.branchPoint.get)).get
-                } else vault()
-                blocksApplied.foreach(newVault.scanPersistent)
+                  v.rollback(idToVersion(progressInfo.branchPoint.get)) match {
+                    case Success(nv) => nv
+                    case Failure(e) => log.warn("Wallet rollback failed: ", e); v
+                  }
+                } else {
+                  v
+                }
+
+                // we assume that wallet scan may be started if fullblocks-chain is no more
+                // than 20 blocks behind headers-chain
+                val almostSyncedGap = 20
+
+                if((newHistory.headersHeight - newHistory.fullBlockHeight) < almostSyncedGap) {
+                  blocksApplied.foreach(newVault.scanPersistent)
+                }
 
                 log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
                 updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
@@ -541,7 +553,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def processLocallyGeneratedModifiers: Receive = {
     case lm: LocallyGeneratedModifier =>
       log.info(s"Got locally generated modifier ${lm.pmod.encodedId} of type ${lm.pmod.modifierTypeId}")
-      pmodModify(lm.pmod)
+      pmodModify(lm.pmod, local = true)
   }
 
   protected def getCurrentInfo: Receive = {

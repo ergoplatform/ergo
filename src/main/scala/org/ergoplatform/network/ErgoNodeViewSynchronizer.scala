@@ -82,8 +82,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val deliveryTracker: DeliveryTracker =
     DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
-  private val minModifiersPerBucket = 5 // minimum of persistent modifiers (excl. headers) to download by single peer
-  private val maxModifiersPerBucket = 20 // maximum of persistent modifiers (excl. headers) to download by single peer
+  private val minModifiersPerBucket = 20 // minimum of persistent modifiers (excl. headers) to download by single peer
+  private val maxModifiersPerBucket = 50 // maximum of persistent modifiers (excl. headers) to download by single peer
 
   private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
@@ -157,7 +157,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
     if (peersV1.nonEmpty) {
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfoV1), None), SendToPeers(peersV1))
+      val v1SyncInfo = history.syncInfoV1
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v1SyncInfo), None), SendToPeers(peersV1))
     }
     if (peersV2.nonEmpty) {
       //todo: send only last header to peers which are equal or younger
@@ -209,15 +210,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     status match {
       case Unknown =>
         // we do not know what to send to a peer with unknown status
-        log.info(s"Peer status is still unknown for $remote")
+        log.debug(s"Peer status is still unknown for $remote")
       case Nonsense =>
         // we do not know what to send to a peer with such status
-        log.info(s"Got nonsense status for $remote")
+        log.debug(s"Got nonsense status for $remote")
       case Younger | Fork =>
         // send extension (up to 400 header ids) to a peer which chain is less developed or forked
         val ext = hr.continuationIds(syncInfo, size = 400)
         if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-        log.info(s"Sending extension of length ${ext.length}")
+        log.debug(s"Sending extension of length ${ext.length}")
         log.debug(s"Extension ids: ${idsToString(ext)}")
         sendExtension(remote, ext)
       case Older =>
@@ -275,7 +276,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // send extension (up to 400 header ids) to a peer which chain is less developed or forked
         val ext = hr.continuationIds(syncInfo, size = 400)
         if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-        log.info(s"Sending extension of length ${ext.length}")
+        log.debug(s"Sending extension of length ${ext.length}")
         log.debug(s"Extension ids: ${idsToString(ext)}")
         sendExtension(remote, ext)
 
@@ -283,7 +284,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.info(s"Fork detected with peer $remote, its sync message $syncInfo")
 
       case Older =>
-        log.info(s"Peer $remote is older, its height ${syncInfo.height}")
+        log.debug(s"Peer $remote is older, its height ${syncInfo.height}")
 
       case Equal =>
         // does nothing for `Equal`
@@ -504,6 +505,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (!settings.nodeSettings.stateType.requireProofs &&
           hr.isHeadersChainSynced &&
           hr.fullBlockHeight == hr.headersHeight) {
+          log.info(s"Processing ${invData.ids.length} tx invs frpm $peer")
           val unknownMods =
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history
@@ -512,11 +514,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         }
       case _ =>
+        log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) frpm $peer")
         invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
     }
 
     if (newModifierIds.nonEmpty) {
-      log.info(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
+      log.debug(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
       val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
       peer.handlerRef ! msg
       deliveryTracker.setRequested(newModifierIds, modifierTypeId, Some(peer))
@@ -712,7 +715,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
       // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
-      logger.info("Caching applied transactions")
+      logger.debug("Caching applied transactions")
       context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache.putAll(transactionIds)))
   }
 

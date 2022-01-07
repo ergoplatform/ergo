@@ -18,6 +18,8 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.Extensions._
 
+import scala.collection.mutable
+
 
 /**
   * Section of a block which contains transactions.
@@ -121,7 +123,7 @@ object BlockTransactions extends ApiCodecs {
   implicit val jsonDecoder: Decoder[BlockTransactions] = { c: HCursor =>
     for {
       headerId <- c.downField("headerId").as[ModifierId]
-      transactions <- c.downField("transactions").as[List[ErgoTransaction]]
+      transactions <- c.downField("transactions").as[mutable.WrappedArray[ErgoTransaction]]
       blockVersion <- c.downField("blockVersion").as[Version]
       size <- c.downField("size").as[Int]
     } yield BlockTransactions(headerId, blockVersion, transactions, Some(size))

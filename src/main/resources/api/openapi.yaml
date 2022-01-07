@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.19"
+  version: "4.0.20"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -4048,6 +4048,42 @@ paths:
           description: Solution is valid
         '400':
           description: Solution is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/getBoxesBinaryProof:
+    post:
+      security:
+        -  ApiKeyAuth: [api_key]
+      summary: Get serialized batch proof for given set of boxes
+      operationId: getBoxesBinaryProof
+      tags:
+        - utxo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/TransactionBoxId'
+      responses:
+        '200':
+          description: Serialized batch proof
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerializedAdProof:
+        '400':
+          description: Prove error
           content:
             application/json:
               schema:

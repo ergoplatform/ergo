@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionSigningRequest}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction}
 import org.ergoplatform.settings.Parameters._
-import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils.{BoxUtils, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.Constants.{MaxAssetsPerBox, ScanId}
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
@@ -65,7 +65,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = ErgoHistory.EmptyHistoryHeight)
   }
 
-  def unspendableErgoBoxGen(minValue: Long = LaunchParameters.minValuePerByte * 200,
+  def unspendableErgoBoxGen(minValue: Long = parameters.minValuePerByte * 200,
                             maxValue: Long = coinsTotal): Gen[ErgoBox] = {
     ergoBoxGen(propGen = falseLeafGen, valueGenOpt = Some(Gen.choose(minValue, maxValue)))
   }
@@ -128,7 +128,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
       assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
     }
 
-    val minValue = BoxUtils.sufficientAmount(LaunchParameters)
+    val minValue = BoxUtils.sufficientAmount(parameters)
 
     require(inputSum >= minValue)
     val inputsCount = boxesToSpend.size
@@ -137,7 +137,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     require(outputsCount > 0, s"outputs count is not positive: $outputsCount")
 
     require(minValue * outputsCount <= inputSum)
-    val outputPreamounts = (1 to outputsCount).map(_ => minValue.toLong).toBuffer
+    val outputPreamounts = (1 to outputsCount).map(_ => minValue).toBuffer
 
     var remainder = inputSum - minValue * outputsCount
     do {
@@ -323,7 +323,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
           c.appendFullBlock(block).get -> (h + 1)
         }._1
       case _ =>
-        ErgoStateContext.empty(stateRoot, settings)
+        ErgoStateContext.empty(stateRoot, settings, parameters)
     }
   }
 

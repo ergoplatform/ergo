@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UpcomingStateContext}
 import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.interface4j.SecretString
@@ -36,6 +37,17 @@ trait ErgoTestConstants extends ScorexLogging {
     .updated(ErgoValidationSettingsUpdate(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty), Seq()))
 
   val parameters: Parameters = LaunchParameters
+
+  val increasedMaxBlockCostParameters: Parameters = {
+    // Randomness in tests is causing occasional cost overflow in the state context
+    val slightlyIncreasedMaxBlockCost = Math.ceil(parameters.parametersTable(MaxBlockCostIncrease) * 1.1).toInt
+    new Parameters(
+      height = 0,
+      parametersTable = Parameters.DefaultParameters + (MaxBlockCostIncrease -> slightlyIncreasedMaxBlockCost),
+      proposedUpdate = ErgoValidationSettingsUpdate.empty
+    )
+  }
+
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(Args(Some("src/test/resources/application.conf"), None))
 
@@ -74,9 +86,10 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultVersion: Byte = 0
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val emptyVSUpdate = ErgoValidationSettingsUpdate.empty
-  val emptyStateContext: UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings)
+  val emptyStateContext: UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings, parameters)
     .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
-
+  def stateContextWith(parameters: Parameters): UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings, parameters)
+    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest
 

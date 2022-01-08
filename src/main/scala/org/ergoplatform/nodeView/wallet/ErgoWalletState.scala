@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import scorex.util.ScorexLogging
@@ -67,7 +67,7 @@ case class ErgoWalletState(
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them).
   // The state context is being updated by listening to state updates.
-  def stateContext: ErgoStateContext = storage.readStateContext
+  def stateContext: ErgoStateContext = storage.readStateContext(parameters)
 
   /**
     * @return height of the last block scanned by the wallet
@@ -133,7 +133,7 @@ object ErgoWalletState {
     */
   val noWalletFilter: FilterFn = (_: TrackedBox) => true
 
-  def initial(ergoSettings: ErgoSettings): Try[ErgoWalletState] = {
+  def initial(ergoSettings: ErgoSettings, parameters: Parameters): Try[ErgoWalletState] = {
     WalletRegistry.apply(ergoSettings).map { registry =>
       val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)(ergoSettings.addressEncoder)
       val offChainRegistry = OffChainRegistry.init(registry)
@@ -148,7 +148,7 @@ object ErgoWalletState {
         stateReaderOpt = None,
         mempoolReaderOpt = None,
         utxoStateReaderOpt = None,
-        LaunchParameters
+        parameters
       )
     }
   }

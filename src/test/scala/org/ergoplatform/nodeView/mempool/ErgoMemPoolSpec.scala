@@ -57,7 +57,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       whenever(n1 != n2) {
         val (us, bh) = createUtxoState(increasedMaxBlockCostParameters)
         val genesis = validFullBlock(None, us, bh)
-        val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis).get
+        val wus = WrappedUtxoState(us, bh, stateConstants, increasedMaxBlockCostParameters).applyModifier(genesis).get
 
         val feeProp = settings.chainSettings.monetary.feeProposition
         val inputBox = wus.takeBoxes(1).head

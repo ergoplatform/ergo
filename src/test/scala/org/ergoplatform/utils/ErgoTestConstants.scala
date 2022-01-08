@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UpcomingStateContext}
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
+import org.ergoplatform.settings.Parameters.{MaxBlockCostIncrease, MinValuePerByteIncrease}
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.interface4j.SecretString
@@ -38,12 +38,15 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val parameters: Parameters = LaunchParameters
 
-  val increasedMaxBlockCostParameters: Parameters = {
-    // Randomness in tests is causing occasional cost overflow in the state context
-    val slightlyIncreasedMaxBlockCost = Math.ceil(parameters.parametersTable(MaxBlockCostIncrease) * 1.1).toInt
+  val extendedParameters: Parameters = {
+    // Randomness in tests is causing occasional cost overflow in the state context and insufficient box value
+    val extension = Map(
+      MaxBlockCostIncrease -> Math.ceil(parameters.parametersTable(MaxBlockCostIncrease) * 1.1).toInt,
+      MinValuePerByteIncrease -> (parameters.parametersTable(MinValuePerByteIncrease) - 20)
+    )
     new Parameters(
       height = 0,
-      parametersTable = Parameters.DefaultParameters + (MaxBlockCostIncrease -> slightlyIncreasedMaxBlockCost),
+      parametersTable = Parameters.DefaultParameters ++ extension,
       proposedUpdate = ErgoValidationSettingsUpdate.empty
     )
   }

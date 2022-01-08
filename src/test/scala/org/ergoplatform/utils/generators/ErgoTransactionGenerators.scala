@@ -128,7 +128,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
       assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
     }
 
-    val minValue = BoxUtils.sufficientAmount(parameters)
+    val minValue = BoxUtils.sufficientAmount(extendedParameters)
 
     require(inputSum >= minValue)
     val inputsCount = boxesToSpend.size

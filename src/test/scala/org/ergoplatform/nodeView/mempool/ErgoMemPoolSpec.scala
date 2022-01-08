@@ -55,9 +55,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "reject double-spending transaction if it is paying no more than one already sitting in the pool" in {
     forAll(smallPositiveInt, smallPositiveInt) { case (n1, n2) =>
       whenever(n1 != n2) {
-        val (us, bh) = createUtxoState(increasedMaxBlockCostParameters)
+        val (us, bh) = createUtxoState(extendedParameters)
         val genesis = validFullBlock(None, us, bh)
-        val wus = WrappedUtxoState(us, bh, stateConstants, increasedMaxBlockCostParameters).applyModifier(genesis).get
+        val wus = WrappedUtxoState(us, bh, stateConstants, extendedParameters).applyModifier(genesis).get
 
         val feeProp = settings.chainSettings.monetary.feeProposition
         val inputBox = wus.takeBoxes(1).head

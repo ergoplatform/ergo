@@ -477,13 +477,15 @@ object CandidateGenerator extends ScorexLogging {
       )
 
       val emissionTxs = emissionTxOpt.toSeq
+      val transactions = emissionTxs ++ prioritizedTransactions ++ poolTxs
+      val extraFeeCost = transactions.size * state.constants.settings.walletSettings.defaultTransactionFee
       val (txs, toEliminate) = collectTxs(
         minerPk,
-        state.stateContext.currentParameters.maxBlockCost,
+        state.stateContext.currentParameters.maxBlockCost + extraFeeCost,
         state.stateContext.currentParameters.maxBlockSize,
         state,
         upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs
+        transactions
       )
 
       val eliminateTransactions = EliminateTransactions(toEliminate)

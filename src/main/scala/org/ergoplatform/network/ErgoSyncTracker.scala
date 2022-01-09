@@ -114,7 +114,7 @@ final case class ErgoSyncTracker(system: ActorSystem,
   }
 
   def youngerPeers(): Seq[ConnectedPeer] = {
-    val peers = statuses.filter(_._2.status == Younger).keys
+    val peers = statuses.filter(_._2.status == Younger).keys.toSeq
     peers.foreach(updateLastSyncSentTime)
     peers
   }

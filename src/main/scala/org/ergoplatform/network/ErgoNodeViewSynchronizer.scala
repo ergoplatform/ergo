@@ -1,8 +1,8 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-
 import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -43,7 +43,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Random, Success}
 
 /**
   * Tweaks on top of Scorex' NodeViewSynchronizer made to optimize Ergo network
@@ -153,7 +153,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     *
     */
   protected def sendSync(history: ErgoHistory): Unit = {
-    val peers = syncTracker.peersToSyncWith()
+    val peers = if (Random.nextBoolean()) {
+      log.info("Sending sync to younger peers")
+      syncTracker.youngerPeers()
+    } else {
+      syncTracker.peersToSyncWith()
+    }
+
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
     if (peersV1.nonEmpty) {

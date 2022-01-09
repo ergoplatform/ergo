@@ -5,7 +5,7 @@ import java.net.InetSocketAddress
 import akka.actor.ActorSystem
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.consensus.History.{Fork, HistoryComparisonResult, Older, Unknown}
+import scorex.core.consensus.History.{Fork, HistoryComparisonResult, Older, Unknown, Younger}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.Events.{BetterNeighbourAppeared, NoBetterNeighbour}
 import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings
@@ -109,6 +109,12 @@ final case class ErgoSyncTracker(system: ActorSystem,
         nonOutdated.filter(p => (timeProvider.time() - lastSyncSentTime.getOrElse(p, 0L)).millis >= MinSyncInterval)
       }
 
+    peers.foreach(updateLastSyncSentTime)
+    peers
+  }
+
+  def youngerPeers(): Seq[ConnectedPeer] = {
+    val peers = statuses.filter(_._2.status == Younger).keys
     peers.foreach(updateLastSyncSentTime)
     peers
   }

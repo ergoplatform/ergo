@@ -471,7 +471,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
-        val spammyTxs = modifiers.filterKeys(id => !blockAppliedTxsCache.mightContain(id))
+        val spammyTxs = modifiers.filterKeys(blockAppliedTxsCache.mightContain)
         if (spammyTxs.nonEmpty) {
           log.info(s"Got spammy transactions: $spammyTxs")
           penalizeSpammingPeer(remote)

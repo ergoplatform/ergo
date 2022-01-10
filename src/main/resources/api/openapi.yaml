@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.17"
+  version: "4.0.21"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -830,10 +830,17 @@ components:
       properties:
         scanName:
           type: string
+        removeOffchain:
+          type: boolean
+        walletInteraction:
+          type: string
+          enum: [off, shared, forced]
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
       example:
         scanName: Assets Tracker
+        walletInteraction: off
+        removeOffchain: true
         trackingRule:
           predicate: containsAsset
           assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
@@ -845,11 +852,18 @@ components:
           type: string
         scanId:
           type: integer
+        walletInteraction:
+          type: string
+          enum: [off, shared, forced]
+        removeOffchain:
+          type: boolean
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
       example:
         scanId: 2
         scanName: Assets Tracker
+        walletInteraction: off
+        removeOffchain: true
         trackingRule:
           predicate: containsAsset
           assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
@@ -1526,7 +1540,7 @@ components:
     PeersStatus:
       type: object
       required:
-        - lastInomingMessage
+        - lastIncomingMessage
         - currentNetworkTime
       properties:
         lastIncomingMessage:
@@ -2811,7 +2825,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PeersInfo'
+                  $ref: '#/components/schemas/PeersStatus'
         default:
           description: Error
           content:
@@ -2833,7 +2847,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PeersInfo'
+                  $ref: '#/components/schemas/PeerInfo'
         default:
           description: Error
           content:
@@ -3600,7 +3614,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /wallet/boxes/collect:
-    get:
+    post:
       security:
         - ApiKeyAuth: [ api_key ]
       summary: Get a list of collected boxes.
@@ -4034,6 +4048,42 @@ paths:
           description: Solution is valid
         '400':
           description: Solution is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/getBoxesBinaryProof:
+    post:
+      security:
+        -  ApiKeyAuth: [api_key]
+      summary: Get serialized batch proof for given set of boxes
+      operationId: getBoxesBinaryProof
+      tags:
+        - utxo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/TransactionBoxId'
+      responses:
+        '200':
+          description: Serialized batch proof
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerializedAdProof:
+        '400':
+          description: Prove error
           content:
             application/json:
               schema:

@@ -11,8 +11,6 @@ object CoinEmissionPrinter extends App {
   val blocksPerHour = 30
 
   //  // Number of coins issued after slow start period
-  //  lazy val SlowStartFinalSupply: Long = (0 until emissionCurve.SlowStartPeriod)
-  //    .map(h => emissionCurve.emissionAtHeight(h)).sum
   val blocksPerYear = 365 * 24 * blocksPerHour
 
   // 100215692 coins total supply

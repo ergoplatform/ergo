@@ -1,17 +1,17 @@
 package scorex.core.transaction.state
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import scorex.core.PersistentNodeViewModifier
 import scala.util.Try
 
-
+/**
+  * Basic trait for features supported by state representation
+  */
 trait StateFeature
 
+/**
+  * Instance of this trait supports stateful validation of any transaction
+  */
 trait TransactionValidation extends StateFeature {
-  def isValid(tx: ErgoTransaction): Boolean = validate(tx).isSuccess
-
-  def filterValid(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = txs.filter(isValid)
-
   def validate(tx: ErgoTransaction): Try[Unit]
 }
 
@@ -20,6 +20,3 @@ object TransactionValidation {
   case class TooHighCostError(message: String) extends Exception(message)
 }
 
-trait ModifierValidation[M <: PersistentNodeViewModifier] extends StateFeature {
-  def validate(mod: M): Try[Unit]
-}

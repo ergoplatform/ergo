@@ -26,7 +26,6 @@ import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
 import sigmastate.utxo.CostTable
 import sigmastate.helpers.TestingHelpers._
 
-import java.nio.ByteBuffer
 import scala.util.{Random, Try}
 
 class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
@@ -404,8 +403,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
       val txCost = tx.statefulValidity(from, IndexedSeq(), emptyStateContext, accInitCost).get
 
-      val (inAssets, inAssetsNum): (Map[ByteBuffer, Long], Int) = ErgoBoxAssetExtractor.extractAssets(from).get
-      val (outAssets, outAssetsNum): (Map[ByteBuffer, Long], Int) = ErgoBoxAssetExtractor.extractAssets(tx.outputs).get
+      val (inAssets, inAssetsNum): (Map[Seq[Byte], Long], Int) = ErgoBoxAssetExtractor.extractAssets(from).get
+      val (outAssets, outAssetsNum): (Map[Seq[Byte], Long], Int) = ErgoBoxAssetExtractor.extractAssets(tx.outputs).get
 
       val assetsCost = inAssetsNum * tokenAccessCost + inAssets.size * tokenAccessCost +
         outAssetsNum * tokenAccessCost + outAssets.size * tokenAccessCost

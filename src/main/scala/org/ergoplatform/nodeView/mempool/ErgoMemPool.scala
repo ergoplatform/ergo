@@ -45,7 +45,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
     val result = mutable.WrappedArray.newBuilder[ErgoTransaction]
     val txSeq = pool.orderedTransactions.values.to[Vector]
     val total = txSeq.size
-    val start = if(total < limit) {
+    val start = if (total <= limit) {
       0
     } else {
       val max = total - limit

@@ -52,7 +52,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
       scala.util.Random.nextInt(max)
     }
 
-    cfor(start)(_ < start + limit, _ + 1) { idx =>
+    cfor(start)(_ < Math.min(start + limit, total), _ + 1) { idx =>
       val tx = txSeq.apply(idx)
       result += tx
     }

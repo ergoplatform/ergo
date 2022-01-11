@@ -52,7 +52,8 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     val wtx = weighted(tx)
     val newPool = OrderedTxPool(
       orderedTransactions.updated(wtx, tx),
-      transactionsRegistry.updated(wtx.id, wtx), invalidatedTxIds,
+      transactionsRegistry.updated(wtx.id, wtx),
+      invalidatedTxIds,
       outputs ++ tx.outputs.map(_.id -> wtx),
       inputs ++ tx.inputs.map(_.boxId -> wtx)
     ).updateFamily(tx, wtx.weight)

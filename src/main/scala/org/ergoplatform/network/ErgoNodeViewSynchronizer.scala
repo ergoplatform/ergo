@@ -1,8 +1,8 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-
 import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -23,6 +23,7 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import scorex.core.network.message._
 import scorex.core.network._
@@ -489,7 +490,27 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val msg = Message(SnapshotsInfoSpec, Right(snapInfo), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
       }
-      case _ => log.warn(s"No snapshots avaialble")
+      case _ => log.warn(s"No snapshots available")
+    }
+  }
+
+  protected def sendManifest(id: ManifestId, usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
+    usr.getManifest(id) match {
+      case Some(manifest) => {
+        val msg = Message(ManifestSpec, Right(manifest), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      }
+      case _ => log.warn(s"No snapshots available")
+    }
+  }
+
+  protected def sendUtxoSnapshotChunk(id: SubtreeId, usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
+    usr.getUtxoSnapshotChunk(id) match {
+      case Some(snapChunk) => {
+        val msg = Message(UtxoSnapshotChunkSpec, Right(snapChunk), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      }
+      case _ => log.warn(s"No snapshots available")
     }
   }
 
@@ -750,6 +771,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case (spec: MessageSpec[_], _, remote) if spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
       usrOpt match {
         case Some(usr) => sendSnapshotsInfo(usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+    case (_: GetManifestSpec, id: ManifestId @unchecked, remote) =>
+      usrOpt match {
+        case Some(usr) => sendManifest(id, usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+    case (_: GetUtxoSnapshotChunkSpec,  id: SubtreeId @unchecked, remote) =>
+      usrOpt match {
+        case Some(usr) => sendUtxoSnapshotChunk(id, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
   }

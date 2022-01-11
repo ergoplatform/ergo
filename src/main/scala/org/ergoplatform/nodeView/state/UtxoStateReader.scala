@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
@@ -25,7 +26,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedLDBAVLStorage(store, np)
 
-  protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
+  val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
   /**
     * Validate transaction against provided state context, if specified,
@@ -148,5 +149,15 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
   def getSnapshotInfo(): Option[SnapshotsInfo] = {
     val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
     snapshotsDb.readSnapshotsInfo
+  }
+
+  def getManifest(id: ManifestId): Option[Array[Byte]] = {
+    val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
+    snapshotsDb.readManifestBytes(id)
+  }
+
+  def getUtxoSnapshotChunk(id: SubtreeId): Option[Array[Byte]] = {
+    val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
+    snapshotsDb.readSubtreeBytes(id)
   }
 }

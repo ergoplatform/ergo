@@ -253,9 +253,9 @@ object UtxoState extends ScorexLogging {
       case Some(snapshotsInfo) =>
         val (h, manifestId) = snapshotsInfo.availableManifests.maxBy(_._1)
         log.info(s"Reading snapshot from height $h")
-        val manifest = snapshotDb.readManifestBytes(manifestId).get
+        val manifest = snapshotDb.readManifest(manifestId).get
         val subtreeIds = manifest.subtreesIds
-        val subtrees = subtreeIds.map(sid => snapshotDb.readSubtreeBytes(sid).get)
+        val subtrees = subtreeIds.map(sid => snapshotDb.readSubtree(sid).get)
         val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
         val prover = serializer.combine(manifest -> subtrees, Algos.hash.DigestSize, None).get
 

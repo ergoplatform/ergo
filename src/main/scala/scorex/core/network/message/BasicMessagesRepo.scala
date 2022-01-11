@@ -2,6 +2,7 @@ package scorex.core.network.message
 
 
 import org.ergoplatform.nodeView.state.SnapshotsInfo
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.wallet.Constants
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
@@ -325,3 +326,90 @@ object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
     }.toMap)
   }
 }
+
+/**
+  * The `GetManifest` sends manifest (BatchAVLProverManifest) identifier
+  */
+class GetManifestSpec extends MessageSpecV1[ManifestId] {
+  private val SizeLimit = 100
+
+  override val messageCode: MessageCode = 78: Byte
+  override val messageName: String = "GetManifest"
+
+  override def serialize(id: ManifestId, w: Writer): Unit = {
+    w.putBytes(id)
+  }
+
+  override def parse(r: Reader): ManifestId = {
+    require(r.remaining < SizeLimit, "Too big GetManifest message")
+    Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+  }
+}
+
+/**
+  * The `Manifest` message is a reply to a `GetManifest` message.
+  */
+object ManifestSpec extends MessageSpecV1[Array[Byte]] {
+  private val SizeLimit = 1000
+
+  override val messageCode: MessageCode = 79: Byte
+
+  override val messageName: String = "Manifest"
+
+  override def serialize(manifestBytes: Array[Byte], w: Writer): Unit = {
+    w.putUInt(manifestBytes.size)
+    w.putBytes(manifestBytes)
+  }
+
+  override def parse(r: Reader): Array[Byte] = {
+    require(r.remaining <= SizeLimit, s"Too big Manifest message.")
+
+    val length = r.getUInt().toIntExact
+    r.getBytes(length)
+  }
+}
+
+/**
+  * The `GetManifest` sends send utxo subtree (BatchAVLProverSubtree) identifier
+  */
+class GetUtxoSnapshotChunkSpec() extends MessageSpecV1[SubtreeId] {
+  private val SizeLimit = 100
+
+  override val messageCode: MessageCode = 80: Byte
+
+  override val messageName: String = "GetUtxoSnapshotChunk"
+
+  override def serialize(id: SubtreeId, w: Writer): Unit = {
+    w.putBytes(id)
+  }
+
+  override def parse(r: Reader): SubtreeId = {
+    require(r.remaining < SizeLimit, "Too big GetManifest message")
+    Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+  }
+}
+
+/**
+  * The `Manifest` message is a reply to a `GetManifest` message.
+  */
+object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
+  private val SizeLimit = 1000
+
+  override val messageCode: MessageCode = 81: Byte
+
+  override val messageName: String = "UtxoSnapshotChunk"
+
+  override def serialize(subtree: Array[Byte], w: Writer): Unit = {
+    w.putUInt(subtree.size)
+    w.putBytes(subtree)
+  }
+
+  override def parse(r: Reader): Array[Byte] = {
+    require(r.remaining <= SizeLimit, s"Too big UtxoSnapshotChunk message.")
+
+    val length = r.getUInt().toIntExact
+    r.getBytes(length)
+  }
+}
+
+

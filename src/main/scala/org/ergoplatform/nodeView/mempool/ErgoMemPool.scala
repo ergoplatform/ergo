@@ -49,6 +49,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
       0
     } else {
       val max = total - limit
+      // max > 0 always
       scala.util.Random.nextInt(max)
     }
 

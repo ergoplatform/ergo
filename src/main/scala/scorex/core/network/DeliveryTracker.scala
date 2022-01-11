@@ -120,7 +120,7 @@ class DeliveryTracker(system: ActorSystem,
       val checks = requested(modifierTypeId)(modifierId).checks + 1
       setUnknown(modifierId, modifierTypeId)
       if (checks < maxDeliveryChecks) setRequested(modifierId, modifierTypeId,  Some(cp), checks)
-      else throw new StopExpectingError(modifierId, checks)
+      else throw new StopExpectingError(modifierId, modifierTypeId, checks)
     }
 
   /**
@@ -275,8 +275,8 @@ class DeliveryTracker(system: ActorSystem,
         ()
     }
 
-  class StopExpectingError(mid: ModifierId, checks: Int)
-    extends Error(s"Stop expecting ${encoder.encodeId(mid)} due to exceeded number of retries $checks")
+  class StopExpectingError(mid: ModifierId, mType: ModifierTypeId, checks: Int)
+    extends Error(s"Stop expecting ${encoder.encodeId(mid)} of type $mType due to exceeded number of retries $checks")
 
   private def tryWithLogging[T](fn: => T): Try[T] =
     Try(fn).recoverWith {

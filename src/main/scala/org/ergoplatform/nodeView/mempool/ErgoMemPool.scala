@@ -42,8 +42,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
   override def take(limit: Int): Iterable[ErgoTransaction] = pool.orderedTransactions.values.take(limit)
 
   def random(limit: Int): Iterable[ErgoTransaction] = {
-    val result = mutable.ArrayBuffer[ErgoTransaction]()
-    val txSeq = pool.orderedTransactions.values.toSeq
+    val result = mutable.WrappedArray.newBuilder[ErgoTransaction]
+    val txSeq = pool.orderedTransactions.values.to[Vector]
     val total = txSeq.size
     val start = if(total < limit) {
       0
@@ -57,7 +57,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
       result += tx
     }
 
-    result
+    result.result()
   }
 
   override def getAll: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq

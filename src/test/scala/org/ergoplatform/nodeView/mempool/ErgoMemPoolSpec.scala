@@ -140,7 +140,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       blockTransactions.txs.forall{tx =>
         val valRes = pool.process(tx, us)._2
         valRes.isInstanceOf[ProcessingOutcome.Invalidated] ||
-          valRes.isInstanceOf[ProcessingOutcome.Invalidated]} shouldBe true
+          valRes.isInstanceOf[ProcessingOutcome.Declined]} shouldBe true
     }
   }
 

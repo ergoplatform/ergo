@@ -384,7 +384,7 @@ class GetUtxoSnapshotChunkSpec() extends MessageSpecV1[SubtreeId] {
   }
 
   override def parse(r: Reader): SubtreeId = {
-    require(r.remaining < SizeLimit, "Too big GetManifest message")
+    require(r.remaining < SizeLimit, "Too big GetUtxoSnapshotChunk message")
     Digest32 @@ r.getBytes(Constants.ModifierIdLength)
   }
 }

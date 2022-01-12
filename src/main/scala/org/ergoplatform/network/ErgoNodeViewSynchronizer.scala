@@ -38,6 +38,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.wallet.VaultReader
+import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -773,14 +774,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Some(usr) => sendSnapshotsInfo(usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
-    case (_: GetManifestSpec, id: ManifestId @unchecked, remote) =>
+    case (_: GetManifestSpec, id: Array[Byte], remote) =>
       usrOpt match {
-        case Some(usr) => sendManifest(id, usr, remote)
+        case Some(usr) => sendManifest(Digest32 @@ id, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
-    case (_: GetUtxoSnapshotChunkSpec,  id: SubtreeId @unchecked, remote) =>
+    case (_: GetUtxoSnapshotChunkSpec,  id: Array[Byte], remote) =>
       usrOpt match {
-        case Some(usr) => sendUtxoSnapshotChunk(id, usr, remote)
+        case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ id, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
   }

@@ -13,7 +13,6 @@ import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.core._
-import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
@@ -29,7 +28,6 @@ class DigestState protected(override val version: VersionTag,
                             override val store: LDBVersionedStore,
                             ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
-    with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging
     with ScorexEncoding {
 

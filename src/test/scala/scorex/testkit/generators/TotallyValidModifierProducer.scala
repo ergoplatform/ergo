@@ -2,10 +2,10 @@ package scorex.testkit.generators
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
-import scorex.core.transaction.state.MinimalState
+import org.ergoplatform.nodeView.state.ErgoState
 
 
-trait TotallyValidModifierProducer[ST <: MinimalState[ST]] {
+trait TotallyValidModifierProducer[ST <: ErgoState[ST]] {
 
   def totallyValidModifier(history: ErgoHistory, state: ST): ErgoPersistentModifier
 

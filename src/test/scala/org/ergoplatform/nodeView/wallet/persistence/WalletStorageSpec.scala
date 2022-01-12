@@ -12,15 +12,13 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.db.LDBKVStore
-import scorex.testkit.utils.FileUtils
 
 class WalletStorageSpec
   extends AnyFlatSpec
     with Matchers
     with WalletGenerators
     with ScalaCheckPropertyChecks
-    with DBSpec
-    with FileUtils {
+    with DBSpec {
 
   private implicit val addressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
@@ -64,7 +62,7 @@ class WalletStorageSpec
         externalScanReqs.foreach(req => storage.addScan(req))
         val storageApps = storage.allScans
         val storageRequests = storageApps.map { app =>
-          ScanRequest(app.scanName, app.trackingRule, Some(ScanWalletInteraction.Off))
+          ScanRequest(app.scanName, app.trackingRule, Some(ScanWalletInteraction.Off), Some(true))
         }
         storageRequests.foreach(r => externalScanReqs.contains(r) shouldBe true)
         storageApps.map(_.scanId).foreach(storage.removeScan(_).get)

@@ -10,8 +10,10 @@ import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, bytesToId}
 import OrderedTxPool.weighted
+import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.Try
 
 
@@ -31,13 +33,33 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
 
-  override type NVCT = ErgoMemPool
+  private val nodeSettings = settings.nodeSettings
 
   override def size: Int = pool.size
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = pool.get(modifierId)
 
   override def take(limit: Int): Iterable[ErgoTransaction] = pool.orderedTransactions.values.take(limit)
+
+  def random(limit: Int): Iterable[ErgoTransaction] = {
+    val result = mutable.WrappedArray.newBuilder[ErgoTransaction]
+    val txSeq = pool.orderedTransactions.values.to[Vector]
+    val total = txSeq.size
+    val start = if (total <= limit) {
+      0
+    } else {
+      val max = total - limit
+      // max > 0 always
+      scala.util.Random.nextInt(max)
+    }
+
+    cfor(start)(_ < Math.min(start + limit, total), _ + 1) { idx =>
+      val tx = txSeq.apply(idx)
+      result += tx
+    }
+
+    result.result()
+  }
 
   override def getAll: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
 
@@ -107,40 +129,50 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
   }
 
   def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
-    val fee = extractFee(tx)
-    val minFee = settings.nodeSettings.minimalFeeAmount
-    val canAccept = pool.canAccept(tx)
+    val blacklistedTransactions = nodeSettings.blacklistedTransactions
+    if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
+      new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
+    } else {
+      val fee = extractFee(tx)
+      val minFee = settings.nodeSettings.minimalFeeAmount
+      val canAccept = pool.canAccept(tx)
 
-    if (fee >= minFee) {
-      if (canAccept) {
-        state match {
-          case utxo: UtxoState =>
-            // Allow proceeded transaction to spend outputs of pooled transactions.
-            utxo.withTransactions(getAll).validate(tx).fold(
-              ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
-              _ => acceptIfNoDoubleSpend(tx)
-            )
-          case validator: TransactionValidation =>
-            // transaction validation currently works only for UtxoState, so this branch currently
-            // will not be triggered probably
-            validator.validate(tx).fold(
-              ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
-              _ => acceptIfNoDoubleSpend(tx)
-            )
-          case _ =>
-            // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
-            // peers though, so such transactions can come from the local wallet only.
-            acceptIfNoDoubleSpend(tx)
+      if (fee >= minFee) {
+        if (canAccept) {
+          state match {
+            case utxo: UtxoState =>
+              // Allow proceeded transaction to spend outputs of pooled transactions.
+              val utxoWithPool = utxo.withTransactions(getAll)
+              if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
+                utxoWithPool.validate(tx).fold(
+                  ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
+                  _ => acceptIfNoDoubleSpend(tx)
+                )
+              } else {
+                this -> ProcessingOutcome.Declined(new Exception("not all utxos in place yet"))
+              }
+            case validator: TransactionValidation =>
+              // transaction validation currently works only for UtxoState, so this branch currently
+              // will not be triggered probably
+              validator.validate(tx).fold(
+                ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
+                _ => acceptIfNoDoubleSpend(tx)
+              )
+            case _ =>
+              // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
+              // peers though, so such transactions can come from the local wallet only.
+              acceptIfNoDoubleSpend(tx)
+          }
+        } else {
+          this -> ProcessingOutcome.Declined(
+            new Exception(s"Pool can not accept transaction ${tx.id}, it is invalidated earlier or the pool is full"))
         }
       } else {
         this -> ProcessingOutcome.Declined(
-          new Exception(s"Pool can not accept transaction ${tx.id}, it is invalidated earlier or the pool is full"))
+          new Exception(s"Min fee not met: ${minFee.toDouble / CoinsInOneErgo} ergs required, " +
+            s"${fee.toDouble / CoinsInOneErgo} ergs given")
+        )
       }
-    } else {
-      this -> ProcessingOutcome.Declined(
-        new Exception(s"Min fee not met: ${minFee.toDouble / CoinsInOneErgo} ergs required, " +
-          s"${fee.toDouble / CoinsInOneErgo} ergs given")
-      )
     }
   }
 

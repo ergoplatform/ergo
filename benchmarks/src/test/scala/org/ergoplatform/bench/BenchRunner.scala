@@ -8,8 +8,8 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPr
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, NVBenchmark}
 import org.ergoplatform.settings.{Args, ErgoSettings}
-import scorex.core.NodeViewHolder.CurrentView
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings}
 import scorex.util.ScorexLogging
 

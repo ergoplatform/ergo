@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
 import scorex.crypto.authds.ADKey
@@ -26,7 +26,7 @@ import sigmastate.helpers.TestingHelpers._
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Random, Try}
+import scala.util.Try
 
 
 class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
@@ -48,7 +48,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
       val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
-      us.validateWithCost(tx, None, complexityLimit).get should be <= 100000L
+      us.validateWithCost(tx, None, complexityLimit, None).get should be <= 100000L
       val block1 = validFullBlock(Some(lastBlock), us, Seq(ErgoTransaction(tx)))
       us = us.applyModifier(block1).get
       foundersBox = tx.outputs.head
@@ -69,7 +69,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     forAll(defaultHeaderGen) { header =>
       val rewardPk = new DLogProverInput(BigInt(header.height).bigInteger).publicImage
 
-      val t = validTransactionsFromBoxHolder(bh, new Random(height))
+      val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
       val txs = t._1
       bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
@@ -125,7 +125,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     us.emissionBoxOpt should not be None
     var lastBlockOpt: Option[ErgoFullBlock] = None
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBoxHolder(lastBlockOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(lastBlockOpt, us, bh, new RandomWrapper(Some(seed)))
       val block = blBh._1
       us.extractEmissionBox(block) should not be None
       lastBlockOpt = Some(block)
@@ -147,7 +147,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     var (us: UtxoState, bh) = createUtxoState()
     var height: Int = ErgoHistory.GenesisHeight
     forAll(defaultHeaderGen) { header =>
-      val t = validTransactionsFromBoxHolder(bh, new Random(height))
+      val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
       val txs = t._1
       bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
@@ -173,7 +173,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     // generate chain of correct full blocks
     val chain = (0 until 10) map { _ =>
       val header = defaultHeaderGen.sample.value
-      val t = validTransactionsFromBoxHolder(bh, new Random(height))
+      val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
       val txs = t._1
       bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
@@ -196,7 +196,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       (0 until 1000) foreach { _ =>
         Try {
           val boxes = stateReader.randomBox().toSeq
-          val txs = validTransactionsFromBoxes(400, boxes, new Random)._1
+          val txs = validTransactionsFromBoxes(400, boxes, new RandomWrapper)._1
           stateReader.proofsForTransactions(txs).get
         }
       }
@@ -253,8 +253,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val us = createUtxoState(bh)
 
       // generate 2 independent transactions, that only spend state boxes
-      val headTx = validTransactionsFromBoxes(1, bh.boxes.take(10).values.toSeq, new Random())._1.head
-      val nextTx = validTransactionsFromBoxes(1, bh.boxes.takeRight(10).values.toSeq, new Random())._1.head
+      val headTx = validTransactionsFromBoxes(1, bh.boxes.take(10).values.toSeq, new RandomWrapper())._1.head
+      val nextTx = validTransactionsFromBoxes(1, bh.boxes.takeRight(10).values.toSeq, new RandomWrapper())._1.head
       headTx.inputs.intersect(nextTx.inputs) shouldBe empty
 
       // trying to apply transactions with data inputs same as inputs of the next tx

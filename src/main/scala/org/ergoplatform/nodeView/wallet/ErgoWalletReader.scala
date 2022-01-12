@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.Constants.ScanId
@@ -35,14 +36,14 @@ trait ErgoWalletReader extends VaultReader {
     * @param mnemonicPassOpt  mnemonic encription password
     * @return  menmonic phrase for the new wallet
     */
-  def initWallet(pass: String, mnemonicPassOpt: Option[String]): Future[Try[String]] =
-    (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[String]]
+  def initWallet(pass: SecretString, mnemonicPassOpt: Option[SecretString]): Future[Try[SecretString]] =
+    (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[SecretString]]
 
-  def restoreWallet(encryptionPass: String, mnemonic: String,
-                    mnemonicPassOpt: Option[String] = None): Future[Try[Unit]] =
+  def restoreWallet(encryptionPass: SecretString, mnemonic: SecretString,
+                    mnemonicPassOpt: Option[SecretString] = None): Future[Try[Unit]] =
     (walletActor ? RestoreWallet(mnemonic, mnemonicPassOpt, encryptionPass)).mapTo[Try[Unit]]
 
-  def unlockWallet(pass: String): Future[Try[Unit]] =
+  def unlockWallet(pass: SecretString): Future[Try[Unit]] =
     (walletActor ? UnlockWallet(pass)).mapTo[Try[Unit]]
 
   def lockWallet(): Unit = walletActor ! LockWallet
@@ -52,7 +53,9 @@ trait ErgoWalletReader extends VaultReader {
   def getWalletStatus: Future[WalletStatus] =
     (walletActor ? GetWalletStatus).mapTo[WalletStatus]
 
-  def checkSeed(mnemonic: String, mnemonicPassOpt: Option[String] = None): Future[Boolean] = (walletActor ? CheckSeed(mnemonic, mnemonicPassOpt)).mapTo[Boolean]
+  def checkSeed(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString] = None): Future[Boolean] = {
+    (walletActor ? CheckSeed(mnemonic, mnemonicPassOpt)).mapTo[Boolean]
+  }
 
   def deriveKey(path: String): Future[Try[P2PKAddress]] =
     (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]

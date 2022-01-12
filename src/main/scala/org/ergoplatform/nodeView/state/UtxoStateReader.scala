@@ -10,7 +10,7 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
-import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{Lookup, NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
@@ -27,15 +27,23 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
+  def generateBatchProofForBoxes(boxes: Seq[ErgoBox.BoxId]): SerializedAdProof = persistentProver.synchronized {
+    boxes.map { box => persistentProver.performOneOperation(Lookup(ADKey @@ box)) }
+    persistentProver.prover().generateProof()
+  }
+
   /**
     * Validate transaction against provided state context, if specified,
     * or state context from the previous block if not
     */
   def validateWithCost(tx: ErgoTransaction,
                        stateContextOpt: Option[ErgoStateContext],
-                       complexityLimit: Int): Try[Long] = {
-    val verifier = ErgoInterpreter(stateContext.currentParameters)
+                       complexityLimit: Int,
+                       interpreterOpt: Option[ErgoInterpreter]): Try[Long] = {
     val context = stateContextOpt.getOrElse(stateContext)
+
+    val verifier = interpreterOpt.getOrElse(ErgoInterpreter(context.currentParameters))
+
     tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
       val txComplexity = boxesToSpend.map(_.ergoTree.complexity).sum
@@ -54,8 +62,11 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * This validation does not guarantee that transaction will be valid in future
     * as soon as state (both UTXO set and state context) will change.
     *
+    * Used in mempool.
     */
-  override def validate(tx: ErgoTransaction): Try[Unit] = validateWithCost(tx, None, Int.MaxValue).map(_ => Unit)
+  override def validate(tx: ErgoTransaction): Try[Unit] = {
+    validateWithCost(tx, None, Int.MaxValue, None).map(_ => Unit)
+  }
 
   /**
     *

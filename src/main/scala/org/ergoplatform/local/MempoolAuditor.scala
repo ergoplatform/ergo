@@ -6,12 +6,14 @@ import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.network.Broadcast
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, SemanticallySuccessfulModifier}
+import org.ergoplatform.nodeView.state.UtxoStateReader
 import scorex.core.network.message.{InvData, InvSpec, Message}
 import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
@@ -98,21 +100,33 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     context become working // ignore other triggers until work is done
   }
 
+  private def broadcastTx(tx: ErgoTransaction): Unit = {
+    val msg = Message(
+      new InvSpec(settings.scorexSettings.network.maxInvObjects),
+      Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
+      None
+    )
+    networkControllerRef ! SendToNetwork(msg, Broadcast)
+  }
+
   private def rebroadcastTransactions(): Unit = {
     log.debug("Rebroadcasting transactions")
     poolReaderOpt.foreach { pr =>
-      pr.take(settings.nodeSettings.rebroadcastCount).foreach { tx =>
-        log.info(s"Rebroadcasting $tx")
-        val msg = Message(
-          new InvSpec(settings.scorexSettings.network.maxInvObjects),
-          Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
-          None
-        )
-        networkControllerRef ! SendToNetwork(msg, Broadcast)
+      pr.random(settings.nodeSettings.rebroadcastCount).foreach { tx =>
+        stateReaderOpt match {
+          case Some(utxoState: UtxoStateReader) =>
+            if (tx.inputIds.forall(inputBoxId => utxoState.boxById(inputBoxId).isDefined)) {
+              log.info(s"Rebroadcasting $tx")
+              broadcastTx(tx)
+            } else {
+              log.info(s"Not rebroadcasting $tx as not all the inputs are in place")
+            }
+          case _ =>
+            log.warn(s"Rebroadcasting $tx while state is not ready or not UTXO set")
+            broadcastTx(tx)
+        }
       }
-
     }
-
   }
 }
 

@@ -644,6 +644,11 @@ object ErgoNodeViewHolder {
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
 
+  /**
+    * Checks whether chain got stuck by comparing timestamp of bestFullBlock or last time a modifier was applied to history.
+    * @param progress metadata of last chain update
+    * @return True if chain is healthy and False if it got stuck
+    */
   def checkChainIsHealthy(
       progress: ChainProgress,
       history: ErgoHistory,

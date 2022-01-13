@@ -19,31 +19,19 @@ import scorex.util.{ModifierId, bytesToId}
 
 class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers with NodeViewTestOps with NoShrink {
 
-  private val t0 = TestCase("xyx") { fixture =>
+  private val t0 = TestCase("check chain is healthy") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
 
-    getBestHeaderOpt shouldBe None
-    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
-
-    subscribeEvents(classOf[SyntacticallySuccessfulModifier])
-
-    //sending header
-    nodeViewHolderRef ! LocallyGeneratedModifier(block.header)
-    expectMsgType[SyntacticallySuccessfulModifier]
-
-    getHistoryHeight shouldBe ErgoHistory.GenesisHeight
-    getHeightOf(block.header.id) shouldBe Some(ErgoHistory.GenesisHeight)
-    getLastHeadersLength(10) shouldBe 1
-    getBestHeaderOpt shouldBe Some(block.header)
-
     val history = generateHistory(true, StateType.Utxo, false, 2)
 
+    // too big chain update delay
     val notAcceptableDelay = System.currentTimeMillis() - (initSettings.chainSettings.acceptableChainUpdateDelay.toMillis + 100)
     val invalidProgress = ChainProgress(block, 2, 3, notAcceptableDelay)
     ErgoNodeViewHolder.checkChainIsHealthy(invalidProgress, history, us.stateContext, initSettings) shouldBe false
 
+    // acceptable chain update delay
     val acceptableDelay = System.currentTimeMillis() - 5
     val validProgress = ChainProgress(block, 2, 3, acceptableDelay)
     ErgoNodeViewHolder.checkChainIsHealthy(validProgress, history, us.stateContext, initSettings) shouldBe true

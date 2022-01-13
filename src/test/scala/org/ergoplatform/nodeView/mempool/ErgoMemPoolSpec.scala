@@ -133,11 +133,14 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
   }
 
-  it should "invalidate invalid transaction" in {
+  it should "invalidate or reject invalid transaction" in {
     val us = createUtxoState(parameters)._1
     val pool = ErgoMemPool.empty(settings)
     forAll(invalidBlockTransactionsGen) { blockTransactions =>
-      blockTransactions.txs.forall(pool.process(_, us)._2.isInstanceOf[ProcessingOutcome.Invalidated]) shouldBe true
+      blockTransactions.txs.forall{tx =>
+        val valRes = pool.process(tx, us)._2
+        valRes.isInstanceOf[ProcessingOutcome.Invalidated] ||
+          valRes.isInstanceOf[ProcessingOutcome.Declined]} shouldBe true
     }
   }
 

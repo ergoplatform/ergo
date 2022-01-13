@@ -30,7 +30,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
   //todo: scaladoc
-  //todo: used in tests only, make private[] ? 
+  //todo: used in tests only, make private[] ?
   def slicedTree(): (BatchAVLProverManifest[Digest32], Seq[BatchAVLProverSubtree[Digest32]]) = {
     persistentProver.synchronized {
       val serializer = new BatchAVLProverSerializer[Digest32, HF]

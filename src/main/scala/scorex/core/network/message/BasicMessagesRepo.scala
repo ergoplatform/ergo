@@ -350,7 +350,7 @@ class GetManifestSpec extends MessageSpecV1[ManifestId] {
   * The `Manifest` message is a reply to a `GetManifest` message.
   */
 object ManifestSpec extends MessageSpecV1[Array[Byte]] {
-  private val SizeLimit = 1000
+  private val SizeLimit = 10000000
 
   override val messageCode: MessageCode = 79: Byte
 
@@ -393,7 +393,7 @@ class GetUtxoSnapshotChunkSpec() extends MessageSpecV1[SubtreeId] {
   * The `Manifest` message is a reply to a `GetManifest` message.
   */
 object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
-  private val SizeLimit = 1000
+  private val SizeLimit = 10000000
 
   override val messageCode: MessageCode = 81: Byte
 

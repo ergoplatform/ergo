@@ -108,8 +108,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         (height % SnapshotEvery == 0) &&
           estimatedTip.get - height <= SnapshotEvery) {
 
-      val serializer = new BatchAVLProverSerializer[Digest32, HF]
-      val (manifest, subtrees) = serializer.slice(persistentProver.avlProver, subtreeDepth = 12)
+      val (manifest, subtrees) = slicedTree()
 
       val ms0 = System.currentTimeMillis()
       snapshotsDb.pruneSnapshots(height - SnapshotEvery * 2)

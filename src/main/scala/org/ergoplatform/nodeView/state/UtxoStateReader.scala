@@ -11,6 +11,7 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -26,7 +27,16 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
   protected lazy val storage = new VersionedLDBAVLStorage(store, np)
 
-  val persistentProver: PersistentBatchAVLProver[Digest32, HF]
+  protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
+
+  //todo: scaladoc
+  //todo: used in tests only, make private[] ? 
+  def slicedTree(): (BatchAVLProverManifest[Digest32], Seq[BatchAVLProverSubtree[Digest32]]) = {
+    persistentProver.synchronized {
+      val serializer = new BatchAVLProverSerializer[Digest32, HF]
+      serializer.slice(persistentProver.avlProver, subtreeDepth = 12)
+    }
+  }
 
   /**
     * Validate transaction against provided state context, if specified,

@@ -16,12 +16,10 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.nodeView.state.{ErgoState, SnapshotsDb, SnapshotsInfo, UtxoStateReader}
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.settings.Algos.HF
 import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
-import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
@@ -278,10 +276,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
           // Generate some snapshot
           val height = 1
           usr.applyModifier(mod, Some(height))
-          usr.persistentProver.generateProofAndUpdateStorage()
-          implicit val hf: HF = Algos.hash
-          val serializer = new BatchAVLProverSerializer[Digest32, HF]
-          val (manifest, subtrees) = serializer.slice(usr.persistentProver.avlProver, subtreeDepth = 12)
+          val (manifest, subtrees) = usr.slicedTree()
 
           val db = SnapshotsDb.create(s.constants.settings)
           db.writeSnapshot(height, manifest, subtrees)
@@ -314,10 +309,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
           // Generate some snapshot
           val height = 1
           usr.applyModifier(mod, Some(height))
-          usr.persistentProver.generateProofAndUpdateStorage()
-          implicit val hf: HF = Algos.hash
-          val serializer = new BatchAVLProverSerializer[Digest32, HF]
-          val (manifest, subtrees) = serializer.slice(usr.persistentProver.avlProver, subtreeDepth = 12)
+          val (manifest, subtrees) = usr.slicedTree()
 
           val db = SnapshotsDb.create(s.constants.settings)
           db.writeSnapshot(height, manifest, subtrees)

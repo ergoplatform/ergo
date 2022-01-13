@@ -16,6 +16,7 @@ import scala.concurrent.duration.FiniteDuration
   */
 case class ChainSettings(protocolVersion: Byte,
                          addressPrefix: Byte,
+                         acceptableChainUpdateDelay: FiniteDuration,
                          blockInterval: FiniteDuration,
                          epochLength: Int,
                          useLastEpochs: Int,

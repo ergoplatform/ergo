@@ -20,18 +20,15 @@
             <level>${logback.file.level:-DEBUG}</level>
         </filter>
         <file>ergo.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!-- daily rollover -->
             <fileNamePattern>ergo.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
 
             <!-- keep 30 days' worth of history capped at 1GB total size -->
             <maxHistory>30</maxHistory>
+            <maxFileSize>100MB</maxFileSize>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
-
-        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <maxFileSize>100MB</maxFileSize>
-        </triggeringPolicy>
         <encoder>
             <pattern>${default.pattern}</pattern>
         </encoder>

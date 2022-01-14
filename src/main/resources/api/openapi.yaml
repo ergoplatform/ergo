@@ -4081,7 +4081,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SerializedAdProof:
+                $ref: '#/components/schemas/SerializedAdProof'
         '400':
           description: Prove error
           content:

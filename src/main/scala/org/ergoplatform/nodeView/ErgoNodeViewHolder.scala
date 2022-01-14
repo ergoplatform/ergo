@@ -4,7 +4,6 @@ import akka.actor.SupervisorStrategy.Escalate
 import java.io.File
 
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
-import com.typesafe.scalalogging.Logger
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -23,7 +22,6 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, C
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import scorex.core.consensus.History.ProgressInfo
 import org.ergoplatform.wallet.utils.FileUtils
-import org.slf4j.LoggerFactory
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.ScorexEncoding
@@ -91,11 +89,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.error(s"NodeViewHolder failed, killing whole application ...", e)
         Escalate
     }
-
-  override def preStart(): Unit = {
-    val healthCheckRate = settings.chainSettings.acceptableChainUpdateDelay / 5
-    context.system.scheduler.scheduleAtFixedRate(healthCheckRate, healthCheckRate, self, HealthCheck)
-  }
 
   override def postStop(): Unit = {
     log.warn("Stopping ErgoNodeViewHolder")
@@ -584,10 +577,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def handleHealthCheck: Receive = {
-    case HealthCheck =>
-      chainProgress.foreach { progress =>
+    case IsChainHealthy =>
+      val healthCheckReply = chainProgress.map { progress =>
         ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), minimalState().stateContext, settings)
-      }
+      }.getOrElse(ChainIsHealthy)
+      sender() ! healthCheckReply
   }
 
   override def receive: Receive =
@@ -604,9 +598,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
 object ErgoNodeViewHolder {
-
-  // TODO compiler does not allow for extending ScorexLogging or StrictLogging trait
-  private val logger: Logger = Logger(LoggerFactory.getLogger(getClass.getName))
 
   object ReceivableMessages {
     // Tracking last modifier and header & block heights in time, being periodically checked for possible stuck
@@ -634,7 +625,10 @@ object ErgoNodeViewHolder {
 
     case class EliminateTransactions(ids: Seq[scorex.util.ModifierId])
 
-    case object HealthCheck
+    case object IsChainHealthy
+    sealed trait HealthCheckResult
+    case object ChainIsHealthy extends HealthCheckResult
+    case class ChainIsStuck(reason: String) extends HealthCheckResult
   }
 
   case class BlockAppliedTransactions(txs: Seq[scorex.util.ModifierId]) extends NodeViewHolderEvent
@@ -647,13 +641,13 @@ object ErgoNodeViewHolder {
   /**
     * Checks whether chain got stuck by comparing timestamp of bestFullBlock or last time a modifier was applied to history.
     * @param progress metadata of last chain update
-    * @return True if chain is healthy and False if it got stuck
+    * @return None if chain is healthy and Some(error) with details if it got stuck
     */
   def checkChainIsHealthy(
       progress: ChainProgress,
       history: ErgoHistory,
       context: ErgoStateContext,
-      settings: ErgoSettings): Boolean = {
+      settings: ErgoSettings): HealthCheckResult = {
     val ChainProgress(lastMod, headersHeight, blockHeight, lastUpdate) = progress
     val chainUpdateDelay = System.currentTimeMillis() - lastUpdate
     val acceptableChainUpdateDelay = settings.chainSettings.acceptableChainUpdateDelay
@@ -668,14 +662,11 @@ object ErgoNodeViewHolder {
 
     if (chainUpdateDelayed || blockUpdateDelayed) {
       val repairNeeded = ErgoHistory.repairIfNeeded(history)
-      logger.warn(s"Chain not modified for $chainUpdateDelay ms, headers-height: $headersHeight, " +
+      ChainIsStuck(s"Chain not modified for $chainUpdateDelay ms, headers-height: $headersHeight, " +
         s"block-height $blockHeight, chain synced: $chainSynced, repair needed: $repairNeeded, " +
         s"last modifier applied: $lastMod ")
-      false
     } else {
-      logger.info(s"Chain is healthy: headers-height: $headersHeight, block-height $blockHeight, " +
-        s"chain synced: $chainSynced")
-      true
+      ChainIsHealthy
     }
   }
 }

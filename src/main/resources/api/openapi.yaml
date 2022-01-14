@@ -1699,11 +1699,12 @@ components:
           example: 327
         difficulty:
           type: integer
-          format: int64
           minimum: 0
           nullable: true
           example: 667
-          description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
+          description: >
+            Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch.
+            Difficulty is a BigInt integer.
         currentTime:
           type: integer
           description: Current internal node time
@@ -1716,13 +1717,11 @@ components:
             - $ref: '#/components/schemas/Timestamp'
         headersScore:
           type: integer
-          format: int64
-          description: Can be 'null' if no headers is applied since node launch
+          description: Can be 'null' if no headers is applied since node launch. headersScore is a BigInt integer.
           nullable: true
         fullBlocksScore:
           type: integer
-          format: int64
-          description: Can be 'null' if no full block is applied since node launch
+          description: Can be 'null' if no full block is applied since node launch. fullBlocksScore is a BigInt integer.
           nullable: true
         genesisBlockId:
           type: string

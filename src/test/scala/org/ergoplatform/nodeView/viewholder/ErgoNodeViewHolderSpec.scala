@@ -21,7 +21,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
 
   private val t0 = TestCase("check chain is healthy") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+    val (us, bh) = createUtxoState(parameters, Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
 
     val history = generateHistory(true, StateType.Utxo, false, 2)

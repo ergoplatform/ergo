@@ -91,7 +91,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx = defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get
-      us.validate(ErgoTransaction(tx)) shouldBe 'success
+      us.validateWithCost(ErgoTransaction(tx), 100000) shouldBe 'success
       height = height + 1
     }
   }

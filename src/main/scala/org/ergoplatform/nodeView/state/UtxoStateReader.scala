@@ -66,8 +66,8 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     *
     * Used in mempool.
     */
-  override def validate(tx: ErgoTransaction): Try[Unit] = {
-    validateWithCost(tx, None, Int.MaxValue, None).map(_ => Unit)
+  override def validateWithCost(tx: ErgoTransaction, maxTxCost: Int): Try[Unit] = {
+    validateWithCost(tx, None, maxTxCost, None).map(_ => Unit)
   }
 
   /**

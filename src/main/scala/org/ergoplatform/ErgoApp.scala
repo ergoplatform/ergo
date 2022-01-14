@@ -125,7 +125,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, scorexSettings.restApi),
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
     UtxoApiRoute(readersHolderRef, scorexSettings.restApi),
     ScriptApiRoute(readersHolderRef, ergoSettings),

@@ -16,7 +16,6 @@ trait TransactionValidation extends StateFeature {
 }
 
 object TransactionValidation {
-  case class TooHighComplexityError(message: String) extends Exception(message)
   case class TooHighCostError(message: String) extends Exception(message)
 }
 

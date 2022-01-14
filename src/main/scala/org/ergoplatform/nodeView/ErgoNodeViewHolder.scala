@@ -30,7 +30,6 @@ import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -46,7 +45,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
-  private implicit lazy val ec: ExecutionContext = context.dispatcher
 
   type NodeView = (ErgoHistory, State, ErgoWallet, ErgoMemPool)
 

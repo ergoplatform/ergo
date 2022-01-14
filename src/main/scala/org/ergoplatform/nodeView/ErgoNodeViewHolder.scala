@@ -642,7 +642,7 @@ object ErgoNodeViewHolder {
   /**
     * Checks whether chain got stuck by comparing timestamp of bestFullBlock or last time a modifier was applied to history.
     * @param progress metadata of last chain update
-    * @return None if chain is healthy and Some(error) with details if it got stuck
+    * @return ChainIsHealthy if chain is healthy and ChainIsStuck(error) with details if it got stuck
     */
   def checkChainIsHealthy(
       progress: ChainProgress,
@@ -651,7 +651,7 @@ object ErgoNodeViewHolder {
       settings: ErgoSettings): HealthCheckResult = {
     val ChainProgress(lastMod, headersHeight, blockHeight, lastUpdate) = progress
     val chainUpdateDelay = System.currentTimeMillis() - lastUpdate
-    val acceptableChainUpdateDelay = settings.chainSettings.acceptableChainUpdateDelay
+    val acceptableChainUpdateDelay = settings.nodeSettings.acceptableChainUpdateDelay
     def chainUpdateDelayed = chainUpdateDelay > acceptableChainUpdateDelay.toMillis
     def blockUpdateDelayed =
       history.bestFullBlockOpt
@@ -662,10 +662,14 @@ object ErgoNodeViewHolder {
       history.bestFullBlockOpt.map(_.id) == context.lastHeaderOpt.map(_.id)
 
     if (chainUpdateDelayed || blockUpdateDelayed) {
+      val bestFullBlockOpt =
+        history.bestFullBlockOpt
+          .filter(_.id != lastMod.id)
+          .fold("")(fb => s"\n best full block: $fb")
       val repairNeeded = ErgoHistory.repairIfNeeded(history)
       ChainIsStuck(s"Chain not modified for $chainUpdateDelay ms, headers-height: $headersHeight, " +
         s"block-height $blockHeight, chain synced: $chainSynced, repair needed: $repairNeeded, " +
-        s"last modifier applied: $lastMod ")
+        s"last modifier applied: $lastMod $bestFullBlockOpt")
     } else {
       ChainIsHealthy
     }

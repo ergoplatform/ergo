@@ -118,7 +118,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val interval = networkSettings.syncInterval
     context.system.scheduler.scheduleWithFixedDelay(2.seconds, interval, self, SendLocalSyncInfo)
 
-    val healthCheckRate = settings.chainSettings.acceptableChainUpdateDelay / 5
+    val healthCheckRate = settings.nodeSettings.acceptableChainUpdateDelay / 5
     context.system.scheduler.scheduleAtFixedRate(healthCheckRate, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
   }
 

@@ -27,7 +27,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     val history = generateHistory(true, StateType.Utxo, false, 2)
 
     // too big chain update delay
-    val notAcceptableDelay = System.currentTimeMillis() - (initSettings.chainSettings.acceptableChainUpdateDelay.toMillis + 100)
+    val notAcceptableDelay = System.currentTimeMillis() - (initSettings.nodeSettings.acceptableChainUpdateDelay.toMillis + 100)
     val invalidProgress = ChainProgress(block, 2, 3, notAcceptableDelay)
     ErgoNodeViewHolder.checkChainIsHealthy(invalidProgress, history, us.stateContext, initSettings).isInstanceOf[ChainIsStuck] shouldBe true
 

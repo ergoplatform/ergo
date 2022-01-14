@@ -296,19 +296,19 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
 object ErgoStateContext {
 
-  def empty(constants: StateConstants): ErgoStateContext = {
-    empty(constants.settings.chainSettings.genesisStateDigest, constants.settings)
+  def empty(constants: StateConstants, parameters: Parameters): ErgoStateContext = {
+    empty(constants.settings.chainSettings.genesisStateDigest, constants.settings, parameters)
   }
 
-  def empty(settings: ErgoSettings): ErgoStateContext = {
-    empty(settings.chainSettings.genesisStateDigest, settings)
+  def empty(settings: ErgoSettings, parameters: Parameters): ErgoStateContext = {
+    empty(settings.chainSettings.genesisStateDigest, settings, parameters)
   }
 
   /**
     * Initialize empty state context
     */
-  def empty(genesisStateDigest: ADDigest, settings: ErgoSettings): ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, ErgoValidationSettings.initial,
+  def empty(genesisStateDigest: ADDigest, settings: ErgoSettings, parameters: Parameters): ErgoStateContext = {
+    new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters, ErgoValidationSettings.initial,
       VotingData.empty)(settings)
   }
 

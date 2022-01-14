@@ -2,15 +2,16 @@ package org.ergoplatform.nodeView.state.wrapped
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.state.DigestState
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import scorex.core.VersionTag
 
 import scala.util.Try
 
 class WrappedDigestState(val digestState: DigestState,
                          val wrappedUtxoState: WrappedUtxoState,
-                         val settings: ErgoSettings)
-  extends DigestState(digestState.version, digestState.rootHash, digestState.store, settings) {
+                         val settings: ErgoSettings,
+                         override val parameters: Parameters)
+  extends DigestState(digestState.version, digestState.rootHash, digestState.store, parameters, settings) {
 
   override def applyModifier(mod: ErgoPersistentModifier): Try[WrappedDigestState] = {
     wrapped(super.applyModifier(mod), wrappedUtxoState.applyModifier(mod))
@@ -21,5 +22,5 @@ class WrappedDigestState(val digestState: DigestState,
   }
 
   private def wrapped(digestT: Try[DigestState], utxoT: Try[WrappedUtxoState]): Try[WrappedDigestState] =
-    digestT.flatMap(digest => utxoT.map(utxo => new WrappedDigestState(digest, utxo, settings)))
+    digestT.flatMap(digest => utxoT.map(utxo => new WrappedDigestState(digest, utxo, settings, parameters)))
 }

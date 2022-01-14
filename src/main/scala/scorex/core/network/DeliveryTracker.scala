@@ -138,6 +138,15 @@ class DeliveryTracker(system: ActorSystem,
   def setRequested(ids: Seq[ModifierId], typeId: ModifierTypeId, cp: Option[ConnectedPeer])
                   (implicit ec: ExecutionContext): Unit = ids.foreach(setRequested(_, typeId, cp))
 
+  /** Get peer we're communicating with in regards with modifier `id` **/
+  def getSource(id: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
+    status(id, modifierTypeId, Seq.empty) match {
+      case Requested => requested.get(modifierTypeId).flatMap(_.get(id)).flatMap(_.peer)
+      case Received => received.get(modifierTypeId).flatMap(_.get(id))
+      case _ => None
+    }
+  }
+
   /**
     * Modified with id `id` is permanently invalid - set its status to `Invalid`
     * and return [[ConnectedPeer]] which sent bad modifier.

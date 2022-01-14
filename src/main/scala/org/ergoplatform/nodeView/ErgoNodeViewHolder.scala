@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import scorex.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
@@ -41,7 +41,8 @@ import scala.util.{Failure, Success, Try}
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
-                                                             timeProvider: NetworkTimeProvider)
+                                                             timeProvider: NetworkTimeProvider,
+                                                             parameters: Parameters)
   extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
@@ -351,7 +352,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val wallet = ErgoWallet.readOrGenerate(
       history.getReader.asInstanceOf[ErgoHistoryReader],
-      settings)
+      settings,
+      parameters)
 
     val memPool = ErgoMemPool.empty(settings)
 
@@ -370,12 +372,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
     val constants = StateConstants(Some(self), settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[State], history) match {
+    restoreConsistentState(ErgoState.readOrGenerate(settings, constants, parameters).asInstanceOf[State], history) match {
       case Success(state) =>
         log.info("State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
           history.getReader.asInstanceOf[ErgoHistoryReader],
-          settings)
+          settings,
+          parameters)
         log.info("Wallet database read")
         Some((history, state, wallet, memPool))
       case Failure(ex) =>
@@ -461,7 +464,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     deleteRecursive(dir)
 
     val constants = StateConstants(Some(self), settings)
-    ErgoState.readOrGenerate(settings, constants)
+    ErgoState.readOrGenerate(settings, constants, parameters)
       .asInstanceOf[State]
       .ensuring(
         state => java.util.Arrays.equals(state.rootHash, settings.chainSettings.genesisStateDigest),
@@ -522,7 +525,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       .flatMap { ctx =>
         val recoverVersion = idToVersion(lastHeaders.last.id)
         val recoverRoot = bestFullBlock.header.stateRoot
-        DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), constants)
+        DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), constants, parameters)
       }
 
     recoveredStateTry match {
@@ -532,7 +535,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case Failure(exception) => // recover using whole headers chain
         log.warn(s"Failed to recover state from current epoch, using whole chain: ${exception.getMessage}")
         val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
-        val genesisState = DigestState.create(None, None, stateDir(settings), constants)
+        val genesisState = DigestState.create(None, None, stateDir(settings), constants, parameters)
         wholeChain.foldLeft[Try[DigestState]](Success(genesisState))((acc, m) => acc.flatMap(_.applyModifier(m)))
     }
   }
@@ -670,34 +673,40 @@ object ErgoNodeViewHolder {
 }
 
 private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings,
-                                             timeProvider: NetworkTimeProvider)
-  extends ErgoNodeViewHolder[DigestState](settings, timeProvider)
+                                             timeProvider: NetworkTimeProvider,
+                                             parameters: Parameters)
+  extends ErgoNodeViewHolder[DigestState](settings, timeProvider, parameters)
 
 private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
-                                           timeProvider: NetworkTimeProvider)
-  extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
+                                           timeProvider: NetworkTimeProvider,
+                                           parameters: Parameters)
+  extends ErgoNodeViewHolder[UtxoState](settings, timeProvider, parameters)
 
 
 
 object ErgoNodeViewRef {
 
   private def digestProps(settings: ErgoSettings,
-                  timeProvider: NetworkTimeProvider): Props =
-    Props.create(classOf[DigestNodeViewHolder], settings, timeProvider)
+                          timeProvider: NetworkTimeProvider,
+                          parameters: Parameters): Props =
+    Props.create(classOf[DigestNodeViewHolder], settings, timeProvider, parameters)
 
   private def utxoProps(settings: ErgoSettings,
-                timeProvider: NetworkTimeProvider): Props =
-    Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider)
+                        timeProvider: NetworkTimeProvider,
+                        parameters: Parameters): Props =
+    Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider, parameters)
 
   def props(settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider): Props =
+            timeProvider: NetworkTimeProvider,
+            parameters: Parameters): Props =
     settings.nodeSettings.stateType match {
-      case StateType.Digest => digestProps(settings, timeProvider)
-      case StateType.Utxo => utxoProps(settings, timeProvider)
+      case StateType.Digest => digestProps(settings, timeProvider, parameters)
+      case StateType.Utxo => utxoProps(settings, timeProvider, parameters)
     }
 
   def apply(settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(settings, timeProvider))
+            timeProvider: NetworkTimeProvider,
+            parameters: Parameters)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(settings, timeProvider, parameters))
   
 }

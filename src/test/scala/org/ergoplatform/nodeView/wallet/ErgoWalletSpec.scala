@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest}
-import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import scorex.util.encode.Base16
@@ -27,7 +27,7 @@ import scala.concurrent.duration._
 
 class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually {
 
-  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
 
   property("assets in WalletDigest are deterministic against serialization") {
     forAll(Gen.listOfN(5, assetGen)) { preAssets =>

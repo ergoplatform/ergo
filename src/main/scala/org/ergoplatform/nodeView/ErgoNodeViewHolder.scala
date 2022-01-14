@@ -580,7 +580,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def handleHealthCheck: Receive = {
     case IsChainHealthy =>
       val healthCheckReply = chainProgress.map { progress =>
-        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), minimalState().stateContext, settings)
+        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), settings)
       }.getOrElse(ChainIsHealthy)
       sender() ! healthCheckReply
   }
@@ -647,7 +647,6 @@ object ErgoNodeViewHolder {
   def checkChainIsHealthy(
       progress: ChainProgress,
       history: ErgoHistory,
-      context: ErgoStateContext,
       settings: ErgoSettings): HealthCheckResult = {
     val ChainProgress(lastMod, headersHeight, blockHeight, lastUpdate) = progress
     val chainUpdateDelay = System.currentTimeMillis() - lastUpdate
@@ -659,7 +658,7 @@ object ErgoNodeViewHolder {
         .exists(blockUpdateDelay => blockUpdateDelay > acceptableChainUpdateDelay.toMillis)
 
     def chainSynced =
-      history.bestFullBlockOpt.map(_.id) == context.lastHeaderOpt.map(_.id)
+      history.bestFullBlockOpt.map(_.id) == history.bestHeaderOpt.map(_.id)
 
     if (chainUpdateDelayed || blockUpdateDelayed) {
       val bestFullBlockOpt =

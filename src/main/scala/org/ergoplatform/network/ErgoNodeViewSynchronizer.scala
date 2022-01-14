@@ -472,7 +472,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
-        val spammyTxs = modifiers.filterKeys(id => !blockAppliedTxsCache.mightContain(id))
+        // penalize a peer for sending TXs that have been already applied to a block
+        val spammyTxs = modifiers.filterKeys(blockAppliedTxsCache.mightContain)
         if (spammyTxs.nonEmpty) {
           log.info(s"Got spammy transactions: $spammyTxs")
           penalizeSpammingPeer(remote)
@@ -506,11 +507,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (!settings.nodeSettings.stateType.requireProofs &&
           hr.isHeadersChainSynced &&
           hr.fullBlockHeight == hr.headersHeight) {
-          log.info(s"Processing ${invData.ids.length} tx invs frpm $peer")
           val unknownMods =
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history
-          unknownMods.filterNot(blockAppliedTxsCache.mightContain)
+          val notApplied = unknownMods.filterNot(blockAppliedTxsCache.mightContain)
+          log.info(s"Processing ${invData.ids.length} tx invs frpm $peer, " +
+            s"${unknownMods.size} of them are unknown, requesting $notApplied")
+          notApplied
         } else {
           Seq.empty
         }

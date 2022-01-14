@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.mempool
 
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
-import org.ergoplatform.settings.{Constants, LaunchParameters}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -15,7 +15,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
   type Height = Int
 
-  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
 
   def falsify(box: ErgoBox): ErgoBox = {
     testBox(box.value,
@@ -47,7 +47,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
       val fb = fb0.copy(fb0.header.copy(height = h, parentId = fakeHeader.id))
 
       val updContext = {
-        val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, LaunchParameters, validationSettingsNoIl,
+        val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, parameters, validationSettingsNoIl,
           VotingData.empty)(settings)
         inContext.appendFullBlock(fb).get
       }

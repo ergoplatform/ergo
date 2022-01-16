@@ -12,7 +12,7 @@ trait StateFeature
   * Instance of this trait supports stateful validation of any transaction
   */
 trait TransactionValidation extends StateFeature {
-  def validateWithCost(tx: ErgoTransaction, maxTxCost: Int): Try[Unit]
+  def validateWithCost(tx: ErgoTransaction, maxTxCost: Long): Try[Long]
 }
 
 object TransactionValidation {

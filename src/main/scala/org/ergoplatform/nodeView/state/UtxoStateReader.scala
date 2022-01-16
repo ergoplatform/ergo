@@ -11,6 +11,7 @@ import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
+import scorex.core.validation.MalformedModifierError
 import scorex.crypto.authds.avltree.batch.{Lookup, NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -45,16 +46,23 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
 
     val verifier = interpreterOpt.getOrElse(ErgoInterpreter(context.currentParameters))
 
+    val maxBlockCost = context.currentParameters.maxBlockCost
+    val accCost = maxBlockCost - costLimit
+
     tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
       tx.statefulValidity(
           boxesToSpend,
           tx.dataInputs.flatMap(i => boxById(i.boxId)),
-          context)(verifier).flatMap {
-            case txCost if txCost > costLimit =>
+          context,
+          accCost)(verifier).map(_ - accCost) match {
+            case Success(txCost) if txCost > costLimit =>
               Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
-            case txCost =>
+            case Success(txCost) =>
               Success(txCost)
+            case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
+              Failure(TooHighCostError(s"Transaction $tx has too high cost"))
+            case f: Failure[_] => f
         }
     }
   }
@@ -66,8 +74,8 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     *
     * Used in mempool.
     */
-  override def validateWithCost(tx: ErgoTransaction, maxTxCost: Int): Try[Unit] = {
-    validateWithCost(tx, None, maxTxCost, None).map(_ => Unit)
+  override def validateWithCost(tx: ErgoTransaction, maxTxCost: Long): Try[Long] = {
+    validateWithCost(tx, None, maxTxCost, None)
   }
 
   /**

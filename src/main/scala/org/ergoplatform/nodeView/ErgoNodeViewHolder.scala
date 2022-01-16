@@ -10,7 +10,6 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
@@ -19,7 +18,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import scorex.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.{CurrentView, DownloadRequest}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import scorex.core.consensus.History.ProgressInfo
 import org.ergoplatform.wallet.utils.FileUtils
@@ -71,6 +70,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * user-specific information stored in vault (it could be e.g. a wallet), and a memory pool.
     */
   private var nodeView: NodeView = restoreState().getOrElse(genesisState)
+
+  /** Tracking last modifier and header & block heights in time, being periodically checked for possible stuck */
+  private var chainProgress: Option[ChainProgress] = None
 
   protected def history(): ErgoHistory = nodeView._1
 
@@ -426,13 +428,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 // than 20 blocks behind headers-chain
                 val almostSyncedGap = 20
 
-                if((newHistory.headersHeight - newHistory.fullBlockHeight) < almostSyncedGap) {
+                val headersHeight = newHistory.headersHeight
+                val fullBlockHeight = newHistory.fullBlockHeight
+                if((headersHeight - fullBlockHeight) < almostSyncedGap) {
                   blocksApplied.foreach(newVault.scanPersistent)
                 }
 
                 log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
                 updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
-
+                chainProgress =
+                  Some(ChainProgress(pmod, headersHeight, fullBlockHeight, System.currentTimeMillis()))
               case Failure(e) =>
                 log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
                 updateNodeView(updatedHistory = Some(newHistory))
@@ -572,23 +577,32 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (mempool) sender() ! ChangedMempool(nodeView._4.getReader)
   }
 
+  protected def handleHealthCheck: Receive = {
+    case IsChainHealthy =>
+      val healthCheckReply = chainProgress.map { progress =>
+        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), settings)
+      }.getOrElse(ChainIsHealthy)
+      sender() ! healthCheckReply
+  }
+
   override def receive: Receive =
     processRemoteModifiers orElse
       processLocallyGeneratedModifiers orElse
       transactionsProcessing orElse
       getCurrentInfo orElse
-      getNodeViewChanges orElse {
-      case a: Any => log.error("Strange input: " + a)
-    }
+      getNodeViewChanges orElse
+      handleHealthCheck orElse {
+        case a: Any => log.error("Strange input: " + a)
+      }
 
 }
 
 
 object ErgoNodeViewHolder {
 
-  case class BlockAppliedTransactions(txs: Seq[scorex.util.ModifierId])
-
   object ReceivableMessages {
+    // Tracking last modifier and header & block heights in time, being periodically checked for possible stuck
+    case class ChainProgress(lastMod: ErgoPersistentModifier, headersHeight: Int, blockHeight: Int, lastUpdate: Long)
 
     // Explicit request of NodeViewChange events of certain types.
     case class GetNodeViewChanges(history: Boolean, state: Boolean, vault: Boolean, mempool: Boolean)
@@ -612,12 +626,53 @@ object ErgoNodeViewHolder {
 
     case class EliminateTransactions(ids: Seq[scorex.util.ModifierId])
 
+    case object IsChainHealthy
+    sealed trait HealthCheckResult
+    case object ChainIsHealthy extends HealthCheckResult
+    case class ChainIsStuck(reason: String) extends HealthCheckResult
   }
+
+  case class BlockAppliedTransactions(txs: Seq[scorex.util.ModifierId]) extends NodeViewHolderEvent
 
   case class DownloadRequest(modifierTypeId: ModifierTypeId,
                              modifierId: scorex.util.ModifierId) extends NodeViewHolderEvent
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
+
+  /**
+    * Checks whether chain got stuck by comparing timestamp of bestFullBlock or last time a modifier was applied to history.
+    * @param progress metadata of last chain update
+    * @return ChainIsHealthy if chain is healthy and ChainIsStuck(error) with details if it got stuck
+    */
+  def checkChainIsHealthy(
+      progress: ChainProgress,
+      history: ErgoHistory,
+      settings: ErgoSettings): HealthCheckResult = {
+    val ChainProgress(lastMod, headersHeight, blockHeight, lastUpdate) = progress
+    val chainUpdateDelay = System.currentTimeMillis() - lastUpdate
+    val acceptableChainUpdateDelay = settings.nodeSettings.acceptableChainUpdateDelay
+    def chainUpdateDelayed = chainUpdateDelay > acceptableChainUpdateDelay.toMillis
+    def blockUpdateDelayed =
+      history.bestFullBlockOpt
+        .map(b => System.currentTimeMillis() - b.header.timestamp)
+        .exists(blockUpdateDelay => blockUpdateDelay > acceptableChainUpdateDelay.toMillis)
+
+    def chainSynced =
+      history.bestFullBlockOpt.map(_.id) == history.bestHeaderOpt.map(_.id)
+
+    if (chainUpdateDelayed || blockUpdateDelayed) {
+      val bestFullBlockOpt =
+        history.bestFullBlockOpt
+          .filter(_.id != lastMod.id)
+          .fold("")(fb => s"\n best full block: $fb")
+      val repairNeeded = ErgoHistory.repairIfNeeded(history)
+      ChainIsStuck(s"Chain not modified for $chainUpdateDelay ms, headers-height: $headersHeight, " +
+        s"block-height $blockHeight, chain synced: $chainSynced, repair needed: $repairNeeded, " +
+        s"last modifier applied: $lastMod $bestFullBlockOpt")
+    } else {
+      ChainIsHealthy
+    }
+  }
 }
 
 private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings,

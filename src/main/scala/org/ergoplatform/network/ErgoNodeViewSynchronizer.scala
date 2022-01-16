@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.app.Version
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
@@ -117,6 +117,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     val interval = networkSettings.syncInterval
     context.system.scheduler.scheduleWithFixedDelay(2.seconds, interval, self, SendLocalSyncInfo)
+
+    val healthCheckRate = settings.nodeSettings.acceptableChainUpdateDelay / 5
+    context.system.scheduler.scheduleAtFixedRate(healthCheckRate, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
   }
 
   protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
@@ -720,6 +723,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
       logger.debug("Caching applied transactions")
       context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache.putAll(transactionIds)))
+
+    case ChainIsHealthy =>
+      // good news
+
+    case ChainIsStuck(error) =>
+      log.warn(s"$error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
   }
 
   /** get handlers of messages coming from peers */

@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.ErgoContext
-import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
+import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
 import org.ergoplatform.settings._
@@ -30,7 +30,7 @@ import scala.util.{Random, Try}
 
 class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
-  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
 
   property("serialization vector") {
     // test vectors, that specifies transaction json and bytes representation.
@@ -307,7 +307,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     tx.statelessValidity().isSuccess shouldBe true
 
     //check that spam transaction is being rejected quickly
-    implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
+    implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
     val (validity, time0) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext))
     validity.isSuccess shouldBe false
     assert(time0 <= Timeout)
@@ -334,13 +334,11 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   }
 
   property("transaction cost") {
-    def stateContextWithMaxCost(manualCost: Int): UpcomingStateContext = {
-      val table2: Map[Byte, Int] = Parameters.DefaultParameters + (MaxBlockCostIncrease -> manualCost)
-      val params2 = new Parameters(height = 0,
-        parametersTable = table2,
-        proposedUpdate = ErgoValidationSettingsUpdate.empty)
-      emptyStateContext.copy(currentParameters = params2)(settings)
-    }
+    def paramsWith(manualCost: Int) = new Parameters(
+      height = 0,
+      parametersTable = Parameters.DefaultParameters + (MaxBlockCostIncrease -> manualCost),
+      proposedUpdate = ErgoValidationSettingsUpdate.empty
+    )
 
     val gen = validErgoTransactionGenTemplate(0, 0,10, trueLeafGen)
     val (from, tx) = gen.sample.get
@@ -348,26 +346,26 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
     // calculate costs manually
     val initialCost: Long =
-      tx.inputs.size * LaunchParameters.inputCost +
-        tx.dataInputs.size * LaunchParameters.dataInputCost +
-        tx.outputs.size * LaunchParameters.outputCost +
+      tx.inputs.size * parameters.inputCost +
+        tx.dataInputs.size * parameters.dataInputCost +
+        tx.outputs.size * parameters.outputCost +
         CostTable.interpreterInitCost
     val (outAssets, outAssetsNum) = tx.outAssetsTry.get
     val (inAssets, inAssetsNum) = ErgoBoxAssetExtractor.extractAssets(from).get
-    val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * LaunchParameters.tokenAccessCost +
-      (inAssets.size + outAssets.size) * LaunchParameters.tokenAccessCost
+    val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * parameters.tokenAccessCost +
+      (inAssets.size + outAssets.size) * parameters.tokenAccessCost
     val scriptsValidationCosts = tx.inputs.size * (CostTable.constCost + CostTable.logicCost + CostTable.logicCost + from.head.ergoTree.complexity)
     val manualCost: Int = (initialCost + totalAssetsAccessCost + scriptsValidationCosts).toInt
 
 
     // check that validation pass if cost limit equals to manually calculated cost
-    val sc = stateContextWithMaxCost(manualCost)
+    val sc = stateContextWith(paramsWith(manualCost))
     sc.currentParameters.maxBlockCost shouldBe manualCost
     val calculatedCost = tx.statefulValidity(from, IndexedSeq(), sc)(ErgoInterpreter(sc.currentParameters)).get
     manualCost shouldBe calculatedCost
 
     // transaction exceeds computations limit
-    val sc2 = stateContextWithMaxCost(manualCost - 1)
+    val sc2 = stateContextWith(paramsWith(manualCost - 1))
     tx.statefulValidity(from, IndexedSeq(), sc2)(ErgoInterpreter(sc2.currentParameters)) shouldBe 'failure
 
     // transaction exceeds computations limit due to non-zero accumulated cost
@@ -423,9 +421,9 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
       signerTxCostWithInitCost shouldBe txCost // signer and verifier costs should be the same
 
       val initialCost: Long =
-        tx.inputs.size * LaunchParameters.inputCost +
-          tx.dataInputs.size * LaunchParameters.dataInputCost +
-          tx.outputs.size * LaunchParameters.outputCost +
+        tx.inputs.size * parameters.inputCost +
+          tx.dataInputs.size * parameters.dataInputCost +
+          tx.outputs.size * parameters.outputCost +
           CostTable.interpreterInitCost +
           assetsCost
 

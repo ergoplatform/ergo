@@ -3,14 +3,14 @@ package org.ergoplatform.nodeView.wallet.persistence
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
 import org.ergoplatform.P2PKAddress
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.db.{LDBFactory, LDBKVStore}
-import java.io.File
 
+import java.io.File
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
@@ -105,10 +105,10 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * Read state context from the database
     * @return state context read
     */
-  def readStateContext: ErgoStateContext = store
+  def readStateContext(parameters: Parameters): ErgoStateContext = store
     .get(StateContextKey)
     .flatMap(r => ErgoStateContextSerializer(settings).parseBytesTry(r).toOption)
-    .getOrElse(ErgoStateContext.empty(settings))
+    .getOrElse(ErgoStateContext.empty(settings, parameters))
 
   /**
     * Update address used by the wallet for change outputs

@@ -227,7 +227,7 @@ object ErgoHistory extends ScorexLogging {
 
   // check if there is possible database corruption when there is header after
   // recognized blockchain tip marked as invalid
-  private def repairIfNeeded(history: ErgoHistory): Unit = {
+  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = {
     val bestHeaderHeight = history.headersHeight
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
@@ -237,6 +237,9 @@ object ErgoHistory extends ScorexLogging {
         history.forgetHeader(hId)
       }
       history.historyStorage.remove(Seq(history.heightIdsKey(bestHeaderHeight + 1)), Seq.empty)
+      true
+    } else {
+      false
     }
   }
 

@@ -8,14 +8,35 @@ import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
+import org.ergoplatform.utils.{ErgoPropertyTest, HistoryTestHelpers, NodeViewTestConfig, NodeViewTestOps, TestCase}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.testkit.utils.NoShrink
 import scorex.util.{ModifierId, bytesToId}
 
-class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
+class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers with NodeViewTestOps with NoShrink {
+
+  private val t0 = TestCase("check chain is healthy") { fixture =>
+    import fixture._
+    val (us, bh) = createUtxoState(parameters, Some(nodeViewHolderRef))
+    val block = validFullBlock(None, us, bh)
+
+    val history = generateHistory(true, StateType.Utxo, false, 2)
+
+    // too big chain update delay
+    val notAcceptableDelay = System.currentTimeMillis() - (initSettings.nodeSettings.acceptableChainUpdateDelay.toMillis + 100)
+    val invalidProgress = ChainProgress(block, 2, 3, notAcceptableDelay)
+    ErgoNodeViewHolder.checkChainIsHealthy(invalidProgress, history, initSettings).isInstanceOf[ChainIsStuck] shouldBe true
+
+    // acceptable chain update delay
+    val acceptableDelay = System.currentTimeMillis() - 5
+    val validProgress = ChainProgress(block, 2, 3, acceptableDelay)
+    ErgoNodeViewHolder.checkChainIsHealthy(validProgress, history, initSettings) shouldBe ChainIsHealthy
+  }
+
 
   private val t1 = TestCase("check genesis state") { fixture =>
     import fixture._
@@ -449,7 +470,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9)
+  val cases: List[TestCase] = List(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9)
 
   NodeViewTestConfig.allConfigs.foreach { c =>
     cases.foreach { t =>

@@ -26,7 +26,7 @@
 
             <!-- keep 30 days' worth of history capped at 1GB total size -->
             <maxHistory>30</maxHistory>
-            <maxFileSize>100MB</maxFileSize>
+            <maxFileSize>500MB</maxFileSize>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
         <encoder>

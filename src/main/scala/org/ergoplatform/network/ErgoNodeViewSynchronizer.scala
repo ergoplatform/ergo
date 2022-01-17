@@ -700,6 +700,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         deliveryTracker.setInvalid(id, Transaction.ModifierTypeId).foreach { peer =>
           error match {
             case TooHighCostError(_) =>
+              log.info(s"Penalize spamming peer $peer for too costly transaction $it")
               penalizeSpammingPeer(peer)
             case _ =>
               penalizeMisbehavingPeer(peer)
@@ -735,7 +736,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case ChainIsHealthy =>
       // good news
-      logger.debug("Chain is making progress")
+      logger.debug("Chain is good")
 
     case ChainIsStuck(error) =>
       log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")

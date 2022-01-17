@@ -47,7 +47,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     val verifier = interpreterOpt.getOrElse(ErgoInterpreter(context.currentParameters))
 
     val maxBlockCost = context.currentParameters.maxBlockCost
-    val accCost = maxBlockCost - costLimit
+    val startCost = maxBlockCost - costLimit
 
     tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
@@ -55,7 +55,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
           boxesToSpend,
           tx.dataInputs.flatMap(i => boxById(i.boxId)),
           context,
-          accCost)(verifier).map(_ - accCost) match {
+          startCost)(verifier).map(_ - startCost) match {
             case Success(txCost) if txCost > costLimit =>
               Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
             case Success(txCost) =>

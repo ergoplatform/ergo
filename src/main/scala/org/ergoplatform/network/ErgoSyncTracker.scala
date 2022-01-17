@@ -119,4 +119,13 @@ final case class ErgoSyncTracker(system: ActorSystem,
     peers
   }
 
+  override def toString: String = {
+    val now = System.currentTimeMillis()
+    lastSyncSentTime.toSeq.sortBy(_._2)(Ordering[Long].reverse).map {
+      case (peer, syncTimestamp) =>
+        (peer.connectionId.remoteAddress, statuses.get(peer), now - syncTimestamp)
+    }.map { case (address, status, millisSinceLastSync) =>
+      s"$address, height: ${status.map(_.height)}, status: ${status.map(_.status)}, lastSync: $millisSinceLastSync ms ago"
+    }.mkString("\n")
+  }
 }

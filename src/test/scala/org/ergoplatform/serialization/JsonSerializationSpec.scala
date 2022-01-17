@@ -28,7 +28,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
 
   property("ErgoFullBlock should be encoded into JSON and decoded back correctly") {
 
-    val (st, bh) = createUtxoState()
+    val (st, bh) = createUtxoState(parameters)
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
 
     val blockJson: Json = block.asJson
@@ -59,7 +59,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       val json = request.asJson
       val parsingResult = json.as[PaymentRequest]
       parsingResult.isRight shouldBe true
-      val restored = parsingResult.right.value
+      val restored = parsingResult.value
       restored.address shouldEqual request.address
       restored.value shouldEqual request.value
       restored.registers shouldEqual request.registers
@@ -79,7 +79,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       val json = request.asJson
       val parsingResult = json.as[AssetIssueRequest]
       parsingResult.isRight shouldBe true
-      val restored = parsingResult.right.value
+      val restored = parsingResult.value
       restored.addressOpt shouldEqual request.addressOpt
       restored.amount shouldEqual request.amount
       restored.name shouldEqual request.name

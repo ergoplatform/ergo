@@ -28,13 +28,13 @@ import sigmastate.serialization.ErgoTreeSerializer
 class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers {
   implicit lazy val context: IRContext = new RuntimeIRContext
 
-  val cleanupDuration: FiniteDuration = 2.seconds
+  val cleanupDuration: FiniteDuration = 3.seconds
   val settingsToTest: ErgoSettings = settings.copy(
     nodeSettings = settings.nodeSettings.copy(
       mempoolCleanupDuration = cleanupDuration,
       rebroadcastCount = 1
     ))
-  val fixture = new NodeViewFixture(settingsToTest)
+  val fixture = new NodeViewFixture(settingsToTest, parameters)
   val newTx: Class[SuccessfulTransaction] = classOf[SuccessfulTransaction]
 
   it should "remove transactions which become invalid" in {
@@ -43,9 +43,9 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val testProbe = new TestProbe(actorSystem)
     actorSystem.eventStream.subscribe(testProbe.ref, newTx)
 
-    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+    val (us, bh) = createUtxoState(parameters, Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis).get
 
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
@@ -88,7 +88,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
   it should "rebroadcast transactions correctly" in {
 
-    val (us0, bh0) = createUtxoState(None)
+    val (us0, bh0) = createUtxoState(parameters, None)
     val (txs0, bh1) = validTransactionsFromBoxHolder(bh0)
     val b1 = validFullBlock(None, us0, txs0)
 
@@ -114,6 +114,8 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
       override def getAllPrioritized: Seq[ErgoTransaction] = txs
 
       override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
+
+      override def random(limit: Int): Iterable[ErgoTransaction] = take(limit)
 
       override def spentInputs: Iterator[BoxId] = txs.flatMap(_.inputs).map(_.boxId).toIterator
 

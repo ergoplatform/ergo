@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.app.Version
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
@@ -117,6 +117,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     val interval = networkSettings.syncInterval
     context.system.scheduler.scheduleWithFixedDelay(2.seconds, interval, self, SendLocalSyncInfo)
+
+    val healthCheckRate = settings.nodeSettings.acceptableChainUpdateDelay / 5
+    context.system.scheduler.scheduleAtFixedRate(healthCheckRate, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
   }
 
   protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
@@ -477,7 +480,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
-        val spammyTxs = modifiers.filterKeys(id => !blockAppliedTxsCache.mightContain(id))
+        // penalize a peer for sending TXs that have been already applied to a block
+        val spammyTxs = modifiers.filterKeys(blockAppliedTxsCache.mightContain)
         if (spammyTxs.nonEmpty) {
           log.info(s"Got spammy transactions: $spammyTxs")
           penalizeSpammingPeer(remote)
@@ -511,11 +515,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (!settings.nodeSettings.stateType.requireProofs &&
           hr.isHeadersChainSynced &&
           hr.fullBlockHeight == hr.headersHeight) {
-          log.info(s"Processing ${invData.ids.length} tx invs frpm $peer")
           val unknownMods =
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history
-          unknownMods.filterNot(blockAppliedTxsCache.mightContain)
+          val notApplied = unknownMods.filterNot(blockAppliedTxsCache.mightContain)
+          log.info(s"Processing ${invData.ids.length} tx invs frpm $peer, " +
+            s"${unknownMods.size} of them are unknown, requesting $notApplied")
+          notApplied
         } else {
           Seq.empty
         }
@@ -723,6 +729,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
       logger.debug("Caching applied transactions")
       context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache.putAll(transactionIds)))
+
+    case ChainIsHealthy =>
+      // good news
+
+    case ChainIsStuck(error) =>
+      log.warn(s"$error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
   }
 
   /** get handlers of messages coming from peers */

@@ -52,6 +52,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val nodeSettings = empty.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,
       internalMinerPollingInterval = 2.second,
+      maxTransactionCost = 100000,
       offlineGeneration = true,
       verifyTransactions = true)
     val chainSettings = empty.chainSettings.copy(blockInterval = 2.seconds)

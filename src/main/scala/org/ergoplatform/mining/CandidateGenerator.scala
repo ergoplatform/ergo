@@ -492,7 +492,6 @@ object CandidateGenerator extends ScorexLogging {
         minerPk,
         state.stateContext.currentParameters.maxBlockCost - safeGap,
         state.stateContext.currentParameters.maxBlockSize,
-        ergoSettings.nodeSettings.maxTransactionComplexity,
         state,
         upcomingContext,
         emissionTxs ++ prioritizedTransactions ++ poolTxs
@@ -707,7 +706,6 @@ object CandidateGenerator extends ScorexLogging {
     minerPk: ProveDlog,
     maxBlockCost: Long,
     maxBlockSize: Long,
-    maxTransactionComplexity: Int,
     us: UtxoStateReader,
     upcomingContext: ErgoStateContext,
     transactions: Seq[ErgoTransaction]
@@ -745,7 +743,7 @@ object CandidateGenerator extends ScorexLogging {
             stateWithTxs.validateWithCost(
               tx,
               Some(upcomingContext),
-              maxTransactionComplexity,
+              maxBlockCost,
               Some(verifier)
             ) match {
               case Success(costConsumed) =>

@@ -5,29 +5,34 @@ import java.io.File
 
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.ErgoApp
+import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.{CurrentView, DownloadRequest}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.wallet.utils.FileUtils
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import scorex.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import scorex.core.consensus.History.ProgressInfo
-import org.ergoplatform.wallet.utils.FileUtils
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.NetworkTimeProvider
-import scorex.core.utils.ScorexEncoding
+import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 
+import java.io.File
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}

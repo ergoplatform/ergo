@@ -144,7 +144,6 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
           defaultMinerPk,
           maxCost,
           maxSize,
-          Int.MaxValue,
           us,
           upcomingContext,
           Seq(head)
@@ -158,7 +157,6 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
           defaultMinerPk,
           maxCost,
           maxSize,
-          Int.MaxValue,
           us,
           upcomingContext,
           txsWithFees

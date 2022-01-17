@@ -726,9 +726,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case ChainIsHealthy =>
       // good news
+      logger.debug("Chain is making progress")
 
     case ChainIsStuck(error) =>
-      log.warn(s"$error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
+      log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
   }
 
   /** get handlers of messages coming from peers */

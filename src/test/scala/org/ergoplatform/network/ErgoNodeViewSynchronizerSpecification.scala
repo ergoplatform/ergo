@@ -105,7 +105,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   }
 
   val localStateGen: Gen[WrappedUtxoState] =
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings))
 
   def semanticallyValidModifier(state: UTXO_ST): PM = {
     statefulyValidFullBlock(state.asInstanceOf[WrappedUtxoState])

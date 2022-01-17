@@ -55,15 +55,15 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val history: HT = applyChain(generateHistory(), chain)
 
   val digestState: DigestState = {
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
-      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
+      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants, parameters)
     }
   }.sample.value
 
   val utxoSettings: ErgoSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Utxo))
 
   val utxoState: WrappedUtxoState =
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, utxoSettings)).sample.value
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, utxoSettings)).sample.value
 
   lazy val wallet = new WalletStub
 
@@ -230,9 +230,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! Success(tx)
 
       case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
-        val sc = ErgoStateContext.empty(stateConstants)
-        val params = LaunchParameters
-        sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, params, sc) { boxId =>
+        val sc = ErgoStateContext.empty(stateConstants, parameters)
+        sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
           utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
         }
     }
@@ -342,7 +341,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
+      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
     val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)

@@ -33,7 +33,7 @@ class BlocksApiRouteSpec extends AnyFlatSpec
   }
 
   it should "post block correctly" in {
-    val (st, bh) = createUtxoState()
+    val (st, bh) = createUtxoState(parameters)
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
     val blockJson: UniversalEntity = HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
     Post(prefix, blockJson) ~> route ~> check {

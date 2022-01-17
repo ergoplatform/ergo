@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.20.1"
+  version: "4.0.21"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1343,10 +1343,8 @@ components:
           minimum: 0
           example: 667
         difficulty:
-          type: integer
-          format: int32
-          minimum: 0
-          example: 62
+          type: string
+          example: '9575989248'
         parentId:
           $ref: '#/components/schemas/ModifierId'
         votes:
@@ -1701,11 +1699,12 @@ components:
           example: 327
         difficulty:
           type: integer
-          format: int32
           minimum: 0
           nullable: true
           example: 667
-          description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
+          description: >
+            Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch.
+            Difficulty is a BigInt integer.
         currentTime:
           type: integer
           description: Current internal node time
@@ -1718,11 +1717,11 @@ components:
             - $ref: '#/components/schemas/Timestamp'
         headersScore:
           type: integer
-          description: Can be 'null' if no headers is applied since node launch
+          description: Can be 'null' if no headers is applied since node launch. headersScore is a BigInt integer.
           nullable: true
         fullBlocksScore:
           type: integer
-          description: Can be 'null' if no full block is applied since node launch
+          description: Can be 'null' if no full block is applied since node launch. fullBlocksScore is a BigInt integer.
           nullable: true
         genesisBlockId:
           type: string
@@ -4081,7 +4080,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SerializedAdProof:
+                $ref: '#/components/schemas/SerializedAdProof'
         '400':
           description: Prove error
           content:

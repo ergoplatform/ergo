@@ -296,6 +296,25 @@ class DeliveryTracker(system: ActorSystem,
         log.warn("Unexpected error", e)
         Failure(e)
     }
+
+  override def toString: String = {
+    val invalidModCount = s"invalid modifiers count : ${invalidModifierBF.approximateElementCount}"
+    val requestedStr =
+      requested.map { case (mType, infoByMid) =>
+        val peersCheckTimes =
+          infoByMid.toSeq.sortBy(_._2.checks).reverse.map { case (_, info) =>
+            s"${info.peer.map(_.connectionId.remoteAddress)} checked ${info.checks} times"
+          }.mkString(", ")
+        s"$mType : $peersCheckTimes"
+      }.mkString("\n")
+    val receivedStr =
+      received.map { case (mType, peerByMid) =>
+        val listOfPeers = peerByMid.values.toSet.mkString(", ")
+        s"$mType : $listOfPeers"
+      }.mkString("\n")
+    s"$invalidModCount\nrequested modifiers:\n$requestedStr\nreceived modifiers:\n$receivedStr"
+  }
+
 }
 
 object DeliveryTracker {

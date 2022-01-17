@@ -27,7 +27,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   def newAssetIdStub: TokenId = Blake2b256.hash("new_asset")
 
   def withFixture[T](test: WalletFixture => T): T =
-    new WalletFixture(settings, getCurrentView(_).vault).apply(test)
+    new WalletFixture(settings, parameters, getCurrentView(_).vault).apply(test)
 
   def wallet(implicit w: WalletFixture): ErgoWallet = w.wallet
 

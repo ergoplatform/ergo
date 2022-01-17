@@ -12,5 +12,10 @@ trait StateFeature
   * Instance of this trait supports stateful validation of any transaction
   */
 trait TransactionValidation extends StateFeature {
-  def validate(tx: ErgoTransaction): Try[Unit]
+  def validateWithCost(tx: ErgoTransaction, maxTxCost: Long): Try[Long]
 }
+
+object TransactionValidation {
+  case class TooHighCostError(message: String) extends Exception(message)
+}
+

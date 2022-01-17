@@ -18,8 +18,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("applyModifier() - double spending") {
     forAll(boxesHolderGen, Gen.choose(1: Byte, 2: Byte)) { case (bh, version) =>
-      val us = createUtxoState(bh)
-      val ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootHash)
+      val us = createUtxoState(bh, parameters)
+      val ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootHash, parameters)
 
       val validBlock = validFullBlock(None, us, bh)
       val dsTxs = validBlock.transactions ++ validBlock.transactions
@@ -52,8 +52,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       s1.genesisStateDigest shouldBe s2.genesisStateDigest
     }
 
-    var (us, bh) = createUtxoState()
-    var ds = createDigestState(us.version, us.rootHash)
+    var (us, bh) = createUtxoState(parameters)
+    var ds = createDigestState(us.version, us.rootHash, parameters)
     var lastBlocks: Seq[ErgoFullBlock] = Seq()
     forAll { seed: Int =>
       val blBh = validFullBlockWithBoxHolder(lastBlocks.headOption, us, bh, new RandomWrapper(Some(seed)))
@@ -69,13 +69,13 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   property("generateGenesisUtxoState & generateGenesisDigestState are compliant") {
     val settings = ErgoSettings.read(Args.empty)
     val dir = createTempDir
-    val rootHash = createUtxoState()._1.rootHash
-    val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings).rootHash
+    val rootHash = createUtxoState(parameters)._1.rootHash
+    val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings, parameters).rootHash
     rootHash shouldBe expectedRootHash
   }
 
   property("ErgoState.boxChanges() should generate operations in the same order") {
-    var (us, bh) = createUtxoState()
+    var (us, bh) = createUtxoState(parameters)
     var parentOpt: Option[ErgoFullBlock] = None
 
     forAll { seed: Int =>
@@ -93,7 +93,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   }
 
   property("ErgoState.boxChanges() double spend attempt") {
-    val (_, bh) = createUtxoState()
+    val (_, bh) = createUtxoState(parameters)
     val emissionBox = genesisBoxes.head
 
     forAll { seed: Int =>
@@ -117,7 +117,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   }
 
   property("ErgoState.stateChanges()") {
-    val bh = createUtxoState()._2
+    val bh = createUtxoState(parameters)._2
     val emissionBox = genesisBoxes.head
 
     forAll { seed: Int =>

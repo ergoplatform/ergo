@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.app.Version
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
@@ -37,6 +37,7 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
+import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.annotation.tailrec
@@ -117,6 +118,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     val interval = networkSettings.syncInterval
     context.system.scheduler.scheduleWithFixedDelay(2.seconds, interval, self, SendLocalSyncInfo)
+
+    val healthCheckRate = settings.nodeSettings.acceptableChainUpdateDelay / 5
+    context.system.scheduler.scheduleAtFixedRate(healthCheckRate, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
   }
 
   protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
@@ -690,10 +694,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.setHeld(tx.id, Transaction.ModifierTypeId)
       broadcastModifierInv(tx)
 
-    case FailedTransaction(id, _, immediateFailure) =>
-      val senderOpt = deliveryTracker.setInvalid(id, Transaction.ModifierTypeId)
-      // penalize sender only in case transaction was invalidated at first validation.
-      if (immediateFailure) senderOpt.foreach(penalizeMisbehavingPeer)
+    case FailedTransaction(id, error, immediateFailure) =>
+      if (immediateFailure) {
+        // penalize sender only in case transaction was invalidated at first validation.
+        deliveryTracker.setInvalid(id, Transaction.ModifierTypeId).foreach { peer =>
+          error match {
+            case TooHighCostError(_) =>
+              log.info(s"Penalize spamming peer $peer for too costly transaction $id")
+              penalizeSpammingPeer(peer)
+            case _ =>
+              penalizeMisbehavingPeer(peer)
+          }
+        }
+      }
 
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
@@ -720,6 +733,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
       logger.debug("Caching applied transactions")
       context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache.putAll(transactionIds)))
+
+    case ChainIsHealthy =>
+      // good news
+      logger.debug("Chain is good")
+
+    case ChainIsStuck(error) =>
+      log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
   }
 
   /** get handlers of messages coming from peers */

@@ -5,7 +5,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
-import org.ergoplatform.settings.{ErgoSettings, MonetarySettings}
+import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, bytesToId}
@@ -31,9 +31,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
 
+  private val nodeSettings: NodeConfigurationSettings = settings.nodeSettings
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
-
-  private val nodeSettings = settings.nodeSettings
 
   override def size: Int = pool.size
 
@@ -144,7 +143,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
               // Allow proceeded transaction to spend outputs of pooled transactions.
               val utxoWithPool = utxo.withTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
-                utxoWithPool.validate(tx).fold(
+                utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), nodeSettings.maxTransactionCost, None).fold(
                   ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
                   _ => acceptIfNoDoubleSpend(tx)
                 )
@@ -154,7 +153,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
             case validator: TransactionValidation =>
               // transaction validation currently works only for UtxoState, so this branch currently
               // will not be triggered probably
-              validator.validate(tx).fold(
+              validator.validateWithCost(tx, nodeSettings.maxTransactionCost).fold(
                 ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
                 _ => acceptIfNoDoubleSpend(tx)
               )

@@ -52,6 +52,7 @@ case class ReemissionSettings(checkReemissionRules: Boolean,
                               emissionNftId: String,
                               reemissionTokenId: String,
                               reemissionNftId: String,
+                              activationHeight: Int,
                               reemissionStartHeight: Int) {
   val reemissionNftIdBytes: Array[Byte] = Algos.decode(reemissionNftId).get
   val reemissionTokenIdBytes: Array[Byte] = Algos.decode(reemissionTokenId).get

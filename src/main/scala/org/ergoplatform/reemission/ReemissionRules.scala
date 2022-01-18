@@ -19,11 +19,7 @@ object ReemissionRules {
 
   val basicChargeAmount = 12 // in ERG
 
-  // todo: move to settings
-  // if voting done before
-  val ActivationHeight = 700000
-
-
+  // hard-coded flag used to inject tokens into emission box
   val Inject = false
 
   /*
@@ -118,9 +114,12 @@ object ReemissionRules {
     ).toSigmaProp.treeWithSegregation
   }
 
-  def reemissionForHeight(height: Height, emissionRules: EmissionRules): Long = {
+  def reemissionForHeight(height: Height,
+                          emissionRules: EmissionRules,
+                          reemissionSettings: ReemissionSettings): Long = {
     val emission = emissionRules.emissionAtHeight(height)
-    if (height >= ActivationHeight && emission >= (basicChargeAmount + 3) * EmissionRules.CoinsInOneErgo) {
+    if (height >= reemissionSettings.activationHeight &&
+          emission >= (basicChargeAmount + 3) * EmissionRules.CoinsInOneErgo) {
       basicChargeAmount * EmissionRules.CoinsInOneErgo
     } else if (emission > 3 * EmissionRules.CoinsInOneErgo) {
       emission - 3 * EmissionRules.CoinsInOneErgo
@@ -159,15 +158,15 @@ object ReemissionRules {
 
     var lowSet = false
 
-    val total = (ReemissionRules.ActivationHeight to rs.reemissionStartHeight).map { h =>
+    val total = (rs.activationHeight to rs.reemissionStartHeight).map { h =>
       val e = emissionRules.emissionAtHeight(h) / EmissionRules.CoinsInOneErgo
-      val r = reemissionForHeight(h, emissionRules) / EmissionRules.CoinsInOneErgo
+      val r = reemissionForHeight(h, emissionRules, rs) / EmissionRules.CoinsInOneErgo
 
       if ((e - r) == 3 && !lowSet) {
         println("Start of low emission period: " + h)
         lowSet = true
       }
-      if ((h % 65536 == 0) || h == ReemissionRules.ActivationHeight) {
+      if ((h % 65536 == 0) || h == rs.activationHeight) {
         println(s"Emission at height $h : " + e)
         println(s"Reemission at height $h : " + r)
       }

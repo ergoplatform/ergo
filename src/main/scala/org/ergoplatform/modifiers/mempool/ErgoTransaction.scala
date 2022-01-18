@@ -212,9 +212,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        outputCandidates: Seq[ErgoBoxCandidate],
                        stateContext: ErgoStateContext): Try[Unit] = Try {
 
-    val ReemissionTokenId = ModifierId @@ stateContext.ergoSettings.chainSettings.reemission.reemissionTokenId
-    val EmissionNftId = ModifierId @@ stateContext.ergoSettings.chainSettings.reemission.emissionNftId
-    val reemissionNftIdBytes = stateContext.ergoSettings.chainSettings.reemission.reemissionNftIdBytes
+    val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
+    val ReemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
+    val EmissionNftId = ModifierId @@ reemissionSettings.emissionNftId
+    val reemissionNftIdBytes = reemissionSettings.reemissionNftIdBytes
     val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
 
     // reemission logic below
@@ -238,7 +239,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut)
 
           val height = stateContext.currentHeight
-          val properReemissionRewardPart = ReemissionRules.reemissionForHeight(height, emissionRules)
+          val properReemissionRewardPart = ReemissionRules.reemissionForHeight(height, emissionRules, reemissionSettings)
           require(rewardsTokensOut == properReemissionRewardPart)
         }
       } else if (box.tokens.contains(ReemissionTokenId)) {

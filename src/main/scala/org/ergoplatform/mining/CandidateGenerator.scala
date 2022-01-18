@@ -25,6 +25,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
 import org.ergoplatform.reemission.ReemissionRules
+import org.ergoplatform.reemission.ReemissionRules.injectionBox
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -593,13 +594,7 @@ object CandidateGenerator extends ScorexLogging {
       minerPk,
       chainSettings,
       Colls.emptyColl
-    ).headOption.map { tx =>
-      if (ReemissionRules.Inject && state.boxById(ReemissionRules.injectionBox.id).isDefined) {
-        ReemissionRules.injectTransaction(tx)
-      } else {
-        tx
-      }
-    }
+    ).headOption
   }
 
   def collectFees(
@@ -644,9 +639,14 @@ object CandidateGenerator extends ScorexLogging {
       val prop           = emissionBox.ergoTree
       val emissionAmount = emission.minersRewardAtHeight(nextHeight)
 
-      val emissionBoxAssets = emissionBox.additionalTokens
-
       val reemissionAmount = ReemissionRules.reemissionForHeight(nextHeight, emission, reemissionSettings)
+
+      val emissionBoxAssets = if (nextHeight == reemissionActivationHeight) {
+        //injection
+        injectionBox.additionalTokens
+      } else {
+        emissionBox.additionalTokens
+      }
 
       val updEmissionAssets = if(nextHeight >= reemissionActivationHeight) {
         val reemissionTokens = emissionBoxAssets.apply(1)._2
@@ -658,12 +658,24 @@ object CandidateGenerator extends ScorexLogging {
 
       val newEmissionBox: ErgoBoxCandidate =
         new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, nextHeight, updEmissionAssets)
-      val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
+      val inputs = if (nextHeight == reemissionActivationHeight) {
+        //injection
+        IndexedSeq(new Input(emissionBox.id, ProverResult.empty), new Input(injectionBox.id, ProverResult.empty))
+      } else {
+        IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
+      }
 
       if(nextHeight >= reemissionActivationHeight) {
         assets.append(Colls.fromItems(reemissionTokenId -> reemissionAmount))
       }
-      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, nextHeight, assets)
+
+      val minerAmt = if (nextHeight == reemissionActivationHeight) {
+        //injection
+        emissionAmount + injectionBox.value
+      } else {
+        emissionAmount
+      }
+      val minerBox = new ErgoBoxCandidate(minerAmt, minerProp, nextHeight, assets)
 
       ErgoTransaction(
         inputs,
@@ -671,6 +683,7 @@ object CandidateGenerator extends ScorexLogging {
         IndexedSeq(newEmissionBox, minerBox)
       )
     }
+
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
       val feeAmount = feeBoxes.map(_.value).sum
       val feeAssets =

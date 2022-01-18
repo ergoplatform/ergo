@@ -4,14 +4,12 @@ import org.ergoplatform.ErgoBox.R2
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Height, Input, MinerPubkey, Outputs, Self}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Height, MinerPubkey, Outputs, Self}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, ReemissionSettings}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.util.encode.Base16
 import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SByte, SCollection, SLong, STuple}
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant}
-import sigmastate.interpreter.ProverResult
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes, OptionGet, SelectField, SizeOf}
 
 
@@ -19,17 +17,8 @@ object ReemissionRules {
 
   val basicChargeAmount = 12 // in ERG
 
-  // hard-coded flag used to inject tokens into emission box
-  val Inject = false
 
-  /*
-    box to be protected by the following script:
-
-    {
-      INPUTS(0).value > 20000000L * 1000000000L
-    }
-
-   */
+  // todo: move box id to settings
   lazy val InjectionBoxBytes: Array[Byte] = Base16.decode("").get
 
   lazy val injectionBox: ErgoBox = ErgoBoxSerializer.parseBytes(InjectionBoxBytes)
@@ -127,19 +116,6 @@ object ReemissionRules {
       0L
     }
   }
-
-  def injectTransaction(emissionTx: ErgoTransaction): ErgoTransaction = {
-
-    val inputsModified = emissionTx.inputs ++ IndexedSeq(new Input(injectionBox.id, ProverResult.empty))
-    val emissionOut = emissionTx.outputCandidates.head
-    val emissionOutModified = new ErgoBoxCandidate(emissionOut.value, emissionOut.ergoTree, emissionOut.creationHeight,
-                                                    injectionBox.additionalTokens)
-    val minerOut = emissionTx.outputCandidates(1)
-    val minerOutModified = new ErgoBoxCandidate(minerOut.value + injectionBox.value,
-                                                  minerOut.ergoTree, minerOut.creationHeight)
-    new ErgoTransaction(inputsModified, IndexedSeq.empty, IndexedSeq(emissionOutModified, minerOutModified))
-  }
-
 
   def main(args: Array[String]): Unit = {
     val settings = ErgoSettings.read()

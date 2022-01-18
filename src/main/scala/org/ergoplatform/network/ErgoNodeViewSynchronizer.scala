@@ -250,7 +250,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"$remote has equal header-chain")
     }
 
-    if ((oldStatus != status) || syncTracker.isOutdated(remote) || status == Older || status == Fork) {
+    if ((oldStatus != status) || syncTracker.notSyncedOrOutdated(remote) || status == Older || status == Fork) {
       val ownSyncInfo = hr.syncInfoV1
       sendSyncToPeer(remote, ownSyncInfo)
     }
@@ -295,7 +295,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"$remote has equal header-chain")
     }
 
-    if ((oldStatus != status) || syncTracker.isOutdated(remote) || status == Older || status == Fork) {
+    if ((oldStatus != status) || syncTracker.notSyncedOrOutdated(remote) || status == Older || status == Fork) {
       val ownSyncInfo = hr.syncInfoV2(full = true)
       sendSyncToPeer(remote, ownSyncInfo)
     }

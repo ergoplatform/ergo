@@ -37,6 +37,7 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
+import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.annotation.tailrec
@@ -693,10 +694,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.setHeld(tx.id, Transaction.ModifierTypeId)
       broadcastModifierInv(tx)
 
-    case FailedTransaction(id, _, immediateFailure) =>
-      val senderOpt = deliveryTracker.setInvalid(id, Transaction.ModifierTypeId)
-      // penalize sender only in case transaction was invalidated at first validation.
-      if (immediateFailure) senderOpt.foreach(penalizeMisbehavingPeer)
+    case FailedTransaction(id, error, immediateFailure) =>
+      if (immediateFailure) {
+        // penalize sender only in case transaction was invalidated at first validation.
+        deliveryTracker.setInvalid(id, Transaction.ModifierTypeId).foreach { peer =>
+          error match {
+            case TooHighCostError(_) =>
+              log.info(s"Penalize spamming peer $peer for too costly transaction $id")
+              penalizeSpammingPeer(peer)
+            case _ =>
+              penalizeMisbehavingPeer(peer)
+          }
+        }
+      }
 
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
@@ -726,9 +736,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case ChainIsHealthy =>
       // good news
+      logger.debug("Chain is good")
 
     case ChainIsStuck(error) =>
-      log.warn(s"$error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
+      log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
   }
 
   /** get handlers of messages coming from peers */

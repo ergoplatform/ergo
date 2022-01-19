@@ -337,9 +337,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
                       useLastEpochs: Int = 10): ErgoHistory = {
 
     val minimalSuffix = 2
-    val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
+    val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, useExternalMiner = false,
+      PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
       offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null

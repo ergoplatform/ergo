@@ -52,13 +52,14 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val nodeSettings = empty.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,
       internalMinerPollingInterval = 2.second,
+      maxTransactionCost = 100000,
       offlineGeneration = true,
       verifyTransactions = true)
     val chainSettings = empty.chainSettings.copy(blockInterval = 2.seconds)
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
 
-  it should "not include too complex transactions" in new TestKit(ActorSystem()) {
+  it should "not include too costly transactions" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
@@ -89,7 +90,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
     val input = Input(boxToSpend.id, emptyProverResult)
 
-    // create transaction with output with complex proposition
+    // create transaction with output with costly proposition
     val output = new ErgoBoxCandidate(boxToSpend.value / 10, complexScript, r.s.stateContext.currentHeight)
     val outputs = (0 until 10).map(_ => output)
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
@@ -106,25 +107,34 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     tx.outputs.foreach(o => state.boxById(o.id).get shouldBe o)
 
     // try to spend all the boxes with complex scripts
-    val complexInputs = tx.outputs.map(o => Input(o.id, emptyProverResult))
-    val complexOut = new ErgoBoxCandidate(tx.outputs.map(_.value).sum, complexScript, r.s.stateContext.currentHeight)
-    val unsignedComplexTx = new UnsignedErgoTransaction(complexInputs, IndexedSeq(), IndexedSeq(complexOut))
-    val complexTx = defaultProver.sign(unsignedComplexTx, tx.outputs, IndexedSeq(), r.s.stateContext).get
-    tx.outputs.map(_.ergoTree.complexity).sum should be > ergoSettings.nodeSettings.maxTransactionComplexity
-    // send complex transaction to the mempool
-    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(complexTx))
+    val costlyInputs = tx.outputs.map(o => Input(o.id, emptyProverResult))
+    val costlyOut = new ErgoBoxCandidate(tx.outputs.map(_.value).sum, complexScript, r.s.stateContext.currentHeight)
+    val unsignedComplexTx = new UnsignedErgoTransaction(costlyInputs, IndexedSeq(), IndexedSeq(costlyOut))
+    val costlyTx = defaultProver.sign(unsignedComplexTx, tx.outputs, IndexedSeq(), r.s.stateContext).get
+
+    val txCost =
+      state.validateWithCost(
+        ErgoTransaction(costlyTx.inputs, costlyTx.dataInputs, costlyTx.outputCandidates),
+        Some(r.s.stateContext),
+        costLimit = 431780,
+        None
+      ).get
+    txCost shouldBe 431780
+
+    // send costly transaction to the mempool
+    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(costlyTx))
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    // complex tx was removed from mempool
+    // costly tx was removed from mempool
     expectNoMessage(1 second)
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
-    // complex tx was not included
+    // costly tx was not included
     val state2 = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
     tx.outputs.foreach(o => state2.boxById(o.id) should not be None)
-    complexTx.outputs.foreach(o => state2.boxById(o.id) shouldBe None)
+    costlyTx.outputs.foreach(o => state2.boxById(o.id) shouldBe None)
   }
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {

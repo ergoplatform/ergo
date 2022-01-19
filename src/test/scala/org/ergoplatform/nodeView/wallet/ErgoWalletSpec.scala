@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
-import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import scorex.util.encode.Base16

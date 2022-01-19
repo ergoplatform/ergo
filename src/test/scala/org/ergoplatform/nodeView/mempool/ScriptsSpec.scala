@@ -26,12 +26,6 @@ class ScriptsSpec extends ErgoPropertyTest {
   val fixedBox: ErgoBox = ergoBoxGen(fromString("1 == 1"), heightGen = 0).sample.get
   implicit lazy val context: IRContext = new CompiletimeIRContext
 
-  property("scripts complexity") {
-    val maxComplexity = settings.nodeSettings.maxTransactionComplexity
-    defaultMinerPk.toSigmaProp.treeWithSegregation.complexity should be <= maxComplexity
-    ErgoScriptPredef.rewardOutputScript(delta, defaultMinerPk).complexity should be <= maxComplexity
-  }
-
   property("simple operations without cryptography") {
     // true/false
     applyBlockSpendingScript(Values.TrueLeaf.toSigmaProp) shouldBe 'success
@@ -73,7 +67,7 @@ class ScriptsSpec extends ErgoPropertyTest {
   private def applyBlockSpendingScript(script: ErgoTree): Try[UtxoState] = {
     val scriptBox = ergoBoxGen(script, heightGen = 0).sample.get
     val bh = BoxHolder(Seq(fixedBox, scriptBox))
-    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants)
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants, parameters)
     bh.boxes.map(b => us.boxById(b._2.id) shouldBe Some(b._2))
     val tx = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
     tx.size shouldBe 1

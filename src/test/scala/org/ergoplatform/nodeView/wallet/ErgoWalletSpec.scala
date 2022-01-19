@@ -27,7 +27,7 @@ import scala.concurrent.duration._
 
 class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually {
 
-  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
+  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
 
   property("assets in WalletDigest are deterministic against serialization") {
     forAll(Gen.listOfN(5, assetGen)) { preAssets =>

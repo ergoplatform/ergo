@@ -20,7 +20,7 @@ import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.crypto.hash.Digest32
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import scorex.util.{ScorexLogging, idToBytes}
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
@@ -269,14 +269,13 @@ trait ErgoWalletSupport extends ScorexLogging {
     require(inputBoxes.nonEmpty, "There must be at least one input box")
 
     //filter burnTokens requests
-    val requestsWithoutBurnTokens = requests.filterNot(_.isInstanceOf[BurnTokensRequest])
-    val burnTokens = {
-      val burnRequests = requests.flatMap {
-        case req: BurnTokensRequest => req.assetsToBurn
-        case _ => None
-      }
-      if (burnRequests.isEmpty) Map.empty[ModifierId, Long] else TransactionBuilder.collTokensToMap(burnRequests.toColl)
-    }
+    val (requestsWithBurnTokens, requestsWithoutBurnTokens) = requests.partition(_.isInstanceOf[BurnTokensRequest])
+    val burnTokensMap = TransactionBuilder.collTokensToMap(
+      requestsWithBurnTokens
+        .map(_.asInstanceOf[BurnTokensRequest])
+        .flatMap(_.assetsToBurn)
+        .toColl
+    )
 
     //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
     requestsToBoxCandidates(requestsWithoutBurnTokens, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)
@@ -295,7 +294,7 @@ trait ErgoWalletSupport extends ScorexLogging {
 
         //add burnTokens to target assets so that they are excluded from the change outputs
         //thus total outputs assets will be reduced which is interpreted as _token burning_
-        val targetAssetsWithBurn = AssetUtils.mergeAssets(targetAssets, burnTokens)
+        val targetAssetsWithBurn = AssetUtils.mergeAssets(targetAssets, burnTokensMap)
 
         val selectionOpt = boxSelector.select(inputBoxes.iterator, targetBalance, targetAssetsWithBurn)
         val dataInputs = ErgoWalletService.stringsToBoxes(dataInputsRaw).toIndexedSeq

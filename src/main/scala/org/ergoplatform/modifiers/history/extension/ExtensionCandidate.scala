@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.history.extension
 
+import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
 import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{BatchMerkleProof, Leaf, MerkleProof, MerkleTree}
@@ -22,6 +23,11 @@ class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
 
   lazy val digest: Digest32 = Algos.merkleTreeRoot(merkleTree)
 
+  lazy val interlinksMerkleTree: MerkleTree[Digest32] =
+    Extension.merkleTree(fields.filter(_._1.head.equals(InterlinksVectorPrefix)))
+
+  lazy val interlinksDigest: Digest32 = Algos.merkleTreeRoot(interlinksMerkleTree)
+
   def toExtension(headerId: ModifierId): Extension = Extension(headerId, fields)
 
   def ++(that: ExtensionCandidate): ExtensionCandidate = ExtensionCandidate(fields ++ that.fields)
@@ -41,8 +47,8 @@ class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
     val indices = keys.flatMap(key => fields.find(_._1 sameElements key)
       .map(Extension.kvToLeaf)
       .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
-      .flatMap(leafData => merkleTree.elementsHashIndex.get(new mutable.WrappedArray.ofByte(leafData))))
-    if (indices.isEmpty) None else merkleTree.proofByIndices(indices)(Algos.hash)
+      .flatMap(leafData => interlinksMerkleTree.elementsHashIndex.get(new mutable.WrappedArray.ofByte(leafData))))
+    if (indices.isEmpty) None else interlinksMerkleTree.proofByIndices(indices)(Algos.hash)
   }
 }
 

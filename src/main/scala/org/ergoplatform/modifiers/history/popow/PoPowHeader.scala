@@ -53,9 +53,13 @@ object PoPowHeader {
     * Validates interlinks merkle root against provided proof
     */
   def checkInterlinksProof(interlinks: Seq[ModifierId], proof: BatchMerkleProof[Digest32]): Boolean = {
-    val fields = nipopowAlgos.packInterlinks(interlinks)
-    val tree = merkleTree(fields)
-    proof.valid(tree.rootHash)
+    if (interlinks.isEmpty && proof.indices.isEmpty && proof.proofs.isEmpty) {
+      true
+    } else {
+      val fields = nipopowAlgos.packInterlinks(interlinks)
+      val tree = merkleTree(fields)
+      proof.valid(tree.rootHash)
+    }
   }
 
   /**

@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandida
 import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -266,7 +266,11 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
     val keys = ext.fields
       .filter({ case (key, _) => key.head == InterlinksVectorPrefix })
       .map(_._1)
-    if (keys.isEmpty) None else ext.batchProofFor(keys: _*)
+    if (keys.isEmpty) {
+      Some(BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash))
+    } else {
+      ext.batchProofFor(keys: _*)
+    }
   }
 }
 
@@ -289,6 +293,8 @@ object NipopowAlgos {
             val duplicatesQty = 0xff & value.head.toInt
             val link = bytesToId(value.tail)
             loop(tail, acc ++ Seq.fill(duplicatesQty)(link))
+//            val nextAcc = if (duplicatesQty == 0) Seq(link) else Seq.fill(duplicatesQty)(link)
+//            loop(tail, nextAcc)
           } else {
             Failure(new Exception("Interlinks improperly packed"))
           }

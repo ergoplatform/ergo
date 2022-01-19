@@ -58,7 +58,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return true if the proof is valid
     */
   def isValid: Boolean = {
-    this.hasValidConnections && this.hasValidHeights
+    this.hasValidConnections && this.hasValidHeights && this.hasValidProofs
   }
 
   /**

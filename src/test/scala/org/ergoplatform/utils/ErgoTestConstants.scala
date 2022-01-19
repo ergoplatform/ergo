@@ -83,9 +83,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
   val EmptyDigest32: Digest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
   val defaultDifficultyControl = new LinearDifficultyControl(settings.chainSettings)
-  val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(
-    Array(0: Byte, 8: Byte) -> EmptyDigest32,
-    Array(1: Byte, 0: Byte) -> Array.fill(HashLength + 1)(0.toByte)))
+  val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(Array(0: Byte, 8: Byte) -> EmptyDigest32))
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq())
   val emptyDataInputs: IndexedSeq[DataInput] = IndexedSeq()
   val emptyDataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()

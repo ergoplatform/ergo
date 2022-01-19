@@ -54,7 +54,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                settings: ErgoSettings,
                                timeProvider: NetworkTimeProvider,
-                               syncTracker: ErgoSyncTracker
+                               syncTracker: ErgoSyncTracker,
+                               deliveryTracker: DeliveryTracker
                               )(implicit ex: ExecutionContext)
   extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
 
@@ -74,14 +75,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   protected val deliveryTimeout: FiniteDuration = networkSettings.deliveryTimeout
-  protected val maxDeliveryChecks: Int = networkSettings.maxDeliveryChecks
 
   protected val invSpec = new InvSpec(networkSettings.maxInvObjects)
   protected val requestModifierSpec = new RequestModifierSpec(networkSettings.maxInvObjects)
   protected val modifiersSpec = new ModifiersSpec(networkSettings.maxPacketSize)
-
-  protected val deliveryTracker: DeliveryTracker =
-    DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
   private val minModifiersPerBucket = 20 // minimum of persistent modifiers (excl. headers) to download by single peer
   private val maxModifiersPerBucket = 50 // maximum of persistent modifiers (excl. headers) to download by single peer
@@ -355,7 +352,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
         // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
         modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
-          deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer))
+          deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer)) { deliveryCheck =>
+            context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+          }
           val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
           networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
         }
@@ -529,7 +528,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.debug(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
       val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
       peer.handlerRef ! msg
-      deliveryTracker.setRequested(newModifierIds, modifierTypeId, Some(peer))
+      deliveryTracker.setRequested(newModifierIds, modifierTypeId, Some(peer)) { deliveryCheck =>
+        context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+      }
     }
   }
 
@@ -600,7 +601,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             case Some(peer) =>
               log.info(s"Peer ${peer.toString} has not delivered asked modifier ${encoder.encodeId(modifierId)} on time")
               penalizeNonDeliveringPeer(peer)
-              deliveryTracker.onStillWaiting(peer, modifierTypeId, modifierId)
+              deliveryTracker.onStillWaiting(peer, modifierTypeId, modifierId) { deliveryCheck =>
+                context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+              }
             case None =>
               // Random peer has not delivered modifier we need, ask another peer
               // We need this modifier - no limit for number of attempts
@@ -619,7 +622,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Request this modifier from random peer.
     */
   def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
-    deliveryTracker.setRequested(modifierIds, modifierTypeId, None)
+    deliveryTracker.setRequested(modifierIds, modifierTypeId, None) { deliveryCheck =>
+      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+    }
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
   }
@@ -801,19 +806,21 @@ object ErgoNodeViewSynchronizer {
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
-            syncTracker: ErgoSyncTracker)
+            syncTracker: ErgoSyncTracker,
+            deliveryTracker: DeliveryTracker)
            (implicit ex: ExecutionContext): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
-      timeProvider, syncTracker))
+      timeProvider, syncTracker, deliveryTracker))
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
-            syncTracker: ErgoSyncTracker)
+            syncTracker: ErgoSyncTracker,
+            deliveryTracker: DeliveryTracker)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker))
+    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker, deliveryTracker))
 
   case object CheckModifiersToDownload
 

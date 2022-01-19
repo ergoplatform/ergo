@@ -29,7 +29,7 @@ import scala.util.Random
 
 class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with ErgoWalletSupport with ErgoTransactionGenerators with DBSpec with BeforeAndAfterAll {
 
-  private implicit val x: WalletFixture = new WalletFixture(settings, getCurrentView(_).vault)
+  private implicit val x: WalletFixture = new WalletFixture(settings, parameters, getCurrentView(_).vault)
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 4)
   private lazy val pks = getPublicKeys.toList
   private val masterKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create("edge talent poet tortoise trumpet dose")))

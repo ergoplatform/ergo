@@ -63,7 +63,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   println("boxes read: " + boxesRead.size)
   println("boxes read time: " + (bts - bts0) + " ms")
 
-  val stateContext = storage.readStateContext
+  val stateContext = storage.readStateContext(parameters)
 
   val txs = boxes.map { tb =>
     val bx = tb.box

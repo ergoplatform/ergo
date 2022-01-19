@@ -157,7 +157,7 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
   }
 
   property("append header to genesis - 2") {
-    val (us, bh) = createUtxoState()
+    val (us, bh) = createUtxoState(parameters)
 
     val block = validFullBlock(None, us, bh)
 

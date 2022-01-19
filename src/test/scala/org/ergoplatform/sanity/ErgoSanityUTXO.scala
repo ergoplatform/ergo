@@ -28,7 +28,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
 
   override val stateGen: Gen[WrappedUtxoState] =
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings))
 
   override def semanticallyValidModifier(state: UTXO_ST): PM = {
     statefulyValidFullBlock(state.asInstanceOf[WrappedUtxoState])

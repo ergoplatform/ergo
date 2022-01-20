@@ -198,12 +198,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val newGlobal = timeProvider.time()
     val globalDiff = newGlobal - globalSyncGot
 
-    if(globalDiff > 700) {
+    if(globalDiff > 250) {
       globalSyncGot = newGlobal
 
       val diff = syncTracker.updateLastSyncGetTime(remote)
-      if (diff > 2000 ) {
-        // process sync if sent in more than 2 seconds after previous sync
+      if (diff > 1000 ) {
+        // process sync if sent in more than 1 second after previous sync
         log.debug(s"Processing sync from $remote")
         syncInfo match {
           case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
@@ -241,7 +241,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Younger | Fork =>
         val newExtSend = timeProvider.time()
 
-        if(newExtSend - globalExtSend > 1000) {
+        if(newExtSend - globalExtSend > 250) {
           globalExtSend = newExtSend
 
           // send extension (up to 400 header ids) to a peer which chain is less developed or forked
@@ -307,7 +307,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Younger =>
         val newExtSend = timeProvider.time()
 
-        if (newExtSend - globalExtSend > 1000) {
+        if (newExtSend - globalExtSend > 250) {
           globalExtSend = newExtSend
 
           // send extension (up to 400 header ids) to a peer which chain is less developed or forked
@@ -561,7 +561,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   //other node asking for objects by their ids
   protected def modifiersReq(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, remote: ConnectedPeer): Unit = {
-      val ms0 = System.currentTimeMillis()
       val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
         case typeId: ModifierTypeId if typeId == Transaction.ModifierTypeId =>
           mp.getAll(invData.ids).map(tx => tx.id -> tx.bytes)
@@ -581,12 +580,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
         size < networkSettings.maxPacketSize
       }
-      if(batch.isEmpty) {
-        batch = Seq(mods.head)
+      if (batch.isEmpty) {
+        // send modifier anyway
+        val ho = mods.headOption
+        batch = ho.toSeq
+        log.warn(s"Sending too big modifier ${ho.map(_._1)}, its size ${ho.map(_._2.length)}")
       }
-      log.debug("Sending modifiers: " + idsToString(invData.typeId, objs.map(_._1)))
       remote.handlerRef ! Message(modifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
-      log.debug("Sent modifiers: " + idsToString(invData.typeId, objs.map(_._1)))
       val remaining = mods.drop(batch.length)
       if (remaining.nonEmpty) {
         sendByParts(remaining)
@@ -596,8 +596,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (objs.nonEmpty) {
       sendByParts(objs)
     }
-    val ms = System.currentTimeMillis()
-    log.debug(s"Sent ${objs.length} modifiers in ${ms - ms0} ms.")
   }
 
   /**

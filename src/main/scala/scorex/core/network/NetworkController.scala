@@ -1,7 +1,6 @@
 package scorex.core.network
 
 import java.net._
-
 import akka.actor._
 import akka.io.Tcp._
 import akka.io.{IO, Tcp}

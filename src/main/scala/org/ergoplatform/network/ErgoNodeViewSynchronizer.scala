@@ -145,7 +145,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val syncV2Version = Version(4, 0, 16)
     remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
   }
-
+  
   /**
     * Send synchronization statuses to neighbour peers
     *
@@ -189,20 +189,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         networkControllerRef ! SendToNetwork(Message(invSpec, Right(InvData(mid, mods)), None), SendToPeer(remote))
     }
 
+  var globalSyncGot = 0L
   /**
     * Process sync message `syncInfo` got from neighbour peer `remote`
     */
   protected def processSync(hr: ErgoHistory, syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
-    val diff = syncTracker.updateLastSyncGetTime(remote)
-    if(diff > 1000 * 2) {
-      // process sync if sent in more than 2 seconds after previous sync
-      log.debug(s"Processing sync from $remote")
-      syncInfo match {
-        case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
-        case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
+    val globalDiff = timeProvider.time() - globalSyncGot
+
+    if(globalDiff > 250) {
+      val diff = syncTracker.updateLastSyncGetTime(remote)
+      if (diff > 1000 * 2) {
+        // process sync if sent in more than 2 seconds after previous sync
+        log.debug(s"Processing sync from $remote")
+        syncInfo match {
+          case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
+          case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
+        }
+      } else {
+        log.debug(s"Spammy sync detected from $remote")
       }
-    } else {
-      log.debug(s"Spammy sync detected from $remote")
     }
   }
 

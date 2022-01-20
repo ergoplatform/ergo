@@ -4,13 +4,17 @@ import org.ergoplatform.ErgoBox.R2
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Height, MinerPubkey, Outputs, Self}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Height, MinerPubkey, Outputs, Pay2SAddress, Self}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, ReemissionSettings}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.util.encode.Base16
-import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SByte, SCollection, SLong, STuple}
-import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant}
+import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SBoolean, SByte, SCollection, SLong, STuple}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant, Value}
+import sigmastate.eval.CompiletimeIRContext
+import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes, OptionGet, SelectField, SizeOf}
+
+import scala.util.Try
 
 
 object ReemissionRules {
@@ -19,13 +23,13 @@ object ReemissionRules {
 
 
   // todo: move box id to settings
-  lazy val InjectionBoxBytes: Array[Byte] = Base16.decode("").get
+  lazy val InjectionBoxBytes: Array[Byte] = Base16.decode("8094ebdc03100204000580c0dfda8ee906d191c1b2a4730000730181030202aeaee7a0286770b5a5f4ee75e92ad412b6a58ce90ed3b7d45f6d6940520f340106ad86473b1d3ef06a4fc38e6b79b042c4930f017469e4f4957589a17cc60179808094f6c2d7e85800690e17713c44ade202860b7023f350739f943bf2cf77de15b7f359c1dcfc373f00").get
 
   lazy val injectionBox: ErgoBox = ErgoBoxSerializer.parseBytes(InjectionBoxBytes)
 
   /**
-    * Contract for boxes miners paying to according to EIP-27. Then anyone can merge multiple boxes locked by this
-    * contract with reemission box
+    * Contract for boxes miners paying to remission contract according to EIP-27.
+    * Anyone can merge multiple boxes locked by this contract with reemission box
     */
   def payToReemission(reemissionNftId: Array[Byte]): ErgoTree = {
     // output of the reemission contract
@@ -117,7 +121,35 @@ object ReemissionRules {
     }
   }
 
+  def injectionBoxP2SAddress(mainnet: Boolean): Pay2SAddress = {
+    val networkPrefix = if (mainnet) {
+      ErgoAddressEncoder.MainnetNetworkPrefix
+    } else {
+      ErgoAddressEncoder.TestnetNetworkPrefix
+    }
+
+    implicit val addrEncoder = new ErgoAddressEncoder(networkPrefix)
+
+    val source =
+      """
+        |  {
+        |    INPUTS(0).value > 15000000L * 1000000000L
+        |  }
+      """.stripMargin
+
+    val compiler = SigmaCompiler(CompilerSettings(networkPrefix, TransformingSigmaBuilder, lowerMethodCalls = true))
+    val compiled = Try(compiler.compile(Map.empty, source)(new CompiletimeIRContext)).get.asInstanceOf[Value[SBoolean.type]].toSigmaProp
+
+    Pay2SAddress.apply(compiled)
+  }
+
   def main(args: Array[String]): Unit = {
+    val p2sAddress = injectionBoxP2SAddress(mainnet = false)
+    println(new ErgoAddressEncoder(ErgoAddressEncoder.TestnetNetworkPrefix).fromString(p2sAddress.toString()))
+    println("injectioon box p2s: " + p2sAddress)
+
+    System.exit(10)
+
     val settings = ErgoSettings.read()
 
     println("Monetary settings: " + settings.chainSettings.monetary)

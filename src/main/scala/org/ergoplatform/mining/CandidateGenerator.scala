@@ -677,11 +677,13 @@ object CandidateGenerator extends ScorexLogging {
       }
       val minerBox = new ErgoBoxCandidate(minerAmt, minerProp, nextHeight, assets)
 
-      ErgoTransaction(
+      val emissionTx = ErgoTransaction(
         inputs,
         IndexedSeq(),
         IndexedSeq(newEmissionBox, minerBox)
       )
+      log.info(s"Emission tx for nextHeight = $nextHeight: $emissionTx")
+      emissionTx
     }
 
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {

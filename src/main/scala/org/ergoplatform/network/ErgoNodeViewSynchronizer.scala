@@ -790,7 +790,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     processDataFromPeer(msgHandlers(hr, mp, blockAppliedTxsCache)) orElse
       onDownloadRequest(hr) orElse
       getLocalSyncInfo(hr) orElse
-      responseFromLocal orElse
       viewHolderEvents(hr, mp, blockAppliedTxsCache) orElse
       peerManagerEvents orElse
       checkDelivery orElse {

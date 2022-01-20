@@ -12,7 +12,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
 import scala.collection.immutable
 
-case class ModifiersData(typeId: ModifierTypeId, modifiers: Map[ModifierId, Array[Byte]])
+case class ModifiersData(typeId: ModifierTypeId, modifiers: Seq[(ModifierId, Array[Byte])])
 
 case class InvData(typeId: ModifierTypeId, ids: Seq[ModifierId])
 

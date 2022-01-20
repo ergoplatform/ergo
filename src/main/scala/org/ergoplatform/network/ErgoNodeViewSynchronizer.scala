@@ -581,7 +581,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
         size < networkSettings.maxPacketSize
       }
+      log.debug("Sending modifiers: " + idsToString(invData.typeId, objs.map(_._1)))
       remote.handlerRef ! Message(modifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
+      log.debug("Sent modifiers: " + idsToString(invData.typeId, objs.map(_._1)))
       val remaining = mods.drop(batch.length)
       if (remaining.nonEmpty) {
         sendByParts(remaining)

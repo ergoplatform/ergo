@@ -196,9 +196,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def processSync(hr: ErgoHistory, syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
     val newGlobal = timeProvider.time()
     val globalDiff = newGlobal - globalSyncGot
-    globalSyncGot = newGlobal
 
-    if(globalDiff > 250) {
+    if(globalDiff > 500) {
+      globalSyncGot = newGlobal
+
       val diff = syncTracker.updateLastSyncGetTime(remote)
       if (diff > 1000 * 2) {
         // process sync if sent in more than 2 seconds after previous sync
@@ -214,6 +215,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.debug("Global sync violation")
     }
   }
+
+  var globalExtSend = 0L
 
   /**
     * Processing sync V1 message `syncInfo` got from neighbour peer `remote`
@@ -235,12 +238,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // we do not know what to send to a peer with such status
         log.debug(s"Got nonsense status for $remote")
       case Younger | Fork =>
-        // send extension (up to 400 header ids) to a peer which chain is less developed or forked
-        val ext = hr.continuationIds(syncInfo, size = 400)
-        if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-        log.debug(s"Sending extension of length ${ext.length}")
-        log.debug(s"Extension ids: ${idsToString(ext)}")
-        sendExtension(remote, ext)
+        val newExtSend = timeProvider.time()
+
+        if(newExtSend - globalExtSend > 1000) {
+          globalExtSend = newExtSend
+
+          // send extension (up to 400 header ids) to a peer which chain is less developed or forked
+          val ext = hr.continuationIds(syncInfo, size = 400)
+          if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
+          log.debug(s"Sending extension of length ${ext.length}")
+          log.debug(s"Extension ids: ${idsToString(ext)}")
+          sendExtension(remote, ext)
+        } else {
+          log.debug("Global extension send violated")
+        }
       case Older =>
         // asking headers from older peers
         val ids = syncInfo.lastHeaderIds.reverse
@@ -293,12 +304,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.warn(s"Got nonsense status in v2 for $remote")
 
       case Younger =>
-        // send extension (up to 400 header ids) to a peer which chain is less developed or forked
-        val ext = hr.continuationIds(syncInfo, size = 400)
-        if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-        log.debug(s"Sending extension of length ${ext.length}")
-        log.debug(s"Extension ids: ${idsToString(ext)}")
-        sendExtension(remote, ext)
+        val newExtSend = timeProvider.time()
+
+        if (newExtSend - globalExtSend > 1000) {
+          globalExtSend = newExtSend
+
+          // send extension (up to 400 header ids) to a peer which chain is less developed or forked
+          val ext = hr.continuationIds(syncInfo, size = 400)
+          if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
+          log.debug(s"Sending extension of length ${ext.length}")
+          log.debug(s"Extension ids: ${idsToString(ext)}")
+          sendExtension(remote, ext)
+        } else {
+          log.debug("Global extension send violated")
+        }
 
       case Fork =>
         log.info(s"Fork detected with peer $remote, its sync message $syncInfo")

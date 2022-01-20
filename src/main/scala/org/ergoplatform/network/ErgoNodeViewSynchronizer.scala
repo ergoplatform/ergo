@@ -561,7 +561,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   //other node asking for objects by their ids
   protected def modifiersReq(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, remote: ConnectedPeer): Unit = {
-
+      val ms0 = System.currentTimeMillis()
       val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
         case typeId: ModifierTypeId if typeId == Transaction.ModifierTypeId =>
           mp.getAll(invData.ids).map(tx => tx.id -> tx.bytes)
@@ -591,6 +591,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (objs.nonEmpty) {
       sendByParts(objs)
     }
+    val ms = System.currentTimeMillis()
+    log.debug(s"Sent ${objs.length} modifiers in ${ms - ms0} ms.")
   }
 
   /**

@@ -1,9 +1,10 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-
 import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
+import org.ergoplatform.GlobalConstants
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -197,11 +198,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val newGlobal = timeProvider.time()
     val globalDiff = newGlobal - globalSyncGot
 
-    if(globalDiff > 500) {
+    if(globalDiff > 700) {
       globalSyncGot = newGlobal
 
       val diff = syncTracker.updateLastSyncGetTime(remote)
-      if (diff > 1000 * 2) {
+      if (diff > 2000 ) {
         // process sync if sent in more than 2 seconds after previous sync
         log.debug(s"Processing sync from $remote")
         syncInfo match {
@@ -839,7 +840,7 @@ object ErgoNodeViewSynchronizer {
             syncTracker: ErgoSyncTracker)
            (implicit ex: ExecutionContext): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
-      timeProvider, syncTracker))
+      timeProvider, syncTracker)).withDispatcher(GlobalConstants.NetworkDispatcher)
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,

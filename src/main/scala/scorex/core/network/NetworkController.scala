@@ -542,7 +542,6 @@ object NetworkControllerRef {
             scorexContext: ScorexContext,
             tcpManager: ActorRef)(implicit ec: ExecutionContext): Props = {
     Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager))
-      .withDispatcher(GlobalConstants.NetworkDispatcher)
   }
 
   def apply(settings: NetworkSettings,

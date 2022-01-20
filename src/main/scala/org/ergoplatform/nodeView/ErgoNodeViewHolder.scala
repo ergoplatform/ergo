@@ -229,7 +229,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         f
       case (success@Success(updateInfo), modToApply) =>
         if (updateInfo.failedMod.isEmpty) {
-          updateInfo.state.applyModifier(modToApply) match {
+          updateInfo.state.applyModifier(modToApply)(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 context.system.eventStream.publish(SemanticallySuccessfulModifier(modToApply))
@@ -376,7 +376,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    val constants = StateConstants(Some(self), settings)
+    val constants = StateConstants(settings)
     restoreConsistentState(ErgoState.readOrGenerate(settings, constants, parameters).asInstanceOf[State], history) match {
       case Success(state) =>
         log.info("State database read, state synchronized")
@@ -468,7 +468,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val dir = stateDir(settings)
     deleteRecursive(dir)
 
-    val constants = StateConstants(Some(self), settings)
+    val constants = StateConstants(settings)
     ErgoState.readOrGenerate(settings, constants, parameters)
       .asInstanceOf[State]
       .ensuring(
@@ -505,7 +505,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         }
         toApply.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
           log.info(s"Applying modifier during node start-up to restore consistent state: ${m.id}")
-          acc.flatMap(_.applyModifier(m))
+          acc.flatMap(_.applyModifier(m)(lm => pmodModify(lm.pmod, local = true)))
         }
     }
   }
@@ -514,7 +514,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * Recovers digest state from history.
     */
   private def recoverDigestState(bestFullBlock: ErgoFullBlock, history: ErgoHistory): Try[DigestState] = {
-    val constants = StateConstants(Some(self), settings)
+    val constants = StateConstants(settings)
     val votingLength = settings.chainSettings.voting.votingLength
     val bestHeight = bestFullBlock.header.height
     val newEpochHeadersQty = bestHeight % votingLength // how many blocks current epoch lasts
@@ -536,12 +536,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     recoveredStateTry match {
       case Success(state) =>
         log.info("Recovering state using current epoch")
-        chainToApply.foldLeft[Try[DigestState]](Success(state))((acc, m) => acc.flatMap(_.applyModifier(m)))
+        chainToApply.foldLeft[Try[DigestState]](Success(state)) { case (acc, m) =>
+          acc.flatMap(_.applyModifier(m)(lm => pmodModify(lm.pmod, local = true)))
+        }
       case Failure(exception) => // recover using whole headers chain
         log.warn(s"Failed to recover state from current epoch, using whole chain: ${exception.getMessage}")
         val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
         val genesisState = DigestState.create(None, None, stateDir(settings), constants, parameters)
-        wholeChain.foldLeft[Try[DigestState]](Success(genesisState))((acc, m) => acc.flatMap(_.applyModifier(m)))
+        wholeChain.foldLeft[Try[DigestState]](Success(genesisState)) { case (acc, m) =>
+          acc.flatMap(_.applyModifier(m)(lm => pmodModify(lm.pmod, local = true)))
+        }
     }
   }
 

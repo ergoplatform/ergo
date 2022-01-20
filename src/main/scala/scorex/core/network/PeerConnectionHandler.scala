@@ -189,7 +189,7 @@ class PeerConnectionHandler(val settings: NetworkSettings,
 
       chunksBuffer ++= data
 
-      if(chunksBuffer > 50 * 1024){
+      if(chunksBuffer.length > 50 * 1024){
         log.debug(s"Received ${data.length} bytes, chunksBuffer ${chunksBuffer.length} from $connectionId" )
       }
 

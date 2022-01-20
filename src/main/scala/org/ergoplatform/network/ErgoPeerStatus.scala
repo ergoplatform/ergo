@@ -13,12 +13,14 @@ import scorex.core.utils.TimeProvider.Time
   * @param peer - peer information (public address, exposed info on operating mode etc)
   * @param status - peer's blockchain status (is it ahead or behind our, or on fork)
   * @param height - peer's height
-  * @param lastSyncTime - last time peer was asked to sync, None if never
+  * @param lastSyncSentTime - last time peer was asked to sync, None if never
+  * @param lastSyncGetTime - last time peer received sync, None if never
   */
 case class ErgoPeerStatus(peer: ConnectedPeer,
                           status: HistoryComparisonResult,
                           height: Height,
-                          lastSyncTime: Option[Time]) {
+                          lastSyncSentTime: Option[Time],
+                          lastSyncGetTime: Option[Time]) {
   val mode: Option[ModeFeature] = ErgoPeerStatus.mode(peer)
 
   def version: Option[Version] = peer.peerInfo.map(_.peerSpec.protocolVersion)

@@ -18,7 +18,7 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     val height = 1000
     // add peer to sync
     syncTracker.updateStatus(connectedPeer, status, Some(height))
-    syncTracker.statuses(connectedPeer) shouldBe ErgoPeerStatus(connectedPeer, status, height, None)
+    syncTracker.statuses(connectedPeer) shouldBe ErgoPeerStatus(connectedPeer, status, height, None, None)
     syncTracker.getStatus(connectedPeer) shouldBe Some(status)
     syncTracker.peersByStatus.apply(status).head shouldBe connectedPeer
     // peer should not be synced yet

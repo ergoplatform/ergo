@@ -1,11 +1,13 @@
 package scorex.core.network
 
 import java.net._
+
 import akka.actor._
 import akka.io.Tcp._
 import akka.io.{IO, Tcp}
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.GlobalConstants
 import scorex.core.app.{ScorexContext, Version}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{DisconnectedPeer, HandshakedPeer}
 import scorex.core.network.message.Message.MessageCode
@@ -540,6 +542,7 @@ object NetworkControllerRef {
             scorexContext: ScorexContext,
             tcpManager: ActorRef)(implicit ec: ExecutionContext): Props = {
     Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager))
+      .withDispatcher(GlobalConstants.NetworkDispatcher)
   }
 
   def apply(settings: NetworkSettings,

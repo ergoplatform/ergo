@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Cancellable, Props, SupervisorS
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
+import org.ergoplatform.GlobalConstants
 import scorex.core.app.{ScorexContext, Version}
 import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
 import scorex.core.network.PeerConnectionHandler.ReceivableMessages
@@ -188,6 +189,10 @@ class PeerConnectionHandler(val settings: NetworkSettings,
 
       chunksBuffer ++= data
 
+      if(chunksBuffer > 50 * 1024){
+        log.debug(s"Received ${data.length} bytes, chunksBuffer ${chunksBuffer.length} from $connectionId" )
+      }
+
       @tailrec
       def process(): Unit = {
         messageSerializer.deserialize(chunksBuffer, selfPeer) match {
@@ -277,6 +282,7 @@ object PeerConnectionHandlerRef {
             connectionDescription: ConnectionDescription
            )(implicit ec: ExecutionContext): Props =
     Props(new PeerConnectionHandler(settings, networkControllerRef, scorexContext, connectionDescription))
+      .withDispatcher(GlobalConstants.NetworkDispatcher)
 
   def apply(settings: NetworkSettings,
             networkControllerRef: ActorRef,

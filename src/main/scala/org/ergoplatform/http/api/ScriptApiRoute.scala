@@ -20,6 +20,7 @@ import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
 import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
+import sigmastate.interpreter.Interpreter
 import sigmastate.serialization.ValueSerializer
 
 import scala.concurrent.Future
@@ -102,8 +103,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         tree => {
           implicit val irc: IRContext = new RuntimeIRContext()
           val interpreter: ErgoLikeInterpreter = new ErgoLikeInterpreter()
-          val prop = interpreter.propositionFromErgoTree(tree, req.ctx.asInstanceOf[interpreter.CTX])
-          val res = interpreter.reduceToCrypto(req.ctx.asInstanceOf[interpreter.CTX], prop)
+          val res = Try(interpreter.fullReduction(tree, req.ctx.asInstanceOf[interpreter.CTX], Interpreter.emptyEnv))
           res.fold(
             e => BadRequest(e.getMessage),
             s => ApiResponse(CryptoResult(s.value, s.cost).asJson)

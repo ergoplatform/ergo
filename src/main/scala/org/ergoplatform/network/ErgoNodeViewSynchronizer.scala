@@ -193,9 +193,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Process sync message `syncInfo` got from neighbour peer `remote`
     */
   protected def processSync(hr: ErgoHistory, syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
-    syncInfo match {
-      case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
-      case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
+    val diff = syncTracker.updateLastSyncGetTime(remote)
+    if(diff > 1000 * 2) {
+      // process sync if sent in more than 2 seconds after previous sync
+      log.debug(s"Processing sync from $remote")
+      syncInfo match {
+        case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
+        case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
+      }
+    } else {
+      log.debug(s"Spammy sync detected from $remote")
     }
   }
 

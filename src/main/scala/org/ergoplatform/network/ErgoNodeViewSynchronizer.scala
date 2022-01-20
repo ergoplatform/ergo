@@ -577,9 +577,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     @tailrec
     def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
       var size = 5 //message type id + message size
-      val batch = mods.takeWhile { case (_, modBytes) =>
+      var batch = mods.takeWhile { case (_, modBytes) =>
         size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
         size < networkSettings.maxPacketSize
+      }
+      if(batch.isEmpty) {
+        batch = Seq(mods.head)
       }
       log.debug("Sending modifiers: " + idsToString(invData.typeId, objs.map(_._1)))
       remote.handlerRef ! Message(modifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)

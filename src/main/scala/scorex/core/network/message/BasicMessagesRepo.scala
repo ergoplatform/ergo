@@ -171,7 +171,7 @@ class ModifiersSpec(maxMessageSize: Int) extends MessageSpecV1[ModifiersData] wi
       val id = bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
       val objBytesCnt = r.getUInt().toIntExact
       val newMsgSize = msgSize + NodeViewModifier.ModifierIdSize + objBytesCnt
-      if (newMsgSize > maxMessageSize) {
+      if (newMsgSize > 2 * maxMessageSize) { // 2x buffer for safety
         throw new Exception("Too big message with modifiers, size: " + maxMessageSize)
       }
       val obj = r.getBytes(objBytesCnt)

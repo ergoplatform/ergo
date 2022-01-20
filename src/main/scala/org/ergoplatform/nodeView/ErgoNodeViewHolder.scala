@@ -505,7 +505,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         }
         toApply.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
           log.info(s"Applying modifier during node start-up to restore consistent state: ${m.id}")
-          acc.flatMap(_.applyModifier(m)(lm => pmodModify(lm.pmod, local = true)))
+          acc.flatMap(_.applyModifier(m)(lm => self ! lm))
         }
     }
   }
@@ -537,14 +537,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case Success(state) =>
         log.info("Recovering state using current epoch")
         chainToApply.foldLeft[Try[DigestState]](Success(state)) { case (acc, m) =>
-          acc.flatMap(_.applyModifier(m)(lm => pmodModify(lm.pmod, local = true)))
+          acc.flatMap(_.applyModifier(m)(lm => self ! lm))
         }
       case Failure(exception) => // recover using whole headers chain
         log.warn(s"Failed to recover state from current epoch, using whole chain: ${exception.getMessage}")
         val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
         val genesisState = DigestState.create(None, None, stateDir(settings), constants, parameters)
         wholeChain.foldLeft[Try[DigestState]](Success(genesisState)) { case (acc, m) =>
-          acc.flatMap(_.applyModifier(m)(lm => pmodModify(lm.pmod, local = true)))
+          acc.flatMap(_.applyModifier(m)(lm => self ! lm))
         }
     }
   }

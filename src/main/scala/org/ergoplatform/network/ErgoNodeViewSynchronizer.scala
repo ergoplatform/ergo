@@ -145,7 +145,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val syncV2Version = Version(4, 0, 16)
     remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
   }
-  
+
   /**
     * Send synchronization statuses to neighbour peers
     *
@@ -194,7 +194,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Process sync message `syncInfo` got from neighbour peer `remote`
     */
   protected def processSync(hr: ErgoHistory, syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
-    val globalDiff = timeProvider.time() - globalSyncGot
+    val newGlobal = timeProvider.time()
+    val globalDiff = newGlobal - globalSyncGot
+    globalSyncGot = newGlobal
 
     if(globalDiff > 250) {
       val diff = syncTracker.updateLastSyncGetTime(remote)
@@ -208,6 +210,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       } else {
         log.debug(s"Spammy sync detected from $remote")
       }
+    } else {
+      log.debug("Global sync violation")
     }
   }
 

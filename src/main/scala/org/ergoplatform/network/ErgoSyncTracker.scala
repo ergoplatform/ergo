@@ -33,7 +33,7 @@ final case class ErgoSyncTracker(system: ActorSystem,
   val heights: mutable.Map[ConnectedPeer, Height] = mutable.Map[ConnectedPeer, Height]()
 
 
-  def fullInfo(): Iterable[ErgoPeerStatus] = statuses.values
+  def fullInfo: Iterable[ErgoPeerStatus] = statuses.values
 
   def isOutdated(peer: ConnectedPeer): Boolean = {
     (timeProvider.time() - lastSyncSentTime.getOrElse(peer, 0L)).millis > SyncThreshold

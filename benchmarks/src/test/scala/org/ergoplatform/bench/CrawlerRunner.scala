@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, LaunchParameters}
 import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
-import scorex.core.network.PeerFeature
+import scorex.core.network.{DeliveryTracker, PeerFeature}
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
 
@@ -61,10 +61,11 @@ class CrawlerRunner(args: Array[String]) extends Application {
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
   val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
+  val deliveryTracker = DeliveryTracker.empty(ergoSettings)
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      ergoSettings, timeProvider, syncTracker)
+      ergoSettings, timeProvider, syncTracker, deliveryTracker)
 
 }
 

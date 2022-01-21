@@ -26,6 +26,11 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
     */
   def getAllPrioritized: IndexedSeq[ErgoTransaction]
 
+  /**
+    * Returns up to given number of transactions randomly
+    */
+  def random(limit: Int): Iterable[ErgoTransaction]
+
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 
   /**

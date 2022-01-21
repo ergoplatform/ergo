@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoScriptPredef.boxCreationHeight
 import org.ergoplatform.{ErgoBox, ErgoScriptPredef, Height, Self}
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import scorex.crypto.authds.ADKey
 import sigmastate._
 import sigmastate.Values._
@@ -15,7 +15,7 @@ import sigmastate.eval.{CompiletimeIRContext, IRContext}
 import sigmastate.interpreter.CryptoConstants.dlogGroup
 import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
 
-import scala.util.{Random, Try}
+import scala.util.Try
 
 class ScriptsSpec extends ErgoPropertyTest {
 
@@ -25,12 +25,6 @@ class ScriptsSpec extends ErgoPropertyTest {
   val delta = emission.settings.minerRewardDelay
   val fixedBox: ErgoBox = ergoBoxGen(fromString("1 == 1"), heightGen = 0).sample.get
   implicit lazy val context: IRContext = new CompiletimeIRContext
-
-  property("scripts complexity") {
-    val maxComplexity = settings.nodeSettings.maxTransactionComplexity
-    defaultMinerPk.toSigmaProp.treeWithSegregation.complexity should be <= maxComplexity
-    ErgoScriptPredef.rewardOutputScript(delta, defaultMinerPk).complexity should be <= maxComplexity
-  }
 
   property("simple operations without cryptography") {
     // true/false
@@ -73,9 +67,9 @@ class ScriptsSpec extends ErgoPropertyTest {
   private def applyBlockSpendingScript(script: ErgoTree): Try[UtxoState] = {
     val scriptBox = ergoBoxGen(script, heightGen = 0).sample.get
     val bh = BoxHolder(Seq(fixedBox, scriptBox))
-    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants)
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants, parameters)
     bh.boxes.map(b => us.boxById(b._2.id) shouldBe Some(b._2))
-    val tx = validTransactionsFromBoxHolder(bh, new Random(1), 201)._1
+    val tx = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
     tx.size shouldBe 1
     tx.head.inputs.size shouldBe 2
     ErgoState.boxChanges(tx)._1.foreach { boxId: ADKey =>

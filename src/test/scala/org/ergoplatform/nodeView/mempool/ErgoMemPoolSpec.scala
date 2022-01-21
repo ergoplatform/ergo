@@ -11,18 +11,16 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
-import scala.util.Random
-
 class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoGenerators
   with ErgoTestHelpers
   with ScalaCheckPropertyChecks {
 
   it should "accept valid transaction" in {
-    val (us, bh) = createUtxoState()
-    val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-    val txs = validTransactionsFromUtxoState(wus, Random)
+    val (us, bh) = createUtxoState(parameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis).get
+    val txs = validTransactionsFromUtxoState(wus)
     val pool0 = ErgoMemPool.empty(settings)
     val poolAfter = txs.foldLeft(pool0) { case (pool, tx) =>
       val (p, outcome) = pool.process(tx, us)
@@ -41,10 +39,10 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   }
 
   it should "decline already contained transaction" in {
-    val (us, bh) = createUtxoState()
-    val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-    val txs = validTransactionsFromUtxoState(wus, Random)
+    val (us, bh) = createUtxoState(parameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis).get
+    val txs = validTransactionsFromUtxoState(wus)
     var pool = ErgoMemPool.empty(settings)
     txs.foreach { tx =>
       pool = pool.putWithoutCheck(Seq(tx))
@@ -57,9 +55,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "reject double-spending transaction if it is paying no more than one already sitting in the pool" in {
     forAll(smallPositiveInt, smallPositiveInt) { case (n1, n2) =>
       whenever(n1 != n2) {
-        val (us, bh) = createUtxoState()
-        val genesis = validFullBlock(None, us, bh, Random)
-        val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+        val (us, bh) = createUtxoState(extendedParameters)
+        val genesis = validFullBlock(None, us, bh)
+        val wus = WrappedUtxoState(us, bh, stateConstants, extendedParameters).applyModifier(genesis).get
 
         val feeProp = settings.chainSettings.monetary.feeProposition
         val inputBox = wus.takeBoxes(1).head
@@ -103,7 +101,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   }
 
   it should "decline transactions invalidated earlier" in {
-    val us = createUtxoState()._1
+    val us = createUtxoState(parameters)._1
     var pool = ErgoMemPool.empty(settings)
     forAll(invalidBlockTransactionsGen) { blockTransactions =>
       blockTransactions.txs.foreach(tx => pool = pool.process(tx, us)._1)
@@ -113,10 +111,10 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   }
 
   it should "decline transactions not meeting min fee" in {
-    val (us, bh) = createUtxoState()
-    val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-    val txs = validTransactionsFromUtxoState(wus, Random)
+    val (us, bh) = createUtxoState(parameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis).get
+    val txs = validTransactionsFromUtxoState(wus)
 
     val maxSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = Long.MaxValue))
     val pool = ErgoMemPool.empty(maxSettings)
@@ -135,11 +133,14 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
   }
 
-  it should "invalidate invalid transaction" in {
-    val us = createUtxoState()._1
+  it should "invalidate or reject invalid transaction" in {
+    val us = createUtxoState(parameters)._1
     val pool = ErgoMemPool.empty(settings)
     forAll(invalidBlockTransactionsGen) { blockTransactions =>
-      blockTransactions.txs.forall(pool.process(_, us)._2.isInstanceOf[ProcessingOutcome.Invalidated]) shouldBe true
+      blockTransactions.txs.forall{tx =>
+        val valRes = pool.process(tx, us)._2
+        valRes.isInstanceOf[ProcessingOutcome.Invalidated] ||
+          valRes.isInstanceOf[ProcessingOutcome.Declined]} shouldBe true
     }
   }
 
@@ -171,10 +172,10 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   }
 
   it should "Accept output of pooled transactions" in {
-    val (us, bh) = createUtxoState()
-    val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-    val txs = validTransactionsFromUtxoState(wus, Random)
+    val (us, bh) = createUtxoState(parameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis).get
+    val txs = validTransactionsFromUtxoState(wus)
     var pool = ErgoMemPool.empty(settings)
     txs.foreach { tx =>
       pool = pool.putWithoutCheck(Seq(tx))
@@ -189,10 +190,10 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   }
 
   it should "consider families for replacement policy" in {
-    val (us, bh) = createUtxoState()
-    val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-    var txs = validTransactionsFromUtxoState(wus, Random)
+    val (us, bh) = createUtxoState(parameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis).get
+    var txs = validTransactionsFromUtxoState(wus)
     val family_depth = 10
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
@@ -219,10 +220,10 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   }
 
   it should "correctly remove transaction from pool and rebuild families" in {
-    val (us, bh) = createUtxoState()
-    val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-    var txs = validTransactionsFromUtxoState(wus, Random)
+    val (us, bh) = createUtxoState(parameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis).get
+    var txs = validTransactionsFromUtxoState(wus)
     var allTxs = txs
     val family_depth = 10
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
@@ -252,10 +253,10 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "return results take / getAll / getAllPrioritized sorted by priority" in {
     val feeProp = settings.chainSettings.monetary.feeProposition
 
-    val (us, bh) = createUtxoState()
-    val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-    var txs = validTransactionsFromUtxoState(wus, Random)
+    val (us, bh) = createUtxoState(parameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis).get
+    var txs = validTransactionsFromUtxoState(wus)
     val family_depth = 10
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
@@ -293,10 +294,10 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   }
 
   it should "add removed transaction to mempool statistics" in {
-    val (us, bh) = createUtxoState()
-    val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
-    var txs = validTransactionsFromUtxoState(wus, Random)
+    val (us, bh) = createUtxoState(parameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis).get
+    var txs = validTransactionsFromUtxoState(wus)
     var allTxs = txs
     val family_depth = 10
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))

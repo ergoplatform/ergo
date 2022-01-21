@@ -5,11 +5,12 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
-import org.ergoplatform.settings.{ErgoSettings, MonetarySettings}
+import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, bytesToId}
 import OrderedTxPool.weighted
+import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -30,9 +31,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
 
+  private val nodeSettings: NodeConfigurationSettings = settings.nodeSettings
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
-
-  private val nodeSettings = settings.nodeSettings
 
   override def size: Int = pool.size
 
@@ -40,6 +40,26 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   override def take(limit: Int): IndexedSeq[ErgoTransaction] =
     mutable.WrappedArray.make(pool.orderedTransactions.values.take(limit).toArray)
+
+  def random(limit: Int): Iterable[ErgoTransaction] = {
+    val result = mutable.WrappedArray.newBuilder[ErgoTransaction]
+    val txSeq = pool.orderedTransactions.values.to[Vector]
+    val total = txSeq.size
+    val start = if (total <= limit) {
+      0
+    } else {
+      val max = total - limit
+      // max > 0 always
+      scala.util.Random.nextInt(max)
+    }
+
+    cfor(start)(_ < Math.min(start + limit, total), _ + 1) { idx =>
+      val tx = txSeq.apply(idx)
+      result += tx
+    }
+
+    result.result()
+  }
 
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(pool.get)
 
@@ -110,7 +130,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
   def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
     val blacklistedTransactions = nodeSettings.blacklistedTransactions
     if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
-      new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Declined(new Exception("blacklisted tx"))
+      new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
     } else {
       val fee = extractFee(tx)
       val minFee = settings.nodeSettings.minimalFeeAmount
@@ -121,14 +141,19 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
           state match {
             case utxo: UtxoState =>
               // Allow proceeded transaction to spend outputs of pooled transactions.
-              utxo.withTransactions(getAllPrioritized).validate(tx).fold(
-                ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
-                _ => acceptIfNoDoubleSpend(tx)
-              )
+              val utxoWithPool = utxo.withTransactions(getAllPrioritized)
+              if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
+                utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), nodeSettings.maxTransactionCost, None).fold(
+                  ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
+                  _ => acceptIfNoDoubleSpend(tx)
+                )
+              } else {
+                this -> ProcessingOutcome.Declined(new Exception("not all utxos in place yet"))
+              }
             case validator: TransactionValidation =>
               // transaction validation currently works only for UtxoState, so this branch currently
               // will not be triggered probably
-              validator.validate(tx).fold(
+              validator.validateWithCost(tx, nodeSettings.maxTransactionCost).fold(
                 ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
                 _ => acceptIfNoDoubleSpend(tx)
               )

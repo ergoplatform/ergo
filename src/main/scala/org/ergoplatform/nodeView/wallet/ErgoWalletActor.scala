@@ -31,6 +31,7 @@ import scala.util.{Failure, Success, Try}
 
 
 class ErgoWalletActor(settings: ErgoSettings,
+                      parameters: Parameters,
                       ergoWalletService: ErgoWalletService,
                       boxSelector: BoxSelector,
                       historyReader: ErgoHistoryReader)
@@ -68,7 +69,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   override def preStart(): Unit = {
     log.info("Initializing wallet actor")
-    ErgoWalletState.initial(settings) match {
+    ErgoWalletState.initial(settings, parameters) match {
       case Success(state) =>
         context.system.eventStream.subscribe(self, classOf[ChangedState])
         context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
@@ -445,10 +446,11 @@ object ErgoWalletActor extends ScorexLogging {
 
   /** Start actor and register its proper closing into coordinated shutdown */
   def apply(settings: ErgoSettings,
+            parameters: Parameters,
             service: ErgoWalletService,
             boxSelector: BoxSelector,
             historyReader: ErgoHistoryReader)(implicit actorSystem: ActorSystem): ActorRef = {
-    val props = Props(classOf[ErgoWalletActor], settings, service, boxSelector, historyReader)
+    val props = Props(classOf[ErgoWalletActor], settings, parameters, service, boxSelector, historyReader)
       .withDispatcher(GlobalConstants.ApiDispatcher)
     val walletActorRef = actorSystem.actorOf(props)
     CoordinatedShutdown(actorSystem).addActorTerminationTask(

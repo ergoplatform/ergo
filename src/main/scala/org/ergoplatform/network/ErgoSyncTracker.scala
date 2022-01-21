@@ -27,11 +27,19 @@ final case class ErgoSyncTracker(system: ActorSystem,
 
   private[network] val statuses = mutable.Map[ConnectedPeer, ErgoPeerStatus]()
   private[network] val lastSyncSentTime = mutable.Map[ConnectedPeer, Time]()
+  private[network] val lastSyncGetTime = mutable.Map[ConnectedPeer, Time]()
 
   protected var lastSyncInfoSentTime: Time = 0L
 
   val heights: mutable.Map[ConnectedPeer, Height] = mutable.Map[ConnectedPeer, Height]()
 
+  // returns diff
+  def updateLastSyncGetTime(peer: ConnectedPeer): Long = {
+    val prevSyncGetTime = lastSyncGetTime.getOrElse(peer, 0L)
+    val currentTime = timeProvider.time()
+    lastSyncGetTime(peer) = currentTime
+    currentTime - prevSyncGetTime
+  }
 
   def fullInfo(): Iterable[ErgoPeerStatus] = statuses.values
 
@@ -70,6 +78,11 @@ final case class ErgoSyncTracker(system: ActorSystem,
 
     lastSyncSentTime.find(_._1.connectionId.remoteAddress == remote) match {
       case Some((peer, _)) => lastSyncSentTime -= peer
+      case None => log.warn(s"Trying to clear last sync time for $remote, but it is not found")
+    }
+
+    lastSyncGetTime.find(_._1.connectionId.remoteAddress == remote) match {
+      case Some((peer, _)) => lastSyncGetTime -= peer
       case None => log.warn(s"Trying to clear last sync time for $remote, but it is not found")
     }
   }
@@ -113,4 +126,13 @@ final case class ErgoSyncTracker(system: ActorSystem,
     peers
   }
 
+  override def toString: String = {
+    val now = System.currentTimeMillis()
+    lastSyncSentTime.toSeq.sortBy(_._2)(Ordering[Long].reverse).map {
+      case (peer, syncTimestamp) =>
+        (peer.connectionId.remoteAddress, statuses.get(peer), now - syncTimestamp)
+    }.map { case (address, status, millisSinceLastSync) =>
+      s"$address, height: ${status.map(_.height)}, status: ${status.map(_.status)}, lastSync: $millisSinceLastSync ms ago"
+    }.mkString("\n")
+  }
 }

@@ -4,12 +4,12 @@ import org.ergoplatform.{DataInput, Input}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import scorex.core._
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ProverResult
 
-import scala.util.{Random, Try}
+import scala.util.Try
 
 class DigestStateSpecification extends ErgoPropertyTest {
 
@@ -18,28 +18,28 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
   property("reopen") {
     forAll(boxesHolderGen) { bh =>
-      val us = createUtxoState(bh)
+      val us = createUtxoState(bh, parameters)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
 
       val fb = validFullBlock(parentOpt = None, us, bh)
       val dir2 = createTempDir
-      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, stateConstants)
+      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, stateConstants, parameters)
       ds.applyModifier(fb) shouldBe 'success
       ds.close()
 
-      val state = DigestState.create(None, None, dir2, stateConstants)
+      val state = DigestState.create(None, None, dir2, stateConstants, parameters)
       state.version shouldEqual fb.header.id
       state.rootHash shouldEqual fb.header.stateRoot
     }
   }
 
   property("validate() - valid block") {
-    var (us, bh) = createUtxoState()
-    var ds = createDigestState(us.version, us.rootHash)
+    var (us, bh) = createUtxoState(parameters)
+    var ds = createDigestState(us.version, us.rootHash, parameters)
     var parentOpt: Option[ErgoFullBlock] = None
 
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new RandomWrapper(Some(seed)))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
@@ -50,39 +50,39 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
   property("validate() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createDigestState(emptyVersion, emptyAdDigest)
+      val state = createDigestState(emptyVersion, emptyAdDigest, parameters)
       state.validate(b).isFailure shouldBe true
     }
   }
 
   property("applyModifier() - valid block") {
     forAll(boxesHolderGen) { bh =>
-      val us = createUtxoState(bh)
+      val us = createUtxoState(bh, parameters)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
 
       val block = validFullBlock(parentOpt = None, us, bh)
       block.blockTransactions.transactions.exists(_.dataInputs.nonEmpty) shouldBe true
 
-      val ds = createDigestState(us.version, us.rootHash)
+      val ds = createDigestState(us.version, us.rootHash, parameters)
       ds.applyModifier(block) shouldBe 'success
     }
   }
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createDigestState(emptyVersion, emptyAdDigest)
+      val state = createDigestState(emptyVersion, emptyAdDigest, parameters)
       state.applyModifier(b).isFailure shouldBe true
     }
   }
 
   property("rollback & rollback versions") {
     forAll(boxesHolderGen) { bh =>
-      val us = createUtxoState(bh)
+      val us = createUtxoState(bh, parameters)
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
 
       val block = validFullBlock(parentOpt = None, us, bh)
 
-      val ds = createDigestState(us.version, us.rootHash)
+      val ds = createDigestState(us.version, us.rootHash, parameters)
 
       ds.rollbackVersions.size shouldEqual 1
 
@@ -105,12 +105,12 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
   property("validateTransactions() - dataInputs") {
     forAll(boxesHolderGen) { bh =>
-      val us = createUtxoState(bh)
-      val ds = createDigestState(us.version, us.rootHash)
+      val us = createUtxoState(bh, parameters)
+      val ds = createDigestState(us.version, us.rootHash, parameters)
 
       // generate 2 independent transactions spending state boxes only
-      val headTx = validTransactionsFromBoxes(1, bh.boxes.take(10).values.toSeq, new Random())._1.head
-      val nextTx = validTransactionsFromBoxes(1, bh.boxes.takeRight(10).values.toSeq, new Random())._1.head
+      val headTx = validTransactionsFromBoxes(1, bh.boxes.take(10).values.toSeq, new RandomWrapper())._1.head
+      val nextTx = validTransactionsFromBoxes(1, bh.boxes.takeRight(10).values.toSeq, new RandomWrapper())._1.head
       headTx.inputs.intersect(nextTx.inputs) shouldBe empty
 
       // trying to apply transactions with data inputs same as inputs of the next tx

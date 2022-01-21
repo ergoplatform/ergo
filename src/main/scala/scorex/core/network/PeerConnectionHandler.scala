@@ -192,7 +192,7 @@ class PeerConnectionHandler(val settings: NetworkSettings,
       def process(): Unit = {
         messageSerializer.deserialize(chunksBuffer, selfPeer) match {
           case Success(Some(message)) =>
-            log.info("Received message " + message.spec + " from " + connectionId)
+            log.debug("Received message " + message.spec + " from " + connectionId)
             networkControllerRef ! message
             chunksBuffer = chunksBuffer.drop(message.messageLength)
             process()

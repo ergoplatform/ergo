@@ -532,7 +532,6 @@ object CandidateGenerator extends ScorexLogging {
         minerPk,
         state.stateContext.currentParameters.maxBlockCost - safeGap,
         state.stateContext.currentParameters.maxBlockSize,
-        ergoSettings.nodeSettings.maxTransactionComplexity,
         state,
         upcomingContext,
         emissionTxs ++ prioritizedTransactions ++ poolTxs
@@ -722,7 +721,6 @@ object CandidateGenerator extends ScorexLogging {
     minerPk: ProveDlog,
     maxBlockCost: Long,
     maxBlockSize: Long,
-    maxTransactionComplexity: Int,
     us: UtxoStateReader,
     upcomingContext: ErgoStateContext,
     transactions: IndexedSeq[ErgoTransaction]
@@ -746,9 +744,10 @@ object CandidateGenerator extends ScorexLogging {
       // transactions from mempool and fee txs from the previous step
       def current: IndexedSeq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
 
+      val stateWithTxs = us.withTransactions(current)
+
       if (index < transactions.length) {
         val tx = transactions(index)
-        val stateWithTxs = us.withTransactions(current)
         if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
           //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
           //do these checks before validating the scripts to save time
@@ -759,7 +758,7 @@ object CandidateGenerator extends ScorexLogging {
           stateWithTxs.validateWithCost(
             tx,
             Some(upcomingContext),
-            maxTransactionComplexity,
+            maxBlockCost,
             Some(verifier)
           ) match {
             case Success(costConsumed) =>

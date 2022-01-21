@@ -16,6 +16,7 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
+import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.crypto.authds.ADKey
 import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
@@ -47,8 +48,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val newBoxes = IndexedSeq(newFoundersBox, rewardBox)
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
-      val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
-      us.validateWithCost(tx, None, complexityLimit, None).get should be <= 100000L
+      val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
+      us.validateWithCost(tx, None, txCostLimit, None).get should be <= 100000L
       val block1 = validFullBlock(Some(lastBlock), us, Seq(ErgoTransaction(tx)))
       us = us.applyModifier(block1).get
       foundersBox = tx.outputs.head
@@ -91,7 +92,18 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx = defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get
-      us.validate(ErgoTransaction(tx)) shouldBe 'success
+      val validationRes1 = us.validateWithCost(ErgoTransaction(tx), 100000)
+      validationRes1 shouldBe 'success
+      val txCost = validationRes1.get
+
+      val validationRes2 = us.validateWithCost(ErgoTransaction(tx), txCost - 1)
+      validationRes2 shouldBe 'failure
+      validationRes2.toEither.left.get.isInstanceOf[TooHighCostError] shouldBe true
+
+      us.validateWithCost(ErgoTransaction(tx), txCost + 1) shouldBe 'success
+
+      us.validateWithCost(ErgoTransaction(tx), txCost) shouldBe 'success
+
       height = height + 1
     }
   }
@@ -205,7 +217,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     chain.foreach { fb =>
       us2 = us2.applyModifier(fb).get
     }
-    Await.result(f, Duration.Inf);
+    Await.result(f, Duration.Inf)
   }
 
   property("proofsForTransactions() to be deterministic") {
@@ -464,6 +476,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       }
     }
   }
+
+
 
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {
     popowAlgos.interlinksToExtension(popowAlgos.updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)

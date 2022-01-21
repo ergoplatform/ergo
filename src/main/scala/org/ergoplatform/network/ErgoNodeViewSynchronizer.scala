@@ -406,7 +406,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                      hr: ErgoHistory,
                                      data: ModifiersData,
                                      remote: ConnectedPeer,
-                                     blockAppliedTxsCache: FixedSizeBloomFilterQueue): Unit = {
+                                     blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
     val typeId = data.typeId
     val modifiers = data.modifiers
     log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
@@ -476,7 +476,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def processSpam(remote: ConnectedPeer,
                   typeId: ModifierTypeId,
                   modifiers: Map[ModifierId, Array[Byte]],
-                  blockAppliedTxsCache: FixedSizeBloomFilterQueue): Map[ModifierId, Array[Byte]] = {
+                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Map[ModifierId, Array[Byte]] = {
     val modifiersByStatus =
       modifiers
         .groupBy { case (id, _) => deliveryTracker.status(id, typeId, Seq.empty) }
@@ -512,7 +512,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                            mp: ErgoMemPool,
                            invData: InvData,
                            peer: ConnectedPeer,
-                           blockAppliedTxsCache: FixedSizeBloomFilterQueue): Unit = {
+                           blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
     val modifierTypeId = invData.typeId
     val newModifierIds = modifierTypeId match {
       case Transaction.ModifierTypeId =>
@@ -706,7 +706,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
   }
 
-  protected def viewHolderEvents(historyReader: ErgoHistory, mempoolReader: ErgoMemPool, blockAppliedTxsCache: FixedSizeBloomFilterQueue): Receive = {
+  protected def viewHolderEvents(historyReader: ErgoHistory, mempoolReader: ErgoMemPool, blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
 
@@ -779,7 +779,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /** get handlers of messages coming from peers */
   private def msgHandlers(hr: ErgoHistory,
                           mp: ErgoMemPool,
-                          blockAppliedTxsCache: FixedSizeBloomFilterQueue
+                          blockAppliedTxsCache: FixedSizeApproximateCacheQueue
                          ): PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: ErgoSyncInfoMessageSpec.type @unchecked, data: ErgoSyncInfo @unchecked, remote) =>
       processSync(hr, data, remote)
@@ -791,7 +791,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       modifiersFromRemote(hr, data, remote, blockAppliedTxsCache)
   }
 
-  def initialized(hr: ErgoHistory, mp: ErgoMemPool, blockAppliedTxsCache: FixedSizeBloomFilterQueue): PartialFunction[Any, Unit] = {
+  def initialized(hr: ErgoHistory, mp: ErgoMemPool, blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
     processDataFromPeer(msgHandlers(hr, mp, blockAppliedTxsCache)) orElse
       onDownloadRequest(hr) orElse
       getLocalSyncInfo(hr) orElse
@@ -803,7 +803,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /** Wait until both historyReader and mempoolReader instances are received so actor can be operational */
-  def initializing(hr: Option[ErgoHistory], mp: Option[ErgoMemPool], blockAppliedTxsCache: FixedSizeBloomFilterQueue): PartialFunction[Any, Unit] = {
+  def initializing(hr: Option[ErgoHistory], mp: Option[ErgoMemPool], blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
     case ChangedHistory(historyReader: ErgoHistory) =>
       mp match {
         case Some(mempoolReader) =>
@@ -823,7 +823,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       context.system.scheduler.scheduleOnce(1.second, self, msg)
   }
 
-  override def receive: Receive = initializing(None, None, FixedSizeBloomFilterQueue.empty(bloomFilterQueueSize = 5))
+  override def receive: Receive = initializing(None, None, FixedSizeApproximateCacheQueue.empty(cacheQueueSize = 5))
 
 }
 

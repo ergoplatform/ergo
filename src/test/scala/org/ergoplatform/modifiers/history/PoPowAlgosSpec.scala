@@ -71,7 +71,9 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val blockIds = Seq.empty[ModifierId]
     val extension = popowAlgos.interlinksToExtension(blockIds)
     val proof = popowAlgos.proofForInterlinkVector(extension)
-    proof shouldBe None
+    proof shouldBe defined
+    proof.get.proofs should have length 0
+    proof.get.indices should have length 0
   }
 
   property("0 level is always valid for any block") {

@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.scalacheck.Gen
 
 class ExtensionCandidateTest extends ErgoPropertyTest {
   type KV = (Array[Byte], Array[Byte])
@@ -23,13 +24,15 @@ class ExtensionCandidateTest extends ErgoPropertyTest {
   }
 
   property("batchProofFor should return a valid proof for a set of existing values") {
-    forAll { fields: Seq[KV] =>
-      whenever(fields.nonEmpty) {
+    val modifierIds = Gen.listOf(modifierIdGen)
+    forAll(modifierIds) { modifiers =>
+      whenever(modifiers.nonEmpty) {
 
+        val fields = popowAlgos.packInterlinks(modifiers)
         val ext = ExtensionCandidate(fields)
         val proof = ext.batchProofFor(fields.map(_._1.clone).toArray: _*)
         proof shouldBe defined
-        proof.get.valid(ext.digest) shouldBe true
+        proof.get.valid(ext.interlinksDigest) shouldBe true
       }
     }
   }

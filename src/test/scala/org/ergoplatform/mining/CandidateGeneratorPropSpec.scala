@@ -3,14 +3,13 @@ package org.ergoplatform.mining
 import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.settings.MonetarySettings
+import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
 import sigmastate.basics.DLogProtocol.ProveDlog
 
-import scala.util.Random
-import concurrent.duration._
+import scala.concurrent.duration._
 
 class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
@@ -19,7 +18,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
   private def expectedRewardOutputScriptBytes(pk: ProveDlog): Array[Byte] =
     ErgoScriptPredef.rewardOutputScript(delta, pk).bytes
 
-  implicit private val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
+  implicit private val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
 
   property("minersRewardAtHeight test vectors") {
     emission.minersRewardAtHeight(525000) shouldBe 67500000000L
@@ -52,7 +51,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
   }
 
   property("collect reward from emission box only") {
-    val us = createUtxoState()._1
+    val us = createUtxoState(parameters)._1
     us.emissionBoxOpt should not be None
     val expectedReward = emission.minersRewardAtHeight(us.stateContext.currentHeight)
 
@@ -74,7 +73,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
   property("collect reward from transaction fees only") {
     val bh     = boxesHolderGen.sample.get
-    val us     = createUtxoState(bh)
+    val us     = createUtxoState(bh, parameters)
     val height = us.stateContext.currentHeight
     val blockTx = validTransactionFromBoxes(
       bh.boxes.take(2).values.toIndexedSeq,
@@ -123,8 +122,8 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     ): Unit = {
 
       val bh          = boxesHolderGen.sample.get
-      val rnd: Random = new Random
-      val us          = createUtxoState(bh)
+      val rnd         = new RandomWrapper
+      val us          = createUtxoState(bh, parameters)
       val inputs      = bh.boxes.values.toIndexedSeq.takeRight(100)
       val txsWithFees = inputs.map(i =>
         validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = withTokens, feeProp)
@@ -147,7 +146,6 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
           defaultMinerPk,
           maxCost,
           maxSize,
-          Int.MaxValue,
           us,
           upcomingContext,
           Seq(head)
@@ -161,7 +159,6 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
           defaultMinerPk,
           maxCost,
           maxSize,
-          Int.MaxValue,
           us,
           upcomingContext,
           txsWithFees
@@ -184,7 +181,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     }
 
     // transactions reach computation cost block limit
-    checkCollectTxs(LaunchParameters.maxBlockCost, Int.MaxValue)
+    checkCollectTxs(parameters.maxBlockCost, Int.MaxValue)
 
     // transactions reach block size limit
     checkCollectTxs(Long.MaxValue, 4096)
@@ -201,7 +198,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     val feeProposition = ErgoScriptPredef.feeProposition(delta)
 
     val bh     = boxesHolderGen.sample.get
-    var us     = createUtxoState(bh)
+    var us     = createUtxoState(bh, parameters)
     val height = ErgoHistory.EmptyHistoryHeight
 
     val emissionRules = new EmissionRules(
@@ -245,7 +242,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
   }
 
   property("collect reward from both emission box and fees") {
-    val (us, _) = createUtxoState()
+    val (us, _) = createUtxoState(parameters)
     us.emissionBoxOpt should not be None
     val expectedReward = emission.minersRewardAtHeight(us.stateContext.currentHeight)
 

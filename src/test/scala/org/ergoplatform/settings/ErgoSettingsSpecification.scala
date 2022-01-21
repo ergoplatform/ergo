@@ -7,7 +7,7 @@ import scala.concurrent.duration._
 
 class ErgoSettingsSpecification extends ErgoPropertyTest {
 
-  private val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
+  private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
 
   property("should keep data user home  by default") {
     val settings = ErgoSettings.read()
@@ -23,19 +23,20 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       poPoWBootstrap = false,
       10,
       mining = true,
-      complexityLimit,
-      useExternalMiner                 = false,
-      blockCandidateGenerationInterval = 45.seconds,
-      internalMinersCount              = 1,
-      internalMinerPollingInterval     = 1.second,
-      miningPubKeyHex                  = None,
-      offlineGeneration                = false,
-      keepVersions                     = 200,
-      mempoolCapacity                  = 100000,
-      mempoolCleanupDuration           = 10.seconds,
-      rebroadcastCount                 = 3,
-      minimalFeeAmount                 = 0,
-      headerChainDiff                  = 100
+      txCostLimit,
+      useExternalMiner                          = false,
+      blockCandidateGenerationInterval          = 45.seconds,
+      internalMinersCount                       = 1,
+      internalMinerPollingInterval              = 1.second,
+      miningPubKeyHex                           = None,
+      offlineGeneration                         = false,
+      keepVersions                              = 200,
+      acceptableChainUpdateDelay                = 15.minutes,
+      mempoolCapacity                           = 100000,
+      mempoolCleanupDuration                    = 10.seconds,
+      rebroadcastCount                          = 3,
+      minimalFeeAmount                          = 0,
+      headerChainDiff                           = 100
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
@@ -65,19 +66,20 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       poPoWBootstrap = false,
       10,
       mining = true,
-      complexityLimit,
-      useExternalMiner                 = false,
-      blockCandidateGenerationInterval = 45.seconds,
-      internalMinersCount              = 1,
-      internalMinerPollingInterval     = 1.second,
-      miningPubKeyHex                  = None,
-      offlineGeneration                = false,
-      keepVersions                     = 200,
-      mempoolCapacity                  = 100000,
-      mempoolCleanupDuration           = 10.seconds,
-      rebroadcastCount                 = 3,
-      minimalFeeAmount                 = 0,
-      headerChainDiff                  = 100
+      txCostLimit,
+      useExternalMiner                          = false,
+      blockCandidateGenerationInterval          = 45.seconds,
+      internalMinersCount                       = 1,
+      internalMinerPollingInterval              = 1.second,
+      miningPubKeyHex                           = None,
+      offlineGeneration                         = false,
+      keepVersions                              = 200,
+      acceptableChainUpdateDelay                = 15.minutes,
+      mempoolCapacity                           = 100000,
+      mempoolCleanupDuration                    = 10.seconds,
+      rebroadcastCount                          = 3,
+      minimalFeeAmount                          = 0,
+      headerChainDiff                           = 100
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
@@ -107,19 +109,20 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       poPoWBootstrap = false,
       10,
       mining = true,
-      complexityLimit,
-      useExternalMiner                 = false,
-      blockCandidateGenerationInterval = 45.seconds,
-      internalMinersCount              = 1,
-      internalMinerPollingInterval     = 1.second,
-      miningPubKeyHex                  = None,
-      offlineGeneration                = false,
-      keepVersions                     = 200,
-      mempoolCapacity                  = 100000,
-      mempoolCleanupDuration           = 10.seconds,
-      rebroadcastCount                 = 3,
-      minimalFeeAmount                 = 0,
-      headerChainDiff                  = 100
+      txCostLimit,
+      useExternalMiner                          = false,
+      blockCandidateGenerationInterval          = 45.seconds,
+      internalMinersCount                       = 1,
+      internalMinerPollingInterval              = 1.second,
+      miningPubKeyHex                           = None,
+      offlineGeneration                         = false,
+      keepVersions                              = 200,
+      acceptableChainUpdateDelay                = 15.minutes,
+      mempoolCapacity                           = 100000,
+      mempoolCleanupDuration                    = 10.seconds,
+      rebroadcastCount                          = 3,
+      minimalFeeAmount                          = 0,
+      headerChainDiff                           = 100
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(

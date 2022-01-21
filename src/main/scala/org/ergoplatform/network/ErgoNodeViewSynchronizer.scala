@@ -1,9 +1,10 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-
 import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
+import org.ergoplatform.GlobalConstants
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -14,7 +15,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.app.Version
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
@@ -37,6 +38,7 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
+import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.annotation.tailrec
@@ -82,8 +84,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val deliveryTracker: DeliveryTracker =
     DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
-  private val minModifiersPerBucket = 5 // minimum of persistent modifiers (excl. headers) to download by single peer
-  private val maxModifiersPerBucket = 20 // maximum of persistent modifiers (excl. headers) to download by single peer
+  private val minModifiersPerBucket = 10 // minimum of persistent modifiers (excl. headers) to download by single peer
+  private val maxModifiersPerBucket = 30 // maximum of persistent modifiers (excl. headers) to download by single peer
 
   private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
@@ -117,6 +119,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     val interval = networkSettings.syncInterval
     context.system.scheduler.scheduleWithFixedDelay(2.seconds, interval, self, SendLocalSyncInfo)
+
+    val healthCheckRate = settings.nodeSettings.acceptableChainUpdateDelay / 5
+    context.system.scheduler.scheduleAtFixedRate(healthCheckRate, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
   }
 
   protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
@@ -157,7 +162,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
     if (peersV1.nonEmpty) {
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfoV1), None), SendToPeers(peersV1))
+      val v1SyncInfo = history.syncInfoV1
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v1SyncInfo), None), SendToPeers(peersV1))
     }
     if (peersV2.nonEmpty) {
       //todo: send only last header to peers which are equal or younger
@@ -184,15 +190,34 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         networkControllerRef ! SendToNetwork(Message(invSpec, Right(InvData(mid, mods)), None), SendToPeer(remote))
     }
 
+  var globalSyncGot = 0L
   /**
     * Process sync message `syncInfo` got from neighbour peer `remote`
     */
   protected def processSync(hr: ErgoHistory, syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
-    syncInfo match {
-      case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
-      case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
+    val newGlobal = timeProvider.time()
+    val globalDiff = newGlobal - globalSyncGot
+
+    if(globalDiff > 250) {
+      globalSyncGot = newGlobal
+
+      val diff = syncTracker.updateLastSyncGetTime(remote)
+      if (diff > 1000 ) {
+        // process sync if sent in more than 1 second after previous sync
+        log.debug(s"Processing sync from $remote")
+        syncInfo match {
+          case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
+          case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
+        }
+      } else {
+        log.debug(s"Spammy sync detected from $remote")
+      }
+    } else {
+      log.debug("Global sync violation")
     }
   }
+
+  var globalExtSend = 0L
 
   /**
     * Processing sync V1 message `syncInfo` got from neighbour peer `remote`
@@ -209,17 +234,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     status match {
       case Unknown =>
         // we do not know what to send to a peer with unknown status
-        log.info(s"Peer status is still unknown for $remote")
+        log.debug(s"Peer status is still unknown for $remote")
       case Nonsense =>
         // we do not know what to send to a peer with such status
-        log.info(s"Got nonsense status for $remote")
+        log.debug(s"Got nonsense status for $remote")
       case Younger | Fork =>
-        // send extension (up to 400 header ids) to a peer which chain is less developed or forked
-        val ext = hr.continuationIds(syncInfo, size = 400)
-        if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-        log.info(s"Sending extension of length ${ext.length}")
-        log.debug(s"Extension ids: ${idsToString(ext)}")
-        sendExtension(remote, ext)
+        val newExtSend = timeProvider.time()
+
+        if(newExtSend - globalExtSend > 250) {
+          globalExtSend = newExtSend
+
+          // send extension (up to 400 header ids) to a peer which chain is less developed or forked
+          val ext = hr.continuationIds(syncInfo, size = 400)
+          if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
+          log.debug(s"Sending extension of length ${ext.length}")
+          log.debug(s"Extension ids: ${idsToString(ext)}")
+          sendExtension(remote, ext)
+        } else {
+          log.debug("Global extension send violated")
+        }
       case Older =>
         // asking headers from older peers
         val ids = syncInfo.lastHeaderIds.reverse
@@ -272,18 +305,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.warn(s"Got nonsense status in v2 for $remote")
 
       case Younger =>
-        // send extension (up to 400 header ids) to a peer which chain is less developed or forked
-        val ext = hr.continuationIds(syncInfo, size = 400)
-        if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-        log.info(s"Sending extension of length ${ext.length}")
-        log.debug(s"Extension ids: ${idsToString(ext)}")
-        sendExtension(remote, ext)
+        val newExtSend = timeProvider.time()
+
+        if (newExtSend - globalExtSend > 250) {
+          globalExtSend = newExtSend
+
+          // send extension (up to 400 header ids) to a peer which chain is less developed or forked
+          val ext = hr.continuationIds(syncInfo, size = 400)
+          if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
+          log.debug(s"Sending extension of length ${ext.length}")
+          log.debug(s"Extension ids: ${idsToString(ext)}")
+          sendExtension(remote, ext)
+        } else {
+          log.debug("Global extension send violated")
+        }
 
       case Fork =>
         log.info(s"Fork detected with peer $remote, its sync message $syncInfo")
 
       case Older =>
-        log.info(s"Peer $remote is older, its height ${syncInfo.height}")
+        log.debug(s"Peer $remote is older, its height ${syncInfo.height}")
 
       case Equal =>
         // does nothing for `Equal`
@@ -355,31 +396,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
         }
       }
-
-  /**
-    * Local node sending out objects requested to remote
-    */
-  protected def responseFromLocal: Receive = {
-    case ResponseFromLocal(peer, modType, modifiers: Seq[(ModifierId, Array[Byte])]) =>
-
-      @tailrec
-      def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
-        var size = 5 //message type id + message size
-        val batch = mods.takeWhile { case (_, modBytes) =>
-          size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
-          size < networkSettings.maxPacketSize
-        }
-        peer.handlerRef ! Message(modifiersSpec, Right(ModifiersData(modType, batch.toMap)), None)
-        val remaining = mods.drop(batch.length)
-        if (remaining.nonEmpty) {
-          sendByParts(remaining)
-        }
-      }
-
-      if (modifiers.nonEmpty) {
-        sendByParts(modifiers)
-      }
-  }
 
   /**
     * Logic to process block parts got from another peer.
@@ -470,7 +486,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
-        val spammyTxs = modifiers.filterKeys(id => !blockAppliedTxsCache.mightContain(id))
+        // penalize a peer for sending TXs that have been already applied to a block
+        val spammyTxs = modifiers.filterKeys(blockAppliedTxsCache.mightContain)
         if (spammyTxs.nonEmpty) {
           log.info(s"Got spammy transactions: $spammyTxs")
           penalizeSpammingPeer(remote)
@@ -507,16 +524,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val unknownMods =
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history
-          unknownMods.filterNot(blockAppliedTxsCache.mightContain)
+          val notApplied = unknownMods.filterNot(blockAppliedTxsCache.mightContain)
+          log.info(s"Processing ${invData.ids.length} tx invs frpm $peer, " +
+            s"${unknownMods.size} of them are unknown, requesting $notApplied")
+          notApplied
         } else {
           Seq.empty
         }
       case _ =>
+        log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) frpm $peer")
         invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
     }
 
     if (newModifierIds.nonEmpty) {
-      log.info(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
+      log.debug(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
       val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
       peer.handlerRef ! msg
       deliveryTracker.setRequested(newModifierIds, modifierTypeId, Some(peer))
@@ -551,7 +572,30 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
           s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_._1))} ")
       }
-      self ! ResponseFromLocal(remote, invData.typeId, objs)
+
+    @tailrec
+    def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
+      var size = 5 //message type id + message size
+      var batch = mods.takeWhile { case (_, modBytes) =>
+        size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
+        size < networkSettings.maxPacketSize
+      }
+      if (batch.isEmpty) {
+        // send modifier anyway
+        val ho = mods.headOption
+        batch = ho.toSeq
+        log.warn(s"Sending too big modifier ${ho.map(_._1)}, its size ${ho.map(_._2.length)}")
+      }
+      remote.handlerRef ! Message(modifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
+      val remaining = mods.drop(batch.length)
+      if (remaining.nonEmpty) {
+        sendByParts(remaining)
+      }
+    }
+
+    if (objs.nonEmpty) {
+      sendByParts(objs)
+    }
   }
 
   /**
@@ -684,10 +728,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.setHeld(tx.id, Transaction.ModifierTypeId)
       broadcastModifierInv(tx)
 
-    case FailedTransaction(id, _, immediateFailure) =>
-      val senderOpt = deliveryTracker.setInvalid(id, Transaction.ModifierTypeId)
-      // penalize sender only in case transaction was invalidated at first validation.
-      if (immediateFailure) senderOpt.foreach(penalizeMisbehavingPeer)
+    case FailedTransaction(id, error, immediateFailure) =>
+      if (immediateFailure) {
+        // penalize sender only in case transaction was invalidated at first validation.
+        deliveryTracker.setInvalid(id, Transaction.ModifierTypeId).foreach { peer =>
+          error match {
+            case TooHighCostError(_) =>
+              log.info(s"Penalize spamming peer $peer for too costly transaction $id")
+              penalizeSpammingPeer(peer)
+            case _ =>
+              penalizeMisbehavingPeer(peer)
+          }
+        }
+      }
 
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
@@ -712,8 +765,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
       // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
-      logger.info("Caching applied transactions")
+      logger.debug("Caching applied transactions")
       context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache.putAll(transactionIds)))
+
+    case ChainIsHealthy =>
+      // good news
+      logger.debug("Chain is good")
+
+    case ChainIsStuck(error) =>
+      log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
   }
 
   /** get handlers of messages coming from peers */
@@ -735,7 +795,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     processDataFromPeer(msgHandlers(hr, mp, blockAppliedTxsCache)) orElse
       onDownloadRequest(hr) orElse
       getLocalSyncInfo(hr) orElse
-      responseFromLocal orElse
       viewHolderEvents(hr, mp, blockAppliedTxsCache) orElse
       peerManagerEvents orElse
       checkDelivery orElse {
@@ -778,7 +837,7 @@ object ErgoNodeViewSynchronizer {
             syncTracker: ErgoSyncTracker)
            (implicit ex: ExecutionContext): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
-      timeProvider, syncTracker))
+      timeProvider, syncTracker)).withDispatcher(GlobalConstants.NetworkDispatcher)
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,

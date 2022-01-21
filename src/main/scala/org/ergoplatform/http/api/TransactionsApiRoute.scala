@@ -11,15 +11,19 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
 
-case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
+case class TransactionsApiRoute(readersHolder: ActorRef,
+                                nodeViewActorRef: ActorRef,
+                                ergoSettings: ErgoSettings)
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
+  override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   val txPaging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 50)
 
@@ -48,7 +52,8 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
       getStateAndPool
         .map {
           case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
-            utxo.withMempool(mp).validate(tx)
+            val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
+            utxo.withMempool(mp).validateWithCost(tx, maxTxCost)
           case _ =>
             tx.statelessValidity()
         }

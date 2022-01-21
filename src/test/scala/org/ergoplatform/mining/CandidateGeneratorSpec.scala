@@ -56,7 +56,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider, parameters)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -79,7 +79,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider, parameters)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -123,7 +123,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider, parameters)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -265,7 +265,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
   ) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider, parameters)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =

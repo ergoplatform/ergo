@@ -3,10 +3,7 @@ package org.ergoplatform.nodeView.wallet.requests
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction._
-import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
-import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddress, ErgoBox}
-
+import org.ergoplatform.ErgoBox
 
 /**
   * Request for asset burning.
@@ -17,24 +14,16 @@ import org.ergoplatform.{ErgoAddress, ErgoBox}
 case class BurnTokensRequest(assetsToBurn: Seq[(ErgoBox.TokenId, Long)])
   extends TransactionGenerationRequest
 
-class BurnTokensRequestEncoder(settings: ErgoSettings) extends Encoder[BurnTokensRequest] {
-
-  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder
-
+class BurnTokensRequestEncoder extends Encoder[BurnTokensRequest] {
   def apply(request: BurnTokensRequest): Json = {
     Json.obj(
-      "assetsToBurn" -> request.assetsToBurn.asJson,
+      "assetsToBurn" -> request.assetsToBurn.asJson
     )
   }
 
 }
 
-class BurnTokensRequestDecoder(settings: ErgoSettings) extends Decoder[BurnTokensRequest] {
-
-  val addressEncoders: ErgoAddressJsonEncoder = ErgoAddressJsonEncoder(settings)
-
-  implicit def addressDecoder: Decoder[ErgoAddress] = addressEncoders.decoder
-
+class BurnTokensRequestDecoder extends Decoder[BurnTokensRequest] {
   def apply(cursor: HCursor): Decoder.Result[BurnTokensRequest] = {
     for {
       assetsToBurn <- cursor.downField("assetsToBurn").as[Option[Seq[(ErgoBox.TokenId, Long)]]]

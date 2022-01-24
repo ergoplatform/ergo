@@ -7,11 +7,11 @@ import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, Er
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionGenerationRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.{AssetUtils, Constants}
 import org.ergoplatform.wallet.interface4j.SecretString
-import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
@@ -50,7 +50,7 @@ trait ErgoWalletSupport extends ScorexLogging {
   protected def deriveNextKeyForMasterKey(state: ErgoWalletState,
                                           masterKey: ExtendedSecretKey,
                                           usePreEip3Derivation: Boolean)
-                                       (implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)] = {
+                                         (implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)] = {
     val secrets = state.walletVars.proverOpt.toIndexedSeq.flatMap(_.hdKeys)
     val derivationResult = DerivationPath.nextPath(secrets, usePreEip3Derivation).map { path =>
       val secret = masterKey.derive(path)
@@ -58,7 +58,7 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
     derivationResult.map(_._3)
       .flatMap(secret => addSecretToStorage(state, secret))
-      .map( newState => DeriveNextKeyResult(derivationResult) -> newState )
+      .map(newState => DeriveNextKeyResult(derivationResult) -> newState)
   }
 
   protected def updatePublicKeys(state: ErgoWalletState,
@@ -77,7 +77,7 @@ trait ErgoWalletSupport extends ScorexLogging {
       (masterKey +: sks, masterKey.publicKey +: pks)
     }
     val prover = new ErgoProvingInterpreter(secrets, state.parameters, Some(pubKeys))(new RuntimeIRContext)
-    log.info(s"Wallet unlock: ${prover.hdPubKeys.length} keys read" )
+    log.info(s"Wallet unlock: ${prover.hdPubKeys.length} keys read")
     state.copy(walletVars = state.walletVars.withProver(prover))
   }
 
@@ -134,8 +134,8 @@ trait ErgoWalletSupport extends ScorexLogging {
         }
       } else {
         if (pubKeys.size == 1 &&
-              pubKeys.head.path == Constants.eip3DerivationPath.toPublicBranch &&
-              state.storage.readChangeAddress.isEmpty) {
+          pubKeys.head.path == Constants.eip3DerivationPath.toPublicBranch &&
+          state.storage.readChangeAddress.isEmpty) {
           val changeAddress = P2PKAddress(pubKeys.head.key)
           log.info(s"Update change address to $changeAddress")
           state.storage.updateChangeAddress(changeAddress)
@@ -268,8 +268,17 @@ trait ErgoWalletSupport extends ScorexLogging {
 
     require(inputBoxes.nonEmpty, "There must be at least one input box")
 
+    //filter burnTokens requests
+    val (requestsWithBurnTokens, requestsWithoutBurnTokens) = requests.partition(_.isInstanceOf[BurnTokensRequest])
+    val burnTokensMap = TransactionBuilder.collTokensToMap(
+      requestsWithBurnTokens
+        .map(_.asInstanceOf[BurnTokensRequest])
+        .flatMap(_.assetsToBurn)
+        .toColl
+    )
+
     //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
-    requestsToBoxCandidates(requests, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)
+    requestsToBoxCandidates(requestsWithoutBurnTokens, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)
       .flatMap { outputs =>
         require(outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, state.parameters)), "Minimal ERG value not met")
         require(outputs.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
@@ -283,7 +292,11 @@ trait ErgoWalletSupport extends ScorexLogging {
         val targetBalance = outputs.map(_.value).sum
         val targetAssets = TransactionBuilder.collectOutputTokens(outputs.filterNot(bx => assetIssueBox.contains(bx)))
 
-        val selectionOpt = boxSelector.select(inputBoxes.iterator, targetBalance, targetAssets)
+        //add burnTokens to target assets so that they are excluded from the change outputs
+        //thus total outputs assets will be reduced which is interpreted as _token burning_
+        val targetAssetsWithBurn = AssetUtils.mergeAssets(targetAssets, burnTokensMap)
+
+        val selectionOpt = boxSelector.select(inputBoxes.iterator, targetBalance, targetAssetsWithBurn)
         val dataInputs = ErgoWalletService.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress.map(_.pubkey)
@@ -294,7 +307,7 @@ trait ErgoWalletSupport extends ScorexLogging {
             new Exception(s"Failed to find boxes to assemble a transaction for $outputs, \nreason: $e")
           )
         }
-    }
+      }
   }.flatten
 
 }

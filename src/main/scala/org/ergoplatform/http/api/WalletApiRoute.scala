@@ -26,7 +26,9 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
+case class WalletApiRoute(readersHolder: ActorRef,
+                          nodeViewActorRef: ActorRef,
+                          ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
@@ -130,8 +132,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def generateTransactionAndProcess(requests: Seq[TransactionGenerationRequest],
                                             inputsRaw: Seq[String],
                                             dataInputsRaw: Seq[String],
+                                            verifyFn: ErgoTransaction => Future[Try[ErgoTransaction]],
                                             processFn: ErgoTransaction => Route): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw)) {
+    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap(txTry => txTry match {
+      case Success(tx) => verifyFn(tx)
+      case f: Failure[ErgoTransaction] => Future(f)
+    })) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => processFn(tx)
     }
@@ -140,7 +146,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def generateTransaction(requests: Seq[TransactionGenerationRequest],
                                   inputsRaw: Seq[String],
                                   dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => ApiResponse(tx))
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => Future(Success(tx)), tx => ApiResponse(tx))
   }
 
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
@@ -155,25 +161,27 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def sendTransaction(requests: Seq[TransactionGenerationRequest],
                               inputsRaw: Seq[String],
                               dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, { tx =>
-      nodeViewActorRef ! LocallyGeneratedTransaction(tx)
-      ApiResponse(tx.id)
-    })
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw,
+      tx => verifyTransaction(tx, readersHolder, ergoSettings),
+      { tx =>
+        nodeViewActorRef ! LocallyGeneratedTransaction(tx)
+        ApiResponse(tx.id)
+      })
   }
 
   def sendTransactionR: Route =
     (path("transaction" / "send") & post & entity(as[RequestsHolder])) { holder =>
-      sendTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+      sendTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateTransactionR: Route =
     (path("transaction" / "generate") & post & entity(as[RequestsHolder])) { holder =>
-      generateTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+      generateTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateUnsignedTransactionR: Route =
     (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])) { holder =>
-      generateUnsignedTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+      generateUnsignedTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateCommitmentsR: Route = (path("generateCommitments")

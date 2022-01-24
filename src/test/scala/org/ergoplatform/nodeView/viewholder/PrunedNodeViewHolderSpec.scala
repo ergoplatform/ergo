@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.viewholder
 
+import akka.actor.ActorRef
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -35,11 +36,11 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     )
   }
 
-  def genFullChain(genesisState: WrappedUtxoState, howMany: Int): Seq[ErgoFullBlock] = {
+  def genFullChain(genesisState: WrappedUtxoState, howMany: Int, nodeViewHolderRef: ActorRef): Seq[ErgoFullBlock] = {
     (1 to howMany).foldLeft((Seq[ErgoFullBlock](), genesisState, None: Option[ErgoFullBlock])) { case ((chain, wus, parentOpt), h) =>
       val time = System.currentTimeMillis() - (howMany - h) * (BlockInterval.toMillis * 20)
       val block = validFullBlock(parentOpt, wus, time)
-      val newState = wus.applyModifier(block).get
+      val newState = wus.applyModifier(block)(mod => nodeViewHolderRef ! mod).get
       (chain :+ block, newState, Some(block))
     }._1
   }
@@ -50,7 +51,7 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     val (us, bh) = createUtxoState(stateConstants, parameters)
     val wus = WrappedUtxoState(us, bh, stateConstants, parameters)
 
-    val fullChain = genFullChain(wus, totalBlocks)
+    val fullChain = genFullChain(wus, totalBlocks, nodeViewHolderRef)
 
     fullChain.foreach { block =>
       applyHeader(block.header).isSuccess shouldBe true

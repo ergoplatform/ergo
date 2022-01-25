@@ -730,9 +730,10 @@ object CandidateGenerator extends ScorexLogging {
   ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
 
     val currentHeight = us.stateContext.currentHeight
+    val nextHeight = upcomingContext.currentHeight
 
     log.info(
-      s"Assembling a block candidate for block #$currentHeight from ${transactions.length} transactions available"
+      s"Assembling a block candidate for block #$nextHeight from ${transactions.length} transactions available"
     )
 
     val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
@@ -810,7 +811,7 @@ object CandidateGenerator extends ScorexLogging {
 
     val res = loop(transactions, Seq.empty, None, Seq.empty)
     log.info(
-      s"Collected ${res._1.length} transactions For block #$currentHeight, " +
+      s"Collected ${res._1.length} transactions For block #$nextHeight, " +
       s"${res._2.length} transactions turned out to be invalid"
     )
     res

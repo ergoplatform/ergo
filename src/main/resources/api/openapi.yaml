@@ -1119,7 +1119,7 @@ components:
       description: Request for burning tokens in wallet
       type: object
       required:
-        - assets
+        - assetsToBurn
       properties:
         assetsToBurn:
           description: Assets list to burn in the transaction

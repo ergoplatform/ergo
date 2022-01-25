@@ -1121,7 +1121,7 @@ components:
       required:
         - assets
       properties:
-        assets:
+        assetsToBurn:
           description: Assets list to burn in the transaction
           type: array
           items:

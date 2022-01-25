@@ -47,13 +47,13 @@ trait ErgoBaseApiRoute extends ApiRoute {
                                   readersHolder: ActorRef,
                                   ergoSettings: ErgoSettings): Future[Try[ErgoTransaction]] = {
     getStateAndPool(readersHolder)
-      .map({
+      .map {
         case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
           val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
           utxo.withMempool(mp).validateWithCost(tx, maxTxCost).map(_ => tx)
         case _ =>
           tx.statelessValidity().map(_ => tx)
-      })
+      }
   }
 
 }

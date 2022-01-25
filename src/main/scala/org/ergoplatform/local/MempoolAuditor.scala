@@ -112,7 +112,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def rebroadcastTransactions(): Unit = {
     log.debug("Rebroadcasting transactions")
     poolReaderOpt.foreach { pr =>
-      val toBroadcast = pr.random(settings.nodeSettings.rebroadcastCount).toSeq.reverse
+      val toBroadcast = pr.random(settings.nodeSettings.rebroadcastCount).toSeq
       stateReaderOpt match {
         case Some(utxoState: UtxoStateReader) =>
           val stateToCheck = utxoState.withTransactions(toBroadcast)

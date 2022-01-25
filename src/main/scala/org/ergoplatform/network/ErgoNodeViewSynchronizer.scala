@@ -198,12 +198,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val newGlobal = timeProvider.time()
     val globalDiff = newGlobal - globalSyncGot
 
-    if(globalDiff > 250) {
+    if(globalDiff > 100) {
       globalSyncGot = newGlobal
 
       val diff = syncTracker.updateLastSyncGetTime(remote)
-      if (diff > 1000 ) {
-        // process sync if sent in more than 1 second after previous sync
+      if (diff > 600 ) {
+        // process sync if sent in more than 600 ms after previous sync
         log.debug(s"Processing sync from $remote")
         syncInfo match {
           case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
@@ -241,7 +241,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Younger | Fork =>
         val newExtSend = timeProvider.time()
 
-        if(newExtSend - globalExtSend > 250) {
+        if(newExtSend - globalExtSend > 100) {
           globalExtSend = newExtSend
 
           // send extension (up to 400 header ids) to a peer which chain is less developed or forked
@@ -307,7 +307,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Younger =>
         val newExtSend = timeProvider.time()
 
-        if (newExtSend - globalExtSend > 250) {
+        if (newExtSend - globalExtSend > 100) {
           globalExtSend = newExtSend
 
           // send extension (up to 400 header ids) to a peer which chain is less developed or forked

@@ -112,19 +112,23 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def rebroadcastTransactions(): Unit = {
     log.debug("Rebroadcasting transactions")
     poolReaderOpt.foreach { pr =>
-      pr.random(settings.nodeSettings.rebroadcastCount).foreach { tx =>
-        stateReaderOpt match {
-          case Some(utxoState: UtxoStateReader) =>
-            if (tx.inputIds.forall(inputBoxId => utxoState.boxById(inputBoxId).isDefined)) {
+    val toBroadcast = pr.random(settings.nodeSettings.rebroadcastCount).toSeq
+      stateReaderOpt match {
+        case Some(utxoState: UtxoStateReader) =>
+          val stateToCheck = utxoState.withTransactions(toBroadcast)
+          toBroadcast.foreach { tx =>
+            if (tx.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
               log.info(s"Rebroadcasting $tx")
               broadcastTx(tx)
             } else {
               log.info(s"Not rebroadcasting $tx as not all the inputs are in place")
             }
-          case _ =>
+          }
+        case _ =>
+          toBroadcast.foreach { tx =>
             log.warn(s"Rebroadcasting $tx while state is not ready or not UTXO set")
             broadcastTx(tx)
-        }
+          }
       }
     }
   }

@@ -436,7 +436,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
                 updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
                 chainProgress =
-                  Some(ChainProgress(pmod, headersHeight, fullBlockHeight, System.currentTimeMillis()))
+                  Some(ChainProgress(pmod, headersHeight, fullBlockHeight, timeProvider.time()))
               case Failure(e) =>
                 log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
                 updateNodeView(updatedHistory = Some(newHistory))
@@ -582,6 +582,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def handleHealthCheck: Receive = {
     case IsChainHealthy =>
+      log.debug(s"Check that chain is helathy, progress is $chainProgress")
       val healthCheckReply = chainProgress.map { progress =>
         ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), timeProvider, settings)
       }.getOrElse(ChainIsHealthy)

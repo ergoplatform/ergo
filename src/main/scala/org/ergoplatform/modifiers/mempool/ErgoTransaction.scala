@@ -211,7 +211,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
                                outputCandidates: Seq[ErgoBoxCandidate],
                                stateContext: ErgoStateContext): Try[Unit] = {
-    val res = Try {
+    Try {
 
       val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
       val ReemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
@@ -265,8 +265,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         require(reemissionOutputs.map(_.value).sum == toBurn, "Burning condition violated")
       }
     }
-    println("reemission check result: " + res)
-    res
   }
 
   /**

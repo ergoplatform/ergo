@@ -384,7 +384,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
           version == Version.v4017 || version == Version.v4018
         }
-        val modifiersByBucket = ElementPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
+        val modifiersByBucket = ElementPartitioner.distribute(peersFiltered, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
         // collect and log useful downloading progress information, don't worry it does not run frequently
         modifiersByBucket.headOption.foreach { _ =>
           modifiersByBucket

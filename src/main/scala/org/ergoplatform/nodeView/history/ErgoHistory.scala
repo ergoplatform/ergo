@@ -191,15 +191,17 @@ trait ErgoHistory
     */
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
     typedModifierById[Header](headerId).foreach { h =>
-      historyStorage.remove(
+      val hRes = historyStorage.remove(
         indicesToRemove = Seq(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
         idsToRemove = Seq(headerId)
-      ).get
+      )
+      log.debug(s"Result of removing header $headerId: " + hRes)
       requiredModifiersForHeader(h).foreach { case (_, mId) =>
-        historyStorage.remove(
+        val mRes = historyStorage.remove(
           indicesToRemove = Seq(validityKey(mId)),
           idsToRemove = Seq(mId)
-        ).get
+        )
+        log.debug(s"Result of removing modifier $mId: " + mRes)
       }
     }
   }

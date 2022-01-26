@@ -702,13 +702,11 @@ object ErgoNodeViewRef {
                           timeProvider: NetworkTimeProvider,
                           parameters: Parameters): Props =
     Props.create(classOf[DigestNodeViewHolder], settings, timeProvider, parameters)
-      .withDispatcher(GlobalConstants.NetworkDispatcher)
 
   private def utxoProps(settings: ErgoSettings,
                         timeProvider: NetworkTimeProvider,
                         parameters: Parameters): Props =
     Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider, parameters)
-      .withDispatcher(GlobalConstants.NetworkDispatcher)
 
   def props(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,

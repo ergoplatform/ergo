@@ -665,17 +665,18 @@ object CandidateGenerator extends ScorexLogging {
         IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
       }
 
-      if(nextHeight >= reemissionActivationHeight) {
-        assets.append(Colls.fromItems(reemissionTokenId -> reemissionAmount))
-      }
-
       val minerAmt = if (nextHeight == reemissionActivationHeight) {
         //injection
         emissionAmount + injectionBox.value
       } else {
         emissionAmount
       }
-      val minerBox = new ErgoBoxCandidate(minerAmt, minerProp, nextHeight, assets)
+      val minersAssets = if (nextHeight >= reemissionActivationHeight) {
+        assets.append(Colls.fromItems(reemissionTokenId -> reemissionAmount))
+      } else {
+        assets
+      }
+      val minerBox = new ErgoBoxCandidate(minerAmt, minerProp, nextHeight, minersAssets)
 
       val emissionTx = ErgoTransaction(
         inputs,

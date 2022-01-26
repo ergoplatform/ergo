@@ -671,7 +671,8 @@ object ErgoNodeViewHolder {
       val repairNeeded = ErgoHistory.repairIfNeeded(history)
       ChainIsStuck(s"Chain not modified for $chainUpdateDelay ms, headers-height: $headersHeight, " +
         s"block-height $blockHeight, chain synced: $chainSynced, repair needed: $repairNeeded, " +
-        s"last modifier applied: $lastMod $bestFullBlockOpt")
+        s"last modifier applied: $lastMod, " +
+        s"possible best full block $bestFullBlockOpt")
     } else {
       ChainIsHealthy
     }

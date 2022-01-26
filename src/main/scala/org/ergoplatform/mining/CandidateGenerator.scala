@@ -800,6 +800,9 @@ object CandidateGenerator extends ScorexLogging {
                     }
                 }
               case Failure(e) =>
+                println(s"Not included transaction ${tx.id} due to ${e.getMessage}")
+                e.printStackTrace()
+
                 log.debug(s"Not included transaction ${tx.id} due to ${e.getMessage}")
                 loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
             }

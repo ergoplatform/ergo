@@ -208,57 +208,65 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     }
   }
 
-  def verifyReemission(boxesToSpend: IndexedSeq[ErgoBox],
-                       outputCandidates: Seq[ErgoBoxCandidate],
-                       stateContext: ErgoStateContext): Try[Unit] = Try {
+  def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
+                               outputCandidates: Seq[ErgoBoxCandidate],
+                               stateContext: ErgoStateContext): Try[Unit] = {
+    val res = Try {
 
-    val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
-    val ReemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
-    val EmissionNftId = ModifierId @@ reemissionSettings.emissionNftId
-    val reemissionNftIdBytes = reemissionSettings.reemissionNftIdBytes
-    val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
+      val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
+      val ReemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
+      val EmissionNftId = ModifierId @@ reemissionSettings.emissionNftId
+      val reemissionNftIdBytes = reemissionSettings.reemissionNftIdBytes
+      val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
 
-    // reemission logic below
-    var reemissionSpending = false
-    boxesToSpend.foreach { box =>
-      if (box.value > 100000 * EmissionRules.CoinsInOneErgo) { // for efficiency
-        if (box.tokens.contains(EmissionNftId)) {
-          //we're checking how emission box is paying reemission tokens below
+      val height = stateContext.currentHeight
 
-          val reemissionTokensIn = box.tokens.getOrElse(ReemissionTokenId, 0L)
-          require(reemissionTokensIn > 0) // todo check only after some height only
+      // reemission logic below
+      var reemissionSpending = false
+      boxesToSpend.foreach { box =>
+        if (box.value > 100000 * EmissionRules.CoinsInOneErgo) { // for efficiency, skip boxes with less than 100,000 ERG
+          // todo: on activation height, emissionNftId is not inputs
+          if (box.tokens.contains(EmissionNftId)) {
+            //we're checking how emission box is paying reemission tokens below
 
-          // output positions guaranteed by emission contract
-          val emissionOut = outputCandidates(0)
-          val rewardsOut = outputCandidates(1)
+            val reemissionTokensIn = box.tokens.getOrElse(ReemissionTokenId, 0L)
+            require(reemissionTokensIn > 0) // todo check only after some height only
 
-          val emissionTokensOut = emissionOut.tokens.getOrElse(ReemissionTokenId, 0L)
-          val rewardsTokensOut = rewardsOut.tokens.getOrElse(ReemissionTokenId, 0L)
+            // output positions guaranteed by emission contract
+            val emissionOut = outputCandidates(0)
+            val rewardsOut = outputCandidates(1)
 
-          require(emissionOut.tokens.contains(EmissionNftId))
-          require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut)
+            val emissionTokensOut = emissionOut.tokens.getOrElse(ReemissionTokenId, 0L)
+            val rewardsTokensOut = rewardsOut.tokens.getOrElse(ReemissionTokenId, 0L)
 
-          val height = stateContext.currentHeight
-          val properReemissionRewardPart = ReemissionRules.reemissionForHeight(height, emissionRules, reemissionSettings)
-          require(rewardsTokensOut == properReemissionRewardPart)
+            require(emissionOut.tokens.contains(EmissionNftId))
+            require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission token not preserved")
+
+            val height = stateContext.currentHeight
+            val properReemissionRewardPart = ReemissionRules.reemissionForHeight(height, emissionRules, reemissionSettings)
+            require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
+          }
+        } else if (box.tokens.contains(ReemissionTokenId) && height > reemissionSettings.activationHeight) {
+          // reemission tokens spent after EIP-27 activation
+          // todo: check activation height
+          reemissionSpending = true
         }
-      } else if (box.tokens.contains(ReemissionTokenId)) {
-        reemissionSpending = true
+      }
+
+      // if box with reemission tokens spent
+      if (reemissionSpending) {
+        val toBurn = boxesToSpend.map { box =>
+          box.tokens.getOrElse(ReemissionTokenId, 0L)
+        }.sum
+        val reemissionOutputs = outputCandidates.filter { out =>
+          require(!out.tokens.contains(ReemissionTokenId), "outputs contain reemission token")
+          out.ergoTree == ReemissionRules.payToReemission(reemissionNftIdBytes)
+        }
+        require(reemissionOutputs.map(_.value).sum == toBurn, "Burning condition violated")
       }
     }
-
-    // if box with reemission tokens spent
-    if (reemissionSpending) {
-      val toBurn = boxesToSpend.map { box =>
-        box.tokens.getOrElse(ReemissionTokenId, 0L)
-      }.sum
-      val reemissionOutputs = outputCandidates.filter { out =>
-        require(!out.tokens.contains(ReemissionTokenId), "outputs contain reemission token")
-        out.ergoTree == ReemissionRules.payToReemission(reemissionNftIdBytes)
-      }
-      require(reemissionOutputs.map(_.value).sum == toBurn)
-    }
-
+    println("reemission check result: " + res)
+    res
   }
 
   /**
@@ -330,7 +338,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
        }
       .validate(txReemission, !stateContext.ergoSettings.chainSettings.reemission.checkReemissionRules ||
-                                verifyReemission(boxesToSpend, outputCandidates, stateContext).isSuccess)
+                                verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess)
   }
 
   /**

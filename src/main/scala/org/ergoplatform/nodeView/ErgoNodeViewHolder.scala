@@ -583,7 +583,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def handleHealthCheck: Receive = {
     case IsChainHealthy =>
       val healthCheckReply = chainProgress.map { progress =>
-        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), settings)
+        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), timeProvider, settings)
       }.getOrElse(ChainIsHealthy)
       sender() ! healthCheckReply
   }
@@ -650,14 +650,15 @@ object ErgoNodeViewHolder {
   def checkChainIsHealthy(
       progress: ChainProgress,
       history: ErgoHistory,
+      timeProvider: NetworkTimeProvider,
       settings: ErgoSettings): HealthCheckResult = {
     val ChainProgress(lastMod, headersHeight, blockHeight, lastUpdate) = progress
-    val chainUpdateDelay = System.currentTimeMillis() - lastUpdate
+    val chainUpdateDelay = timeProvider.time() - lastUpdate
     val acceptableChainUpdateDelay = settings.nodeSettings.acceptableChainUpdateDelay
     def chainUpdateDelayed = chainUpdateDelay > acceptableChainUpdateDelay.toMillis
     def blockUpdateDelayed =
       history.bestFullBlockOpt
-        .map(b => System.currentTimeMillis() - b.header.timestamp)
+        .map(b => timeProvider.time() - b.header.timestamp)
         .exists(blockUpdateDelay => blockUpdateDelay > acceptableChainUpdateDelay.toMillis)
 
     def chainSynced =
@@ -668,7 +669,11 @@ object ErgoNodeViewHolder {
         history.bestFullBlockOpt
           .filter(_.id != lastMod.id)
           .fold("")(fb => s"\n best full block: $fb")
-      val repairNeeded = ErgoHistory.repairIfNeeded(history)
+      val repairNeeded = if(blockUpdateDelayed) {
+        ErgoHistory.repairIfNeeded(history)
+      } else {
+        false
+      }
       ChainIsStuck(s"Chain not modified for $chainUpdateDelay ms, headers-height: $headersHeight, " +
         s"block-height $blockHeight, chain synced: $chainSynced, repair needed: $repairNeeded, " +
         s"last modifier applied: $lastMod, " +

@@ -233,9 +233,10 @@ object ErgoHistory extends ScorexLogging {
   // recognized blockchain tip marked as invalid
   protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
+    val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
-    if (afterHeaders.nonEmpty) {
+    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
       log.warn("Found suspicious continuation, clearing it...")
       afterHeaders.map { hId =>
         history.forgetHeader(hId)

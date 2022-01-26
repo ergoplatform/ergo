@@ -1,9 +1,8 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
-
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
-import org.ergoplatform.ErgoApp
+import org.ergoplatform.{ErgoApp, GlobalConstants}
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -25,8 +24,8 @@ import scorex.core.settings.ScorexSettings
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
-
 import java.io.File
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -703,11 +702,13 @@ object ErgoNodeViewRef {
                           timeProvider: NetworkTimeProvider,
                           parameters: Parameters): Props =
     Props.create(classOf[DigestNodeViewHolder], settings, timeProvider, parameters)
+      .withDispatcher(GlobalConstants.NetworkDispatcher)
 
   private def utxoProps(settings: ErgoSettings,
                         timeProvider: NetworkTimeProvider,
                         parameters: Parameters): Props =
     Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider, parameters)
+      .withDispatcher(GlobalConstants.NetworkDispatcher)
 
   def props(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,

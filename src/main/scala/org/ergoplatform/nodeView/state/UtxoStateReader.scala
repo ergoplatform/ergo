@@ -71,6 +71,9 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Used in mempool.
     */
   override def validate(tx: ErgoTransaction): Try[Unit] = {
+    if (tx.size > constants.settings.nodeSettings.maxTransactionSize) {
+      throw new Exception(s"Transaction $tx has too large size ${tx.size}")
+    }
     validateWithCost(tx, None, Int.MaxValue, None).map(_ => Unit)
   }
 

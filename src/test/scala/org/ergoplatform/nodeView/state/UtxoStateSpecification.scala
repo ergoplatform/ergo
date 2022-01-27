@@ -349,7 +349,6 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         IndexedSeq(),
         IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight))
       )
-
       val txs = txsFromHolder :+ spendingTx
 
       val us = createUtxoState(bh, parameters)
@@ -360,6 +359,46 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val fb = new ErgoFullBlock(header, bt, genExtension(header, us.stateContext), None)
       val newSC = us.stateContext.appendFullBlock(fb).get
       us.applyTransactions(txs, digest, newSC).get
+    }
+  }
+
+  property("applyTransactions() - no double-spend of an output created in a block is possible") {
+    forAll(boxesHolderGen) { bh =>
+      val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
+
+      val boxToSpend = txsFromHolder.last.outputs.head
+
+      val spendingTxInput = Input(boxToSpend.id, emptyProverResult)
+      val spendingTx = ErgoTransaction(
+        IndexedSeq(spendingTxInput),
+        IndexedSeq(),
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight))
+      )
+
+      val spending2Tx = ErgoTransaction(
+        IndexedSeq(Input(spendingTx.outputs.head.id, emptyProverResult)),
+        IndexedSeq(),
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight))
+      )
+
+      val spending3Tx = ErgoTransaction(
+        IndexedSeq(Input(spending2Tx.outputs.head.id, emptyProverResult)),
+        IndexedSeq(),
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight))
+      )
+
+      val spending4Tx = ErgoTransaction(
+        IndexedSeq(Input(spending2Tx.outputs.head.id, emptyProverResult)),
+        IndexedSeq(),
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.FalseLeaf, creationHeight = startHeight))
+      )
+
+      val txs = txsFromHolder ++ Seq(spendingTx, spending2Tx, spending3Tx, spending4Tx)
+
+      val us = createUtxoState(bh, parameters)
+
+      // Fails on generating state root digest for the block
+      us.proofsForTransactions(txs).isSuccess shouldBe false
     }
   }
 

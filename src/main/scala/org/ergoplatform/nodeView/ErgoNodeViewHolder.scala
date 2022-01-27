@@ -442,7 +442,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
                 updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
                 chainProgress =
-                  Some(ChainProgress(pmod, headersHeight, fullBlockHeight, System.currentTimeMillis()))
+                  Some(ChainProgress(pmod, headersHeight, fullBlockHeight, timeProvider.time()))
               case Failure(e) =>
                 log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
                 updateNodeView(updatedHistory = Some(newHistory))
@@ -585,7 +585,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def handleHealthCheck: Receive = {
     case IsChainHealthy =>
       val healthCheckReply = chainProgress.map { progress =>
-        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), settings)
+        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), settings, timeProvider)
       }.getOrElse(ChainIsHealthy)
       sender() ! healthCheckReply
   }
@@ -652,20 +652,22 @@ object ErgoNodeViewHolder {
   def checkChainIsHealthy(
       progress: ChainProgress,
       history: ErgoHistory,
-      settings: ErgoSettings): HealthCheckResult = {
+      settings: ErgoSettings,
+      timeProvider: NetworkTimeProvider): HealthCheckResult = {
     val ChainProgress(lastMod, headersHeight, blockHeight, lastUpdate) = progress
-    val chainUpdateDelay = System.currentTimeMillis() - lastUpdate
+    val currentTime = timeProvider.time()
+    val chainUpdateDelay = currentTime - lastUpdate
     val acceptableChainUpdateDelay = settings.nodeSettings.acceptableChainUpdateDelay
     def chainUpdateDelayed = chainUpdateDelay > acceptableChainUpdateDelay.toMillis
     def blockUpdateDelayed =
       history.bestFullBlockOpt
-        .map(b => System.currentTimeMillis() - b.header.timestamp)
+        .map(b => currentTime - b.header.timestamp)
         .exists(blockUpdateDelay => blockUpdateDelay > acceptableChainUpdateDelay.toMillis)
 
     def chainSynced =
       history.bestFullBlockOpt.map(_.id) == history.bestHeaderOpt.map(_.id)
 
-    if (chainUpdateDelayed || blockUpdateDelayed) {
+    if (acceptableChainUpdateDelay.toMinutes > 1 && (chainUpdateDelayed || blockUpdateDelayed)) {
       val bestFullBlockOpt =
         history.bestFullBlockOpt
           .filter(_.id != lastMod.id)

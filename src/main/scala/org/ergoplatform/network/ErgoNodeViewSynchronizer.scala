@@ -83,8 +83,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val deliveryTracker: DeliveryTracker =
     DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
-  private val minModifiersPerBucket = 10 // minimum of persistent modifiers (excl. headers) to download by single peer
-  private val maxModifiersPerBucket = 30 // maximum of persistent modifiers (excl. headers) to download by single peer
+  private val minModifiersPerBucket = 16 // minimum of persistent modifiers (excl. headers) to download by single peer
+  private val maxModifiersPerBucket = 32 // maximum of persistent modifiers (excl. headers) to download by single peer
 
   private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer

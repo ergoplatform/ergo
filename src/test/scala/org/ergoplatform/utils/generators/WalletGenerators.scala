@@ -4,7 +4,7 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning._
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.wallet.Constants.ScanId
@@ -84,6 +84,12 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
       assets <- additionalTokensGen
       registers <- additionalRegistersGen
     } yield PaymentRequest(Pay2SAddress(Constants.FalseLeaf), value, assets, registers)
+  }
+
+  def burnTokensRequestGen: Gen[BurnTokensRequest] = {
+    for {
+      assets <- additionalTokensGen
+    } yield BurnTokensRequest(assets)
   }
 
   def assetIssueRequestGen: Gen[AssetIssueRequest] = {

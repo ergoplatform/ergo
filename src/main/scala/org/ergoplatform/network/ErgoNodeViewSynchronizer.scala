@@ -120,7 +120,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val interval = networkSettings.syncInterval
     context.system.scheduler.scheduleWithFixedDelay(2.seconds, interval, self, SendLocalSyncInfo)
 
-    val healthCheckRate = settings.nodeSettings.acceptableChainUpdateDelay / 5
+    val healthCheckRate = settings.nodeSettings.acceptableChainUpdateDelay / 3
     context.system.scheduler.scheduleAtFixedRate(healthCheckRate, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
   }
 
@@ -198,12 +198,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val newGlobal = timeProvider.time()
     val globalDiff = newGlobal - globalSyncGot
 
-    if(globalDiff > 250) {
+    if(globalDiff > 100) {
       globalSyncGot = newGlobal
 
       val diff = syncTracker.updateLastSyncGetTime(remote)
-      if (diff > 1000 ) {
-        // process sync if sent in more than 1 second after previous sync
+      if (diff > 600 ) {
+        // process sync if sent in more than 600 ms after previous sync
         log.debug(s"Processing sync from $remote")
         syncInfo match {
           case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
@@ -241,7 +241,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Younger | Fork =>
         val newExtSend = timeProvider.time()
 
-        if(newExtSend - globalExtSend > 250) {
+        if(newExtSend - globalExtSend > 100) {
           globalExtSend = newExtSend
 
           // send extension (up to 400 header ids) to a peer which chain is less developed or forked
@@ -307,7 +307,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Younger =>
         val newExtSend = timeProvider.time()
 
-        if (newExtSend - globalExtSend > 250) {
+        if (newExtSend - globalExtSend > 100) {
           globalExtSend = newExtSend
 
           // send extension (up to 400 header ids) to a peer which chain is less developed or forked
@@ -379,7 +379,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit =
     getPeersOpt
       .foreach { case (peerStatus, peers) =>
-        val modifiersByBucket = ElementPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
+        // filter out peers of 4.0.17 or 4.0.18 version as they are delivering broken modifiers
+        val peersFiltered = peers.filterNot { cp =>
+          val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
+          version == Version.v4017 || version == Version.v4018
+        }
+        val modifiersByBucket = ElementPartitioner.distribute(peersFiltered, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
         // collect and log useful downloading progress information, don't worry it does not run frequently
         modifiersByBucket.headOption.foreach { _ =>
           modifiersByBucket

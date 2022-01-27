@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state.wrapped
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import scorex.core.VersionTag
@@ -13,8 +14,9 @@ class WrappedDigestState(val digestState: DigestState,
                          override val parameters: Parameters)
   extends DigestState(digestState.version, digestState.rootHash, digestState.store, parameters, settings) {
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[WrappedDigestState] = {
-    wrapped(super.applyModifier(mod), wrappedUtxoState.applyModifier(mod))
+  override def applyModifier(mod: ErgoPersistentModifier)
+                            (generate: LocallyGeneratedModifier => Unit): Try[WrappedDigestState] = {
+    wrapped(super.applyModifier(mod)(_ => ()), wrappedUtxoState.applyModifier(mod)(_ => ()))
   }
 
   override def rollbackTo(version: VersionTag): Try[WrappedDigestState] = {

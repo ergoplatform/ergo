@@ -426,6 +426,7 @@ components:
           items:
             anyOf:
               - $ref: '#/components/schemas/PaymentRequest'
+              - $ref: '#/components/schemas/BurnTokensRequest'
               - $ref: '#/components/schemas/AssetIssueRequest'
         fee:
           description: Transaction fee
@@ -1113,6 +1114,18 @@ components:
             $ref: '#/components/schemas/Asset'
         registers:
           $ref: '#/components/schemas/Registers'
+
+    BurnTokensRequest:
+      description: Request for burning tokens in wallet
+      type: object
+      required:
+        - assetsToBurn
+      properties:
+        assetsToBurn:
+          description: Assets list to burn in the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
 
     AssetIssueRequest:
       description: Request for generation of asset issue transaction

@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
 import spire.syntax.all.cfor
 
@@ -25,8 +25,9 @@ import scala.util.Try
   * @param stats    - Mempool statistics, that allows to track
   *                 information about mempool's state and transactions in it.
   */
-class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val stats : MemPoolStatistics)(implicit settings: ErgoSettings)
-  extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
+class ErgoMemPool private[mempool](pool: OrderedTxPool,
+                                   private[mempool] val stats : MemPoolStatistics)(implicit settings: ErgoSettings)
+  extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader with ScorexLogging {
 
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
@@ -128,6 +129,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
   }
 
   def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
+    log.info(s"Processing mempool transaction: $tx")
+
     val blacklistedTransactions = nodeSettings.blacklistedTransactions
     if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
       new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))

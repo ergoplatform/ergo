@@ -114,7 +114,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       miningPubKeyHex                           = None,
       offlineGeneration                         = false,
       keepVersions                              = 200,
-      acceptableChainUpdateDelay                = 15.minutes,
+      acceptableChainUpdateDelay                = 30.minutes,
       mempoolCapacity                           = 100000,
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,

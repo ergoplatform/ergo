@@ -89,6 +89,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
 
+  // It could be the case that adversarial peers are sending sync messages to the node to cause
+  // resource exhaustion. To prevent it, we do not answer on sync message, if previous one was sent
+  // no more than `GlobalSyncLockTime` milliseconds ago. There's also per-peer limit `PerPeerSyncLockTime`
+  private val GlobalSyncLockTime = 50
+  private val PerPeerSyncLockTime = 100
+
   /**
     * Register periodic events
     */
@@ -197,11 +203,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val newGlobal = timeProvider.time()
     val globalDiff = newGlobal - globalSyncGot
 
-    if(globalDiff > 100) {
+    if(globalDiff > GlobalSyncLockTime) {
       globalSyncGot = newGlobal
 
       val diff = syncTracker.updateLastSyncGetTime(remote)
-      if (diff > 200 ) {
+      if (diff > PerPeerSyncLockTime) {
         // process sync if sent in more than 200 ms after previous sync
         log.debug(s"Processing sync from $remote")
         syncInfo match {
@@ -215,8 +221,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.debug("Global sync violation")
     }
   }
-
-  var globalExtSend = 0L
 
   /**
     * Processing sync V1 message `syncInfo` got from neighbour peer `remote`
@@ -238,20 +242,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // we do not know what to send to a peer with such status
         log.debug(s"Got nonsense status for $remote")
       case Younger | Fork =>
-        val newExtSend = timeProvider.time()
-
-        if(newExtSend - globalExtSend > 100) {
-          globalExtSend = newExtSend
-
-          // send extension (up to 400 header ids) to a peer which chain is less developed or forked
-          val ext = hr.continuationIds(syncInfo, size = 400)
-          if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-          log.debug(s"Sending extension of length ${ext.length}")
-          log.debug(s"Extension ids: ${idsToString(ext)}")
-          sendExtension(remote, ext)
-        } else {
-          log.debug("Global extension send violated")
-        }
+        // send extension (up to 400 header ids) to a peer which chain is less developed or forked
+        val ext = hr.continuationIds(syncInfo, size = 400)
+        if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
+        log.debug(s"Sending extension of length ${ext.length}")
+        log.debug(s"Extension ids: ${idsToString(ext)}")
+        sendExtension(remote, ext)
       case Older =>
         // asking headers from older peers
         val ids = syncInfo.lastHeaderIds.reverse
@@ -304,20 +300,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.warn(s"Got nonsense status in v2 for $remote")
 
       case Younger =>
-        val newExtSend = timeProvider.time()
-
-        if (newExtSend - globalExtSend > 100) {
-          globalExtSend = newExtSend
-
-          // send extension (up to 400 header ids) to a peer which chain is less developed or forked
-          val ext = hr.continuationIds(syncInfo, size = 400)
-          if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-          log.debug(s"Sending extension of length ${ext.length}")
-          log.debug(s"Extension ids: ${idsToString(ext)}")
-          sendExtension(remote, ext)
-        } else {
-          log.debug("Global extension send violated")
-        }
+        // send extension (up to 400 header ids) to a peer which chain is less developed or forked
+        val ext = hr.continuationIds(syncInfo, size = 400)
+        if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
+        log.debug(s"Sending extension of length ${ext.length}")
+        log.debug(s"Extension ids: ${idsToString(ext)}")
+        sendExtension(remote, ext)
 
       case Fork =>
         log.info(s"Fork detected with peer $remote, its sync message $syncInfo")

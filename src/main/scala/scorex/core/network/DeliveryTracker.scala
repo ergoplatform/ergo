@@ -112,7 +112,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
       val checks = requested(modifierTypeId)(modifierId).checks + 1
       setUnknown(modifierId, modifierTypeId)
       if (checks < maxDeliveryChecks) setRequested(modifierId, modifierTypeId,  Some(cp), checks)(schedule)
-      else throw new StopExpectingError(modifierId, checks)
+      else throw new StopExpectingError(modifierId, modifierTypeId, checks)
     }
 
   /**

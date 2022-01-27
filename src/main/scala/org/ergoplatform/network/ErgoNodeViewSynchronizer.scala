@@ -842,7 +842,7 @@ object ErgoNodeViewSynchronizer {
             syncTracker: ErgoSyncTracker)
            (implicit ex: ExecutionContext): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
-      timeProvider, syncTracker)).withDispatcher(GlobalConstants.NetworkDispatcher)
+      timeProvider, syncTracker))
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,

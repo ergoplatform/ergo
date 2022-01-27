@@ -201,8 +201,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       globalSyncGot = newGlobal
 
       val diff = syncTracker.updateLastSyncGetTime(remote)
-      if (diff > 600 ) {
-        // process sync if sent in more than 600 ms after previous sync
+      if (diff > 200 ) {
+        // process sync if sent in more than 200 ms after previous sync
         log.debug(s"Processing sync from $remote")
         syncInfo match {
           case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)

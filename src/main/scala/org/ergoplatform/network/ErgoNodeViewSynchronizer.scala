@@ -444,14 +444,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                             serializer: ScorexSerializer[M],
                                             remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
-      serializer.parseBytesTry(bytes) match {
-        case Success(mod) if id == mod.id =>
-          Some(mod)
-        case _ =>
-          // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
-          penalizeMisbehavingPeer(remote)
-          log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
-          None
+      if (bytes.size > settings.nodeSettings.maxTransactionSize) {
+        penalizeMisbehavingPeer(remote)
+        log.warn(s"Transaction size ${bytes.size} from ${remote.toString} exceeds limit ${settings.nodeSettings.maxTransactionSize}")
+        None
+      } else {
+        serializer.parseBytesTry(bytes) match {
+          case Success(mod) if id == mod.id =>
+            Some(mod)
+          case _ =>
+            // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
+            penalizeMisbehavingPeer(remote)
+            log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
+            None
+        }
       }
     }
   }

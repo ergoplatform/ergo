@@ -8,6 +8,7 @@ import scala.concurrent.duration._
 class ErgoSettingsSpecification extends ErgoPropertyTest {
 
   private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
+  private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
 
   property("should keep data user home  by default") {
     val settings = ErgoSettings.read()
@@ -24,6 +25,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
@@ -66,6 +68,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
@@ -108,6 +111,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,

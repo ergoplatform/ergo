@@ -48,25 +48,32 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   }
 
   private def validateTransactionAndProcess(tx: ErgoTransaction)(processFn: ErgoTransaction => Any): Route = {
-    onSuccess {
-      getStateAndPool
-        .map {
-          case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
-            val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
-            utxo.withMempool(mp).validateWithCost(tx, maxTxCost)
-          case _ =>
-            tx.statelessValidity()
-        }
-    } {
-      _.fold(
-        e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
-        _ => {
-          processFn(tx)
-          ApiResponse(tx.id)
-        }
-      )
+
+    if (tx.size > ergoSettings.nodeSettings.maxTransactionSize) {
+      BadRequest(s"Transaction $tx has too large size ${tx.size}")
+    } else {
+      onSuccess {
+        getStateAndPool
+          .map {
+            case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
+              val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
+              utxo.withMempool(mp).validateWithCost(tx, maxTxCost)
+            case _ =>
+              tx.statelessValidity()
+          }
+
+      } {
+        _.fold(
+          e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
+          _ => {
+            processFn(tx)
+            ApiResponse(tx.id)
+          }
+        )
+      }
     }
   }
+
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
     validateTransactionAndProcess(tx) { tx =>

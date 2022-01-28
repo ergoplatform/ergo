@@ -24,10 +24,12 @@ import scala.util.Try
   * @param keepVersions - number of versions to keep
   *
   */
-class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends KVStoreReader {
+class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) extends KVStoreReader {
   type VersionID = Array[Byte]
 
   type LSN = Long // logical serial number: type used to provide order of records in undo list
+
+  private var keepVersions: Int = initialKeepVersions;
 
   override val db: DB = createDB(dir, "ldb_main") // storage for main data
   override val lock = new ReentrantReadWriteLock()
@@ -48,6 +50,21 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     op.createIfMissing(true)
     op.paranoidChecks(true)
     factory.open(new File(dir, storeName), op)
+  }
+
+  /** Set new keep versions threshold, remove not needed versions and return old value of keep versions */
+  def setKeepVersions(newKeepVersions: Int): Int = {
+    lock.writeLock().lock()
+    val oldKeepVersions = keepVersions
+    try {
+      if (newKeepVersions < oldKeepVersions) {
+        cleanStart(newKeepVersions)
+      }
+      keepVersions = newKeepVersions
+    } finally {
+      lock.writeLock().unlock()
+    }
+    oldKeepVersions
   }
 
   /** returns value associated with the key or throws `NoSuchElementException` */

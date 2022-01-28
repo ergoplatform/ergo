@@ -33,6 +33,10 @@ object Version {
 
   val initial: Version = Version(0, 0, 1)
 
+  val v4017: Version = Version(4, 0, 17)
+
+  val v4018: Version = Version(4, 0, 18)
+
 }
 
 object ApplicationVersionSerializer extends ScorexSerializer[Version] {

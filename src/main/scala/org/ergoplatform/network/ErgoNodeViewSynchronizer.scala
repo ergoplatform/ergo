@@ -517,14 +517,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history
           val notApplied = unknownMods.filterNot(blockAppliedTxsCache.mightContain)
-          log.info(s"Processing ${invData.ids.length} tx invs frpm $peer, " +
+          log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
             s"${unknownMods.size} of them are unknown, requesting $notApplied")
           notApplied
         } else {
           Seq.empty
         }
       case _ =>
-        log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) frpm $peer")
+        log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
         invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
     }
 

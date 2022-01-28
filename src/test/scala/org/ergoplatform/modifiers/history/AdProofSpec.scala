@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.modifiers.state.{Insertion, StateChanges}
+import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -24,7 +24,7 @@ class AdProofSpec extends ErgoPropertyTest {
   val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
   private def createEnv(howMany: Int = 10):
-  (Seq[Insertion], PrevDigest, NewDigest, Proof) = {
+  (Seq[Insert], PrevDigest, NewDigest, Proof) = {
 
     val prover = new BatchAVLProver[Digest32, HF](KL, None)
     val zeroBox = testBox(0, Constants.TrueLeaf, startHeight, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId)
@@ -37,7 +37,7 @@ class AdProofSpec extends ErgoPropertyTest {
     val pf = prover.generateProof()
 
     val newDigest = prover.digest
-    val operations: Seq[Insertion] = boxes.map(box => Insertion(box))
+    val operations: Seq[Insert] = boxes.map(box => Insert(box.id, ADValue @@ box.bytes))
     (operations, prevDigest, newDigest, pf)
   }
 

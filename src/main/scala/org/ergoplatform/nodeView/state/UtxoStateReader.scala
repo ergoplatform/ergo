@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.Algos
@@ -136,7 +135,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
       Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}. " +
         "Possible reason - state update is in process."))
     } else {
-      persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations.map(ADProofs.changeToMod))
+      persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations)
     }
   }
 

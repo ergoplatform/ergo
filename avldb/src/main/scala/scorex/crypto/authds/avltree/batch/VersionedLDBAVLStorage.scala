@@ -8,6 +8,8 @@ import scorex.crypto.hash
 import scorex.crypto.hash.{CryptographicHash, Digest}
 import scorex.db.LDBVersionedStore
 import scorex.util.ScorexLogging
+
+import scala.collection.mutable
 import scala.util.{Failure, Try}
 
 /**
@@ -61,7 +63,7 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
   }
 
   private def serializedVisitedNodes(node: ProverNodes[D],
-                                     isTop: Boolean): Seq[(Array[Byte], Array[Byte])] = {
+                                     isTop: Boolean): Array[(Array[Byte], Array[Byte])] = {
     // Should always serialize top node. It may not be new if it is the creation of the tree
     if (node.isNew || isTop) {
       val pair: (Array[Byte], Array[Byte]) = (nodeKey(node), toBytes(node))
@@ -70,28 +72,33 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
           val leftSubtree = serializedVisitedNodes(n.left, isTop = false)
           val rightSubtree = serializedVisitedNodes(n.right, isTop = false)
           pair +: (leftSubtree ++ rightSubtree)
-        case _: ProverLeaf[D] => Seq(pair)
+        case _: ProverLeaf[D] => Array(pair)
       }
     } else {
-      Seq()
+      Array()
     }
   }
 
   //TODO label or key???
   private def nodeKey(node: ProverNodes[D]): Array[Byte] = node.label
 
-  private def toBytes(node: ProverNodes[D]): Array[Byte] = node match {
-    case n: InternalProverNode[D] => InternalNodePrefix +: n.balance +: (n.key ++ n.left.label ++ n.right.label)
-    case n: ProverLeaf[D] =>
-      if (fixedSizeValueMode){
-        LeafPrefix +: (n.key ++ n.value ++ n.nextLeafKey)
-      } else {
-        LeafPrefix +: (n.key ++ Ints.toByteArray(n.value.length) ++ n.value ++ n.nextLeafKey)
-      }
+  private def toBytes(node: ProverNodes[D]): Array[Byte] = {
+    val builder = new mutable.ArrayBuilder.ofByte;
+    node match {
+      case n: InternalProverNode[D] =>
+        builder += InternalNodePrefix += n.balance ++= n.key ++= n.left.label ++= n.right.label
+      case n: ProverLeaf[D] =>
+        if (fixedSizeValueMode) {
+          builder += LeafPrefix ++= n.key ++= n.value ++= n.nextLeafKey
+        } else {
+          builder += LeafPrefix ++= n.key ++= Ints.toByteArray(n.value.length) ++= n.value ++= n.nextLeafKey
+        }
+    }
+    builder.result()
   }
 
   //todo: this method is not used, should be removed on next scrypto update?
-  override def update(prover: BatchAVLProver[D, _]): Try[Unit] = update(prover, Seq())
+  override def update(prover: BatchAVLProver[D, _]): Try[Unit] = update(prover, Nil)
 }
 
 

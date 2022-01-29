@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.history
 
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.Constants
@@ -22,6 +23,8 @@ class AdProofSpec extends ErgoPropertyTest {
   type NewDigest = Digest
 
   val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
+
+  private def insert(box: ErgoBox) = Insert(box.id, ADValue @@ box.bytes)
 
   private def createEnv(howMany: Int = 10):
   (Seq[Insert], PrevDigest, NewDigest, Proof) = {
@@ -66,14 +69,14 @@ class AdProofSpec extends ErgoPropertyTest {
   property("verify should be failed if there are more operations than expected") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    val moreInsertions = operations :+ Insertion(testBox(10, Constants.TrueLeaf, creationHeight = startHeight))
+    val moreInsertions = operations :+ insert(testBox(10, Constants.TrueLeaf, creationHeight = startHeight))
     proof.verify(StateChanges(Seq(), moreInsertions, Seq()), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are illegal operation") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    val differentInsertions = operations.init :+ Insertion(testBox(10, Constants.TrueLeaf, creationHeight = startHeight))
+    val differentInsertions = operations.init :+ insert(testBox(10, Constants.TrueLeaf, creationHeight = startHeight))
     proof.verify(StateChanges(Seq(), differentInsertions, Seq()), prevDigest, newDigest) shouldBe 'failure
   }
 

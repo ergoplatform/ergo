@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGe
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.settings.Algos.HF
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Digest32
@@ -45,8 +46,8 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
             val changes = ErgoState.stateChanges(ct.transactions)
             val updHolder = versionedBoxHolder.applyChanges(
               us.version,
-              changes.toRemove.map(_.boxId).map(ByteArrayWrapper.apply),
-              changes.toAppend.map(_.box))
+              changes.toRemove.map(_.key).map(ByteArrayWrapper.apply),
+              changes.toAppend.map(_.value).map(ErgoBoxSerializer.parseBytes))
             Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants, parameters))
           case _ =>
             val updHolder = versionedBoxHolder.applyChanges(us.version, Seq(), Seq())

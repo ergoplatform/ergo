@@ -5,6 +5,7 @@ import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProofSerializer}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
@@ -81,6 +82,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val invSpec = new InvSpec(networkSettings.maxInvObjects)
   protected val requestModifierSpec = new RequestModifierSpec(networkSettings.maxInvObjects)
   protected val modifiersSpec = new ModifiersSpec(networkSettings.maxPacketSize)
+  protected val nipopowProofSpec = new NipopowProofSpec(new NipopowProofSerializer(new NipopowAlgos(settings.chainSettings.powScheme)))
 
   protected val deliveryTracker: DeliveryTracker =
     DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
@@ -101,7 +103,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val toDownloadCheckInterval = networkSettings.syncInterval
 
     // register as a handler for synchronization-specific types of messages
-    val messageSpecs: Seq[MessageSpec[_]] = Seq(invSpec, requestModifierSpec, modifiersSpec, syncInfoSpec)
+    val messageSpecs: Seq[MessageSpec[_]] = Seq(invSpec, requestModifierSpec, modifiersSpec, nipopowProofSpec, syncInfoSpec)
     networkControllerRef ! RegisterMessageSpecs(messageSpecs, self)
 
     // register as a listener for peers got connected (handshaked) or disconnected
@@ -515,6 +517,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  protected def sendNipopowProof(data: NipopowProofData, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+    hr.popowProof(data.m, data.k, data.headerId) match {
+      case Success(proof) => {
+        val msg = Message(nipopowProofSpec, Right(proof), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      }
+      case _ => log.warn(s"No Nipopow Proof available")
+    }
+  }
+
   /**
     * Object ids coming from other node.
     * Filter out modifier ids that are already in process (requested, received or applied),
@@ -784,6 +796,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ id, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
+    case (_: MessageSpec[_], data: NipopowProofData, remote) =>
+      sendNipopowProof(data, hr, remote)
   }
 
   def initialized(hr: ErgoHistory,

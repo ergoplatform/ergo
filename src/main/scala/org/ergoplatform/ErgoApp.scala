@@ -9,6 +9,7 @@ import org.ergoplatform.http.api._
 import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProofSerializer}
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -22,8 +23,8 @@ import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
-import java.net.InetSocketAddress
 
+import java.net.InetSocketAddress
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
 
@@ -62,6 +63,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     val invSpec = new InvSpec(scorexSettings.network.maxInvObjects)
     val requestModifierSpec = new RequestModifierSpec(scorexSettings.network.maxInvObjects)
     val modifiersSpec = new ModifiersSpec(scorexSettings.network.maxPacketSize)
+    val nipopowProofSpec = new NipopowProofSpec(new NipopowProofSerializer(new NipopowAlgos(ergoSettings.chainSettings.powScheme)))
     Seq(
       GetPeersSpec,
       new PeersSpec(featureSerializers, scorexSettings.network.maxPeerSpecObjects),
@@ -70,7 +72,9 @@ class ErgoApp(args: Args) extends ScorexLogging {
       modifiersSpec,
       GetSnapshotsInfoSpec,
       new GetManifestSpec,
-      new GetUtxoSnapshotChunkSpec
+      new GetUtxoSnapshotChunkSpec,
+      new GetNipopowProofSpec,
+      nipopowProofSpec
     )
   }
 

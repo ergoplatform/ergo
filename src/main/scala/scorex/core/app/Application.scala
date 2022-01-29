@@ -3,6 +3,7 @@ package scorex.core.app
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler, Route}
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProofSerializer}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.{ApiErrorHandler, ApiRejectionHandler, ApiRoute, CompositeHttpService}
 import scorex.core.network._
@@ -36,6 +37,8 @@ trait Application extends ScorexLogging {
   protected val features: Seq[PeerFeature]
   protected val additionalMessageSpecs: Seq[MessageSpec[_]]
   private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
+  private val nipopowSerializer =new NipopowProofSerializer(new NipopowAlgos(ergoSettings.chainSettings.powScheme))
+
 
   //p2p
   private val upnpGateway: Option[UPnPGateway] = if (settings.network.upnpEnabled) UPnP.getValidGateway(settings.network) else None
@@ -46,6 +49,7 @@ trait Application extends ScorexLogging {
     val invSpec = new InvSpec(settings.network.maxInvObjects)
     val requestModifierSpec = new RequestModifierSpec(settings.network.maxInvObjects)
     val modifiersSpec = new ModifiersSpec(settings.network.maxPacketSize)
+    val nipopowProofSpec = new NipopowProofSpec(nipopowSerializer)
     Seq(
       GetPeersSpec,
       new PeersSpec(featureSerializers, settings.network.maxPeerSpecObjects),
@@ -54,7 +58,9 @@ trait Application extends ScorexLogging {
       modifiersSpec,
       GetSnapshotsInfoSpec,
       new GetManifestSpec,
-      new GetUtxoSnapshotChunkSpec
+      new GetUtxoSnapshotChunkSpec,
+      new GetNipopowProofSpec,
+      nipopowProofSpec
     )
   }
 

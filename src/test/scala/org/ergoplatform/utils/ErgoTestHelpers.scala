@@ -37,20 +37,6 @@ trait ErgoTestHelpers
     }
   }
 
-  def inspectAll[E, C[_], A](xs: C[E])(fun: E => A)
-                            (implicit collecting: Collecting[E, C[E]],
-                             asserting: InspectorAsserting[A],
-                             prettifier: Prettifier,
-                             pos: source.Position): InspectorAsserting[A]#Result =
-    Inspectors.forAll(xs)(fun)
-
-  def inspectAll[K, V, MAP[k, v] <: GenMap[k, v], A](xs: MAP[K, V])(fun: ((K, V)) => A)
-                                                    (implicit collecting: Collecting[(K, V), GenTraversable[(K, V)]],
-                                                     asserting: InspectorAsserting[A],
-                                                     prettifier: Prettifier,
-                                                     pos: source.Position): InspectorAsserting[A]#Result =
-    Inspectors.forAll(xs)(fun)
-
   val inetAddr1 = new InetSocketAddress("92.92.92.92", 27017)
   val inetAddr2 = new InetSocketAddress("93.93.93.93", 27017)
   val ts1 = System.currentTimeMillis() - 100

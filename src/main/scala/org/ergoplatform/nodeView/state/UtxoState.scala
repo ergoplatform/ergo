@@ -184,7 +184,7 @@ object UtxoState {
     val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
-    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
+    Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
   def create(dir: File, constants: StateConstants, parameters: Parameters): UtxoState = {

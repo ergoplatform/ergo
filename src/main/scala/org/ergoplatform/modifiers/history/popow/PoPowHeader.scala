@@ -28,7 +28,9 @@ import scala.util.Try
   * Not used in the consensus protocol
   *
   */
-case class PoPowHeader(header: Header, interlinks: Seq[ModifierId], interlinksProof: BatchMerkleProof[Digest32]) extends BytesSerializable {
+case class PoPowHeader(header: Header,
+                       interlinks: Seq[ModifierId],
+                       interlinksProof: BatchMerkleProof[Digest32]) extends BytesSerializable {
 
   override type M = PoPowHeader
 
@@ -77,13 +79,14 @@ object PoPowHeader {
   }
 
   implicit val batchMerkleProofEncoder: Encoder[BatchMerkleProof[Digest32]] = { proof: BatchMerkleProof[Digest32] =>
+    import org.ergoplatform.wallet.serialization.JsonCodecsWrapper.arrayBytesEncoder
 
     val indicesAsJson = proof.indices.map(i => Json.obj(fields =
       "index" -> i._1.asJson,
-      "digest" -> i._2.toArray.asJson
+      "digest" -> i._2.array.asJson(arrayBytesEncoder)
     ))
     val proofsAsJson = proof.proofs.map(p => Json.obj(fields =
-      "digest" -> p._1.toArray.asJson,
+      "digest" -> p._1.array.asJson(arrayBytesEncoder),
       "side" -> p._2.toByte.asJson
     ))
     Json.obj(fields =
@@ -93,6 +96,7 @@ object PoPowHeader {
   }
 
   implicit val batchMerkleProofDecoder: Decoder[BatchMerkleProof[Digest32]] = { p =>
+    import org.ergoplatform.wallet.serialization.JsonCodecsWrapper.arrayBytesDecoder
 
     for {
       indicesJson <- p.downField("indices").as[List[Json]]
@@ -100,11 +104,11 @@ object PoPowHeader {
         indexJson => indexJson.hcursor.downField("index").as[Int]
       )
       indexDigests <- Traverse[List].traverse(indicesJson)(
-        indexJson => indexJson.hcursor.downField("digest").as[Array[Byte]]
+        indexJson => indexJson.hcursor.downField("digest").as[Array[Byte]](arrayBytesDecoder)
       )
       proofsJson <- p.downField("proofs").as[List[Json]]
       proofBytes <- Traverse[List].traverse(proofsJson)(
-        proofsJson => proofsJson.hcursor.downField("digest").as[Array[Byte]]
+        proofsJson => proofsJson.hcursor.downField("digest").as[Array[Byte]](arrayBytesDecoder)
       )
       proofSides <- Traverse[List].traverse(proofsJson)(
         proofsJson => proofsJson.hcursor.downField("side").as[Byte]

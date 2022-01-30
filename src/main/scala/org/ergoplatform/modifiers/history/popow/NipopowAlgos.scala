@@ -293,8 +293,6 @@ object NipopowAlgos {
             val duplicatesQty = 0xff & value.head.toInt
             val link = bytesToId(value.tail)
             loop(tail, acc ++ Seq.fill(duplicatesQty)(link))
-//            val nextAcc = if (duplicatesQty == 0) Seq(link) else Seq.fill(duplicatesQty)(link)
-//            loop(tail, nextAcc)
           } else {
             Failure(new Exception("Interlinks improperly packed"))
           }

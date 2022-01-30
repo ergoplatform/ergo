@@ -46,11 +46,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     persistentProver.digest
   }
 
-  private def onAdProofGenerated(proof: ADProofs): Unit = {
-    if (constants.nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
-    constants.nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
-  }
-
   import UtxoState.metadata
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
@@ -96,7 +91,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
+  override def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       persistentProver.synchronized {
         val height = fb.header.height
@@ -106,12 +101,29 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
+          val tm0 = System.currentTimeMillis()
+          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+          val tm = System.currentTimeMillis()
+          log.debug(s"Transactions at height $height checked in ${tm-tm0} ms.")
+
+          txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
+
+            val tp0 = System.currentTimeMillis()
             val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
+            val tp = System.currentTimeMillis()
+            log.debug(s"Utxo storage at height $height updated in ${tp-tp0} ms.")
+
             val proofHash = ADProofs.proofDigest(proofBytes)
-            if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+
+            if (fb.adProofs.isEmpty) {
+              val ta0 = System.currentTimeMillis()
+              val adProofs = ADProofs(fb.header.id, proofBytes)
+              generate(LocallyGeneratedModifier(adProofs))
+              val ta = System.currentTimeMillis()
+              log.debug(s"UTXO set transformation proofs at height $height dumped in ${ta-ta0} ms.")
+            }
 
             if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
               throw new Error("Storage kept roothash is not equal to the declared one")

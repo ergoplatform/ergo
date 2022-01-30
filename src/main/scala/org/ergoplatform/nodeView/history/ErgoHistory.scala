@@ -190,16 +190,20 @@ trait ErgoHistory
     * @return
     */
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
-    typedModifierById[Header](headerId).foreach { h =>
-      historyStorage.remove(
+    val hOpt = typedModifierById[Header](headerId)
+      val hRes = historyStorage.remove(
         indicesToRemove = Seq(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
         idsToRemove = Seq(headerId)
-      ).get
+      )
+    log.info(s"Result of removing header $headerId: " + hRes)
+
+    hOpt.foreach { h =>
       requiredModifiersForHeader(h).foreach { case (_, mId) =>
-        historyStorage.remove(
+        val mRes = historyStorage.remove(
           indicesToRemove = Seq(validityKey(mId)),
           idsToRemove = Seq(mId)
-        ).get
+        )
+        log.info(s"Result of removing modifier $mId: " + mRes)
       }
     }
   }
@@ -227,11 +231,12 @@ object ErgoHistory extends ScorexLogging {
 
   // check if there is possible database corruption when there is header after
   // recognized blockchain tip marked as invalid
-  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = {
+  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
+    val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
-    if (afterHeaders.nonEmpty) {
+    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
       log.warn("Found suspicious continuation, clearing it...")
       afterHeaders.map { hId =>
         history.forgetHeader(hId)

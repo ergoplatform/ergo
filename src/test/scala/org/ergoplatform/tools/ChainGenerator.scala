@@ -75,7 +75,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   HistoryTestHelpers.allowToApplyOldBlocks(history)
-  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings), parameters)
+  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(fullHistorySettings), parameters)
   log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
   val chain = loop(state, None, None, Seq())
@@ -111,7 +111,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
       log.info(
         s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
-      loop(state.applyModifier(block).get, outToPassNext, Some(block.header), acc :+ block.id)
+      loop(state.applyModifier(block)(_ => ()).get, outToPassNext, Some(block.header), acc :+ block.id)
     } else {
       acc
     }

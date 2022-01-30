@@ -513,7 +513,7 @@ trait ErgoHistoryReader
     typedModifierById[Header](headerId).flatMap(h =>
       typedModifierById[Extension](h.extensionId).flatMap { ext =>
         val interlinks = NipopowAlgos.unpackInterlinks(ext.fields).toOption
-        val interlinkProof = nipopowAlgos.proofForInterlinkVector(ext)
+        val interlinkProof = NipopowAlgos.proofForInterlinkVector(ext)
         (interlinks, interlinkProof) match {
           case (Some(links), Some(proof)) => Some(PoPowHeader(h, links, proof))
           case _ => None

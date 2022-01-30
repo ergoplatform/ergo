@@ -67,25 +67,6 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
       Seq(prevHeader.id)
     }
 
-  /**
-    * Packs interlinks into key-value format of the block extension.
-    */
-  @inline def packInterlinks(links: Seq[ModifierId]): Seq[(Array[Byte], Array[Byte])] = {
-    @scala.annotation.tailrec
-    def loop(rem: List[(ModifierId, Int)],
-             acc: Seq[(Array[Byte], Array[Byte])]): Seq[(Array[Byte], Array[Byte])] =
-      rem match {
-        case (headLink, idx) :: _ =>
-          val duplicatesQty = links.count(_ == headLink)
-          val filled = Array(InterlinksVectorPrefix, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
-          loop(rem.drop(duplicatesQty), acc :+ filled)
-        case Nil =>
-          acc
-      }
-
-    loop(links.zipWithIndex.toList, Seq.empty)
-  }
-
   @inline
   def interlinksToExtension(links: Seq[ModifierId]): ExtensionCandidate = {
     ExtensionCandidate(packInterlinks(links))
@@ -259,25 +240,31 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
     NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
   }
 
-  /**
-   * Proves the inclusion of the interlink vector in the Merkle Tree of the given extension.
-   */
-  def proofForInterlinkVector(ext: ExtensionCandidate): Option[BatchMerkleProof[Digest32]] = {
-    val keys = ext.fields
-      .filter({ case (key, _) => key.head == InterlinksVectorPrefix })
-      .map(_._1)
-    if (keys.isEmpty) {
-      Some(BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash))
-    } else {
-      ext.batchProofFor(keys: _*)
-    }
-  }
 }
 
 
 object NipopowAlgos {
 
   private def log2(x: Double): Double = math.log(x) / math.log(2)
+
+  /**
+    * Packs interlinks into key-value format of the block extension.
+    */
+  @inline def packInterlinks(links: Seq[ModifierId]): Seq[(Array[Byte], Array[Byte])] = {
+    @scala.annotation.tailrec
+    def loop(rem: List[(ModifierId, Int)],
+             acc: Seq[(Array[Byte], Array[Byte])]): Seq[(Array[Byte], Array[Byte])] =
+      rem match {
+        case (headLink, idx) :: _ =>
+          val duplicatesQty = links.count(_ == headLink)
+          val filled = Array(InterlinksVectorPrefix, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
+          loop(rem.drop(duplicatesQty), acc :+ filled)
+        case Nil =>
+          acc
+      }
+
+    loop(links.zipWithIndex.toList, Seq.empty)
+  }
 
   /**
     * Unpacks interlinks from key-value format of block extension.
@@ -302,4 +289,19 @@ object NipopowAlgos {
 
     loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
   }
+
+  /**
+    * Proves the inclusion of the interlink vector in the Merkle Tree of the given extension.
+    */
+  def proofForInterlinkVector(ext: ExtensionCandidate): Option[BatchMerkleProof[Digest32]] = {
+    val keys = ext.fields
+      .filter({ case (key, _) => key.head == InterlinksVectorPrefix })
+      .map(_._1)
+    if (keys.isEmpty) {
+      Some(BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash))
+    } else {
+      ext.batchProofFor(keys: _*)
+    }
+  }
+
 }

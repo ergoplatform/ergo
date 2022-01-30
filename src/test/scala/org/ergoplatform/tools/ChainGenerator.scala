@@ -161,10 +161,10 @@ object ChainGenerator extends App with ErgoTestHelpers {
       .flatMap { h =>
         history.typedModifierById[Extension](h.extensionId)
           .flatMap(ext => NipopowAlgos.unpackInterlinks(ext.fields).toOption)
-          .map(popowAlgos.updateInterlinks(h, _))
+          .map(nipopowAlgos.updateInterlinks(h, _))
       }
       .getOrElse(Seq.empty)
-    val interlinksExtension = popowAlgos.interlinksToExtension(interlinks)
+    val interlinksExtension = nipopowAlgos.interlinksToExtension(interlinks)
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = lastHeaderOpt.map { header =>
       val newHeight = header.height + 1
@@ -182,7 +182,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
           newParams.suggestVotes(settings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {
-        (popowAlgos.interlinksToExtension(interlinks),
+        (nipopowAlgos.interlinksToExtension(interlinks),
           currentParams.vote(settings.votingTargets.targets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
@@ -204,12 +204,12 @@ object ChainGenerator extends App with ErgoTestHelpers {
       case Some(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt
-          .map(popowAlgos.updateInterlinks(_, NipopowAlgos.unpackInterlinks(candidate.extension.fields).get))
+          .map(nipopowAlgos.updateInterlinks(_, NipopowAlgos.unpackInterlinks(candidate.extension.fields).get))
           .getOrElse(Seq.empty)
         val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
         proveCandidate {
           candidate.copy(
-            extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag)) ++ popowAlgos.interlinksToExtension(interlinks)
+            extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag)) ++ nipopowAlgos.interlinksToExtension(interlinks)
           )
         }
     }

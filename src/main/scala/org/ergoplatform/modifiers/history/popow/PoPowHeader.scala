@@ -3,7 +3,6 @@ package org.ergoplatform.modifiers.history.popow
 import cats.Traverse
 import cats.implicits.{catsStdInstancesForEither, catsStdInstancesForList}
 import io.circe.{Decoder, Encoder, Json}
-import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.Extension.merkleTree
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
@@ -13,7 +12,7 @@ import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.crypto.authds.Side
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -47,9 +46,7 @@ object PoPowHeader {
 
   import io.circe.syntax._
 
-  implicit val hf: HF = Blake2b256
-  val powScheme: AutolykosPowScheme = new AutolykosPowScheme(32, 26)
-  val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
+  implicit val hf: HF = Algos.hash
 
   /**
     * Validates interlinks merkle root against provided proof
@@ -58,7 +55,7 @@ object PoPowHeader {
     if (interlinks.isEmpty && proof.indices.isEmpty && proof.proofs.isEmpty) {
       true
     } else {
-      val fields = nipopowAlgos.packInterlinks(interlinks)
+      val fields = NipopowAlgos.packInterlinks(interlinks)
       val tree = merkleTree(fields)
       proof.valid(tree.rootHash)
     }
@@ -68,7 +65,7 @@ object PoPowHeader {
     * Create PoPowHeader from a given block
     */
   def fromBlock(b: ErgoFullBlock): Try[PoPowHeader] = {
-    val proof = nipopowAlgos.proofForInterlinkVector(b.extension).get
+    val proof = NipopowAlgos.proofForInterlinkVector(b.extension).get
     NipopowAlgos.unpackInterlinks(b.extension.fields).map { interlinkVector =>
       PoPowHeader(b.header, interlinkVector, proof)
     }

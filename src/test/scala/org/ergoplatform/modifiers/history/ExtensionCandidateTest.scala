@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
+import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 
@@ -28,7 +29,7 @@ class ExtensionCandidateTest extends ErgoPropertyTest {
     forAll(modifierIds) { modifiers =>
       whenever(modifiers.nonEmpty) {
 
-        val fields = popowAlgos.packInterlinks(modifiers)
+        val fields = NipopowAlgos.packInterlinks(modifiers)
         val ext = ExtensionCandidate(fields)
         val proof = ext.batchProofFor(fields.map(_._1.clone).toArray: _*)
         proof shouldBe defined

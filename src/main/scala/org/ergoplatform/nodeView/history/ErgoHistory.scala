@@ -85,12 +85,14 @@ trait ErgoHistory
         if (nonMarkedIds.nonEmpty) {
           historyStorage.insert(
             nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
-            Seq.empty).map(_ => this)
-        } else Success(this)
+            Nil).map(_ => this)
+        } else {
+          Success(this)
+        }
       case _ =>
         historyStorage.insert(
-          Seq(validityKey(modifier.id) -> Array(1.toByte)),
-          Seq.empty).map(_ => this)
+          Array(validityKey(modifier.id) -> Array(1.toByte)),
+          Nil).map(_ => this)
     }
   }
 
@@ -117,7 +119,7 @@ trait ErgoHistory
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
-            historyStorage.insert(validityRow, Seq.empty).map { _ =>
+            historyStorage.insert(validityRow, Nil).map { _ =>
               this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
             }
           case _ =>
@@ -165,11 +167,9 @@ trait ErgoHistory
       case None =>
         //No headers become invalid. Just mark this modifier as invalid
         log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
-        historyStorage.insert(
-          Seq(validityKey(modifier.id) -> Array(0.toByte)),
-          Seq.empty).map { _ =>
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
-         }
+        historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), Nil).map { _ =>
+          this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+        }
     }
   }
 
@@ -192,16 +192,16 @@ trait ErgoHistory
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
     val hOpt = typedModifierById[Header](headerId)
       val hRes = historyStorage.remove(
-        indicesToRemove = Seq(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
-        idsToRemove = Seq(headerId)
+        indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
+        idsToRemove = Array(headerId)
       )
     log.info(s"Result of removing header $headerId: " + hRes)
 
     hOpt.foreach { h =>
       requiredModifiersForHeader(h).foreach { case (_, mId) =>
         val mRes = historyStorage.remove(
-          indicesToRemove = Seq(validityKey(mId)),
-          idsToRemove = Seq(mId)
+          indicesToRemove = Array(validityKey(mId)),
+          idsToRemove = Array(mId)
         )
         log.info(s"Result of removing modifier $mId: " + mRes)
       }
@@ -241,7 +241,7 @@ object ErgoHistory extends ScorexLogging {
       afterHeaders.map { hId =>
         history.forgetHeader(hId)
       }
-      history.historyStorage.remove(Seq(history.heightIdsKey(bestHeaderHeight + 1)), Seq.empty)
+      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Nil)
       true
     } else {
       false

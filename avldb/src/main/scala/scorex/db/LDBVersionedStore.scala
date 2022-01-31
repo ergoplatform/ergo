@@ -206,11 +206,17 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     val valueSize = undo.length - versionSize - keySize - 2
     val versionID = undo.slice(2, 2 + versionSize)
     val key = undo.slice(2 + versionSize, 2 + versionSize + keySize)
-    val value = if (valueSize == 0) null else undo.slice(2 + versionSize + keySize, undo.length)
+    val value = if (valueSize == 0){
+      null
+    } else{
+      undo.slice(2 + versionSize + keySize, undo.length)
+    }
     Undo(versionID, key, value)
   }
 
-  def update(versionID: VersionID, toRemove: Iterable[Array[Byte]], toUpdate: Iterable[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
+  def update(versionID: VersionID,
+             toRemove: Iterable[Array[Byte]],
+             toUpdate: Iterable[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
     lock.writeLock().lock()
     val lastLsn = lsn // remember current LSN value
     val batch = db.createWriteBatch()

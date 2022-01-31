@@ -78,7 +78,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
       persistentProver.synchronized {
-        val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
+        val mods = ErgoState.stateChanges(transactions).operations
         val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
         ModifierValidator(stateContext.validationSettings)
           .validateNoFailure(fbOperationFailed, resultTry)
@@ -184,7 +184,7 @@ object UtxoState {
     val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
-    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
+    Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
   def create(dir: File, constants: StateConstants, parameters: Parameters): UtxoState = {

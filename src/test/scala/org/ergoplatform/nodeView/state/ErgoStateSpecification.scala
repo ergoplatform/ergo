@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalacheck.Gen
 import scorex.core.bytesToVersion
 import scorex.core.validation.ValidationResult.Valid
@@ -24,7 +25,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val validBlock = validFullBlock(None, us, bh)
       val dsTxs = validBlock.transactions ++ validBlock.transactions
       val changes = ErgoState.stateChanges(dsTxs)
-      val toRemove = changes.toRemove.map(_.boxId)
+      val toRemove = changes.toRemove.map(_.key)
       toRemove.count(boxId => java.util.Arrays.equals(toRemove.head, boxId)) shouldBe 2
 
       val dsRoot = BlockTransactions.transactionsRoot(dsTxs, version)
@@ -127,13 +128,13 @@ class ErgoStateSpecification extends ErgoPropertyTest {
         val removals = changes.toRemove
         // should remove the only genesis box from the state
         removals.length shouldBe 1
-        removals.head.boxId shouldEqual emissionBox.id
+        removals.head.key shouldEqual emissionBox.id
         // number of inputs should be more than 1 - we create boxes and spend them in the same block
         txs.flatMap(_.inputs).length should be > 1
 
         val insertions = changes.toAppend
         // sum of coins in outputs should equal to genesis value
-        insertions.map(_.box.value).sum shouldBe emissionBox.value
+        insertions.map(_.value).map(ErgoBoxSerializer.parseBytes).map(_.value).sum shouldBe emissionBox.value
 
         // if output was spend and then created - it is in both toInsert and toRemove
         val changesRev = ErgoState.stateChanges(txs.reverse)

@@ -147,7 +147,6 @@ class ModifiersSpec(maxMessageSize: Int) extends MessageSpecV1[ModifiersData] wi
       count -> size
     }
 
-    val start = w.length()
     w.put(typeId)
     w.putUInt(msgCount)
 
@@ -158,8 +157,7 @@ class ModifiersSpec(maxMessageSize: Int) extends MessageSpecV1[ModifiersData] wi
     }
 
     if (msgSize > maxMessageSize) {
-      log.warn(s"Message with modifiers ${modifiers.keySet} has size $msgSize exceeding limit $maxMessageSize." +
-        s" Sending ${w.length() - start} bytes instead")
+      log.warn(s"Message with modifiers ${modifiers.keySet} has size $msgSize exceeding limit $maxMessageSize.")
     }
   }
 
@@ -171,7 +169,7 @@ class ModifiersSpec(maxMessageSize: Int) extends MessageSpecV1[ModifiersData] wi
       val id = bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
       val objBytesCnt = r.getUInt().toIntExact
       val newMsgSize = msgSize + NodeViewModifier.ModifierIdSize + objBytesCnt
-      if (newMsgSize > maxMessageSize) {
+      if (newMsgSize > 4 * maxMessageSize) { // buffer for safety
         throw new Exception("Too big message with modifiers, size: " + maxMessageSize)
       }
       val obj = r.getBytes(objBytesCnt)
@@ -272,4 +270,5 @@ class HandshakeSpec(featureSerializers: PeerFeature.Serializers, sizeLimit: Int)
     val data = peersDataSerializer.parse(r)
     Handshake(data, t)
   }
+
 }

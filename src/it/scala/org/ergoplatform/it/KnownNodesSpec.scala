@@ -10,10 +10,10 @@ import scala.concurrent.duration._
 class KnownNodesSpec extends AnyFlatSpec with IntegrationSuite {
 
   val nodeConfigs: List[Config] = nodeSeedConfigs.take(3).map(nonGeneratingPeerConfig.withFallback)
-  val nodes: List[Node] = docker.startDevNetNodes(nodeConfigs, sequentialTopologyConfig).get
+  val nodes: List[Node] = docker.startDevNetNodes(nodeConfigs, allTopologyConfig).get
 
   // todo: https://github.com/ergoplatform/ergo/issues/653
-  it should s"The third node knows first node" ignore {
+  it should s"The third node knows first node" in {
 
     val node03 = nodes.find(_.nodeName == "node03").value
     val targetPeersCount = nodes.length - 1 /* self */

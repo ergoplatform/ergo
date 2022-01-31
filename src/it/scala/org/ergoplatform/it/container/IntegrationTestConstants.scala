@@ -38,6 +38,12 @@ trait IntegrationTestConstants extends ErgoTestConstants {
     previousNode map { node => knownPeersConfig(Seq(node.nodeInfo)) }
   }
 
+  def allTopologyConfig: ExtraConfig = { (docker, nodeConfig) =>
+    val nodeName = nodeNameFromConfig(nodeConfig)
+    val nodes = docker.nodes.takeWhile(_.nodeName != nodeName)
+    Some(knownPeersConfig(nodes.map(_.nodeInfo)))
+  }
+
   def isolatedPeersConfig: ExtraConfig = { (_, _) =>
     Some(knownPeersConfig(Seq.empty))
   }

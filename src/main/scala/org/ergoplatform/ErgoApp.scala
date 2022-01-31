@@ -104,6 +104,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider, parameters)
 
   private val syncTracker = ErgoSyncTracker(actorSystem, scorexSettings.network, timeProvider)
+  private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 
   // touch it to run preStart method of the actor which is in turn running schedulers
   ErgoNodeViewSynchronizer(
@@ -112,7 +113,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
     ErgoSyncInfoMessageSpec,
     ergoSettings,
     timeProvider,
-    syncTracker
+    syncTracker,
+    deliveryTracker
   )
 
   // Launching PeerSynchronizer actor which is then registering itself at network controller

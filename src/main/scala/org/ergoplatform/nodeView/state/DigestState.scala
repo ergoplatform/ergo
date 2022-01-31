@@ -158,7 +158,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
               dir: File,
               constants: StateConstants,
               parameters: Parameters): Try[DigestState] = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(scorex.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
@@ -171,7 +171,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              dir: File,
              constants: StateConstants,
              parameters: Parameters): DigestState = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     Try {
       val context = ErgoStateReader.storageStateContext(store, constants, parameters)
       (versionOpt, rootHashOpt) match {

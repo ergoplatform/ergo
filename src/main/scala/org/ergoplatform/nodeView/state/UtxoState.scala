@@ -188,7 +188,7 @@ object UtxoState {
   }
 
   def create(dir: File, constants: StateConstants, parameters: Parameters): UtxoState = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
@@ -214,7 +214,7 @@ object UtxoState {
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
 
     val defaultStateContext = ErgoStateContext.empty(constants, parameters)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)

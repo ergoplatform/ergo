@@ -9,7 +9,7 @@ import scorex.db.LDBVersionedStore
 
 object LDBVersionedStoreRollbackBench extends App with TestFileUtils {
 
-  private val store = new LDBVersionedStore(createTempDir, keepVersions = 400)
+  private val store = new LDBVersionedStore(createTempDir, initialKeepVersions = 400)
 
   private val numEpochs = 10000
   private val elemsAtStep = 500

@@ -79,8 +79,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val peerSpec: PeerSpec = defaultPeerSpec.copy(protocolVersion = protocolVersion)
 
   val connectedPeers: Seq[Handshake] = Seq(
-    Handshake(peerSpec.copy(nodeName = "first"), ts1),
-    Handshake(peerSpec.copy(nodeName = "second"), ts2)
+    Handshake(peerSpec.copy(nodeName = "first"), System.currentTimeMillis() - 100),
+    Handshake(peerSpec.copy(nodeName = "second"), System.currentTimeMillis() + 100)
   )
 
   val blacklistedPeers: Seq[String] = Seq("4.4.4.4:1111", "8.8.8.8:2222")

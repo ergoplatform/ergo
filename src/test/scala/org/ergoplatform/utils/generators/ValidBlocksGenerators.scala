@@ -1,6 +1,5 @@
 package org.ergoplatform.utils.generators
 
-import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -26,9 +25,8 @@ import scala.util.{Failure, Random, Success}
 trait ValidBlocksGenerators
   extends TestkitHelpers with TestFileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
-  def createUtxoState(parameters: Parameters, nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
-    val constants = StateConstants(nodeViewHolderRef, settings)
-    createUtxoState(constants, parameters)
+  def createUtxoState(parameters: Parameters): (UtxoState, BoxHolder) = {
+    createUtxoState(StateConstants(settings), parameters)
   }
 
   def createUtxoState(constants: StateConstants, parameters: Parameters): (UtxoState, BoxHolder) = {

@@ -375,7 +375,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
 
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction =
-    ErgoTransaction(inputs, IndexedSeq(), outputCandidates, None)
+    ErgoTransaction(inputs, IndexedSeq.empty, outputCandidates, None)
 
   def apply(tx: ErgoLikeTransaction): ErgoTransaction =
     ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)

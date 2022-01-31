@@ -21,7 +21,7 @@ import scala.util.Try
   * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is not possible.
   *
   * @param dir - folder to store data
-  * @param keepVersions - number of versions to keep
+  * @param initialKeepVersions - number of versions to keep when the store is created. Can be changed after.
   *
   */
 class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) extends KVStoreReader {

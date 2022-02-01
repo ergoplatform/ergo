@@ -208,29 +208,36 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     }
   }
 
+  /**
+    * Helper method to validate reemission rules according to EIP-27
+    */
   def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
                                outputCandidates: Seq[ErgoBoxCandidate],
                                stateContext: ErgoStateContext): Try[Unit] = {
     Try {
 
-      val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
-      val ReemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
-      val EmissionNftId = ModifierId @@ reemissionSettings.emissionNftId
-      val reemissionNftIdBytes = reemissionSettings.reemissionNftIdBytes
-      val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
+      lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
+      lazy val ReemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
+      lazy val EmissionNftId = ModifierId @@ reemissionSettings.emissionNftId
+      lazy val reemissionNftIdBytes = reemissionSettings.reemissionNftIdBytes
+      lazy val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
 
-      val height = stateContext.currentHeight
+      lazy val height = stateContext.currentHeight
+      lazy val activationHeight = reemissionSettings.activationHeight
 
       // reemission logic below
       var reemissionSpending = false
       boxesToSpend.foreach { box =>
+        // checking EIP-27 rules for emission box
         if (box.value > 100000 * EmissionRules.CoinsInOneErgo) { // for efficiency, skip boxes with less than 100,000 ERG
-          // todo: on activation height, emissionNftId is not inputs
-          if (box.tokens.contains(EmissionNftId)) {
+          // on activation height, emissionNft is not in emission box yet
+          if (box.tokens.headOption.contains(EmissionNftId) ||
+                height == activationHeight && boxesToSpend(1).tokens.headOption.contains(EmissionNftId)) {
             //we're checking how emission box is paying reemission tokens below
 
+            // if emission contract NFT is in the input, remission tokens should be there also
             val reemissionTokensIn = box.tokens.getOrElse(ReemissionTokenId, 0L)
-            require(reemissionTokensIn > 0) // todo check only after some height only
+            require(reemissionTokensIn > 0)
 
             // output positions guaranteed by emission contract
             val emissionOut = outputCandidates(0)
@@ -242,7 +249,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             require(emissionOut.tokens.contains(EmissionNftId))
             require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission token not preserved")
 
-            val height = stateContext.currentHeight
             val properReemissionRewardPart = ReemissionRules.reemissionForHeight(height, emissionRules, reemissionSettings)
             require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
           }

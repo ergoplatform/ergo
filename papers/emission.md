@@ -152,7 +152,8 @@ The injection box is protected by the script
 
 ```
 {
-    INPUTS(0).value > 30000000L * 1000000000L
+    INPUTS(0).value > 30000000L * 1000000000L &&
+       SELF.id == INPUTS(1).id 
 }
 ```
 

@@ -230,10 +230,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       boxesToSpend.foreach { box =>
         // checking EIP-27 rules for emission box
         if (box.value > 100000 * EmissionRules.CoinsInOneErgo) { // for efficiency, skip boxes with less than 100,000 ERG
-          // on activation height, emissionNft is not in emission box yet
-          if (box.tokens.headOption.contains(EmissionNftId) ||
-                height == activationHeight && boxesToSpend(1).tokens.headOption.contains(EmissionNftId)) {
-            //we're checking how emission box is paying reemission tokens below
+          // on activation height, emissionNft is not in emission box yet, but in injection box
+          if (box.tokens.contains(EmissionNftId) ||
+                height == activationHeight && boxesToSpend(1).tokens.contains(EmissionNftId)) {
 
             // if emission contract NFT is in the input, remission tokens should be there also
             val reemissionTokensIn = box.tokens.getOrElse(ReemissionTokenId, 0L)
@@ -243,10 +242,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             val emissionOut = outputCandidates(0)
             val rewardsOut = outputCandidates(1)
 
+            // check positions of emission NFT and reemission token
+            require(emissionOut.additionalTokens.apply(0)._1 == EmissionNftId)
+            require(emissionOut.additionalTokens.apply(1)._1 == ReemissionTokenId)
+
+            //we're checking how emission box is paying reemission tokens below
             val emissionTokensOut = emissionOut.tokens.getOrElse(ReemissionTokenId, 0L)
             val rewardsTokensOut = rewardsOut.tokens.getOrElse(ReemissionTokenId, 0L)
-
-            require(emissionOut.tokens.contains(EmissionNftId))
             require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission token not preserved")
 
             val properReemissionRewardPart = ReemissionRules.reemissionForHeight(height, emissionRules, reemissionSettings)
@@ -254,7 +256,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           }
         } else if (box.tokens.contains(ReemissionTokenId) && height > reemissionSettings.activationHeight) {
           // reemission tokens spent after EIP-27 activation
-          // todo: check activation height
           reemissionSpending = true
         }
       }

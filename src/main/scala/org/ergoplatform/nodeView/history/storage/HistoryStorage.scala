@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.storage
 import com.google.common.cache.CacheBuilder
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBKVStore}
@@ -40,7 +41,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
       objectsStore.get(idToBytes(id)).flatMap { bytes =>
         HistoryModifierSerializer.parseBytesTry(bytes) match {
           case Success(pm) =>
-            log.trace(s"Cache miss for existing modifier $id")
+            log.info(s"Cache miss for existing modifier $id")
             modifiersCache.put(id, pm)
             Some(pm)
           case Failure(_) =>
@@ -59,7 +60,15 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
 
   def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(idToBytes(id))
 
-  def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
+  def contains(id: ModifierId): Boolean = {
+    def validityKey(id: ModifierId): ByteArrayWrapper = {
+      ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+    }
+
+    getIndex(validityKey(id)).map(_ => true).getOrElse(
+      objectsStore.get(idToBytes(id)).isDefined
+    )
+  }
 
   def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Seq[ErgoPersistentModifier]): Try[Unit] = {

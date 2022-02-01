@@ -126,7 +126,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def extractTransactions(mod: ErgoPersistentModifier): Seq[ErgoTransaction] = mod match {
     case tcm: TransactionsCarryingPersistentNodeViewModifier => tcm.transactions
-    case _ => Seq()
+    case _ => Seq.empty
   }
 
 
@@ -138,7 +138,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private def trimChainSuffix(suffix: IndexedSeq[ErgoPersistentModifier],
                               rollbackPoint: scorex.util.ModifierId): IndexedSeq[ErgoPersistentModifier] = {
     val idx = suffix.indexWhere(_.id == rollbackPoint)
-    if (idx == -1) IndexedSeq() else suffix.drop(idx)
+    if (idx == -1) IndexedSeq.empty else suffix.drop(idx)
   }
 
   /**
@@ -185,7 +185,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       val branchingPoint = progressInfo.branchPoint.get //todo: .get
       if (state.version != branchingPoint) {
         state.rollbackTo(idToVersion(branchingPoint)) -> trimChainSuffix(suffixApplied, branchingPoint)
-      } else Success(state) -> IndexedSeq()
+      } else Success(state) -> IndexedSeq.empty
     } else Success(state) -> suffixApplied
 
     stateToApplyTry match {
@@ -316,7 +316,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           log.debug(s"Cache size before: ${modifiersCache.size}")
 
-          val applied = applyFromCacheLoop(Seq())
+          val applied = applyFromCacheLoop(Seq.empty)
           val cleared = modifiersCache.cleanOverfull()
 
           context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
@@ -405,7 +405,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           if (progressInfo.toApply.nonEmpty) {
             val (newHistory, newStateTry, blocksApplied) =
-              updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq())
+              updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq.empty)
 
             newStateTry match {
               case Success(newMinState) =>

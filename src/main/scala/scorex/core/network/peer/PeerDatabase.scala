@@ -68,7 +68,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
       peerInfo.peerSpec.address.foreach { address =>
         log.debug(s"Updating peer info for $address")
         peers += address -> peerInfo
-        objectStore.insert(Seq((serialize(address), PeerInfoSerializer.toBytes(peerInfo))))
+        objectStore.insert(Array((serialize(address), PeerInfoSerializer.toBytes(peerInfo))))
       }
     }
   }
@@ -92,7 +92,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
 
   def remove(address: InetSocketAddress): Unit = {
     peers -= address
-    objectStore.remove(Seq(serialize(address)))
+    objectStore.remove(Array(serialize(address)))
   }
 
   def knownPeers: Map[InetSocketAddress, PeerInfo] = peers

@@ -78,7 +78,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
       persistentProver.synchronized {
-        val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
+        val mods = ErgoState.stateChanges(transactions).operations
         val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
         ModifierValidator(stateContext.validationSettings)
           .validateNoFailure(fbOperationFailed, resultTry)
@@ -101,13 +101,28 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
+          val tm0 = System.currentTimeMillis()
+          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+          val tm = System.currentTimeMillis()
+          log.debug(s"Transactions at height $height checked in ${tm-tm0} ms.")
+
+          txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
+
+            val tp0 = System.currentTimeMillis()
             val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
+            val tp = System.currentTimeMillis()
+            log.debug(s"Utxo storage at height $height updated in ${tp-tp0} ms.")
+
             val proofHash = ADProofs.proofDigest(proofBytes)
+
             if (fb.adProofs.isEmpty) {
-              generate(LocallyGeneratedModifier(ADProofs(fb.header.id, proofBytes)))
+              val ta0 = System.currentTimeMillis()
+              val adProofs = ADProofs(fb.header.id, proofBytes)
+              generate(LocallyGeneratedModifier(adProofs))
+              val ta = System.currentTimeMillis()
+              log.debug(s"UTXO set transformation proofs at height $height dumped in ${ta-ta0} ms.")
             }
 
             if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
@@ -169,11 +184,11 @@ object UtxoState {
     val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
-    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
+    Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
   def create(dir: File, constants: StateConstants, parameters: Parameters): UtxoState = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
@@ -199,7 +214,7 @@ object UtxoState {
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
 
     val defaultStateContext = ErgoStateContext.empty(constants, parameters)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)

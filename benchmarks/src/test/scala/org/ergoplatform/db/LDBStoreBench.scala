@@ -26,7 +26,7 @@ object LDBStoreBench
   private val db1 = factory.open(createTempDir, options)
 
   private def storeLDB() = new LDBKVStore(db1)
-  private def storeLVDB() = new LDBVersionedStore(createTempDir, keepVersions = 400)
+  private def storeLVDB() = new LDBVersionedStore(createTempDir, initialKeepVersions = 400)
 
   private val modsNumGen = Gen.enumeration("modifiers number")(1000)
 

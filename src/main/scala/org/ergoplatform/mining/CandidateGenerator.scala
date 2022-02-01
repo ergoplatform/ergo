@@ -639,16 +639,19 @@ object CandidateGenerator extends ScorexLogging {
       val prop           = emissionBox.ergoTree
       val emissionAmount = emission.minersRewardAtHeight(nextHeight)
 
-      val reemissionAmount = ReemissionRules.reemissionForHeight(nextHeight, emission, reemissionSettings)
+      // how many nanoERG should be re-emitted
+      lazy val reemissionAmount = ReemissionRules.reemissionForHeight(nextHeight, emission, reemissionSettings)
 
       val emissionBoxAssets = if (nextHeight == reemissionActivationHeight) {
-        //injection
+        // we inject emission box NFT and reemission tokens on activation height
+        // see "Activation Details" section of EIP-27
         injectionBox.additionalTokens
       } else {
         emissionBox.additionalTokens
       }
 
       val updEmissionAssets = if(nextHeight >= reemissionActivationHeight) {
+        // deduct reemission from emission box
         val reemissionTokens = emissionBoxAssets.apply(1)._2
         val updAmount = reemissionTokens - reemissionAmount
         emissionBoxAssets.updated(1, reemissionTokenId -> updAmount)
@@ -659,19 +662,20 @@ object CandidateGenerator extends ScorexLogging {
       val newEmissionBox: ErgoBoxCandidate =
         new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, nextHeight, updEmissionAssets)
       val inputs = if (nextHeight == reemissionActivationHeight) {
-        //injection
+        // injection - second input is injection box
         IndexedSeq(new Input(emissionBox.id, ProverResult.empty), new Input(injectionBox.id, ProverResult.empty))
       } else {
         IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
       }
 
       val minerAmt = if (nextHeight == reemissionActivationHeight) {
-        //injection
+        // injection - inhection box value going to miner
         emissionAmount + injectionBox.value
       } else {
         emissionAmount
       }
       val minersAssets = if (nextHeight >= reemissionActivationHeight) {
+        // miner is getting reemission tokens
         assets.append(Colls.fromItems(reemissionTokenId -> reemissionAmount))
       } else {
         assets

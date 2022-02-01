@@ -1,5 +1,5 @@
-Emission  Retargeting Soft-Fork
-===============================
+Emission  Retargeting Soft-Fork Proposal
+========================================
 
 * Author: kushti
 * Status: Proposed
@@ -38,6 +38,11 @@ Before end of the current emission (before block 2,080,800):
 After end of the current emission (from block 2,080,800):
 
 * pay 3 ERG each block from re-emission contract
+
+Updated Emission Details
+------------------------
+
+
 
 General Design
 --------------
@@ -137,6 +142,21 @@ Voting for the Soft-Fork
 
 TODO: 
 
+Activation Details
+------------------
+
+On emission height, NFT and reemission tokens to be injected into the emission contract by spending
+a box we are calling injection box.
+
+The injection box is protected by the script 
+
+```
+{
+    INPUTS(0).value > 30000000L * 1000000000L
+}
+```
+
+so spendable by anyone who can spend 30M ERG at least provided in the first input. 
 
 Testnet Data
 ------------ 

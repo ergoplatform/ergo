@@ -303,7 +303,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           applyFromCacheLoop()
 
           val cleared = modifiersCache.cleanOverfull()
-          context.system.eventStream.publish(ModifiersProcessingResult(cleared))
+          context.system.eventStream.publish(ModifiersRemovedFromCache(cleared))
           log.debug(s"Cache size after: ${modifiersCache.size}")
         case _ =>
           mods.foreach(m => modifiersCache.put(m.id, m))
@@ -313,7 +313,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           applyFromCacheLoop()
           val cleared = modifiersCache.cleanOverfull()
 
-          context.system.eventStream.publish(ModifiersProcessingResult(cleared))
+          context.system.eventStream.publish(ModifiersRemovedFromCache(cleared))
           log.debug(s"Cache size after: ${modifiersCache.size}")
       }
   }

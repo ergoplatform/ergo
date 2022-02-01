@@ -115,7 +115,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
-    context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
+    context.system.eventStream.subscribe(self, classOf[ModifiersRemovedFromCache])
 
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
 
@@ -754,7 +754,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
       context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
 
-    case ModifiersProcessingResult(cleared: Seq[ErgoPersistentModifier]) =>
+    case ModifiersRemovedFromCache(cleared: Seq[ErgoPersistentModifier]) =>
       // stop processing for cleared modifiers
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       cleared.foreach(m => deliveryTracker.setUnknown(m.id, m.modifierTypeId))
@@ -898,15 +898,13 @@ object ErgoNodeViewSynchronizer {
 
     case object RollbackFailed extends NodeViewHolderEvent
 
-    case class NewOpenSurface(newSurface: Seq[ModifierId]) extends NodeViewHolderEvent
-
     case class StartingPersistentModifierApplication(modifier: ErgoPersistentModifier) extends NodeViewHolderEvent
 
     /**
       * After application of batch of modifiers from cache to History, NodeViewHolder sends this message,
-      * containing all just applied modifiers and cleared from cache
+      * which contains modifiers cleared from cache
       */
-    case class ModifiersProcessingResult(cleared: Seq[ErgoPersistentModifier])
+    case class ModifiersRemovedFromCache(cleared: Seq[ErgoPersistentModifier])
 
     // hierarchy of events regarding modifiers application outcome
     trait ModificationOutcome extends NodeViewHolderEvent

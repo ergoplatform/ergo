@@ -37,6 +37,9 @@ trait ErgoHistoryReader
 
   protected val settings: ErgoSettings
 
+  private val Valid = 1.toByte
+  private val Invalid = 0.toByte
+
   /**
     * True if there's no history, even genesis block
     */
@@ -315,7 +318,7 @@ trait ErgoHistoryReader
     */
   def syncInfoV1: ErgoSyncInfo = {
     if (isEmpty) {
-      ErgoSyncInfoV1(Seq.empty)
+      ErgoSyncInfoV1(Nil)
     } else {
       val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
       if (startingPoints.headOption.exists(_.isGenesis)) {
@@ -334,7 +337,7 @@ trait ErgoHistoryReader
     */
   def syncInfoV2(full: Boolean): ErgoSyncInfoV2 = {
     if (isEmpty) {
-      ErgoSyncInfoV2(Seq.empty)
+      ErgoSyncInfoV2(Nil)
     } else {
       val h = headersHeight
 
@@ -470,8 +473,8 @@ trait ErgoHistoryReader
 
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {
-      case Some(b) if b.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
-      case Some(b) if b.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
+      case Some(b) if b.headOption.contains(Valid) => ModifierSemanticValidity.Valid
+      case Some(b) if b.headOption.contains(Invalid) => ModifierSemanticValidity.Invalid
       case None if contains(modifierId) => ModifierSemanticValidity.Unknown
       case None => ModifierSemanticValidity.Absent
       case m =>
@@ -488,7 +491,7 @@ trait ErgoHistoryReader
   def bestHeadersAfter(header: Header, howMany: Int): Seq[Header] = {
     @tailrec
     def accumulateHeaders(height: Int, accumulator: Seq[Header], left: Int): Seq[Header] = {
-      if(left == 0){
+      if (left == 0) {
         accumulator
       } else {
         bestHeaderAtHeight(height) match {

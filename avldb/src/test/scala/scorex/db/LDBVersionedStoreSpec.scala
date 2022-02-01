@@ -65,14 +65,14 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     var cnt0 = 0
     store.processAll({ case (k, v) =>
       cnt0 = cnt0 + 1
-      if(k.toSeq == k1.toSeq || k.toSeq == k2.toSeq) buffer += v.toSeq
+      if (k.toSeq == k1.toSeq || k.toSeq == k2.toSeq) buffer += v.toSeq
     })
     cnt0 >= 2 shouldBe true
     buffer.length shouldBe 2
     buffer.contains(v1.toSeq) shouldBe true
     buffer.contains(v2.toSeq) shouldBe true
 
-    store.update(Longs.toByteArray(Long.MinValue), keys , Seq.empty).get
+    store.update(Longs.toByteArray(Long.MinValue), keys, Seq.empty).get
 
     store.getWithFilter((_, _) => true).toSeq.length shouldBe 0
 
@@ -83,4 +83,18 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     cnt shouldBe 0
   }
 
+  property("alter keepVersions") {
+    val version1 = Longs.toByteArray(Long.MaxValue + 1)
+    val version2 = Longs.toByteArray(Long.MaxValue + 2)
+    val k1 = Longs.toByteArray(1)
+    val v1 = Longs.toByteArray(100)
+    store.update(version1, Seq.empty, Seq(k1 -> v1)).get
+    store.update(version2, Seq.empty, Seq(k1 -> v1)).get
+    store.versionIdExists(version1) shouldBe true
+    store.versionIdExists(version2) shouldBe true
+    store.setKeepVersions(1) shouldBe 100
+    store.versionIdExists(version1) shouldBe false
+    store.versionIdExists(version2) shouldBe true
+    store.setKeepVersions(10) shouldBe 1
+  }
 }

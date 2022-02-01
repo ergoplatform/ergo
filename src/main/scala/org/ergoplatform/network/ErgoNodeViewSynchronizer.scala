@@ -754,7 +754,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
       context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
 
-    case ModifiersProcessingResult(_: Seq[ErgoPersistentModifier], cleared: Seq[ErgoPersistentModifier]) =>
+    case ModifiersProcessingResult(cleared: Seq[ErgoPersistentModifier]) =>
       // stop processing for cleared modifiers
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       cleared.foreach(m => deliveryTracker.setUnknown(m.id, m.modifierTypeId))
@@ -906,7 +906,7 @@ object ErgoNodeViewSynchronizer {
       * After application of batch of modifiers from cache to History, NodeViewHolder sends this message,
       * containing all just applied modifiers and cleared from cache
       */
-    case class ModifiersProcessingResult(applied: Seq[ErgoPersistentModifier], cleared: Seq[ErgoPersistentModifier])
+    case class ModifiersProcessingResult(cleared: Seq[ErgoPersistentModifier])
 
     // hierarchy of events regarding modifiers application outcome
     trait ModificationOutcome extends NodeViewHolderEvent

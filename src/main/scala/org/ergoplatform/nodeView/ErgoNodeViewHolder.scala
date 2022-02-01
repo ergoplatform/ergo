@@ -263,6 +263,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[ErgoPersistentModifier]@unchecked) =>
+      @tailrec
+      def applyFromCacheLoop(): Unit = {
+        modifiersCache.popCandidate(history()) match {
+          case Some(mod) =>
+            pmodModify(mod, local = false)
+            applyFromCacheLoop()
+          case None =>
+            ()
+        }
+      }
+
       mods.headOption match {
         case Some(h) if h.isInstanceOf[Header] => // modifiers are always of the same type
           val sorted = mods.sortBy(_.asInstanceOf[Header].height)
@@ -289,6 +300,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             mods.foreach(h => modifiersCache.put(h.id, h))
           }
 
+          applyFromCacheLoop()
+
           val cleared = modifiersCache.cleanOverfull()
           context.system.eventStream.publish(ModifiersProcessingResult(cleared))
           log.debug(s"Cache size after: ${modifiersCache.size}")
@@ -297,6 +310,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           log.debug(s"Cache size before: ${modifiersCache.size}")
 
+          applyFromCacheLoop()
           val cleared = modifiersCache.cleanOverfull()
 
           context.system.eventStream.publish(ModifiersProcessingResult(cleared))

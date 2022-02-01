@@ -165,8 +165,8 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     * Generates statefuly invalid full block (contains invalid transactions).
     */
   private def generateInvalidFullBlock(parentBlockOpt: Option[ErgoFullBlock], parentState: WrappedUtxoState) = {
-    val validInterlinks = popowAlgos.updateInterlinks(parentBlockOpt.map(_.header), parentBlockOpt.map(_.extension))
-    val extensionIn = popowAlgos.interlinksToExtension(validInterlinks).toExtension(modifierIdGen.sample.get)
+    val validInterlinks = nipopowAlgos.updateInterlinks(parentBlockOpt.map(_.header), parentBlockOpt.map(_.extension))
+    val extensionIn = nipopowAlgos.interlinksToExtension(validInterlinks).toExtension(modifierIdGen.sample.get)
     val brokenBlockIn = validFullBlock(parentBlockOpt, parentState)
     val headTx = brokenBlockIn.blockTransactions.txs.head
     val wrongBoxId: ADKey = ADKey !@@ Algos.hash("wrong input")

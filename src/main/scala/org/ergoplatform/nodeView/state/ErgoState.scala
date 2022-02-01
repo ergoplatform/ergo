@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
+
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
@@ -8,7 +9,8 @@ import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
+import org.ergoplatform.modifiers.state.StateChanges
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, Parameters}
@@ -16,7 +18,8 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
+import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.AtLeast
@@ -41,7 +44,13 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   self: IState =>
 
-  def applyModifier(mod: ErgoPersistentModifier): Try[IState]
+  /**
+    *
+    * @param mod modifire to apply to the state
+    * @param generate function that handles newly created modifier as a result of application the current one
+    * @return new State
+    */
+  def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[IState]
 
   def rollbackTo(version: VersionTag): Try[IState]
 
@@ -68,8 +77,8 @@ object ErgoState extends ScorexLogging {
     */
   def stateChanges(txs: Seq[ErgoTransaction]): StateChanges = {
     val (toRemove, toInsert) = boxChanges(txs)
-    val toRemoveChanges = toRemove.map(id => Removal(id))
-    val toInsertChanges = toInsert.map(b => Insertion(b))
+    val toRemoveChanges = toRemove.map(id => Remove(id))
+    val toInsertChanges = toInsert.map(b => Insert(b.id, ADValue @@ b.bytes))
     val toLookup = txs.flatMap(_.dataInputs).map(b => Lookup(b.boxId))
     StateChanges(toRemoveChanges, toInsertChanges, toLookup)
   }
@@ -240,7 +249,7 @@ object ErgoState extends ScorexLogging {
 
   def generateGenesisDigestState(stateDir: File, settings: ErgoSettings, parameters: Parameters): DigestState = {
     DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest),
-      stateDir, StateConstants(None, settings), parameters)
+      stateDir, StateConstants(settings), parameters)
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)

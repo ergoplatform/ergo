@@ -60,8 +60,9 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
-  val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
-  val deliveryTracker = DeliveryTracker.empty(ergoSettings)
+  private val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
+
+  private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,

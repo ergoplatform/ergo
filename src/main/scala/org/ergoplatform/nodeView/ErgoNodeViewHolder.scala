@@ -26,6 +26,8 @@ import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 import java.io.File
 
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
+
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
@@ -210,6 +212,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
+  private def estimatedTip(): Option[Height] = Try { //error may happen if history not initialized
+    if(history().isHeadersChainSynced) {
+      Some(history().headersHeight)
+    } else {
+      None
+    }
+  }.getOrElse(None)
+
   private def applyState(history: ErgoHistory,
                          stateToApply: State,
                          suffixTrimmed: IndexedSeq[ErgoPersistentModifier],
@@ -221,7 +231,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         f
       case (success@Success(updateInfo), modToApply) =>
         if (updateInfo.failedMod.isEmpty) {
-          updateInfo.state.applyModifier(modToApply)(lm => pmodModify(lm.pmod, local = true)) match {
+          updateInfo.state.applyModifier(modToApply, estimatedTip())(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 context.system.eventStream.publish(SemanticallySuccessfulModifier(modToApply))
@@ -492,7 +502,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         }
         toApply.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
           log.info(s"Applying modifier during node start-up to restore consistent state: ${m.id}")
-          acc.flatMap(_.applyModifier(m)(lm => self ! lm))
+          acc.flatMap(_.applyModifier(m, estimatedTip())(lm => self ! lm))
         }
     }
   }
@@ -524,14 +534,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case Success(state) =>
         log.info("Recovering state using current epoch")
         chainToApply.foldLeft[Try[DigestState]](Success(state)) { case (acc, m) =>
-          acc.flatMap(_.applyModifier(m)(lm => self ! lm))
+          acc.flatMap(_.applyModifier(m, estimatedTip())(lm => self ! lm))
         }
       case Failure(exception) => // recover using whole headers chain
         log.warn(s"Failed to recover state from current epoch, using whole chain: ${exception.getMessage}")
         val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
         val genesisState = DigestState.create(None, None, stateDir(settings), constants, parameters)
         wholeChain.foldLeft[Try[DigestState]](Success(genesisState)) { case (acc, m) =>
-          acc.flatMap(_.applyModifier(m)(lm => self ! lm))
+          acc.flatMap(_.applyModifier(m, estimatedTip())(lm => self ! lm))
         }
     }
   }

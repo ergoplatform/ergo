@@ -29,7 +29,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
 
   type LSN = Long // logical serial number: type used to provide order of records in undo list
 
-  private var keepVersions: Int = initialKeepVersions;
+  private var keepVersions: Int = initialKeepVersions
 
   override val db: DB = createDB(dir, "ldb_main") // storage for main data
   override val lock = new ReentrantReadWriteLock()
@@ -66,6 +66,8 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     }
     oldKeepVersions
   }
+
+  def getKeepVersions(): Int = keepVersions
 
   /** returns value associated with the key or throws `NoSuchElementException` */
   def apply(key: K): V = getOrElse(key, {

@@ -77,15 +77,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
-      persistentProver.synchronized {
-        val mods = ErgoState.stateChanges(transactions).operations
-        val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
-        ModifierValidator(stateContext.validationSettings)
-          .validateNoFailure(fbOperationFailed, resultTry)
-          .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
-          .result
-          .toTry
-      }
+      val mods = ErgoState.stateChanges(transactions).operations
+      val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+      ModifierValidator(stateContext.validationSettings)
+        .validateNoFailure(fbOperationFailed, resultTry)
+        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
+        .result
+        .toTry
     } else {
       txProcessing.toTry.map(_ => ())
     }
@@ -131,6 +129,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
               persistentProver.rollback(inRoot)
                 .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
+
+              val mods = ErgoState.stateChanges(fb.blockTransactions.txs).operations
+              mods.foreach(persistentProver.performOneOperation)
 
               proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
               proofHash = ADProofs.proofDigest(proofBytes)

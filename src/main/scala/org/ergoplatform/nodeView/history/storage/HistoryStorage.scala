@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.storage
 import com.google.common.cache.CacheBuilder
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.utils.ScorexEncoding
@@ -24,25 +25,42 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
     with AutoCloseable
     with ScorexEncoding {
 
-  private val modifiersCache = CacheBuilder.newBuilder()
-    .maximumSize(config.history.modifiersCacheSize)
+  private val headersCache = CacheBuilder.newBuilder()
+    .maximumSize(config.history.headersCacheSize)
+    .build[String, ErgoPersistentModifier]
+
+  private val blockSectionsCache = CacheBuilder.newBuilder()
+    .maximumSize(config.history.blockSectionsCacheSize)
     .build[String, ErgoPersistentModifier]
 
   private val indexCache = CacheBuilder.newBuilder()
     .maximumSize(config.history.indexesCacheSize)
     .build[ByteArrayWrapper, Array[Byte]]
 
+  private def cacheModifier(mod: ErgoPersistentModifier): Unit = mod.modifierTypeId match {
+    case Header.modifierTypeId => headersCache.put(mod.id, mod)
+    case _ => blockSectionsCache.put(mod.id, mod)
+  }
+
+  private def lookupModifier(id: ModifierId): Option[ErgoPersistentModifier] =
+    Option(headersCache.getIfPresent(id)) orElse Option(blockSectionsCache.getIfPresent(id))
+
+  private def removeModifier(id: ModifierId): Unit = {
+    headersCache.invalidate(id)
+    blockSectionsCache.invalidate(id)
+  }
+
   def modifierBytesById(id: ModifierId): Option[Array[Byte]] = {
     objectsStore.get(idToBytes(id)).map(_.tail) // removing modifier type byte with .tail
   }
 
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
-    Option(modifiersCache.getIfPresent(id)) orElse
+    lookupModifier(id) orElse
       objectsStore.get(idToBytes(id)).flatMap { bytes =>
         HistoryModifierSerializer.parseBytesTry(bytes) match {
           case Success(pm) =>
             log.info(s"Cache miss for existing modifier $id")
-            modifiersCache.put(id, pm)
+            cacheModifier(pm)
             Some(pm)
           case Failure(_) =>
             log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
@@ -75,7 +93,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
     objectsStore.insert(
       objectsToInsert.map(m => idToBytes(m.id) -> HistoryModifierSerializer.toBytes(m))
     ).flatMap { _ =>
-      objectsToInsert.foreach(o => modifiersCache.put(o.id, o))
+      objectsToInsert.foreach(o => cacheModifier(o))
       if (indexesToInsert.nonEmpty) {
         indexStore.insert(indexesToInsert.map { case (k, v) => k.data -> v }).map { _ =>
           indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
@@ -97,7 +115,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
 
       objectsStore.remove(idsToRemove.map(idToBytes)).map { _ =>
         idsToRemove.foreach { id =>
-          modifiersCache.invalidate(id)
+          removeModifier(id)
         }
         indexStore.remove(indicesToRemove.map(_.data)).map { _ =>
           idsToRemove.foreach { id =>

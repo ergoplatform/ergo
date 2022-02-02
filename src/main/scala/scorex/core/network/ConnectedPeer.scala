@@ -33,17 +33,14 @@ object ConnectedPeer {
   import io.circe.syntax._
 
   implicit val jsonEncoder: Encoder[ConnectedPeer] = { peer: ConnectedPeer =>
-    def lastMessage =
-      if (peer.lastMessage == 0L) {
-        -1L // express better that there was no message yet
-      } else {
-        peer.lastMessage
-      }
-    Json.obj(
-      "peer" -> peer.connectionId.remoteAddress.toString.asJson,
-      "version" -> peer.peerInfo.map(_.peerSpec.protocolVersion.toString).getOrElse("N/A").asJson,
-      "lastMessage" -> lastMessage.asJson
-    )
+    val addressField = "address" -> peer.connectionId.remoteAddress.toString.asJson
+    val optionalFields =
+      List(
+        peer.peerInfo.map(_.peerSpec.protocolVersion.toString).map("version" -> _.asJson),
+        Option(peer.lastMessage).filter(_ != 0L).map("lastMessage" -> _.asJson)
+      ).flatten
+    val fields = addressField :: optionalFields
+    Json.obj(fields:_*)
   }
 
 }

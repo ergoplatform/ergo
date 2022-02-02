@@ -322,11 +322,14 @@ object DeliveryTracker {
     import io.circe.syntax._
 
     implicit val jsonEncoder: Encoder[RequestedInfo] = { info: RequestedInfo =>
-      Json.obj(
-        "peer" -> info.peer.map(_.connectionId.remoteAddress.toString).getOrElse("N/A").asJson,
-        "version" -> info.peer.flatMap(_.peerInfo.map(_.peerSpec.protocolVersion.toString)).getOrElse("N/A").asJson,
-        "checks" -> info.checks.asJson
-      )
+      val checksField = "checks" -> info.checks.asJson
+      val optionalFields =
+        List(
+          info.peer.map(_.connectionId.remoteAddress.toString).map("address" -> _.asJson),
+          info.peer.flatMap(_.peerInfo.map(_.peerSpec.protocolVersion.toString)).map("version" -> _.asJson)
+        ).flatten
+      val fields = checksField :: optionalFields
+      Json.obj(fields:_*)
     }
   }
 

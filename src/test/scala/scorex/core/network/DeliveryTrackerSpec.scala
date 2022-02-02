@@ -11,7 +11,7 @@ import scorex.util.ModifierId
 
 class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {
 
-  property("tracker should get accept requested modifiers, turn them into received and clear them") {
+  property("tracker should accept requested modifiers, turn them into received and clear them") {
     forAll(connectedPeerGen(ActorRef.noSender)) { peer =>
       val tracker = DeliveryTracker.empty(settings)
       val mid: ModifierId = ModifierId @@ "foo"
@@ -22,8 +22,7 @@ class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {
         "requested" -> Json.obj(
           "104" -> Json.obj(
             "foo" -> Json.obj(
-              "peer" -> peer.connectionId.remoteAddress.toString.asJson,
-              "version" -> "N/A".asJson,
+              "address" -> peer.connectionId.remoteAddress.toString.asJson,
               "checks" -> 0.asJson
             )
           )
@@ -40,9 +39,7 @@ class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {
         "received" -> Json.obj(
           "104" -> Json.obj(
             "foo" -> Json.obj(
-              "peer" -> peer.connectionId.remoteAddress.toString.asJson,
-              "version" -> "N/A".asJson,
-              "lastMessage" -> (-1).asJson
+              "address" -> peer.connectionId.remoteAddress.toString.asJson
             )
           ),
         )

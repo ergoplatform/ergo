@@ -133,7 +133,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                 .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
 
               proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
-              proofHash = ADProofs.proofDigest(proofBytes2)
+              proofHash = ADProofs.proofDigest(proofBytes)
 
               if(!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
                 throw new Error("Regenerated proofHash is not equal to the declared one")

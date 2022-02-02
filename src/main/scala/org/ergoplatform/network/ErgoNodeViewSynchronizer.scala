@@ -300,7 +300,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // send extension (up to 400 header ids) to a peer which chain is less developed
         val ext = hr.continuationIds(syncInfo, size = 400)
         if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-        log.debug(s"Sending extension of length ${ext.length}")
+        log.debug(s"Sending extension of length ${ext.length} to younger peer $remote")
         log.debug(s"Extension ids: ${idsToString(ext)}")
         sendExtension(remote, ext)
 
@@ -308,7 +308,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // send extension (up to 400 header ids) to a peer which chain is forked
         val ext = hr.continuationIds(syncInfo, size = 400)
         if (ext.isEmpty) log.warn("Extension is empty while comparison is fork")
-        log.debug(s"Sending extension of length ${ext.length}")
+        log.debug(s"Sending extension of length ${ext.length} to forked peer $remote")
         log.debug(s"Extension ids: ${idsToString(ext)}")
         sendExtension(remote, ext)
 

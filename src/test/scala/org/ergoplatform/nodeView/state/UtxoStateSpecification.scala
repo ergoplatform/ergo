@@ -519,7 +519,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
 
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {
-    popowAlgos.interlinksToExtension(popowAlgos.updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)
+    nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)
   }
 
 }

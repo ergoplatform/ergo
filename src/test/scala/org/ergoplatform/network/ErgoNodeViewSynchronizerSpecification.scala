@@ -73,7 +73,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPool]])
       context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
       context.system.eventStream.subscribe(self, classOf[DownloadRequest])
-      context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
+      context.system.eventStream.subscribe(self, classOf[ModifiersRemovedFromCache])
 
       // subscribe for history and mempool changes
       viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)

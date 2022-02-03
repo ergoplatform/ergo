@@ -1,6 +1,7 @@
 package scorex.core.network
 
 import akka.actor.Cancellable
+import io.circe.{Encoder, Json}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.CheckDelivery
 import org.ergoplatform.nodeView.mempool.ExpiringApproximateCache
@@ -45,8 +46,6 @@ class DeliveryTracker(maxDeliveryChecks: Int,
                       cacheSettings: NetworkCacheSettings,
                       desiredSizeOfExpectingModifierQueue: Int) extends ScorexLogging with ScorexEncoding {
 
-  protected case class RequestedInfo(peer: Option[ConnectedPeer], cancellable: Cancellable, checks: Int)
-
   // when a remote peer is asked for a modifier we add the requested data to `requested`
   protected val requested: mutable.Map[ModifierTypeId, Map[ModifierId, RequestedInfo]] = mutable.Map()
 
@@ -63,6 +62,8 @@ class DeliveryTracker(maxDeliveryChecks: Int,
     val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
     ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration)
   }
+
+  def fullInfo: FullInfo = DeliveryTracker.FullInfo(invalidModifierBF.approximateElementCount, requested.toSeq, received.toSeq)
 
   /**
     * @return how many header modifiers to download
@@ -314,6 +315,49 @@ class DeliveryTracker(maxDeliveryChecks: Int,
 }
 
 object DeliveryTracker {
+
+  case class RequestedInfo(peer: Option[ConnectedPeer], cancellable: Cancellable, checks: Int)
+
+  object RequestedInfo {
+    import io.circe.syntax._
+
+    implicit val jsonEncoder: Encoder[RequestedInfo] = { info: RequestedInfo =>
+      val checksField = "checks" -> info.checks.asJson
+      val optionalFields =
+        List(
+          info.peer.map(_.connectionId.remoteAddress.toString).map("address" -> _.asJson),
+          info.peer.flatMap(_.peerInfo.map(_.peerSpec.protocolVersion.toString)).map("version" -> _.asJson)
+        ).flatten
+      val fields = checksField :: optionalFields
+      Json.obj(fields:_*)
+    }
+  }
+
+  case class FullInfo(
+    invalidModifierApproxSize: Long,
+    requested: Seq[(ModifierTypeId, Map[ModifierId, RequestedInfo])],
+    received: Seq[(ModifierTypeId, Map[ModifierId, ConnectedPeer])]
+  )
+
+  object FullInfo {
+    import io.circe.syntax._
+    implicit val encodeState: Encoder[FullInfo] = new Encoder[FullInfo] {
+
+      def nestedMapAsJson[T : Encoder](requested: Seq[(ModifierTypeId, Map[ModifierId, T])]): Json =
+        Json.obj(
+          requested.map { case (k, v) =>
+            k.toString -> Json.obj(v.mapValues(_.asJson).toSeq:_*)
+          }:_*
+        )
+
+      final def apply(state: FullInfo): Json = Json.obj(
+        ("invalidModifierApproxSize", state.invalidModifierApproxSize.asJson),
+        ("requested", nestedMapAsJson(state.requested)),
+        ("received", nestedMapAsJson(state.received))
+      )
+    }
+  }
+
   def empty(settings: ErgoSettings): DeliveryTracker = {
     new DeliveryTracker(
       settings.scorexSettings.network.maxDeliveryChecks,

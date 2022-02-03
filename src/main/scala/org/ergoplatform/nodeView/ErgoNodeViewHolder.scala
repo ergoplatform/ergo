@@ -22,10 +22,10 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
+import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 import java.io.File
-
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
@@ -442,8 +442,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         case Failure(CriticalSystemException(error)) =>
           log.error(error)
           ErgoApp.shutdownSystem()(context.system)
+        case Failure(e: RecoverableModifierError) =>
+          log.warn(s"Can`t yet apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
+          context.system.eventStream.publish(RecoverableFailedModification(pmod, e))
         case Failure(e) =>
-          log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
+          log.warn(s"Can`t apply invalid persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
           context.system.eventStream.publish(SyntacticallyFailedModification(pmod, e))
       }
     } else {

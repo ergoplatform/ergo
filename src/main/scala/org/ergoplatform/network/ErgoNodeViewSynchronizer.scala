@@ -409,12 +409,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     Constants.modifierSerializers.get(typeId) match {
       case Some(serializer: ScorexSerializer[ErgoTransaction]@unchecked) if typeId == Transaction.ModifierTypeId =>
         // parse all transactions and send them to node view holder
-        val parsed: Iterable[ErgoTransaction] = parseModifiers(requestedModifiers, serializer, remote)
+        val parsed: Iterable[ErgoTransaction] = parseModifiers(requestedModifiers, typeId, serializer, remote)
         viewHolderRef ! TransactionsFromRemote(parsed)
 
       case Some(serializer: ScorexSerializer[ErgoPersistentModifier]@unchecked) =>
         // parse all modifiers and put them to modifiers cache
-        val parsed: Iterable[ErgoPersistentModifier] = parseModifiers(requestedModifiers, serializer, remote)
+        val parsed: Iterable[ErgoPersistentModifier] = parseModifiers(requestedModifiers, typeId, serializer, remote)
         val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
         if (valid.nonEmpty) {
           viewHolderRef ! ModifiersFromRemote(valid)
@@ -443,17 +443,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return collection of parsed modifiers
     */
   def parseModifiers[M <: NodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
+                                            typeId: ModifierTypeId,
                                             serializer: ScorexSerializer[M],
                                             remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
-      serializer.parseBytesTry(bytes) match {
-        case Success(mod) if id == mod.id =>
-          Some(mod)
-        case _ =>
-          // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
-          penalizeMisbehavingPeer(remote)
-          log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
-          None
+      if (typeId == Transaction.ModifierTypeId && bytes.size > settings.nodeSettings.maxTransactionSize) {
+        penalizeMisbehavingPeer(remote)
+        log.warn(s"Transaction size ${bytes.size} from ${remote.toString} exceeds limit ${settings.nodeSettings.maxTransactionSize}")
+        None
+      } else {
+        serializer.parseBytesTry(bytes) match {
+          case Success(mod) if id == mod.id =>
+            Some(mod)
+          case _ =>
+            // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
+            penalizeMisbehavingPeer(remote)
+            log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
+            None
+        }
       }
     }
   }

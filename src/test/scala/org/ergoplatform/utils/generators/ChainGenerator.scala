@@ -68,11 +68,17 @@ trait ChainGenerator extends ErgoTestConstants {
   def popowHeaderChain(chain: HeaderChain): Seq[PoPowHeader] = {
     chain.headers.foldLeft((Seq.empty[PoPowHeader], None: Option[PoPowHeader])) {
       case ((acc, bestHeaderOpt), h) =>
-        val links = popowAlgos.updateInterlinks(
-          bestHeaderOpt.map(_.header),
-          bestHeaderOpt.map(ph => popowAlgos.interlinksToExtension(ph.interlinks).toExtension(ph.id))
-        )
-        val poPowH = PoPowHeader(h, links)
+        val links = if (bestHeaderOpt.isEmpty) {
+          Seq(scorex.util.bytesToId(Array.fill(32)(0: Byte)))
+        } else {
+          nipopowAlgos.updateInterlinks(
+            bestHeaderOpt.map(_.header),
+            bestHeaderOpt.map(ph => nipopowAlgos.interlinksToExtension(ph.interlinks).toExtension(ph.id))
+          )
+        }
+        val interlinkProof = NipopowAlgos.proofForInterlinkVector(ExtensionCandidate(NipopowAlgos.packInterlinks(links)))
+          .getOrElse(throw new Error(s"Failed to build interlink proof."))
+        val poPowH = PoPowHeader(h, links, interlinkProof)
         (acc :+ poPowH, Some(poPowH))
     }._1
   }
@@ -148,8 +154,8 @@ trait ChainGenerator extends ErgoTestConstants {
                 blockVersion: Header.Version = Header.InitialVersion,
                 nBits: Long = settings.chainSettings.initialNBits): ErgoFullBlock = {
     val interlinks = prev.toSeq.flatMap(x =>
-      popowAlgos.updateInterlinks(x.header, NipopowAlgos.unpackInterlinks(x.extension.fields).get))
-    val validExtension = extension ++ popowAlgos.interlinksToExtension(interlinks)
+      nipopowAlgos.updateInterlinks(x.header, NipopowAlgos.unpackInterlinks(x.extension.fields).get))
+    val validExtension = extension ++ nipopowAlgos.interlinksToExtension(interlinks)
     powScheme.proveBlock(
       prev.map(_.header),
       blockVersion,

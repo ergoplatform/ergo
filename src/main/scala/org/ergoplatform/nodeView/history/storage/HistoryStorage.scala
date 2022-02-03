@@ -5,9 +5,9 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{Algos, CacheSettings}
+import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import scorex.core.utils.ScorexEncoding
-import scorex.db.{ByteArrayWrapper, LDBKVStore}
+import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
@@ -20,7 +20,7 @@ import scala.util.{Failure, Success, Try}
   * @param objectsStore - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
   * @param config       - cache configs
   */
-class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: CacheSettings)
+class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: CacheSettings)
   extends ScorexLogging
     with AutoCloseable
     with ScorexEncoding {
@@ -118,7 +118,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
           removeModifier(id)
         }
         indexStore.remove(indicesToRemove.map(_.data)).map { _ =>
-          idsToRemove.foreach { id =>
+          indicesToRemove.foreach { id =>
             indexCache.invalidate(id)
           }
           ()
@@ -132,4 +132,12 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
     objectsStore.close()
   }
 
+}
+
+object HistoryStorage {
+  def apply(ergoSettings: ErgoSettings): HistoryStorage = {
+    val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
+    val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
+    new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
+  }
 }

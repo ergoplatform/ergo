@@ -37,7 +37,7 @@ trait Application extends ScorexLogging {
   protected val features: Seq[PeerFeature]
   protected val additionalMessageSpecs: Seq[MessageSpec[_]]
   private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
-  private val nipopowSerializer =new NipopowProofSerializer(new NipopowAlgos(ergoSettings.chainSettings.powScheme))
+  private val nipopowSerializer = new NipopowProofSerializer(new NipopowAlgos(ergoSettings.chainSettings.powScheme))
 
 
   //p2p

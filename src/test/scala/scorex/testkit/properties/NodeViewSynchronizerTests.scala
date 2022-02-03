@@ -139,6 +139,38 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: GetNipopowProof") {
+    withFixture { ctx =>
+      import ctx._
+
+      // Generate history chain
+      val emptyHistory = historyGen.sample.get
+      val prefix = blockStream(None).take(10)
+      val prefixHistory = applyChain(emptyHistory, prefix)
+      val suffix = blockStream(Some(prefix.last)).take(10)
+      val fullHistory = applyChain(prefixHistory, suffix)
+      val headerId = suffix.head.header.id
+
+      // Broadcast updated history
+      node ! ChangedHistory(fullHistory)
+
+      // Build and send GetNipopowProofSpec request
+      val spec = new GetNipopowProofSpec()
+      val msgBytes = spec.toBytes(NipopowProofData(headerId = Some(headerId)))
+      node ! Message[NipopowProofData](spec, Left(msgBytes), Option(peer))
+
+      // Listen for NipopowProofSpec response
+      ncProbe.fishForMessage(5 seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec match {
+            case _: NipopowProofSpec => true
+            case _ => false
+          }
+        case _: Any => false
+      }
+    }
+  }
+
   property("NodeViewSynchronizer: Message: InvSpec") {
     withFixture { ctx =>
       import ctx._
@@ -325,39 +357,6 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
         }
         case _ =>
           log.info("Snapshots not supported by digest-state")
-      }
-    }
-  }
-
-  property("NodeViewSynchronizer: GetNipopowProof") {
-    withFixture { ctx =>
-      import ctx._
-
-      // Generate history chain
-      val emptyHistory = historyGen.sample.get
-      val prefix = blockStream(None).take(10)
-      val prefixHistory = applyChain(emptyHistory, prefix)
-      val suffix = blockStream(Some(prefix.last)).take(10)
-      val fullHistory = applyChain(prefixHistory, suffix)
-      val headerId = suffix.head.header.id
-
-      // Broadcast updated history
-      node ! ChangedHistory(fullHistory)
-
-      // Build and send GetNipopowProofSpec request
-      val spec = new GetNipopowProofSpec()
-      val msgBytes = spec.toBytes(NipopowProofData(headerId = Some(headerId)))
-      node ! Message[NipopowProofData](spec, Left(msgBytes), Option(peer))
-
-      // Listen for NipopowProofSpec response
-      ncProbe.fishForMessage(5 seconds) {
-        case stn: SendToNetwork => {
-          stn.message.spec match {
-            case _: NipopowProofSpec => true
-            case _ => false
-          }
-        }
-        case _: Any => false
       }
     }
   }

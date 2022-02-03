@@ -217,8 +217,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     Try {
 
       lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
+
       lazy val ReemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
+      lazy val ReemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
+
       lazy val EmissionNftId = ModifierId @@ reemissionSettings.emissionNftId
+      lazy val EmissionNftIdBytes = reemissionSettings.emissionNftIdBytes
+
       lazy val reemissionNftIdBytes = reemissionSettings.reemissionNftIdBytes
       lazy val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
 
@@ -243,8 +248,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             val rewardsOut = outputCandidates(1)
 
             // check positions of emission NFT and reemission token
-            require(emissionOut.additionalTokens.apply(0)._1 == EmissionNftId)
-            require(emissionOut.additionalTokens.apply(1)._1 == ReemissionTokenId)
+            require(emissionOut.additionalTokens.apply(0)._1 == EmissionNftIdBytes)
+            require(emissionOut.additionalTokens.apply(1)._1 == ReemissionTokenIdBytes)
 
             //we're checking how emission box is paying reemission tokens below
             val emissionTokensOut = emissionOut.tokens.getOrElse(ReemissionTokenId, 0L)

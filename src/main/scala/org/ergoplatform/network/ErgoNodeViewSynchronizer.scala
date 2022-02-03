@@ -742,10 +742,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
 
-    case SyntacticallyFailedModification(mod, _) =>
+    case RecoverableFailedModification(_, _) =>
+      // we ignore this one as we should try to apply this modifier again
+
+    case SyntacticallyFailedModification(mod, e) =>
+      logger.debug(s"Invalidating syntactically failed modifier ${mod.id}", e)
       deliveryTracker.setInvalid(mod.id, mod.modifierTypeId).foreach(penalizeMisbehavingPeer)
 
-    case SemanticallyFailedModification(mod, _) =>
+    case SemanticallyFailedModification(mod, e) =>
+      logger.debug(s"Invalidating semantically failed modifier ${mod.id}", e)
       deliveryTracker.setInvalid(mod.id, mod.modifierTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
@@ -915,6 +920,8 @@ object ErgoNodeViewSynchronizer {
     case class FailedTransaction(transactionId: ModifierId, error: Throwable, immediateFailure: Boolean) extends ModificationOutcome
 
     case class SuccessfulTransaction(transaction: ErgoTransaction) extends ModificationOutcome
+
+    case class RecoverableFailedModification(modifier: ErgoPersistentModifier, error: Throwable) extends ModificationOutcome
 
     case class SyntacticallyFailedModification(modifier: ErgoPersistentModifier, error: Throwable) extends ModificationOutcome
 

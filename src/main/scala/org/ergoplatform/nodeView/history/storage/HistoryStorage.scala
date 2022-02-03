@@ -78,15 +78,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
 
   def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(idToBytes(id))
 
-  def contains(id: ModifierId): Boolean = {
-    def validityKey(id: ModifierId): ByteArrayWrapper = {
-      ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
-    }
-
-    getIndex(validityKey(id)).map(_ => true).getOrElse(
-      objectsStore.get(idToBytes(id)).isDefined
-    )
-  }
+  def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
 
   def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Seq[ErgoPersistentModifier]): Try[Unit] = {

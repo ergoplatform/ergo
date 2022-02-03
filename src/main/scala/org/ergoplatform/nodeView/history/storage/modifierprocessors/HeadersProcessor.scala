@@ -276,7 +276,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
           .ensuring(_.last == parentHeight)
         if (heights.lengthCompare(1) == 0) {
-          difficultyCalculator.calculate(Seq(parent))
+          difficultyCalculator.calculate(Array(parent))
         } else {
           val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
           val headers = chain.headers.filter(p => heights.contains(p.height))

@@ -165,8 +165,8 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     * Generates statefuly invalid full block (contains invalid transactions).
     */
   private def generateInvalidFullBlock(parentBlockOpt: Option[ErgoFullBlock], parentState: WrappedUtxoState) = {
-    val validInterlinks = popowAlgos.updateInterlinks(parentBlockOpt.map(_.header), parentBlockOpt.map(_.extension))
-    val extensionIn = popowAlgos.interlinksToExtension(validInterlinks).toExtension(modifierIdGen.sample.get)
+    val validInterlinks = nipopowAlgos.updateInterlinks(parentBlockOpt.map(_.header), parentBlockOpt.map(_.extension))
+    val extensionIn = nipopowAlgos.interlinksToExtension(validInterlinks).toExtension(modifierIdGen.sample.get)
     val brokenBlockIn = validFullBlock(parentBlockOpt, parentState)
     val headTx = brokenBlockIn.blockTransactions.txs.head
     val wrongBoxId: ADKey = ADKey !@@ Algos.hash("wrong input")
@@ -271,6 +271,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1)(mod => nodeViewHolderRef ! mod).get
     val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
 
+    subscribeEvents(classOf[RecoverableFailedModification])
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
     nodeViewHolderRef ! LocallyGeneratedModifier(chain2block1.header)
     expectMsgType[SyntacticallySuccessfulModifier]
@@ -291,6 +292,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     getBestHeaderOpt shouldBe None
     getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
 
+    subscribeEvents(classOf[RecoverableFailedModification])
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
     subscribeEvents(classOf[SyntacticallyFailedModification])
 
@@ -302,8 +304,8 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     getHeightOf(block.header.id) shouldBe Some(ErgoHistory.GenesisHeight)
 
     val randomId = modifierIdGen.sample.value
-    val wrongTxs1 = block.blockTransactions.copy(headerId = randomId)
-    val wrongTxs2 = {
+    val recoverableTxs = block.blockTransactions.copy(headerId = randomId)
+    val invalidTxsWithWrongOutputs = {
       val txs = block.blockTransactions.transactions
       val tx = txs.head
       val wrongOutputs = tx.outputCandidates.map(o =>
@@ -312,7 +314,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       val wrongTxs = tx.copy(outputCandidates = wrongOutputs) +: txs.tail
       block.blockTransactions.copy(txs = wrongTxs)
     }
-    val wrongTxs3 = {
+    val invalidTxsWithWrongInputs = {
       val txs = block.blockTransactions.transactions
       val tx = txs.head
       val wrongInputs = tx.inputs.map { input =>
@@ -322,13 +324,13 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       block.blockTransactions.copy(txs = wrongTxs)
     }
 
-    nodeViewHolderRef ! LocallyGeneratedModifier(wrongTxs1)
+    nodeViewHolderRef ! LocallyGeneratedModifier(recoverableTxs)
+    expectMsgType[RecoverableFailedModification]
+
+    nodeViewHolderRef ! LocallyGeneratedModifier(invalidTxsWithWrongOutputs)
     expectMsgType[SyntacticallyFailedModification]
 
-    nodeViewHolderRef ! LocallyGeneratedModifier(wrongTxs2)
-    expectMsgType[SyntacticallyFailedModification]
-
-    nodeViewHolderRef ! LocallyGeneratedModifier(wrongTxs3)
+    nodeViewHolderRef ! LocallyGeneratedModifier(invalidTxsWithWrongInputs)
     expectMsgType[SyntacticallyFailedModification]
 
     nodeViewHolderRef ! LocallyGeneratedModifier(block.blockTransactions)
@@ -344,6 +346,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
 
     getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
 
+    subscribeEvents(classOf[RecoverableFailedModification])
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
     subscribeEvents(classOf[SyntacticallyFailedModification])
 
@@ -357,7 +360,8 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     val wrongProofs2 = block.adProofs.map(_.copy(proofBytes = wrongProofsBytes))
 
     nodeViewHolderRef ! LocallyGeneratedModifier(wrongProofs1.value)
-    expectMsgType[SyntacticallyFailedModification]
+    expectMsgType[RecoverableFailedModification]
+
     nodeViewHolderRef ! LocallyGeneratedModifier(wrongProofs2.value)
     expectMsgType[SyntacticallyFailedModification]
 
@@ -375,6 +379,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     getBestHeaderOpt shouldBe None
     getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
 
+    subscribeEvents(classOf[RecoverableFailedModification])
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
     subscribeEvents(classOf[SyntacticallyFailedModification])
 
@@ -394,6 +399,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     getBestHeaderOpt shouldBe None
     getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
 
+    subscribeEvents(classOf[RecoverableFailedModification])
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
     subscribeEvents(classOf[SyntacticallyFailedModification])
 
@@ -442,6 +448,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     getBestHeaderOpt shouldBe None
     getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
 
+    subscribeEvents(classOf[RecoverableFailedModification])
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
     subscribeEvents(classOf[SyntacticallyFailedModification])
 

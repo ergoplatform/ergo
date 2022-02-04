@@ -77,7 +77,7 @@ object ValidationRules {
     txAssetsPreservation -> RuleStatus(s => fatal(s"For every token, its amount in outputs should not exceed its amount in inputs. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txBoxToSpend -> RuleStatus(s => recoverable(s"Box id doesn't match the input. $s"),
+    txBoxToSpend -> RuleStatus(s => fatal(s"Box id doesn't match the input. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
     txScriptValidation -> RuleStatus(s => fatal(s"Scripts of all transaction inputs should pass verification. $s"),

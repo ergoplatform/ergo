@@ -17,7 +17,6 @@ import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
-import scorex.db.LDBFactory
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
@@ -249,9 +248,7 @@ object ErgoHistory extends ScorexLogging {
   }
 
   def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
-    val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
-    val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
-    val db = new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
+    val db = HistoryStorage(ergoSettings)
     val nodeSettings = ergoSettings.nodeSettings
 
     val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {

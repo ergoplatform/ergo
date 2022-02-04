@@ -1,6 +1,7 @@
 package scorex.core.network
 
 import akka.actor.ActorRef
+import io.circe.{Encoder, Json}
 import scorex.core.network.peer.PeerInfo
 
 /**
@@ -25,5 +26,21 @@ case class ConnectedPeer(connectionId: ConnectionId,
 
   override def toString: String = s"ConnectedPeer(connection: $connectionId , " +
                                     s"remote version: ${peerInfo.map(_.peerSpec.protocolVersion)})"
+
+}
+
+object ConnectedPeer {
+  import io.circe.syntax._
+
+  implicit val jsonEncoder: Encoder[ConnectedPeer] = { peer: ConnectedPeer =>
+    val addressField = "address" -> peer.connectionId.remoteAddress.toString.asJson
+    val optionalFields =
+      List(
+        peer.peerInfo.map(_.peerSpec.protocolVersion.toString).map("version" -> _.asJson),
+        Option(peer.lastMessage).filter(_ != 0L).map("lastMessage" -> _.asJson)
+      ).flatten
+    val fields = addressField :: optionalFields
+    Json.obj(fields:_*)
+  }
 
 }

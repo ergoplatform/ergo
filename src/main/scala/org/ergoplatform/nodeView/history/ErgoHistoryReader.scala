@@ -317,15 +317,26 @@ trait ErgoHistoryReader
     * @return
     */
   def syncInfoV1: ErgoSyncInfo = {
+    /**
+      * Return last count headers from best headers chain if exist or chain up to genesis otherwise
+      */
+    def lastHeaderIds(count: Int): IndexedSeq[ModifierId] = {
+      val currentHeight = headersHeight
+      val from = Math.max(currentHeight - count + 1, 1)
+      val res = (from to currentHeight).flatMap{h =>
+        bestHeaderIdAtHeight(h)
+      }
+      if(from == 1) {
+        PreGenesisHeader.id +: res
+      } else {
+        res
+      }
+    }
+
     if (isEmpty) {
       ErgoSyncInfoV1(Nil)
     } else {
-      val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
-      if (startingPoints.headOption.exists(_.isGenesis)) {
-        ErgoSyncInfoV1((PreGenesisHeader +: startingPoints).map(_.id))
-      } else {
-        ErgoSyncInfoV1(startingPoints.map(_.id))
-      }
+      ErgoSyncInfoV1(lastHeaderIds(ErgoSyncInfo.MaxBlockIds))
     }
   }
 

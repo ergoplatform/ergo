@@ -39,15 +39,15 @@ object ModifierValidator {
   def error(description: String, detail: String): Invalid =
     error(msg(description, detail))
 
-  /** report non-recoverable modifier error that could be fixed by retries and requires modifier change */
+  /** report non-recoverable modifier error that could not be fixed by retries and requires modifier change */
   def fatal(errorMessage: String): Invalid =
     invalid(new MalformedModifierError(errorMessage, None))
 
-  /** report non-recoverable modifier error that could be fixed by retries and requires modifier change */
+  /** report non-recoverable modifier error that could not be fixed by retries and requires modifier change */
   def fatal(errorMessage: String, cause: Throwable): Invalid =
     invalid(new MalformedModifierError(msg(errorMessage, cause), Option(cause)))
 
-  /** report non-recoverable modifier error that could be fixed by retries and requires modifier change */
+  /** report non-recoverable modifier error that could not be fixed by retries and requires modifier change */
   def fatal(description: String, detail: String): Invalid = fatal(msg(description, detail))
 
   /** unsuccessful validation with a given error; also logs the error as an exception */

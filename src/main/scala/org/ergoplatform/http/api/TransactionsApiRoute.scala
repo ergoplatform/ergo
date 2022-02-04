@@ -42,18 +42,23 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   }
 
   private def validateTransactionAndProcess(tx: ErgoTransaction)(processFn: ErgoTransaction => Any): Route = {
-    onSuccess {
-      verifyTransaction(tx, readersHolder, ergoSettings)
-    } {
-      _.fold(
-        e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
-        _ => {
-          processFn(tx)
-          ApiResponse(tx.id)
-        }
-      )
+    if (tx.size > ergoSettings.nodeSettings.maxTransactionSize) {
+      BadRequest(s"Transaction $tx has too large size ${tx.size}")
+    } else {
+      onSuccess {
+        verifyTransaction(tx, readersHolder, ergoSettings)
+      } {
+        _.fold(
+          e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
+          _ => {
+            processFn(tx)
+            ApiResponse(tx.id)
+          }
+        )
+      }
     }
   }
+
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
     validateTransactionAndProcess(tx) { tx =>

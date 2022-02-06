@@ -26,6 +26,9 @@ import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 import java.io.File
+
+import org.ergoplatform.modifiers.history.ADProofs
+
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
@@ -386,7 +389,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * which also needs to be propagated to mempool and wallet
     * @param pmod Remote or local persistent modifier
     */
-  protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit =
+  protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit = {
+    if (pmod.modifierTypeId == ADProofs.modifierTypeId && local) {
+      history().justPutToHistory(pmod.serializedId, pmod.bytes) //todo: extra allocation here, eliminate
+      return
+    }
+
     if (!history().contains(pmod.id)) {
       context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 
@@ -452,6 +460,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     } else {
       log.warn(s"Trying to apply modifier ${pmod.encodedId} that's already in history")
     }
+  }
 
   @SuppressWarnings(Array("AsInstanceOf"))
   private def recreatedState(): State = {

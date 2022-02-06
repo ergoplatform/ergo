@@ -107,5 +107,4 @@ object ADProofsSerializer extends ScorexSerializer[ADProofs] {
     val proofBytes = SerializedAdProof @@ r.getBytes(size)
     ADProofs(headerId, proofBytes, Some(size + Constants.ModifierIdSize))
   }
-
 }

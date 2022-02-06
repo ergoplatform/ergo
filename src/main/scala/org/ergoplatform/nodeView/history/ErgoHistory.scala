@@ -46,6 +46,10 @@ trait ErgoHistory
 
   def closeStorage(): Unit = historyStorage.close()
 
+  def justPutToHistory(mId: Array[Byte], bytes: Array[Byte]): Try[Unit] = {
+    historyStorage.insert(mId, bytes)
+  }
+
   /**
     * Append ErgoPersistentModifier to History if valid
     */

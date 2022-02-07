@@ -13,11 +13,11 @@ Motivation
 ----------
 
 Long-term security of the Ergo protocol, including crypto-economic security, always has high priority. 
- One of the hottest topic in this field is (in)stability of cryptocurrency protocols without the block 
- reward (see e.g. [1] for details). 
+ One of the hottest topic in this field is (in)stability of cryptocurrency protocols without stable block 
+ reward coming from emission (see e.g. [1] for details). 
  
 It was planned during the launch of the Ergo network that after end of emission miners will be rewarded with 
-transaction fees and also storage rent. However, it is hard to estimate yet how successfully will storage rent replace
+transaction fees and also with storage rent. However, it is hard to estimate yet how successfully will storage rent replace
 emission. 
 
 Thus it was proposed on the ErgoForum informally (in [2] and [3]) to prolong emission (with preserving total supply) 

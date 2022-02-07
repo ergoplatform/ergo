@@ -391,7 +391,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit = {
     if (pmod.modifierTypeId == ADProofs.modifierTypeId && local) {
-      val bytes = HistoryModifierSerializer.serialize(pmod) //todo: extra allocation here, eliminate
+      val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
       history().justPutToHistory(pmod.serializedId, bytes)
       return
     }

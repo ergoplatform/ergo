@@ -264,7 +264,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     val deteriorated = versions.size - count
     if (deteriorated > 0) {
       val fromLsn = versionLsn(0)
-      val tillLsn = versionLsn(deteriorated)
+      val tillLsn = if (count > 0) {
+        versionLsn(deteriorated)
+      } else {
+        versionLsn.last + 1 /* exclusive boundary */
+      }
       val batch = undo.createWriteBatch()
       try {
         for (lsn <- fromLsn until tillLsn) {

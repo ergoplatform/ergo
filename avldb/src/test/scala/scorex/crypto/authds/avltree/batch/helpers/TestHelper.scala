@@ -23,9 +23,9 @@ trait TestHelper extends FileHelper {
 
   implicit val hf: HF = Blake2b256
 
-  def createVersionedStore(keepVersions: Int = 10): LDBVersionedStore = {
+  def createVersionedStore(initialKeepVersions: Int = 10): LDBVersionedStore = {
     val dir = getRandomTempDir
-    new LDBVersionedStore(dir, keepVersions = keepVersions)
+    new LDBVersionedStore(dir, initialKeepVersions = initialKeepVersions)
   }
 
   def createVersionedStorage(store: LDBVersionedStore): STORAGE =

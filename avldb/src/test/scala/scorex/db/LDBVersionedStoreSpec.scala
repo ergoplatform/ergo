@@ -96,5 +96,6 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     store.versionIdExists(version1) shouldBe false
     store.versionIdExists(version2) shouldBe true
     store.setKeepVersions(10) shouldBe 1
+    store.setKeepVersions(0) shouldBe 10
   }
 }

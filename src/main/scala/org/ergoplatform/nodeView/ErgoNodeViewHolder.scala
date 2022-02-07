@@ -27,7 +27,7 @@ import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 import java.io.File
 
-import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
@@ -391,7 +391,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit = {
     if (pmod.modifierTypeId == ADProofs.modifierTypeId && local) {
-      history().justPutToHistory(pmod.serializedId, pmod.bytes) //todo: extra allocation here, eliminate
+      val bytes = HistoryModifierSerializer.serialize(pmod) //todo: extra allocation here, eliminate
+      history().justPutToHistory(pmod.serializedId, bytes)
       return
     }
 

@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
@@ -47,10 +48,11 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
   /**
     *
     * @param mod modifire to apply to the state
+    * @param estimatedTip - estimated height of blockchain tip
     * @param generate function that handles newly created modifier as a result of application the current one
     * @return new State
     */
-  def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[IState]
+  def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[IState]
 
   def rollbackTo(version: VersionTag): Try[IState]
 

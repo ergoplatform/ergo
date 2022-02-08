@@ -33,11 +33,11 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val bt = BlockTransactions(dsHeader.id, version, dsTxs)
       val doubleSpendBlock = ErgoFullBlock(dsHeader, bt, validBlock.extension, validBlock.adProofs)
 
-      us.applyModifier(doubleSpendBlock)(_ => ()) shouldBe 'failure
-      us.applyModifier(validBlock)(_ => ()) shouldBe 'success
+      us.applyModifier(doubleSpendBlock, None)(_ => ()) shouldBe 'failure
+      us.applyModifier(validBlock, None)(_ => ()) shouldBe 'success
 
-      ds.applyModifier(doubleSpendBlock)(_ => ()) shouldBe 'failure
-      ds.applyModifier(validBlock)(_ => ()) shouldBe 'success
+      ds.applyModifier(doubleSpendBlock, None)(_ => ()) shouldBe 'failure
+      ds.applyModifier(validBlock, None)(_ => ()) shouldBe 'success
     }
   }
 
@@ -60,8 +60,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val blBh = validFullBlockWithBoxHolder(lastBlocks.headOption, us, bh, new RandomWrapper(Some(seed)))
       val block = blBh._1
       bh = blBh._2
-      ds = ds.applyModifier(block)(_ => ()).get
-      us = us.applyModifier(block)(_ => ()).get
+      ds = ds.applyModifier(block, None)(_ => ()).get
+      us = us.applyModifier(block, None)(_ => ()).get
       lastBlocks = block +: lastBlocks
       requireEqualStateContexts(us.stateContext, ds.stateContext, lastBlocks.map(_.header))
     }
@@ -84,7 +84,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val block = blBh._1
       parentOpt = Some(block)
       bh = blBh._2
-      us = us.applyModifier(block)(_ => ()).get
+      us = us.applyModifier(block, None)(_ => ()).get
 
       val changes1 = ErgoState.boxChanges(block.transactions)
       val changes2 = ErgoState.boxChanges(block.transactions)

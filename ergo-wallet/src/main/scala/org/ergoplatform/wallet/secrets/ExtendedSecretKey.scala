@@ -55,6 +55,10 @@ final class ExtendedSecretKey(val keyBytes: Array[Byte],
 
 object ExtendedSecretKey {
 
+  // For some seeds 'parentKey.keyBytes' is less than 32 bytes while BIP32 requires 32 bytes.
+  // The reason for this is childKey being small(ish) and 'BigIntegers.asUnsignedByteArray(childKey)' 
+  // is less than 32 bytes while BIP32 requires 32 bytes.
+  // see https://github.com/ergoplatform/ergo/issues/1627 for details
   @scala.annotation.tailrec
   def deriveChildSecretKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedSecretKey = {
     val keyCoded: Array[Byte] =

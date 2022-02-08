@@ -83,7 +83,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     prefix.zip(prefix.tail :+ suffixHead).forall({
       // Note that blocks with level 0 do not appear at all within interlinks, which is why we need to check the parent
       // block id as well.
-      case (prev, next) => next.interlinks.contains(prev.id) || next.parentID == prev.id
+      case (prev, next) => next.interlinks.contains(prev.id) || next.parentId == prev.id
     }) && (suffixHead.header +: suffixTail).zip(suffixTail).forall({
       case (prev, next) => next.parentId == prev.id
     })

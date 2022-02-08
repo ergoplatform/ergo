@@ -27,6 +27,19 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
     }
   }
 
+  def insert(id: K,  value: V): Try[Unit] = {
+    val batch = db.createWriteBatch()
+    try {
+      batch.put(id, value)
+      db.write(batch)
+      Success(())
+    } catch {
+      case t: Throwable => Failure(t)
+    } finally {
+      batch.close()
+    }
+  }
+
   def insert(values: Seq[(K, V)]): Try[Unit] = update(values, Seq.empty)
 
   def remove(keys: Seq[K]): Try[Unit] = update(Seq.empty, keys)

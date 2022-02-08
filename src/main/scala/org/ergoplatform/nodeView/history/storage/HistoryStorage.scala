@@ -94,6 +94,11 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
     }
   }
 
+  def insert(objectIdToInsert: Array[Byte],
+             objectToInsert: Array[Byte]): Try[Unit] = {
+    objectsStore.insert(objectIdToInsert, objectToInsert)
+  }
+
   /**
     * Remove elements from stored indices and modifiers
     *

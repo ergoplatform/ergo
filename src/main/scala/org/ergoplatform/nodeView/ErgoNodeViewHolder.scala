@@ -27,6 +27,9 @@ import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 import java.io.File
 
+import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
+
+
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 
 import scala.annotation.tailrec
@@ -397,7 +400,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * which also needs to be propagated to mempool and wallet
     * @param pmod Remote or local persistent modifier
     */
-  protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit =
+  protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit = {
+    if (pmod.modifierTypeId == ADProofs.modifierTypeId && local) {
+      log.info("Dumping ad proofs for") // todo: remove after testing
+      val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
+      history().justPutToHistory(pmod.serializedId, bytes)
+      return
+    }
+
     if (!history().contains(pmod.id)) {
       context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 
@@ -463,6 +473,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     } else {
       log.warn(s"Trying to apply modifier ${pmod.encodedId} that's already in history")
     }
+  }
 
   @SuppressWarnings(Array("AsInstanceOf"))
   private def recreatedState(): State = {

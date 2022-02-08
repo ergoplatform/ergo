@@ -119,7 +119,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
 
             val tp0 = System.currentTimeMillis()
-            val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
+            val proofBytes = if ((fb.height % 500 == 0) ||
+              fb.height >= estimatedTip.getOrElse(Int.MaxValue) - 2 * constants.keepVersions) {
+              persistentProver.generateProofAndUpdateStorage(meta)
+            } else {
+              persistentProver.avlProver.generateProof()
+            }
             val tp = System.currentTimeMillis()
             log.debug(s"Utxo storage at height $height updated in ${tp-tp0} ms.")
 

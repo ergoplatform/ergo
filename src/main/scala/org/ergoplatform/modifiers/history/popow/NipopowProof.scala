@@ -81,7 +81,9 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     */
   def hasValidConnections: Boolean = {
     prefix.zip(prefix.tail :+ suffixHead).forall({
-      case (prev, next) => next.interlinks.contains(prev.id)
+      // Note that blocks with level 0 do not appear at all within interlinks, which is why we need to check the parent
+      // block id as well.
+      case (prev, next) => next.interlinks.contains(prev.id) || next.parentID == prev.id
     }) && (suffixHead.header +: suffixTail).zip(suffixTail).forall({
       case (prev, next) => next.parentId == prev.id
     })

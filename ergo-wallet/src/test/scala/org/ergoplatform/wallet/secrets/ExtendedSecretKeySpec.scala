@@ -7,6 +7,8 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.encode.Base58
+import org.ergoplatform.P2PKAddress
+import org.ergoplatform.ErgoAddressEncoder
 
 class ExtendedSecretKeySpec
   extends AnyPropSpec
@@ -15,6 +17,9 @@ class ExtendedSecretKeySpec
 
   val seedStr = "edge talent poet tortoise trumpet dose"
   val seed: Array[Byte] = Mnemonic.toSeed(SecretString.create(seedStr))
+
+  def equalBase58(v1: Array[Byte], v2b58: String): Assertion =
+    Base58.encode(v1) shouldEqual v2b58
 
   property("key tree derivation from seed (test vectors from BIP32 check)") {
     val expectedRoot = "4rEDKLd17LX4xNR8ss4ithdqFRc3iFnTiTtQbanWJbCT"
@@ -50,6 +55,25 @@ class ExtendedSecretKeySpec
     }
   }
 
-  def equalBase58(v1: Array[Byte], v2b58: String): Assertion = Base58.encode(v1) shouldEqual v2b58
+  property("incorrect BIP32 key derivation (31 bit child key)") {
+    // see https://github.com/ergoplatform/ergo/issues/1627 for details
+    val seedStr =
+      "race relax argue hair sorry riot there spirit ready fetch food hedgehog hybrid mobile pretty"
+    val seed: Array[Byte] = Mnemonic.toSeed(SecretString.create(seedStr))
+    val cases = Seq(
+      ("9ewv8sxJ1jfr6j3WUSbGPMTVx3TZgcJKdnjKCbJWhiJp5U62uhP", "m/44'/429'/0'/0/0")
+    )
+
+    val root = ExtendedSecretKey.deriveMasterKey(seed)
+
+    val addressEncoder = ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
+
+    cases.foreach {
+      case (expectedP2PK, path) =>
+        val derived = root.derive(DerivationPath.fromEncoded(path).get)
+        val p2pk = P2PKAddress(derived.publicKey.key)(addressEncoder)
+        p2pk.toString shouldEqual expectedP2PK
+    }
+  }
 
 }

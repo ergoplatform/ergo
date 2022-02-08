@@ -41,7 +41,7 @@ final case class ErgoSyncTracker(system: ActorSystem,
     currentTime - prevSyncGetTime
   }
 
-  def fullInfo(): Iterable[ErgoPeerStatus] = statuses.values
+  def fullInfo: Iterable[ErgoPeerStatus] = statuses.values
 
   def isOutdated(peer: ConnectedPeer): Boolean = {
     (timeProvider.time() - lastSyncSentTime.getOrElse(peer, 0L)).millis > SyncThreshold

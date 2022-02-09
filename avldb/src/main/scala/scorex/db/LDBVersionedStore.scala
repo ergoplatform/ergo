@@ -9,6 +9,8 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
+import scorex.crypto.hash.Blake2b256
+
 import scala.util.Try
 
 
@@ -177,7 +179,16 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     versionLsn += lastLsn // first LSN of oldest version
     versionLsn = versionLsn.reverse // LSNs should be in ascending order
     versionLsn.remove(versionLsn.size - 1) // remove last element which corresponds to next assigned LSN
-    versions.reverse
+
+    if (versions.nonEmpty) {
+      versions.reverse
+    } else {
+      val dbVersion = db.get(Blake2b256("best_version"))
+      if (dbVersion != null) {
+        versions += dbVersion
+      }
+      versions
+    }
   }
 
   /**
@@ -241,7 +252,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
         }
         batch.put(key, v)
       }
-      db.write(batch, writeOptions)
+
       if (keepVersions > 0) {
         if (lsn == lastLsn) { // no records were written for this version: generate dummy record
           undoBatch.put(newLSN(), serializeUndo(versionID, new Array[Byte](0), null))
@@ -252,7 +263,14 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
           versionLsn += lastLsn + 1 // first LSN for this version
           cleanStart(keepVersions)
         }
+      } else {
+        //keepVersions = 0
+        batch.put(Blake2b256("best_version"), versionID)
+        versions.clear()
+        versions += versionID
       }
+
+      db.write(batch, writeOptions)
       lastVersion = Some(versionID)
     } finally {
       // Make sure you close the batch to avoid resource leaks.

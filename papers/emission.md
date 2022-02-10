@@ -12,9 +12,9 @@ Emission  Retargeting Soft-Fork Proposal
 Motivation 
 ----------
 
-Long-term security of the Ergo protocol, including crypto-economic security, always has high priority. 
+Long-term security of the Ergo protocol, including crypto-economic security, is always of highest priority. 
  One of the hottest topic in this field is (in)stability of cryptocurrency protocols without stable block 
- reward coming from emission (see e.g. [1] for details). 
+ rewards coming from emission (see e.g. [1] for details). 
  
 It was planned during the launch of the Ergo network that after end of emission miners will be rewarded with 
 transaction fees and also with storage rent. However, it is hard to estimate yet how successfully will storage rent replace
@@ -27,7 +27,7 @@ design and implementation.
 Updated Emission Schedule
 -------------------------
 
-Starting from block #699,393 (first block of 684th epoch), new emission rules applied on top of rules described in the 
+Starting from block #XXX,XXX (first block of 684th epoch), new emission rules applied on top of rules described in the 
 Ergo Whitepaper.
 
 Before end of the current emission (before block 2,080,800):
@@ -37,7 +37,10 @@ Before end of the current emission (before block 2,080,800):
 
 After end of the current emission (from block 2,080,800):
 
-* pay 3 ERG each block from re-emission contract
+* pay 3 ERG each block from the re-emission contract,
+
+where the re-emission contract is working like emission one, but does not have emission curve encoded, only flat payment.
+
 
 Updated Emission Details
 ------------------------
@@ -47,20 +50,24 @@ Updated Emission Details
 General Design
 --------------
 
-Emission in Ergo is done via a contract locking funds existing since before genesis block. Changing emission then in
+Emission in Ergo is done via a contract, which is existing since before genesis block. Changing emission then in
 an elegant way is tricky. 
 
 This EIP is proposing to use existing contract in combination with checks done in the core protocol which are mandatory 
 only for mining nodes. Non-updated nodes will successfully validate blocks which are valid for the new nodes (both 
-checking and not checking new rules) after soft-fork activation.
+checking and not checking new rules) after activation of the new rules. Thus this change is soft-fork. 
 
 This EIP offers following procedure for that:
 
-* inject two new tokens into emission contract. First token is a singleton one issued to mark emission box. Second token
-is reemission token, it will go to mining reward blocks and amount of reemission tokens in mining rewards box shows how 
-many ERG should miner send to re-emission contract when spending the box. Any miner can do injection.
+* inject two new tokens into emission contract. First token is a singleton one issued to mark emission box (could be used
+for tracking emission box efficiently) . Second token is reemission token, it will go to mining reward boxes, and 
+amount of reemission tokens in a mining rewards box shows how many ERG a miner should send to the re-emission contract 
+when spending the box. Any miner can do the injection. The injection will happen on activation height.
 
-* new kind of contract, Re-emission Contract is paying 3 ERG each block after end of emission
+* a new kind of contract, the re-emission Contract is paying 3 ERG each block after end of emission
+
+* a new kind of contract, pay-to-reemission contract. Miners enforced to pay to this proxy contract. The contract is 
+similar to existing fee contract, but with no time-lock. 
 
 * new consensus-level checks are verifying that a proper amount of re-emission token is going from the emission box to 
 a miner rewards box, and also that during spending a box which is not emission box but contains re-emission tokens, 

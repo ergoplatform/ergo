@@ -98,7 +98,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       if(fb.height >= estimatedTip.getOrElse(Int.MaxValue) - constants.keepVersions){
         if(store.getKeepVersions < constants.keepVersions) store.setKeepVersions(constants.keepVersions)
       } else {
-        if(store.getKeepVersions > 0) store.setKeepVersions(0)
+        if(store.getKeepVersions > 1) store.setKeepVersions(1)
       }
 
       persistentProver.synchronized {
@@ -126,11 +126,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             val proofHash = ADProofs.proofDigest(proofBytes)
 
             if (fb.adProofs.isEmpty) {
-              val ta0 = System.currentTimeMillis()
-              val adProofs = ADProofs(fb.header.id, proofBytes)
-              generate(LocallyGeneratedModifier(adProofs))
-              val ta = System.currentTimeMillis()
-              log.debug(s"UTXO set transformation proofs at height $height dumped in ${ta-ta0} ms.")
+              if(fb.height >= estimatedTip.getOrElse(Int.MaxValue) - 112 * 1024) {
+                val ta0 = System.currentTimeMillis()
+                val adProofs = ADProofs(fb.header.id, proofBytes)
+                generate(LocallyGeneratedModifier(adProofs))
+                val ta = System.currentTimeMillis()
+                log.debug(s"UTXO set transformation proofs at height $height dumped in ${ta-ta0} ms.")
+              }
             }
 
             if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {

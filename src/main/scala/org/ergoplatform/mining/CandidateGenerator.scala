@@ -24,8 +24,6 @@ import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
-import org.ergoplatform.reemission.ReemissionRules
-import org.ergoplatform.reemission.ReemissionRules.injectionBox
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -622,6 +620,7 @@ object CandidateGenerator extends ScorexLogging {
     val emission = chainSettings.emissionRules
 
     val reemissionSettings = chainSettings.reemission
+    val reemissionRules = reemissionSettings.reemissionRules
     val reemissionActivationHeight = reemissionSettings.activationHeight
     val reemissionTokenId = Digest32 @@ reemissionSettings.reemissionTokenIdBytes
 
@@ -640,12 +639,12 @@ object CandidateGenerator extends ScorexLogging {
       val emissionAmount = emission.minersRewardAtHeight(nextHeight)
 
       // how many nanoERG should be re-emitted
-      lazy val reemissionAmount = ReemissionRules.reemissionForHeight(nextHeight, emission, reemissionSettings)
+      lazy val reemissionAmount = reemissionRules.reemissionForHeight(nextHeight, emission)
 
       val emissionBoxAssets = if (nextHeight == reemissionActivationHeight) {
         // we inject emission box NFT and reemission tokens on activation height
         // see "Activation Details" section of EIP-27
-        injectionBox.additionalTokens
+        reemissionSettings.injectionBox.additionalTokens
       } else {
         emissionBox.additionalTokens
       }
@@ -663,14 +662,17 @@ object CandidateGenerator extends ScorexLogging {
         new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, nextHeight, updEmissionAssets)
       val inputs = if (nextHeight == reemissionActivationHeight) {
         // injection - second input is injection box
-        IndexedSeq(new Input(emissionBox.id, ProverResult.empty), new Input(injectionBox.id, ProverResult.empty))
+        IndexedSeq(
+          new Input(emissionBox.id, ProverResult.empty),
+          new Input(reemissionSettings.injectionBox.id, ProverResult.empty)
+        )
       } else {
         IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
       }
 
       val minerAmt = if (nextHeight == reemissionActivationHeight) {
         // injection - inhection box value going to miner
-        emissionAmount + injectionBox.value
+        emissionAmount + reemissionSettings.injectionBox.value
       } else {
         emissionAmount
       }

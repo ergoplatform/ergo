@@ -8,7 +8,6 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.reemission.ReemissionRules
 import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
@@ -217,6 +216,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     Try {
 
       lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
+      lazy val reemissionRules = reemissionSettings.reemissionRules
 
       lazy val ReemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
       lazy val ReemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
@@ -256,7 +256,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             val rewardsTokensOut = rewardsOut.tokens.getOrElse(ReemissionTokenId, 0L)
             require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission token not preserved")
 
-            val properReemissionRewardPart = ReemissionRules.reemissionForHeight(height, emissionRules, reemissionSettings)
+            val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
             require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
           }
         } else if (box.tokens.contains(ReemissionTokenId) && height > reemissionSettings.activationHeight) {
@@ -272,7 +272,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         }.sum
         val reemissionOutputs = outputCandidates.filter { out =>
           require(!out.tokens.contains(ReemissionTokenId), "outputs contain reemission token")
-          out.ergoTree == ReemissionRules.payToReemission(reemissionNftIdBytes)
+          out.ergoTree == reemissionRules.payToReemission(reemissionNftIdBytes)
         }
         require(reemissionOutputs.map(_.value).sum == toBurn, "Burning condition violated")
       }

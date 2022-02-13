@@ -4,10 +4,8 @@ import org.ergoplatform.ErgoBox.R2
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Height, MinerPubkey, Outputs, Pay2SAddress, Self}
+import org.ergoplatform.{ErgoAddressEncoder, Height, MinerPubkey, Outputs, Pay2SAddress, Self}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, ReemissionSettings}
-import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import scorex.util.encode.Base16
 import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SBoolean, SByte, SCollection, SLong, STuple}
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant, Value}
 import sigmastate.eval.CompiletimeIRContext
@@ -17,15 +15,9 @@ import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScript
 import scala.util.Try
 
 
-object ReemissionRules {
+class ReemissionRules(reemissionSettings: ReemissionSettings) {
 
   val basicChargeAmount = 12 // in ERG
-
-
-  // todo: move box id to settings
-  lazy val InjectionBoxBytes: Array[Byte] = Base16.decode("8094ebdc03100204000580c0dfda8ee906d191c1b2a4730000730181030202aeaee7a0286770b5a5f4ee75e92ad412b6a58ce90ed3b7d45f6d6940520f340106ad86473b1d3ef06a4fc38e6b79b042c4930f017469e4f4957589a17cc60179808094f6c2d7e85800690e17713c44ade202860b7023f350739f943bf2cf77de15b7f359c1dcfc373f00").get
-
-  lazy val injectionBox: ErgoBox = ErgoBoxSerializer.parseBytes(InjectionBoxBytes)
 
   /**
     * Contract for boxes miners paying to remission contract according to EIP-27.
@@ -45,7 +37,7 @@ object ReemissionRules {
   /**
     * Reemission box contract
     */
-  def reemissionBoxProp(ms: MonetarySettings, rs: ReemissionSettings): ErgoTree = {
+  def reemissionBoxProp(ms: MonetarySettings): ErgoTree = {
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
 
@@ -56,7 +48,7 @@ object ReemissionRules {
 
     val firstTokenId = SelectField(ByIndex(rOutTokens, IntConstant(0)), 1.toByte)
 
-    val correctNftId = EQ(firstTokenId, ByteArrayConstant(rs.reemissionNftIdBytes))
+    val correctNftId = EQ(firstTokenId, ByteArrayConstant(reemissionSettings.reemissionNftIdBytes))
 
     // miner's output must have script which is time-locking reward for miner's pubkey
     // box height must be the same as block height
@@ -72,7 +64,7 @@ object ReemissionRules {
     val heightIncreased = GT(Height, boxCreationHeight(Self))
 
     // check that height is greater than end of emission (>= 2,080,800 for the mainnet)
-    val afterEmission = GE(Height, IntConstant(rs.reemissionStartHeight))
+    val afterEmission = GE(Height, IntConstant(reemissionSettings.reemissionStartHeight))
 
     // reemission contract must be preserved
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(reemissionOut))
@@ -104,12 +96,11 @@ object ReemissionRules {
           correctCoinsIssued
         )
       )
-    ).toSigmaProp.treeWithSegregation
-  }
+    )
+  }.toSigmaProp.treeWithSegregation
 
   def reemissionForHeight(height: Height,
-                          emissionRules: EmissionRules,
-                          reemissionSettings: ReemissionSettings): Long = {
+                          emissionRules: EmissionRules): Long = {
     val emission = emissionRules.emissionAtHeight(height)
     if (height >= reemissionSettings.activationHeight &&
           emission >= (basicChargeAmount + 3) * EmissionRules.CoinsInOneErgo) {
@@ -158,7 +149,7 @@ object ReemissionRules {
     val rs = settings.chainSettings.reemission
     val emissionRules = settings.chainSettings.emissionRules
 
-    val et = reemissionBoxProp(ms, rs)
+    val et = reemissionBoxProp(ms)
     val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
     println("p2s address: " + enc.fromProposition(et))
 
@@ -168,7 +159,7 @@ object ReemissionRules {
 
     val total = (rs.activationHeight to rs.reemissionStartHeight).map { h =>
       val e = emissionRules.emissionAtHeight(h) / EmissionRules.CoinsInOneErgo
-      val r = reemissionForHeight(h, emissionRules, rs) / EmissionRules.CoinsInOneErgo
+      val r = reemissionForHeight(h, emissionRules) / EmissionRules.CoinsInOneErgo
 
       if ((e - r) == 3 && !lowSet) {
         println("Start of low emission period: " + h)

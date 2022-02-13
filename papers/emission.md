@@ -76,8 +76,10 @@ The checks can be switched off via a soft-fork.
 
  
 
-Reemission Contract
+Contracts
 -------------------
+
+**Reemission contract**:
 
 ```scala
     // output of the reemission contract
@@ -142,6 +144,18 @@ Reemission Contract
           )
         )
     )
+```
+
+**Pay-to-Reemission contract**:
+
+```scala
+    val reemissionOut = ByIndex(Outputs, IntConstant(0))
+
+    val rOutTokens = OptionGet(ExtractRegisterAs(reemissionOut, R2)(SCollection(STuple(SCollection(SByte), SLong))))
+
+    val firstTokenId = SelectField(ByIndex(rOutTokens, IntConstant(0)), 0.toByte)
+
+    EQ(firstTokenId, ByteArrayConstant(reemissionNftId))
 ```
 
 Voting for the Soft-Fork

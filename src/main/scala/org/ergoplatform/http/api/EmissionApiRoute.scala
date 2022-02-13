@@ -4,7 +4,6 @@ import akka.actor.ActorRefFactory
 import akka.http.scaladsl.server.Route
 import io.circe.{Encoder, Json}
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.reemission.ReemissionRules
 import org.ergoplatform.settings.{ErgoSettings, ReemissionSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -37,7 +36,7 @@ object EmissionApiRoute {
   def emissionInfoAtHeight(height: Long,
                            emissionRules: EmissionRules,
                            reemissionSettings: ReemissionSettings): EmissionInfo = {
-    val reemissionAmt = ReemissionRules.reemissionForHeight(height.toInt, emissionRules, reemissionSettings)
+    val reemissionAmt = reemissionSettings.reemissionRules.reemissionForHeight(height.toInt, emissionRules)
     val minerReward = emissionRules.emissionAtHeight(height) - reemissionAmt
     val totalCoinsIssued = emissionRules.issuedCoinsAfterHeight(height)
     val totalRemainCoins = emissionRules.coinsTotal - totalCoinsIssued

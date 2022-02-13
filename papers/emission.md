@@ -180,6 +180,13 @@ The injection box is protected by the script
 
 so spendable by anyone who can spend 30M ERG at least provided in the first input. 
 
+API Methods Changed
+-------------------
+
+* /emission/at
+* /wallet/balances
+* /wallet/balances/withUnconfirmed
+
 Testnet Data
 ------------ 
 

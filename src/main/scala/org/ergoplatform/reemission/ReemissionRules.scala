@@ -127,7 +127,7 @@ object ReemissionRules {
     val source =
       """
         |  {
-        |    INPUTS(0).value > 15000000L * 1000000000L
+        |    INPUTS(0).value > 30000000L * 1000000000L
         |  }
       """.stripMargin
 

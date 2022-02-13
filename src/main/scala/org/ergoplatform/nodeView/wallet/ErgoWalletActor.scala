@@ -126,7 +126,21 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     /** READERS */
     case ReadBalances(chainStatus) =>
-      sender() ! (if (chainStatus.onChain) state.registry.fetchDigest() else state.offChainRegistry.digest)
+      val walletDigest = if (chainStatus.onChain) {
+        state.registry.fetchDigest()
+      } else {
+        state.offChainRegistry.digest
+      }
+      val reemissionAmt = walletDigest.walletAssetBalances
+        .find(_._1 == settings.chainSettings.reemission.reemissionTokenId)
+        .map(_._2)
+        .getOrElse(0L)
+      val res = if(reemissionAmt == 0) {
+        walletDigest
+      } else {
+        walletDigest.copy(walletBalance = walletDigest.walletBalance - reemissionAmt)
+      }
+      sender() ! walletDigest
 
     case ReadPublicKeys(from, until) =>
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)

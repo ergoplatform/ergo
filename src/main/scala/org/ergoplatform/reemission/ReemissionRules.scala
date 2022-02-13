@@ -103,7 +103,7 @@ class ReemissionRules(reemissionSettings: ReemissionSettings) {
                           emissionRules: EmissionRules): Long = {
     val emission = emissionRules.emissionAtHeight(height)
     if (height >= reemissionSettings.activationHeight &&
-          emission >= (basicChargeAmount + 3) * EmissionRules.CoinsInOneErgo) {
+      emission >= (basicChargeAmount + 3) * EmissionRules.CoinsInOneErgo) {
       basicChargeAmount * EmissionRules.CoinsInOneErgo
     } else if (emission > 3 * EmissionRules.CoinsInOneErgo) {
       emission - 3 * EmissionRules.CoinsInOneErgo
@@ -111,6 +111,9 @@ class ReemissionRules(reemissionSettings: ReemissionSettings) {
       0L
     }
   }
+}
+
+object ReemissionRules {
 
   def injectionBoxP2SAddress(mainnet: Boolean): Pay2SAddress = {
     val networkPrefix = if (mainnet) {
@@ -148,8 +151,9 @@ class ReemissionRules(reemissionSettings: ReemissionSettings) {
     val ms = settings.chainSettings.monetary
     val rs = settings.chainSettings.reemission
     val emissionRules = settings.chainSettings.emissionRules
+    val reemissionRules = settings.chainSettings.reemission.reemissionRules
 
-    val et = reemissionBoxProp(ms)
+    val et = reemissionRules.reemissionBoxProp(ms)
     val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
     println("p2s address: " + enc.fromProposition(et))
 
@@ -159,7 +163,7 @@ class ReemissionRules(reemissionSettings: ReemissionSettings) {
 
     val total = (rs.activationHeight to rs.reemissionStartHeight).map { h =>
       val e = emissionRules.emissionAtHeight(h) / EmissionRules.CoinsInOneErgo
-      val r = reemissionForHeight(h, emissionRules) / EmissionRules.CoinsInOneErgo
+      val r = reemissionRules.reemissionForHeight(h, emissionRules) / EmissionRules.CoinsInOneErgo
 
       if ((e - r) == 3 && !lowSet) {
         println("Start of low emission period: " + h)
@@ -176,4 +180,5 @@ class ReemissionRules(reemissionSettings: ReemissionSettings) {
     println("Total reemission: " + total + " ERG")
     println("Total reemission is enough for: " + totalBlocks + " blocks (" + totalBlocks / 720.0 / 365.0 + " years")
   }
+
 }

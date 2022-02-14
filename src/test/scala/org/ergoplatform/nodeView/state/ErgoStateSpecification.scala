@@ -24,8 +24,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
       val validBlock = validFullBlock(None, us, bh)
       val dsTxs = validBlock.transactions ++ validBlock.transactions
-      val changes = ErgoState.stateChanges(dsTxs).get
-      changes.toRemove.map(_.key).toSet.size shouldBe 1
+      ErgoState.stateChanges(dsTxs) shouldBe 'failure
 
       val dsRoot = BlockTransactions.transactionsRoot(dsTxs, version)
       val dsHeader = validBlock.header.copy(transactionsRoot = dsRoot)

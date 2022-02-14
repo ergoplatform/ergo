@@ -135,12 +135,12 @@ class ErgoWalletActor(settings: ErgoSettings,
         .find(_._1 == settings.chainSettings.reemission.reemissionTokenId)
         .map(_._2)
         .getOrElse(0L)
-      val res = if(reemissionAmt == 0) {
+      val res = if (reemissionAmt == 0) {
         walletDigest
       } else {
         walletDigest.copy(walletBalance = walletDigest.walletBalance - reemissionAmt)
       }
-      sender() ! walletDigest
+      sender() ! res
 
     case ReadPublicKeys(from, until) =>
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)

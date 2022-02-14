@@ -23,7 +23,7 @@ class ErgoProvingInterpreterSpec
     with Generators
     with InterpreterSpecCommon {
 
-  private def obtainSecretKey() = ExtendedSecretKey.deriveMasterKey(Random.randomBytes(32))
+  private def obtainSecretKey() = ExtendedSecretKey.deriveMasterKey(Random.randomBytes(32), usePre1627KeyDerivation = false)
 
   it should "produce proofs with primitive secrets" in {
     val extendedSecretKey = obtainSecretKey()

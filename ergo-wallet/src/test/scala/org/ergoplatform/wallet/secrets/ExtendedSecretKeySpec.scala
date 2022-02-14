@@ -29,7 +29,7 @@ class ExtendedSecretKeySpec
       ("DWMp3L9JZiywxSb5gSjc5dYxPwEZ6KkmasNiHD6VRcpJ", Index.hardIndex(2))
     )
 
-    val root = ExtendedSecretKey.deriveMasterKey(seed)
+    val root = ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = false)
 
     equalBase58(root.keyBytes, expectedRoot)
 
@@ -47,7 +47,7 @@ class ExtendedSecretKeySpec
       ("DWMp3L9JZiywxSb5gSjc5dYxPwEZ6KkmasNiHD6VRcpJ", "m/1/2/2'")
     )
 
-    val root = ExtendedSecretKey.deriveMasterKey(seed)
+    val root = ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = false)
 
     cases.foreach { case (expectedKey, path) =>
       val derived = root.derive(DerivationPath.fromEncoded(path).get)
@@ -55,25 +55,25 @@ class ExtendedSecretKeySpec
     }
   }
 
-  property("incorrect BIP32 key derivation (31 bit child key)") {
+  property("1627 BIP32 key derivation fix (31 bit child key)") {
     // see https://github.com/ergoplatform/ergo/issues/1627 for details
     val seedStr =
       "race relax argue hair sorry riot there spirit ready fetch food hedgehog hybrid mobile pretty"
     val seed: Array[Byte] = Mnemonic.toSeed(SecretString.create(seedStr))
-    val cases = Seq(
-      ("9ewv8sxJ1jfr6j3WUSbGPMTVx3TZgcJKdnjKCbJWhiJp5U62uhP", "m/44'/429'/0'/0/0")
-    )
-
-    val root = ExtendedSecretKey.deriveMasterKey(seed)
-
+    val path = "m/44'/429'/0'/0/0"
     val addressEncoder = ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
 
-    cases.foreach {
-      case (expectedP2PK, path) =>
-        val derived = root.derive(DerivationPath.fromEncoded(path).get)
-        val p2pk = P2PKAddress(derived.publicKey.key)(addressEncoder)
-        p2pk.toString shouldEqual expectedP2PK
-    }
+    val pre1627DerivedSecretKey = ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = true)
+      .derive(DerivationPath.fromEncoded(path).get)
+
+    P2PKAddress(pre1627DerivedSecretKey.publicKey.key)(addressEncoder).toString shouldEqual 
+      "9ewv8sxJ1jfr6j3WUSbGPMTVx3TZgcJKdnjKCbJWhiJp5U62uhP"  
+
+    val fixedDerivedSecretKey = ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = false)
+      .derive(DerivationPath.fromEncoded(path).get)
+
+    P2PKAddress(fixedDerivedSecretKey.publicKey.key)(addressEncoder).toString shouldEqual 
+      "9eYMpbGgBf42bCcnB2nG3wQdqPzpCCw5eB1YaWUUen9uCaW3wwm"  
   }
 
 }

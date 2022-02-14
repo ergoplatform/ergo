@@ -145,7 +145,7 @@ trait Generators {
 
   def extendedSecretGen: Gen[ExtendedSecretKey] = for {
     seed <- Gen.const(Constants.SecretKeyLength).map(scorex.utils.Random.randomBytes)
-  } yield ExtendedSecretKey.deriveMasterKey(seed)
+  } yield ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = false)
 
   def extendedPubKeyGen: Gen[ExtendedPublicKey] = extendedSecretGen.map(_.publicKey)
 

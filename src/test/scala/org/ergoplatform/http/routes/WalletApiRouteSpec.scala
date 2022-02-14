@@ -136,7 +136,8 @@ class WalletApiRouteSpec extends AnyFlatSpec
   }
 
   it should "restore wallet" in {
-    Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
+    Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson, 
+      "usePre1627KeyDerivation" -> false.asJson)) ~>
       route ~> check(status shouldBe StatusCodes.OK)
   }
 

@@ -16,8 +16,9 @@ import sigmastate.interpreter.CryptoConstants
   * Secret, its chain code and path in key tree.
   * (see: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
   */
-final class ExtendedSecretKey(val keyBytes: Array[Byte],
-                              val chainCode: Array[Byte],
+final class ExtendedSecretKey(private[secrets] val keyBytes: Array[Byte],
+                              private[secrets] val chainCode: Array[Byte],
+                              private[secrets] val usePre1627KeyDerivation: Boolean,
                               val path: DerivationPath)
   extends ExtendedKey[ExtendedSecretKey] with SecretKey {
 
@@ -73,8 +74,16 @@ object ExtendedSecretKey {
       .mod(CryptoConstants.groupOrder)
     if (childKeyProtoDecoded.compareTo(CryptoConstants.groupOrder) >= 0 || childKey.equals(BigInteger.ZERO))
       deriveChildSecretKey(parentKey, idx + 1)
-    else
-      new ExtendedSecretKey(BigIntegers.asUnsignedByteArray(childKey), childChainCode, parentKey.path.extended(idx))
+    else {
+      val keyBytes = if (parentKey.usePre1627KeyDerivation) {
+        // maybe less than 32 bytes if childKey is small enough
+        BigIntegers.asUnsignedByteArray(childKey)
+      } else {
+        // padded with leading zeroes to 32 bytes
+        BigIntegers.asUnsignedByteArray(Constants.SecretKeyLength, childKey)
+      }
+      new ExtendedSecretKey(keyBytes, childChainCode, parentKey.usePre1627KeyDerivation, parentKey.path.extended(idx))
+      }
   }
 
   def deriveChildPublicKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedPublicKey = {
@@ -84,9 +93,15 @@ object ExtendedSecretKey {
     new ExtendedPublicKey(derivedPk, derivedSecret.chainCode, derivedPath)
   }
 
-  def deriveMasterKey(seed: Array[Byte]): ExtendedSecretKey = {
+
+  /**
+   * Derives master secret key from the seed 
+   * @param seed - seed bytes
+   * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation (see https://github.com/ergoplatform/ergo/issues/1627 for details)
+   */
+  def deriveMasterKey(seed: Array[Byte], usePre1627KeyDerivation: Boolean): ExtendedSecretKey = {
     val (masterKey, chainCode) = HmacSHA512.hash(Constants.BitcoinSeed, seed).splitAt(Constants.SecretKeyLength)
-    new ExtendedSecretKey(masterKey, chainCode, DerivationPath.MasterPath)
+    new ExtendedSecretKey(masterKey, chainCode, usePre1627KeyDerivation, DerivationPath.MasterPath)
   }
 
 }
@@ -108,7 +123,7 @@ object ExtendedSecretKeySerializer extends ErgoWalletSerializer[ExtendedSecretKe
     val chainCode = r.getBytes(Constants.SecretKeyLength)
     val pathLen = r.getUInt().toIntExact
     val path = DerivationPathSerializer.parseBytes(r.getBytes(pathLen))
-    new ExtendedSecretKey(keyBytes, chainCode, path)
+    new ExtendedSecretKey(keyBytes, chainCode, false, path)
   }
 
 }

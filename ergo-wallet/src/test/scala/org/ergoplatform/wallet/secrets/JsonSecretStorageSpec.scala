@@ -18,7 +18,7 @@ class JsonSecretStorageSpec
     forAll(entropyGen, passwordGen, encryptionSettingsGen) { (seed, pass, cryptoSettings) =>
       val dir = createTempDir
       val settings = SecretStorageSettings(dir.getAbsolutePath, cryptoSettings)
-      val storage = JsonSecretStorage.init(seed, SecretString.create(pass))(settings)
+      val storage = JsonSecretStorage.init(seed, SecretString.create(pass), usePre1627KeyDerivation = false)(settings)
 
       storage.isLocked shouldBe true
 
@@ -34,7 +34,7 @@ class JsonSecretStorageSpec
     forAll(entropyGen, passwordGen, encryptionSettingsGen) { (seed, pass, cryptoSettings) =>
       val dir = createTempDir
       val settings = SecretStorageSettings(dir.getAbsolutePath, cryptoSettings)
-      val storage = JsonSecretStorage.init(seed, SecretString.create(pass))(settings)
+      val storage = JsonSecretStorage.init(seed, SecretString.create(pass), usePre1627KeyDerivation = false)(settings)
 
       storage.unlock(SecretString.create(pass))
 

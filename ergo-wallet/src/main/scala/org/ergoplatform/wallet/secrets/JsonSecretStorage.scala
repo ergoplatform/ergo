@@ -39,9 +39,11 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
     * @param mnemonicPassOpt - optional SecretString mnemonic password to be erased after use.
     */
   override def checkSeed(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString]): Boolean = {
-    val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
-    val secret = ExtendedSecretKey.deriveMasterKey(seed)
-    unlockedSecret.fold(false)(s => secret.equals(s))
+    unlockedSecret.fold(false){ uSecret => 
+      val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
+      val secret = ExtendedSecretKey.deriveMasterKey(seed, uSecret.usePre1627KeyDerivation)
+      secret.equals(uSecret)
+    }
   }
 
   /**
@@ -58,20 +60,20 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
           .flatMap(txt => Base16.decode(encryptedSecret.salt)
             .flatMap(salt => Base16.decode(encryptedSecret.iv)
               .flatMap(iv => Base16.decode(encryptedSecret.authTag)
-                .map(tag => (txt, salt, iv, tag))
+                .map(tag => (txt, salt, iv, tag, encryptedSecret.usePre1627KeyDerivation))
               )
             )
           )
-          .flatMap { case (cipherText, salt, iv, tag) => {
+          .flatMap { case (cipherText, salt, iv, tag, usePre1627KeyDerivation) => {
               val res = crypto.AES.decrypt(cipherText, pass.getData(), salt, iv, tag)(encryptionSettings)
               pass.erase()
               res
+                .map(seed => unlockedSecret = Some(ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation.getOrElse(true))))
             }
           }
       }
-      .fold(Failure(_), Success(_))
+      . fold(Failure(_), Success(_))
       .flatten
-      .map(seed => unlockedSecret = Some(ExtendedSecretKey.deriveMasterKey(seed)))
   }
 
   /**
@@ -87,13 +89,16 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
 object JsonSecretStorage {
 
   /**
-    * Initializes storage instance with new wallet file encrypted with the given `pass`.
-    */
-  def init(seed: Array[Byte], pass: SecretString)(settings: SecretStorageSettings): JsonSecretStorage = {
+   * Initializes storage instance with new wallet file encrypted with the given `pass`.
+   * @param seed   - seed bytes
+   * @param pass   - encryption password
+   * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation (see https://github.com/ergoplatform/ergo/issues/1627 for details)
+   */
+  def init(seed: Array[Byte], pass: SecretString, usePre1627KeyDerivation: Boolean)(settings: SecretStorageSettings): JsonSecretStorage = {
     val iv = scorex.utils.Random.randomBytes(crypto.AES.NonceBitsLen / 8)
     val salt = scorex.utils.Random.randomBytes(32)
     val (ciphertext, tag) = crypto.AES.encrypt(seed, pass.getData(), salt, iv)(settings.encryption)
-    val encryptedSecret = EncryptedSecret(ciphertext, salt, iv, tag, settings.encryption)
+    val encryptedSecret = EncryptedSecret(ciphertext, salt, iv, tag, settings.encryption, Some(usePre1627KeyDerivation))
     val uuid = UUID.nameUUIDFromBytes(ciphertext)
     new File(settings.secretDir).mkdirs()
     val file = new File(s"${settings.secretDir}/$uuid.json")
@@ -110,14 +115,19 @@ object JsonSecretStorage {
   }
 
   /**
-    * Initializes storage with the seed derived from an existing mnemonic phrase.
-    */
+   * Initializes storage with the seed derived from an existing mnemonic phrase.
+   * @param mnemonic - mnemonic phase
+   * @param mnemonicPassOpt - optional mnemonic password
+   * @param encryptionPass - encryption password
+   * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation (see https://github.com/ergoplatform/ergo/issues/1627 for details)
+   */
   def restore(mnemonic: SecretString,
               mnemonicPassOpt: Option[SecretString],
               encryptionPass: SecretString,
-              settings: SecretStorageSettings): JsonSecretStorage = {
+              settings: SecretStorageSettings, 
+              usePre1627KeyDerivation: Boolean): JsonSecretStorage = {
     val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
-    init(seed, encryptionPass)(settings)
+    init(seed, encryptionPass, usePre1627KeyDerivation)(settings)
   }
 
   def readFile(settings: SecretStorageSettings): Try[JsonSecretStorage] = {

@@ -24,9 +24,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
       val validBlock = validFullBlock(None, us, bh)
       val dsTxs = validBlock.transactions ++ validBlock.transactions
-      val changes = ErgoState.stateChanges(dsTxs)
-      val toRemove = changes.toRemove.map(_.key)
-      toRemove.count(boxId => java.util.Arrays.equals(toRemove.head, boxId)) shouldBe 2
+      val changes = ErgoState.stateChanges(dsTxs).get
+      changes.toRemove.map(_.key).toSet.size shouldBe 1
 
       val dsRoot = BlockTransactions.transactionsRoot(dsTxs, version)
       val dsHeader = validBlock.header.copy(transactionsRoot = dsRoot)
@@ -86,8 +85,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       bh = blBh._2
       us = us.applyModifier(block)(_ => ()).get
 
-      val changes1 = ErgoState.boxChanges(block.transactions)
-      val changes2 = ErgoState.boxChanges(block.transactions)
+      val changes1 = ErgoState.boxChanges(block.transactions).get
+      val changes2 = ErgoState.boxChanges(block.transactions).get
       changes1._1 shouldBe changes2._1
       changes1._2 shouldBe changes2._2
     }
@@ -101,8 +100,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val txs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(seed)))._1
       whenever(txs.lengthCompare(2) > 0) {
         // valid transaction should spend the only existing genesis box
-        ErgoState.boxChanges(txs)._1.length shouldBe 1
-        ErgoState.boxChanges(txs)._1.head shouldBe emissionBox.id
+        ErgoState.boxChanges(txs).get._1.length shouldBe 1
+        ErgoState.boxChanges(txs).get._1.head.key shouldBe emissionBox.id
 
         // second transaction input should be an input created by the first transaction
         val inputToDoubleSpend = txs(1).inputs.head
@@ -112,7 +111,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
         invalidTxs.length shouldBe txs.length
         invalidTxs.count(_.inputs.contains(inputToDoubleSpend)) shouldBe 2
 
-        ErgoState.boxChanges(invalidTxs)._1.length shouldBe 2
+        ErgoState.boxChanges(invalidTxs).get._1.length shouldBe 2
       }
     }
   }
@@ -124,7 +123,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     forAll { seed: Int =>
       val txs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(seed)))._1
       whenever(txs.lengthCompare(1) > 0) {
-        val changes = ErgoState.stateChanges(txs)
+        val changes = ErgoState.stateChanges(txs).get
         val removals = changes.toRemove
         // should remove the only genesis box from the state
         removals.length shouldBe 1
@@ -137,7 +136,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
         insertions.map(_.value).map(ErgoBoxSerializer.parseBytes).map(_.value).sum shouldBe emissionBox.value
 
         // if output was spend and then created - it is in both toInsert and toRemove
-        val changesRev = ErgoState.stateChanges(txs.reverse)
+        val changesRev = ErgoState.stateChanges(txs.reverse).get
         val removalsRev = changesRev.toRemove
         val insertionsRev = changesRev.toAppend
         removalsRev.length should be > removals.length

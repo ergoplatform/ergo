@@ -19,7 +19,6 @@ import org.scalatest.propspec.AnyPropSpec
 import scala.util.Random
 
 class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {
-  import DefaultBoxSelector.select
   import BoxSelector.MinBoxValue
 
   private val noFilter: TrackedBox => Boolean = _ => true
@@ -29,22 +28,28 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
   val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
   val StartHeight: Int = 0
 
+  private val selector = new DefaultBoxSelector(None)
+
+  private def genTokens(count: Int) = {
+    (0 until count).map { i => Digest32 @@ idToBytes(bytesToId(Blake2b256(i.toString))) -> i.toLong }
+  }
+
   property("returns error when it is impossible to select coins") {
     val box = testBox(1, TrueLeaf, creationHeight = StartHeight)
     val uBox = TrackedBox(parentTx, 0, None, box, Set(PaymentsScanId))
 
     //target amount is too high
-    select(Seq(uBox).toIterator, noFilter, 10, Map()).left.value shouldBe a [NotEnoughErgsError]
+    selector.select(Seq(uBox).toIterator, noFilter, 10, Map()).left.value shouldBe a [NotEnoughErgsError]
 
     //filter(which is about selecting only onchain boxes) is preventing from picking the proper box
-    select(Seq(uBox).toIterator, onChainFilter, 1, Map()).left.value shouldBe a [NotEnoughErgsError]
+    selector.select(Seq(uBox).toIterator, onChainFilter, 1, Map()).left.value shouldBe a [NotEnoughErgsError]
 
     //no target asset in the input box
-    select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)).left.value shouldBe
+    selector.select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)).left.value shouldBe
       a [NotEnoughTokensError]
 
     //otherwise, everything is fine
-    select(Seq(uBox).toIterator, noFilter, 1, Map()) shouldBe 'right
+    selector.select(Seq(uBox).toIterator, noFilter, 1, Map()) shouldBe 'right
   }
 
   property("properly selects coins - simple case with no assets") {
@@ -58,30 +63,30 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
-    val s1 = select(uBoxes.toIterator, noFilter, 1, Map())
+    val s1 = selector.select(uBoxes.toIterator, noFilter, 1, Map())
     s1 shouldBe 'right
     s1.right.get.changeBoxes.isEmpty shouldBe true
     s1.right.get.boxes.head shouldBe uBox1
 
-    val s2 = select(uBoxes.toIterator, noFilter, 10, Map())
+    val s2 = selector.select(uBoxes.toIterator, noFilter, 10, Map())
     s2 shouldBe 'right
     s2.right.get.changeBoxes.size == 1
     s2.right.get.changeBoxes.head.value shouldBe 1
     s2.right.get.boxes shouldBe Seq(uBox1, uBox2)
 
-    val s3 = select(uBoxes.toIterator, noFilter, 11, Map())
+    val s3 = selector.select(uBoxes.toIterator, noFilter, 11, Map())
     s3 shouldBe 'right
     s3.right.get.changeBoxes.isEmpty shouldBe true
     s3.right.get.boxes shouldBe Seq(uBox1, uBox2)
 
     //box2 should be filtered out
-    val s4 = select(uBoxes.toIterator, onChainFilter, 11, Map())
+    val s4 = selector.select(uBoxes.toIterator, onChainFilter, 11, Map())
     s4 shouldBe 'right
     s4.right.get.changeBoxes.size == 1
     s4.right.get.changeBoxes.head.value shouldBe 90
     s4.right.get.boxes shouldBe Seq(uBox1, uBox3)
 
-    val s5 = select(uBoxes.toIterator, noFilter, 61, Map())
+    val s5 = selector.select(uBoxes.toIterator, noFilter, 61, Map())
     s5 shouldBe 'right
     s5.right.get.changeBoxes.size == 1
     s5.right.get.changeBoxes.head.value shouldBe 50
@@ -104,23 +109,23 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
-    val s1 = select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1))
+    val s1 = selector.select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1))
     s1 shouldBe 'right
     s1.right.get.changeBoxes.isEmpty shouldBe true
     s1.right.get.boxes.head shouldBe uBox1
 
-    val s2 = select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 11))
+    val s2 = selector.select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 11))
     s2 shouldBe 'right
     s2.right.get.changeBoxes.size == 1
     s2.right.get.changeBoxes.head.value shouldBe 100 * MinBoxValue
     s2.right.get.changeBoxes.head.tokens(assetId1) shouldBe 90
     s2.right.get.boxes shouldBe Seq(uBox1, uBox3)
 
-    select(uBoxes.toIterator, onChainFilter, 1, Map(assetId2 -> 1)).left.value shouldBe a [NotEnoughTokensError]
-    select(uBoxes.toIterator, noFilter, 1, Map(assetId2 -> 11)).left.value shouldBe a [NotEnoughTokensError]
-    select(uBoxes.toIterator, noFilter, 1, Map(assetId1 -> 1000)).left.value shouldBe a [NotEnoughTokensError]
+    selector.select(uBoxes.toIterator, onChainFilter, 1, Map(assetId2 -> 1)).left.value shouldBe a [NotEnoughTokensError]
+    selector.select(uBoxes.toIterator, noFilter, 1, Map(assetId2 -> 11)).left.value shouldBe a [NotEnoughTokensError]
+    selector.select(uBoxes.toIterator, noFilter, 1, Map(assetId1 -> 1000)).left.value shouldBe a [NotEnoughTokensError]
 
-    val s3 = select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 11, assetId2 -> 1))
+    val s3 = selector.select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 11, assetId2 -> 1))
     s3 shouldBe 'right
     s3.right.get.changeBoxes.size == 1
     s3.right.get.changeBoxes.head.value shouldBe 110 * MinBoxValue
@@ -128,7 +133,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     s3.right.get.changeBoxes.head.tokens(assetId2) shouldBe 9
     s3.right.get.boxes shouldBe Seq(uBox1, uBox2, uBox3)
 
-    select(uBoxes.toIterator, onChainFilter, 1 * MinBoxValue, Map(assetId1 -> 11, assetId2 -> 1)).left.value shouldBe 
+    selector.select(uBoxes.toIterator, onChainFilter, 1 * MinBoxValue, Map(assetId1 -> 11, assetId2 -> 1)).left.value shouldBe
       a [NotEnoughTokensError]
   }
 
@@ -160,7 +165,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
-    val s1 = select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId3 -> 11))
+    val s1 = selector.select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId3 -> 11))
     s1 shouldBe 'right
 
     s1.right.get.boxes.size shouldBe 2
@@ -177,7 +182,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     s1.right.get.boxes shouldBe Seq(uBox1, uBox3)
 
-    val s2 = select(uBoxes.toIterator, noFilter, 10 * MinBoxValue,
+    val s2 = selector.select(uBoxes.toIterator, noFilter, 10 * MinBoxValue,
       Map(assetId1 -> 1, assetId2 -> 1, assetId3 -> 1, assetId4 -> 1))
     s2 shouldBe 'right
     s2.right.get.changeBoxes.size == 1
@@ -187,7 +192,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     s2.right.get.changeBoxes(0).tokens(assetId8) shouldBe 10
 
     //todo: should selector fail in this case (if there's no monetary value to create a new box w. assets) ?
-    select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1)).left.value shouldBe a [NotEnoughCoinsForChangeBoxesError]
+    selector.select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1)).left.value shouldBe a [NotEnoughCoinsForChangeBoxesError]
   }
 
   property("Size of a box with MaxAssetsPerBox tokens should not cross MaxBoxSize") {
@@ -199,13 +204,10 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
   }
 
   property("Select boxes such that change boxes are grouped by MaxAssetsPerBox") {
-    def genTokens(count: Int) =
-      (0 until count).map { i => Digest32 @@ idToBytes(bytesToId(Blake2b256(i.toString))) -> i.toLong }
-
     // make selection such that '2 * MaxAssetsPerBox + 1' tokens generates exactly 2 change boxes with MaxAssetsPerBox tokens
     val box1 = testBox(3 * MinBoxValue, TrueLeaf, StartHeight, genTokens(2 * MaxAssetsPerBox + 1))
     val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
-    val s1 = select(Iterator(uBox1), noFilter, 1 * MinBoxValue, Map(bytesToId(Blake2b256("1")) -> 1))
+    val s1 = selector.select(Iterator(uBox1), noFilter, 1 * MinBoxValue, Map(bytesToId(Blake2b256("1")) -> 1))
     s1 shouldBe 'right
     s1.right.get.changeBoxes.size shouldBe 2
     s1.right.get.changeBoxes.forall(_.tokens.size == MaxAssetsPerBox) shouldBe true
@@ -213,9 +215,33 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     // make selection such that '2 * MaxAssetsPerBox + 2' tokens generates 3 change boxes, one with just a single token
     val box2 = testBox(4 * MinBoxValue, TrueLeaf, StartHeight, genTokens(2 * MaxAssetsPerBox + 2))
     val uBox2 = TrackedBox(parentTx, 0, Some(100), box2, Set(PaymentsScanId))
-    val s2 = select(Iterator(uBox2), noFilter, 1 * MinBoxValue, Map(bytesToId(Blake2b256("1")) -> 1))
+    val s2 = selector.select(Iterator(uBox2), noFilter, 1 * MinBoxValue, Map(bytesToId(Blake2b256("1")) -> 1))
     s2 shouldBe 'right
     s2.right.get.changeBoxes.size shouldBe 3
     s2.right.get.changeBoxes.exists(_.tokens.size == 1) shouldBe true
+  }
+
+  property("Properly handle EIP-27") {
+    val ts = genTokens(2)
+    val reemissionNftId = ts(0)._1
+    val reemissionTokenId = ts(1)._1
+    val selector = new DefaultBoxSelector(Some(ReemissionData(bytesToId(reemissionNftId), bytesToId(reemissionTokenId))))
+
+    val fullValue = 2000000000L
+    val reemissionAmt = fullValue / 2
+
+    val inputBox = testBox(fullValue, TrueLeaf, StartHeight, Array((reemissionTokenId, reemissionAmt)))
+    val uBox = TrackedBox(parentTx, 0, Some(100), inputBox, Set(PaymentsScanId))
+
+    val s1 = selector.select(Iterator(uBox), noFilter, fullValue - reemissionAmt + 1, Map.empty)
+
+    s1.left.get.isInstanceOf[NotEnoughErgsError] shouldBe true
+
+    val s2 = selector.select(Iterator(uBox), noFilter, (fullValue - reemissionAmt) / 4, Map.empty)
+
+    val cb2 = s2.right.get.changeBoxes
+
+    cb2.length shouldBe 2
+    cb2.head.value shouldBe reemissionAmt
   }
 }

@@ -26,7 +26,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
   // and also optimal number of inputs(a selector is collecting dust if transaction has less inputs than optimal).
   private val maxInputs = walletSettings.maxInputs
   private val optimalInputs = walletSettings.optimalInputs
-  private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
+  private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs, None)
 
   override val walletActor: ActorRef =
     ErgoWalletActor(settings, parameters, new ErgoWalletServiceImpl(settings), boxSelector, historyReader)

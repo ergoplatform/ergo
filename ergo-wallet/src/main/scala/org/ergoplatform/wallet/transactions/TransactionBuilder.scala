@@ -74,7 +74,7 @@ object TransactionBuilder {
     minChangeValue: Long,
     minerRewardDelay: Int,
     burnTokens: TokensMap = Map.empty,
-    boxSelector: BoxSelector = DefaultBoxSelector
+    boxSelector: BoxSelector = new DefaultBoxSelector(None)
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
     validateStatelessChecks(inputs, dataInputs, outputCandidates)

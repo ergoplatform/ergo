@@ -176,7 +176,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
               Base16.encode(ErgoBoxSerializer.toBytes(box))
             }
         val paymentRequest = PaymentRequest(pks.head, 50000, Seq.empty, Map.empty)
-        val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs)
+        val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
 
         val (tx, inputs, dataInputs) = generateUnsignedTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty).get
         dataInputs shouldBe empty

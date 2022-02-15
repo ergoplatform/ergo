@@ -24,7 +24,10 @@ import scala.collection.mutable
   * @param optimalInputs - optimal number of inputs, when transaction is still not expensive. The box selector is
   *                      trying to add dust if a transaction has less inputs than this.
   */
-class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) extends BoxSelector {
+class ReplaceCompactCollectBoxSelector(maxInputs: Int,
+                                       optimalInputs: Int,
+                                       reemissionDataOpt: Option[ReemissionData])
+  extends DefaultBoxSelector(reemissionDataOpt) {
 
   import ReplaceCompactCollectBoxSelector._
 
@@ -51,7 +54,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                                           targetBalance: Long,
                                           targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     // First picking up boxes in given order (1,2,3,4,...) by using DefaultBoxSelector
-    DefaultBoxSelector.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMapRight { initialSelection =>
+    super.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMapRight { initialSelection =>
       val tail = inputBoxes.take(maxInputs * ScanDepthFactor).filter(filterFn).toSeq
       // if number of inputs exceeds the limit, the selector is sorting remaining boxes(actually, only 10*maximum
       // boxes) by value in descending order and replaces small-value boxes in the inputs by big-value from the tail (1,2,3,4 => 10)
@@ -89,7 +92,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     val compactedBalance = boxes.map(_.value).sum
     val compactedAssets = mutable.Map[ModifierId, Long]()
     AssetUtils.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
-    DefaultBoxSelector.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets)
+    super.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets, ???)
   }
 
   protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],

@@ -1,9 +1,11 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.ErgoBoxAssets
+import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.{ErgoBox, ErgoBoxAssets}
 import org.ergoplatform.SigmaConstants.MaxBoxSize
 import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectionResult}
+import scorex.util.ModifierId
 
 
 /**
@@ -45,6 +47,13 @@ object BoxSelector {
   val MinBoxValue: Long = (MaxBoxSize.value / 2L) * MinValuePerByteDefault
 
   final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
+
+  def valueOf[T <: ErgoBoxAssets](box: T)(reemissionDataOpt: Option[ReemissionData]): Long = {
+    reemissionDataOpt match {
+      case Some(reemissionData) => box.value - box.tokens.getOrElse(reemissionData.reemissionTokenId, 0L)
+      case None => box.value
+    }
+  }
 
   trait BoxSelectionError {
     def message: String

@@ -48,7 +48,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
-  val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2)
+  val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2, None)
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/data") else new File(args(1))

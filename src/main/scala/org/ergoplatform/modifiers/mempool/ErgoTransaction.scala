@@ -224,7 +224,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       lazy val EmissionNftId = ModifierId @@ reemissionSettings.emissionNftId
       lazy val EmissionNftIdBytes = reemissionSettings.emissionNftIdBytes
 
-      lazy val reemissionNftIdBytes = reemissionSettings.reemissionNftIdBytes
       lazy val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
 
       lazy val height = stateContext.currentHeight
@@ -272,7 +271,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         }.sum
         val reemissionOutputs = outputCandidates.filter { out =>
           require(!out.tokens.contains(ReemissionTokenId), "outputs contain reemission token")
-          out.ergoTree == reemissionRules.payToReemission(reemissionNftIdBytes)
+          out.ergoTree == reemissionRules.payToReemission()
         }
         require(reemissionOutputs.map(_.value).sum == toBurn, "Burning condition violated")
       }

@@ -1,29 +1,28 @@
 package org.ergoplatform.wallet.boxes
 
+import org.ergoplatform.contracts.ReemissionContracts
 import scorex.util.ModifierId
-import org.ergoplatform.ErgoBoxAssets
-import org.ergoplatform.ErgoBoxAssetsHolder
+import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder, ErgoBoxCandidate}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import org.ergoplatform.wallet.Utils._
+import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
+
+case class ReemissionData(ReemissionNftId: ModifierId, reemissionTokenId: ModifierId)
 
 /**
   * Default implementation of the box selector. It simply picks boxes till sum of their monetary values
   * meets target Ergo balance, then it checks which assets are not fulfilled and adds boxes till target
   * asset values are met.
   */
-object DefaultBoxSelector extends BoxSelector {
+class DefaultBoxSelector(reemissionDataOpt: Option[ReemissionData]) extends BoxSelector {
 
+  import DefaultBoxSelector._
   import BoxSelector._
-
-  final case class NotEnoughErgsError(message: String, balanceFound: Long) extends BoxSelectionError
-
-  final case class NotEnoughTokensError(message: String, tokensFound: Map[ModifierId, Long]) extends BoxSelectionError
-
-  final case class NotEnoughCoinsForChangeBoxesError(message: String) extends BoxSelectionError
+  import scorex.util.idToBytes
 
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                                           externalFilter: T => Boolean,
@@ -35,15 +34,23 @@ object DefaultBoxSelector extends BoxSelector {
     val currentAssets = mutable.Map[ModifierId, Long]()
 
     def pickUp(unspentBox: T) = {
-      currentBalance = currentBalance + unspentBox.value
+      currentBalance = currentBalance + valueOf(unspentBox)(reemissionDataOpt)
       AssetUtils.mergeAssetsMut(currentAssets, unspentBox.tokens)
       res += unspentBox
     }
 
-    def balanceMet = currentBalance >= targetBalance
+    def balanceMet: Boolean = currentBalance >= targetBalance
 
-    def assetsMet = targetAssets.forall {
+    def assetsMet: Boolean = targetAssets.forall {
       case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
+    }
+
+    def reemissionAmount(boxes: Seq[T]) = {
+      reemissionDataOpt.map {reemissionData =>
+        boxes
+          .flatMap(_.tokens.get(reemissionData.reemissionTokenId))
+          .sum
+      }.getOrElse(0L)
     }
 
     @tailrec
@@ -74,7 +81,8 @@ object DefaultBoxSelector extends BoxSelector {
           },
         assetsMet
       )) {
-        formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBoxes =>
+        val ra = reemissionAmount(res)
+        formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets, ra).mapRight { changeBoxes =>
           BoxSelectionResult(res, changeBoxes)
         }
       } else {
@@ -89,12 +97,11 @@ object DefaultBoxSelector extends BoxSelector {
     }
   }
 
-  def formChangeBoxes(
-                       foundBalance: Long,
-                       targetBalance: Long,
-                       foundBoxAssets: mutable.Map[ModifierId, Long],
-                       targetBoxAssets: TokensMap
-                     ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+  def formChangeBoxes(foundBalance: Long,
+                      targetBalance: Long,
+                      foundBoxAssets: mutable.Map[ModifierId, Long],
+                      targetBoxAssets: TokensMap,
+                      reemissionAmt: Long): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     AssetUtils.subtractAssetsMut(foundBoxAssets, targetBoxAssets)
     val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxAssetsPerBox).toSeq
     val changeBalance = foundBalance - targetBalance
@@ -124,8 +131,29 @@ object DefaultBoxSelector extends BoxSelector {
       } else {
         Seq.empty
       }
-      Right(changeBoxes)
+
+      if(reemissionAmt > 0){
+        val reemissionData = reemissionDataOpt.get
+        val rc = new ReemissionContracts {
+          override val reemissionNftIdBytes: Array[Byte] = idToBytes(reemissionData.ReemissionNftId)
+          override val reemissionStartHeight: Int = 0
+        }
+        val p2r = rc.payToReemission()
+        val payToReemissionBox = new ErgoBoxCandidate(reemissionAmt, p2r, creationHeight = 0)
+        Right(payToReemissionBox +: changeBoxes)
+      } else {
+        Right(changeBoxes)
+      }
     }
   }
 
+}
+
+object DefaultBoxSelector {
+
+  final case class NotEnoughErgsError(message: String, balanceFound: Long) extends BoxSelectionError
+
+  final case class NotEnoughTokensError(message: String, tokensFound: Map[ModifierId, Long]) extends BoxSelectionError
+
+  final case class NotEnoughCoinsForChangeBoxesError(message: String) extends BoxSelectionError
 }

@@ -24,6 +24,7 @@ import scorex.util.encode.Base16
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+import akka.http.scaladsl.server.MissingQueryParamRejection
 
 case class WalletApiRoute(readersHolder: ActorRef,
                           nodeViewActorRef: ActorRef,
@@ -89,7 +90,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
           )
         )
       )
-      .fold(_ => reject, s => provide(s))
+      .fold(e => reject(MissingQueryParamRejection(e.toString())), s => provide(s))
   }
 
   private val checkRequest: Directive1[(String, Option[String])] = entity(as[Json]).flatMap { p =>

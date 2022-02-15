@@ -94,7 +94,7 @@ object ExtendedSecretKey {
   /**
    * Derives master secret key from the seed 
    * @param seed - seed bytes
-   * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation (see https://github.com/ergoplatform/ergo/issues/1627 for details)
+   * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation, expected to be false for new wallets, and true for old pre-1627 wallets (see https://github.com/ergoplatform/ergo/issues/1627 for details)
    */
   def deriveMasterKey(seed: Array[Byte], usePre1627KeyDerivation: Boolean): ExtendedSecretKey = {
     val (masterKey, chainCode) = HmacSHA512.hash(Constants.BitcoinSeed, seed).splitAt(Constants.SecretKeyLength)

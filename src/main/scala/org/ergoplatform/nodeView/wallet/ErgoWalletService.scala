@@ -66,7 +66,7 @@ trait ErgoWalletService {
     * @param mnemonic that was used to initialize wallet with
     * @param mnemonicPassOpt that was used to initialize wallet with
     * @param walletPass that was used to initialize wallet with
-    * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation (see https://github.com/ergoplatform/ergo/issues/1627 for details)
+    * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation, expected to be false for new wallets, and true for old pre-1627 wallets (see https://github.com/ergoplatform/ergo/issues/1627 for details)
     * @return new wallet state
     */
   def restoreWallet(state: ErgoWalletState,

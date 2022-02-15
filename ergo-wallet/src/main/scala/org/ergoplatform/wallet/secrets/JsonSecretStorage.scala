@@ -92,7 +92,7 @@ object JsonSecretStorage {
    * Initializes storage instance with new wallet file encrypted with the given `pass`.
    * @param seed   - seed bytes
    * @param pass   - encryption password
-   * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation, expected to be true for new wallets, and false for old pre-1627 wallets (see https://github.com/ergoplatform/ergo/issues/1627 for details)
+   * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation, expected to be false for new wallets, and true for old pre-1627 wallets (see https://github.com/ergoplatform/ergo/issues/1627 for details)
    */
   def init(seed: Array[Byte], pass: SecretString, usePre1627KeyDerivation: Boolean)(settings: SecretStorageSettings): JsonSecretStorage = {
     val iv = scorex.utils.Random.randomBytes(crypto.AES.NonceBitsLen / 8)
@@ -119,7 +119,7 @@ object JsonSecretStorage {
    * @param mnemonic - mnemonic phase
    * @param mnemonicPassOpt - optional mnemonic password
    * @param encryptionPass - encryption password
-   * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation, expected to be true for new wallets, and false for old pre-1627 wallets (see https://github.com/ergoplatform/ergo/issues/1627 for details)
+   * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation, expected to be false for new wallets, and true for old pre-1627 wallets (see https://github.com/ergoplatform/ergo/issues/1627 for details)
    */
   def restore(mnemonic: SecretString,
               mnemonicPassOpt: Option[SecretString],

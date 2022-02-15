@@ -13,7 +13,7 @@ import scorex.util.encode.Base16
   * @param iv           - cipher initialization vector
   * @param authTag      - message authentication tag
   * @param cipherParams - cipher params
-  * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation (see https://github.com/ergoplatform/ergo/issues/1627 for details)
+  * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation, expected to be false for new wallets, and true for old pre-1627 wallets (see https://github.com/ergoplatform/ergo/issues/1627 for details)
   */
 final case class EncryptedSecret(cipherText: String, salt: String, iv: String, authTag: String,
                                  cipherParams: EncryptionSettings, usePre1627KeyDerivation: Option[Boolean])

@@ -356,7 +356,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
   def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {
     val currentHeight = state.fullHeight
     val boxes = if (unspentOnly) {
-      val confirmed = state.registry.walletUnspentBoxes()
+      val confirmed = state.registry.walletUnspentBoxes(state.maxInputsToUse * BoxSelector.ScanDepthFactor)
       if (considerUnconfirmed) {
         // We filter out spent boxes in the same way as wallet does when assembling a transaction
         (confirmed ++ state.offChainRegistry.offChainBoxes).filter(state.walletFilter)

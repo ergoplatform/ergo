@@ -99,19 +99,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          val tm0 = System.currentTimeMillis()
           val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
-          val tm = System.currentTimeMillis()
-          log.debug(s"Transactions at height $height checked in ${tm-tm0} ms.")
 
           txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
 
-            val tp0 = System.currentTimeMillis()
             var proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
-            val tp = System.currentTimeMillis()
-            log.debug(s"Utxo storage at height $height updated in ${tp-tp0} ms.")
 
             if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
               throw new Error("Storage kept roothash is not equal to the declared one")
@@ -126,6 +120,20 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
 
               log.error("Calculated proofHash is not equal to the declared one, doing another attempt")
+
+              /**
+                * Proof generated was different from one announced.
+                *
+                * In most cases, announced proof is okay, and as proof is already checked, problem in some
+                * extra bytes added to the proof.
+                *
+                * Could be related to https://github.com/ergoplatform/ergo/issues/1614
+                *
+                * So the problem could appear on mining nodes only, and caused by
+                * proofsForTransactions() wasting the tree unexpectedly.
+                *
+                * We are trying to generate proof again now.
+                */
 
               persistentProver.rollback(inRoot)
                 .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
@@ -142,11 +150,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             }
 
             if (fb.adProofs.isEmpty) {
-              val ta0 = System.currentTimeMillis()
               val adProofs = ADProofs(fb.header.id, proofBytes)
               generate(LocallyGeneratedModifier(adProofs))
-              val ta = System.currentTimeMillis()
-              log.debug(s"UTXO set transformation proofs at height $height dumped in ${ta-ta0} ms.")
             }
 
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +

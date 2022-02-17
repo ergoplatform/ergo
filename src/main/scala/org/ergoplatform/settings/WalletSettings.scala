@@ -2,7 +2,6 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 
-
 case class WalletSettings(secretStorage: SecretStorageSettings,
                           seedStrengthBits: Int,
                           mnemonicPhraseLanguage: String,
@@ -12,4 +11,7 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           maxInputs: Int = 100,
                           optimalInputs: Int = 3,
                           testMnemonic: Option[String] = None,
-                          testKeysQty: Option[Int] = None)
+                          testKeysQty: Option[Int] = None,
+                          // Some(Seq(x)) burns all except x, Some(Seq.empty) burns all, None ignores that feature
+                          tokensWhitelist: Option[Seq[String]] = None
+                         )

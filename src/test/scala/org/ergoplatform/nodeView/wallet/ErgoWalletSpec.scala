@@ -8,6 +8,7 @@ import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestS
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils._
+import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import scorex.util.encode.Base16
 import sigmastate.eval._
@@ -19,6 +20,7 @@ import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.secrets.PrimitiveSecretKey
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
+import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.{CAND, CTHRESHOLD}
 import sigmastate.basics.DLogProtocol.DLogProverInput
@@ -31,7 +33,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
 
   property("assets in WalletDigest are deterministic against serialization") {
     forAll(Gen.listOfN(5, assetGen)) { preAssets =>
-      val assets = preAssets.map{ case (id, amt) => ModifierId @@ Algos.encode(id) -> amt }
+      val assets = preAssets.map { case (id, amt) => ModifierId @@ Algos.encode(id) -> amt }
       val wd0 = WalletDigest(1, 0, assets)
       val bs = WalletDigestSerializer.toBytes(wd0)
       WalletDigestSerializer.parseBytes(bs).walletAssetBalances shouldBe wd0.walletAssetBalances
@@ -212,7 +214,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
       eventually {
         val confirmedBalance = getConfirmedBalances.walletBalance
-
+        log.error(s"Confirmed balance $confirmedBalance")
         //pay out all the wallet balance:
         val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
         assetToSpend should not be empty
@@ -235,6 +237,110 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         tx2.outputs(1).value shouldBe MinBoxValue
         toAssetMap(tx2.outputs(1).additionalTokens.toArray) shouldBe toAssetMap(assetToReturn)
       }
+    }
+  }
+
+  property("Whitelist set, preserve tokens from auto-burn") {
+    val inputs = {
+      val x = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
+      Seq(encodedTokenId(Digest32 @@ x.head.boxId))
+    }
+
+    implicit val ww: WalletFixture = new WalletFixture(settings
+      .copy(walletSettings = settings
+        .walletSettings.copy(tokensWhitelist = Some(inputs))), parameters, getCurrentView(_).vault)
+
+    val pubKey = getPublicKeys.head.pubkey
+    val genesisBlock = makeNextBlock(getUtxoState, Seq(makeGenesisTxWithAsset(pubKey, issueAsset = true)))
+    val initialBoxes = boxesAvailable(genesisBlock, pubKey)
+    val assetR = assetsByTokenId(initialBoxes).toSeq
+    Some(assetR.map(x => encodedTokenId(x._1))) shouldBe ww.settings.walletSettings.tokensWhitelist
+
+    val boxesToUseEncoded = initialBoxes.map { box =>
+      Base16.encode(ErgoBoxSerializer.toBytes(box))
+    }
+
+    applyBlock(genesisBlock) shouldBe 'success
+    implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
+    eventually {
+      val confirmedBalance = getConfirmedBalances.walletBalance
+      log.error(s"Confirmed balance $confirmedBalance")
+      //pay out all the wallet balance:
+      val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+      Some(assetToSpend.map(x => encodedTokenId(x._1))) shouldBe ww.settings.walletSettings.tokensWhitelist
+      assetToSpend should not be empty
+
+      val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance / 2, Seq.empty, Map.empty)
+
+      val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
+      tx1.outputs.size shouldBe 2
+      tx1.outputs.head.value shouldBe (confirmedBalance / 2)
+      tx1.outputs.head.additionalTokens.toArray shouldBe Seq.empty
+      toAssetMap(tx1.outputs(1).additionalTokens.toArray) shouldBe toAssetMap(assetToSpend)
+    }
+  }
+
+  property("Whitelist empty, auto-burn tokens on arbitrary tx") {
+    implicit val ww: WalletFixture = new WalletFixture(settings
+      .copy(walletSettings = settings
+        .walletSettings.copy(tokensWhitelist = Some(Seq.empty))), parameters, getCurrentView(_).vault)
+
+    val pubKey = getPublicKeys.head.pubkey
+    val genesisBlock = makeNextBlock(getUtxoState, Seq(makeGenesisTxWithAsset(pubKey, issueAsset = true)))
+    val initialBoxes = boxesAvailable(genesisBlock, pubKey)
+
+    val boxesToUseEncoded = initialBoxes.map { box =>
+      Base16.encode(ErgoBoxSerializer.toBytes(box))
+    }
+
+    applyBlock(genesisBlock) shouldBe 'success
+    implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
+    eventually {
+      val confirmedBalance = getConfirmedBalances.walletBalance
+      log.error(s"Confirmed balance $confirmedBalance")
+      //pay out all the wallet balance:
+      val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+      assetToSpend should not be empty
+
+      val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance / 2, Seq.empty, Map.empty)
+
+      val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
+      tx1.outputs.size shouldBe 2
+      tx1.outputs.head.value shouldBe (confirmedBalance / 2)
+      tx1.outputs.head.additionalTokens.toArray shouldBe Seq.empty
+      toAssetMap(tx1.outputs(1).additionalTokens.toArray) shouldBe toAssetMap(Seq.empty)
+    }
+  }
+
+  property("Whitelist not set, ignore auto-burn") {
+    implicit val ww: WalletFixture = new WalletFixture(settings
+      .copy(walletSettings = settings
+        .walletSettings.copy(tokensWhitelist = None)), parameters, getCurrentView(_).vault)
+
+    val pubKey = getPublicKeys.head.pubkey
+    val genesisBlock = makeNextBlock(getUtxoState, Seq(makeGenesisTxWithAsset(pubKey, issueAsset = true)))
+    val initialBoxes = boxesAvailable(genesisBlock, pubKey)
+
+    val boxesToUseEncoded = initialBoxes.map { box =>
+      Base16.encode(ErgoBoxSerializer.toBytes(box))
+    }
+
+    applyBlock(genesisBlock) shouldBe 'success
+    implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
+    eventually {
+      val confirmedBalance = getConfirmedBalances.walletBalance
+      log.error(s"Confirmed balance $confirmedBalance")
+      //pay out all the wallet balance:
+      val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+      assetToSpend should not be empty
+
+      val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance / 2, Seq.empty, Map.empty)
+
+      val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
+      tx1.outputs.size shouldBe 2
+      tx1.outputs.head.value shouldBe (confirmedBalance / 2)
+      tx1.outputs.head.additionalTokens.toArray shouldBe Seq.empty
+      toAssetMap(tx1.outputs(1).additionalTokens.toArray) shouldBe toAssetMap(assetToSpend)
     }
   }
 

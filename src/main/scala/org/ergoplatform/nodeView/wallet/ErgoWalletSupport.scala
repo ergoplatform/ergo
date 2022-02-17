@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.wallet.{AssetUtils, Constants}
+import org.ergoplatform.wallet.{AssetUtils, Constants, TokensMap}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
@@ -92,6 +92,31 @@ trait ErgoWalletSupport extends ScorexLogging {
       val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
       oldPubKeys.foreach(storage.addPublicKeys(_).get)
       storage.removePaths().get
+    }
+  }
+
+  // merge tokens from burn request with auto-burn mechanism
+  private def mergeBurnWhitelistTokens(state: ErgoWalletState,
+                                       inputBoxes: Seq[TrackedBox],
+                                       burnTokensRequestMap: TokensMap): TokensMap = {
+    val input = inputBoxes.flatMap(_.tokens)
+    state.walletVars.settings.walletSettings.tokensWhitelist match {
+      case Some(x: Seq[String]) if x.isEmpty =>
+        AssetUtils.mergeAssets(
+          TransactionBuilder.collTokensToMap(
+            input
+              .map(tMap => (IdUtils.decodedTokenId(tMap._1), tMap._2)).toColl
+          ),
+          burnTokensRequestMap)
+      case Some(x: Seq[String]) => AssetUtils.mergeAssets(
+        TransactionBuilder.collTokensToMap(
+          input
+            .filterNot(tMap => x.contains(tMap._1))
+            .map(tMap => (IdUtils.decodedTokenId(tMap._1), tMap._2)).toColl
+        ),
+        burnTokensRequestMap)
+      case None =>
+        burnTokensRequestMap
     }
   }
 
@@ -270,12 +295,14 @@ trait ErgoWalletSupport extends ScorexLogging {
 
     //filter burnTokens requests
     val (requestsWithBurnTokens, requestsWithoutBurnTokens) = requests.partition(_.isInstanceOf[BurnTokensRequest])
-    val burnTokensMap = TransactionBuilder.collTokensToMap(
+    val burnTokensRequestMap = TransactionBuilder.collTokensToMap(
       requestsWithBurnTokens
         .map(_.asInstanceOf[BurnTokensRequest])
         .flatMap(_.assetsToBurn)
         .toColl
     )
+    //filter out tokens on whitelist from wallet and merge the rest with burnTokens from requests
+    val burnTokensMap = mergeBurnWhitelistTokens(state, inputBoxes, burnTokensRequestMap)
 
     //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
     requestsToBoxCandidates(requestsWithoutBurnTokens, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)

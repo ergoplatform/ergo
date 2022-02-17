@@ -1,9 +1,11 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
+
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
+import com.google.common.cache.CacheBuilder
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -71,6 +73,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.warn(s"Restarting actor due to : $e")
       Restart
   }
+
+  private val syncInfoV1CacheByHeadersHeight = CacheBuilder.newBuilder()
+    .maximumSize(10)
+    .build[Int, ErgoSyncInfoV1]
+
+  private val syncInfoV2CacheByHeadersHeight = CacheBuilder.newBuilder()
+    .maximumSize(10)
+    .build[Int, ErgoSyncInfoV2]
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -140,6 +150,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     deliveryTracker.status(id, modifierTypeId, Array(historyReader)) == ModifiersStatus.Unknown
   }
 
+  /** Get V1 sync info from cache or load it from history and add to cache */
+  private def getV1SyncInfo(history: ErgoHistory) = {
+    val headersHeight = history.headersHeight
+    Option(syncInfoV1CacheByHeadersHeight.getIfPresent(headersHeight)).getOrElse {
+      val v1SyncInfo = history.syncInfoV1
+      syncInfoV1CacheByHeadersHeight.put(headersHeight, v1SyncInfo)
+      v1SyncInfo
+    }
+  }
+
+  /** Get V2 sync info from cache or load it from history and add to cache */
+  private def getV2SyncInfo(history: ErgoHistory, full: Boolean) = {
+    val headersHeight = history.headersHeight
+    Option(syncInfoV2CacheByHeadersHeight.getIfPresent(headersHeight)).getOrElse {
+      val v2SyncInfo = history.syncInfoV2(full)
+      syncInfoV2CacheByHeadersHeight.put(headersHeight, v2SyncInfo)
+      v2SyncInfo
+    }
+  }
+
   /**
     * Whether neighbour peer `remote` supports sync protocol V2.
     */
@@ -164,12 +194,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
     if (peersV1.nonEmpty) {
-      val v1SyncInfo = history.syncInfoV1
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v1SyncInfo), None), SendToPeers(peersV1))
+      val msg = Message(syncInfoSpec, Right(getV1SyncInfo(history)), None)
+      networkControllerRef ! SendToNetwork(msg, SendToPeers(peersV1))
     }
     if (peersV2.nonEmpty) {
       //todo: send only last header to peers which are equal or younger
-      val v2SyncInfo = history.syncInfoV2(full = true)
+      val v2SyncInfo = getV2SyncInfo(history, full = true)
       networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
     }
   }
@@ -271,7 +301,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
 
     if ((oldStatus != status) || syncTracker.isOutdated(remote) || status == Older || status == Fork) {
-      val ownSyncInfo = hr.syncInfoV1
+      val ownSyncInfo = getV1SyncInfo(hr)
       sendSyncToPeer(remote, ownSyncInfo)
     }
   }
@@ -316,7 +346,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
 
     if ((oldStatus != status) || syncTracker.isOutdated(remote) || status == Older || status == Fork) {
-      val ownSyncInfo = hr.syncInfoV2(full = true)
+      val ownSyncInfo = getV2SyncInfo(hr, full = true)
       sendSyncToPeer(remote, ownSyncInfo)
     }
   }
@@ -422,9 +452,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // send sync message to the peer to get new headers quickly
           if (valid.head.isInstanceOf[Header]) {
             val syncInfo = if (syncV2Supported(remote)) {
-              hr.syncInfoV2(full = false)
+              getV2SyncInfo(hr, full = false)
             } else {
-              hr.syncInfoV1
+              getV1SyncInfo(hr)
             }
             sendSyncToPeer(remote, syncInfo)
           }

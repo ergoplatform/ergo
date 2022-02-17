@@ -45,8 +45,8 @@ class DefaultBoxSelector(reemissionDataOpt: Option[ReemissionData]) extends BoxS
       case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
     }
 
-    def reemissionAmount(boxes: Seq[T]) = {
-      reemissionDataOpt.map {reemissionData =>
+    def reemissionAmount(boxes: Seq[T]): Long = {
+      reemissionDataOpt.map { reemissionData =>
         boxes
           .flatMap(_.tokens.get(reemissionData.reemissionTokenId))
           .sum
@@ -156,4 +156,5 @@ object DefaultBoxSelector {
   final case class NotEnoughTokensError(message: String, tokensFound: Map[ModifierId, Long]) extends BoxSelectionError
 
   final case class NotEnoughCoinsForChangeBoxesError(message: String) extends BoxSelectionError
+
 }

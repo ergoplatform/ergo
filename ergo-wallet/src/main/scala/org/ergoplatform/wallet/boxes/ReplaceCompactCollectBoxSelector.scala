@@ -113,15 +113,15 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
                                                     targetBalance: Long,
                                                     targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     val boxes = bsr.boxes
-    val diff = boxes.map(_.value).sum - targetBalance
+    val diff = boxes.map(b => BoxSelector.valueOf(b)(reemissionDataOpt)).sum - targetBalance
 
     val boxesToThrowAway = boxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
-    val sorted = boxesToThrowAway.sortBy(_.value)
+    val sorted = boxesToThrowAway.sortBy(b => BoxSelector.valueOf(b)(reemissionDataOpt))
 
-    if (diff >= sorted.head.value) {
+    if (diff >= BoxSelector.valueOf(sorted.head)(reemissionDataOpt)) {
       var thrownValue = 0L
       val thrownBoxes = sorted.takeWhile { b =>
-        thrownValue = thrownValue + b.value
+        thrownValue = thrownValue + BoxSelector.valueOf(b)(reemissionDataOpt)
         thrownValue <= diff
       }
       val compactedBoxes = boxes.filter(b => !thrownBoxes.contains(b))
@@ -136,9 +136,9 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
                                                    tail: Seq[T],
                                                    targetBalance: Long,
                                                    targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
-    val bigBoxes = tail.sortBy(-_.value)
+    val bigBoxes = tail.sortBy(b => -BoxSelector.valueOf(b)(reemissionDataOpt))
     val boxesToThrowAway = bsr.boxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
-    val sorted = boxesToThrowAway.sortBy(_.value)
+    val sorted = boxesToThrowAway.sortBy(b => BoxSelector.valueOf(b)(reemissionDataOpt))
 
     type BoxesToAdd = Seq[T]
     type BoxesToDrop = Seq[T]
@@ -148,12 +148,15 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
     def replaceStep(candidates: Seq[T], toDrop: Seq[T], currentOps: Operations): Operations = {
       candidates match {
         case Seq() => currentOps
-        case Seq(cand) if cand.value <= toDrop.headOption.map(_.value).getOrElse(Long.MaxValue) => currentOps
+        case Seq(cand)
+          if BoxSelector.valueOf(cand)(reemissionDataOpt) <=
+            toDrop.headOption.map(b => BoxSelector.valueOf(b)(reemissionDataOpt)).getOrElse(Long.MaxValue) =>
+          currentOps
         case Seq(cand, cs@_*) =>
           var collected = 0L
           val (dropped, remain) = toDrop.partition { b =>
-            collected = collected + b.value
-            collected <= cand.value
+            collected = collected + BoxSelector.valueOf(b)(reemissionDataOpt)
+            collected <= BoxSelector.valueOf(cand)(reemissionDataOpt)
           }
           replaceStep(cs, remain, (currentOps._1 :+ cand, currentOps._2 ++ dropped))
       }

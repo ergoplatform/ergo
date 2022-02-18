@@ -18,7 +18,7 @@ case class ReemissionData(ReemissionNftId: ModifierId, reemissionTokenId: Modifi
   * meets target Ergo balance, then it checks which assets are not fulfilled and adds boxes till target
   * asset values are met.
   */
-class DefaultBoxSelector(reemissionDataOpt: Option[ReemissionData]) extends BoxSelector {
+class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData]) extends BoxSelector {
 
   import DefaultBoxSelector._
   import BoxSelector._
@@ -43,14 +43,6 @@ class DefaultBoxSelector(reemissionDataOpt: Option[ReemissionData]) extends BoxS
 
     def assetsMet: Boolean = targetAssets.forall {
       case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
-    }
-
-    def reemissionAmount(boxes: Seq[T]): Long = {
-      reemissionDataOpt.map { reemissionData =>
-        boxes
-          .flatMap(_.tokens.get(reemissionData.reemissionTokenId))
-          .sum
-      }.getOrElse(0L)
     }
 
     @tailrec

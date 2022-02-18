@@ -1,11 +1,9 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.{ErgoBox, ErgoBoxAssets}
+import org.ergoplatform.ErgoBoxAssets
 import org.ergoplatform.SigmaConstants.MaxBoxSize
 import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectionResult}
-import scorex.util.ModifierId
 
 
 /**
@@ -14,6 +12,8 @@ import scorex.util.ModifierId
   * different strategies.
   */
 trait BoxSelector {
+
+  val reemissionDataOpt: Option[ReemissionData]
 
   /**
     * A method which is selecting boxes to spend in order to collect needed amounts of ergo tokens and assets.
@@ -37,6 +37,15 @@ trait BoxSelector {
     targetAssets: TokensMap
   ): Either[BoxSelectionError, BoxSelectionResult[T]] =
     select(inputBoxes, _ => true, targetBalance, targetAssets)
+
+
+  def reemissionAmount[T <: ErgoBoxAssets](boxes: Seq[T]): Long = {
+    reemissionDataOpt.map { reemissionData =>
+      boxes
+        .flatMap(_.tokens.get(reemissionData.reemissionTokenId))
+        .sum
+    }.getOrElse(0L)
+  }
 
 }
 

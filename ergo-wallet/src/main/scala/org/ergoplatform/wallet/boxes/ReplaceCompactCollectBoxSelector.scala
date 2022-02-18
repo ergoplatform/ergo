@@ -26,7 +26,7 @@ import scala.collection.mutable
   */
 class ReplaceCompactCollectBoxSelector(maxInputs: Int,
                                        optimalInputs: Int,
-                                       reemissionDataOpt: Option[ReemissionData])
+                                       override val reemissionDataOpt: Option[ReemissionData])
   extends DefaultBoxSelector(reemissionDataOpt) {
 
   import ReplaceCompactCollectBoxSelector._
@@ -89,10 +89,11 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
                                                       targetBalance: Long,
                                                       targetAssets: TokensMap
                                                      ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
-    val compactedBalance = boxes.map(_.value).sum
+    val compactedBalance = boxes.map(b => BoxSelector.valueOf(b)(reemissionDataOpt)).sum
     val compactedAssets = mutable.Map[ModifierId, Long]()
     AssetUtils.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
-    super.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets, ???)
+    val ra = reemissionAmount(boxes)
+    super.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets, ra)
   }
 
   protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
@@ -100,6 +101,8 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
                                                        targetBalance: Long,
                                                        targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     val diff = optimalInputs - bsr.boxes.length
+
+    // it is okay to not to consider reemission tokens here probably, so sorting is done by _.value just, not valueOf()
     val dust = tail.sortBy(_.value).take(diff).filter(b => !bsr.boxes.contains(b))
 
     val boxes = bsr.boxes ++ dust

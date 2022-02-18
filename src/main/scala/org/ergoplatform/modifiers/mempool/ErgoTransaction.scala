@@ -218,11 +218,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
       lazy val reemissionRules = reemissionSettings.reemissionRules
 
-      lazy val ReemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
-      lazy val ReemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
+      lazy val reemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
+      lazy val reemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
 
-      lazy val EmissionNftId = ModifierId @@ reemissionSettings.emissionNftId
-      lazy val EmissionNftIdBytes = reemissionSettings.emissionNftIdBytes
+      lazy val emissionNftId = ModifierId @@ reemissionSettings.emissionNftId
+      lazy val emissionNftIdBytes = reemissionSettings.emissionNftIdBytes
 
       lazy val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
 
@@ -235,11 +235,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         // checking EIP-27 rules for emission box
         if (box.value > 100000 * EmissionRules.CoinsInOneErgo) { // for efficiency, skip boxes with less than 100,000 ERG
           // on activation height, emissionNft is not in emission box yet, but in injection box
-          if (box.tokens.contains(EmissionNftId) ||
-                height == activationHeight && boxesToSpend(1).tokens.contains(EmissionNftId)) {
+          if (box.tokens.contains(emissionNftId) ||
+                height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId)) {
 
             // if emission contract NFT is in the input, remission tokens should be there also
-            val reemissionTokensIn = box.tokens.getOrElse(ReemissionTokenId, 0L)
+            val reemissionTokensIn = box.tokens.getOrElse(reemissionTokenId, 0L)
             require(reemissionTokensIn > 0)
 
             // output positions guaranteed by emission contract
@@ -247,18 +247,20 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             val rewardsOut = outputCandidates(1)
 
             // check positions of emission NFT and reemission token
-            require(emissionOut.additionalTokens.apply(0)._1 == EmissionNftIdBytes)
-            require(emissionOut.additionalTokens.apply(1)._1 == ReemissionTokenIdBytes)
+            val firstEmissionBoxTokenId = emissionOut.additionalTokens.apply(0)._1
+            val secondEmissionBoxTokenId = emissionOut.additionalTokens.apply(1)._1
+            require(firstEmissionBoxTokenId.sameElements(emissionNftIdBytes))
+            require(secondEmissionBoxTokenId.sameElements(reemissionTokenIdBytes))
 
             //we're checking how emission box is paying reemission tokens below
-            val emissionTokensOut = emissionOut.tokens.getOrElse(ReemissionTokenId, 0L)
-            val rewardsTokensOut = rewardsOut.tokens.getOrElse(ReemissionTokenId, 0L)
+            val emissionTokensOut = emissionOut.tokens.getOrElse(reemissionTokenId, 0L)
+            val rewardsTokensOut = rewardsOut.tokens.getOrElse(reemissionTokenId, 0L)
             require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission token not preserved")
 
             val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
             require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
           }
-        } else if (box.tokens.contains(ReemissionTokenId) && height > reemissionSettings.activationHeight) {
+        } else if (box.tokens.contains(reemissionTokenId) && height > reemissionSettings.activationHeight) {
           // reemission tokens spent after EIP-27 activation
           reemissionSpending = true
         }
@@ -267,10 +269,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // if box with reemission tokens spent
       if (reemissionSpending) {
         val toBurn = boxesToSpend.map { box =>
-          box.tokens.getOrElse(ReemissionTokenId, 0L)
+          box.tokens.getOrElse(reemissionTokenId, 0L)
         }.sum
         val reemissionOutputs = outputCandidates.filter { out =>
-          require(!out.tokens.contains(ReemissionTokenId), "outputs contain reemission token")
+          require(!out.tokens.contains(reemissionTokenId), "outputs contain reemission token")
           out.ergoTree == reemissionRules.payToReemission()
         }
         require(reemissionOutputs.map(_.value).sum == toBurn, "Burning condition violated")

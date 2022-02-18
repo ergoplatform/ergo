@@ -51,16 +51,16 @@ case class ChainSettings(protocolVersion: Byte,
 
 
 case class ReemissionSettings(checkReemissionRules: Boolean,
-                              emissionNftId: String,
-                              reemissionTokenId: String,
-                              reemissionNftId: String,
+                              emissionNftId: ModifierId,
+                              reemissionTokenId: ModifierId,
+                              reemissionNftId: ModifierId,
                               activationHeight: Int,
                               reemissionStartHeight: Int,
-                              injectionBoxBytesEncoded: String) {
+                              injectionBoxBytesEncoded: ModifierId) {
 
   val reemissionRules = new ReemissionRules(this)
 
-  val emissionNftIdBytes: Array[Byte] = Algos.decode(reemissionNftId).get
+  val emissionNftIdBytes: Array[Byte] = Algos.decode(emissionNftId).get
   val reemissionNftIdBytes: Array[Byte] = Algos.decode(reemissionNftId).get
   val reemissionTokenIdBytes: Array[Byte] = Algos.decode(reemissionTokenId).get
 

@@ -76,11 +76,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private val syncInfoV1CacheByHeadersHeight = CacheBuilder.newBuilder()
     .maximumSize(10)
-    .build[Int, ErgoSyncInfoV1]
+    .build[Integer, ErgoSyncInfoV1]
 
   private val syncInfoV2CacheByHeadersHeight = CacheBuilder.newBuilder()
     .maximumSize(10)
-    .build[Int, ErgoSyncInfoV2]
+    .build[Integer, ErgoSyncInfoV2]
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 

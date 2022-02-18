@@ -5,7 +5,6 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
-import com.google.common.cache.CacheBuilder
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -74,13 +73,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       Restart
   }
 
-  private val syncInfoV1CacheByHeadersHeight = CacheBuilder.newBuilder()
-    .maximumSize(10)
-    .build[Integer, ErgoSyncInfoV1]
+  private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
-  private val syncInfoV2CacheByHeadersHeight = CacheBuilder.newBuilder()
-    .maximumSize(10)
-    .build[Integer, ErgoSyncInfoV2]
+  private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -151,23 +146,27 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /** Get V1 sync info from cache or load it from history and add to cache */
-  private def getV1SyncInfo(history: ErgoHistory) = {
+  private def getV1SyncInfo(history: ErgoHistory): ErgoSyncInfoV1 = {
     val headersHeight = history.headersHeight
-    Option(syncInfoV1CacheByHeadersHeight.getIfPresent(headersHeight)).getOrElse {
-      val v1SyncInfo = history.syncInfoV1
-      syncInfoV1CacheByHeadersHeight.put(headersHeight, v1SyncInfo)
-      v1SyncInfo
-    }
+    syncInfoV1CacheByHeadersHeight
+      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+      .getOrElse {
+        val v1SyncInfo = history.syncInfoV1
+        syncInfoV1CacheByHeadersHeight = Some(headersHeight -> v1SyncInfo)
+        v1SyncInfo
+      }
   }
 
   /** Get V2 sync info from cache or load it from history and add to cache */
-  private def getV2SyncInfo(history: ErgoHistory, full: Boolean) = {
+  private def getV2SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV2 = {
     val headersHeight = history.headersHeight
-    Option(syncInfoV2CacheByHeadersHeight.getIfPresent(headersHeight)).getOrElse {
-      val v2SyncInfo = history.syncInfoV2(full)
-      syncInfoV2CacheByHeadersHeight.put(headersHeight, v2SyncInfo)
-      v2SyncInfo
-    }
+    syncInfoV2CacheByHeadersHeight
+      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+      .getOrElse {
+        val v2SyncInfo = history.syncInfoV2(full)
+        syncInfoV2CacheByHeadersHeight = Some(headersHeight -> v2SyncInfo)
+        v2SyncInfo
+      }
   }
 
   /**

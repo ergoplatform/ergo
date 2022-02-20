@@ -10,8 +10,8 @@ import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScript
 
 trait ReemissionContracts {
 
-  val reemissionNftIdBytes: Array[Byte]
-  val reemissionStartHeight: Int
+  def reemissionNftIdBytes: Array[Byte]
+  def reemissionStartHeight: Int
 
   /**
     * Contract for boxes miners paying to remission contract according to EIP-27.

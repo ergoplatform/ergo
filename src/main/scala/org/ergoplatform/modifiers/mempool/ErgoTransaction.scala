@@ -268,14 +268,17 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
       // if box with reemission tokens spent
       if (reemissionSpending) {
+        val payToReemissionContract = reemissionRules.payToReemission()
         val toBurn = boxesToSpend.map { box =>
           box.tokens.getOrElse(reemissionTokenId, 0L)
         }.sum
+        log.debug(s"Reemission tokens to burn: $toBurn")
         val reemissionOutputs = outputCandidates.filter { out =>
           require(!out.tokens.contains(reemissionTokenId), "outputs contain reemission token")
-          out.ergoTree == reemissionRules.payToReemission()
+          out.ergoTree == payToReemissionContract
         }
-        require(reemissionOutputs.map(_.value).sum == toBurn, "Burning condition violated")
+        val sentToReemission = reemissionOutputs.map(_.value).sum
+        require(sentToReemission == toBurn, "Burning condition violated")
       }
     }
   }

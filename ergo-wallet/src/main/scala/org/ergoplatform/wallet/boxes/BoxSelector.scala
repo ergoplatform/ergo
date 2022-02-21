@@ -13,7 +13,7 @@ import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectio
   */
 trait BoxSelector {
 
-  val reemissionDataOpt: Option[ReemissionData]
+  def reemissionDataOpt: Option[ReemissionData]
 
   /**
     * A method which is selecting boxes to spend in order to collect needed amounts of ergo tokens and assets.

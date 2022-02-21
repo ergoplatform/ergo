@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import cats.implicits._
 import cats.Traverse
 import org.ergoplatform.ErgoBox.{BoxId, R4, R5, R6}
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoBox, ErgoBoxCandidate, P2PKAddress, UnsignedInput}
+import org.ergoplatform.{DataInput, ErgoAddress, ErgoBox, ErgoBoxAssets, ErgoBoxCandidate, P2PKAddress, UnsignedInput}
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
@@ -220,9 +220,15 @@ trait ErgoWalletSupport extends ScorexLogging {
     val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
 
     val dataInputs = dataInputBoxes.map(dataInputBox => DataInput(dataInputBox.id))
-    val changeBoxCandidates = selectionResult.changeBoxes.map { changeBox =>
-      val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-      new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
+    val changeBoxCandidates = selectionResult.changeBoxes.map { changeBoxAssets =>
+      changeBoxAssets match {
+        case candidate: ErgoBoxCandidate =>
+          candidate
+        case changeBox: ErgoBoxAssets =>
+          // todo: is this extra check needed ?
+          val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+          new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
+      }
     }
     val inputBoxes = selectionResult.boxes.toIndexedSeq
     new UnsignedErgoTransaction(

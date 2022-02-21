@@ -5,13 +5,12 @@ import scorex.util.ModifierId
 import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder, ErgoBoxCandidate}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.{AssetUtils, TokensMap}
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 import org.ergoplatform.wallet.Utils._
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 
-case class ReemissionData(ReemissionNftId: ModifierId, reemissionTokenId: ModifierId)
+case class ReemissionData(reemissionNftId: ModifierId, reemissionTokenId: ModifierId)
 
 /**
   * Default implementation of the box selector. It simply picks boxes till sum of their monetary values
@@ -124,10 +123,10 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
         Seq.empty
       }
 
-      if(reemissionAmt > 0){
+      if (reemissionAmt > 0) {
         val reemissionData = reemissionDataOpt.get
-        val rc = new ReemissionContracts {
-          override val reemissionNftIdBytes: Array[Byte] = idToBytes(reemissionData.ReemissionNftId)
+        val rc: ReemissionContracts = new ReemissionContracts {
+          override val reemissionNftIdBytes: Array[Byte] = idToBytes(reemissionData.reemissionNftId)
           override val reemissionStartHeight: Int = 0
         }
         val p2r = rc.payToReemission()

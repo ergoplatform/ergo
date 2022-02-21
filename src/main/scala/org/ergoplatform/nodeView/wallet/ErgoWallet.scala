@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
-import org.ergoplatform.wallet.boxes.ReplaceCompactCollectBoxSelector
+import org.ergoplatform.wallet.boxes.{ReemissionData, ReplaceCompactCollectBoxSelector}
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
 import scorex.util.ScorexLogging
@@ -26,7 +26,9 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
   // and also optimal number of inputs(a selector is collecting dust if transaction has less inputs than optimal).
   private val maxInputs = walletSettings.maxInputs
   private val optimalInputs = walletSettings.optimalInputs
-  private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs, None)
+  private val rs = settings.chainSettings.reemission
+  private val reemissionDataOpt = Some(ReemissionData(rs.reemissionNftId, rs.reemissionTokenId))
+  private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs, reemissionDataOpt)
 
   override val walletActor: ActorRef =
     ErgoWalletActor(settings, parameters, new ErgoWalletServiceImpl(settings), boxSelector, historyReader)

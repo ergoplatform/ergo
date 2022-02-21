@@ -26,8 +26,12 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
   // and also optimal number of inputs(a selector is collecting dust if transaction has less inputs than optimal).
   private val maxInputs = walletSettings.maxInputs
   private val optimalInputs = walletSettings.optimalInputs
-  private val rs = settings.chainSettings.reemission
-  private val reemissionDataOpt = Some(ReemissionData(rs.reemissionNftId, rs.reemissionTokenId))
+  private val reemissionDataOpt = if (walletSettings.checkEIP27) {
+    val rs = settings.chainSettings.reemission
+    Some(ReemissionData(rs.reemissionNftId, rs.reemissionTokenId))
+  } else {
+    None
+  }
   private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs, reemissionDataOpt)
 
   override val walletActor: ActorRef =

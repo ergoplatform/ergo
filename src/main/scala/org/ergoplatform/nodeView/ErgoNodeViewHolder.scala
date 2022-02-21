@@ -22,12 +22,11 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
+import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 import java.io.File
-
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -126,7 +125,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def extractTransactions(mod: ErgoPersistentModifier): Seq[ErgoTransaction] = mod match {
     case tcm: TransactionsCarryingPersistentNodeViewModifier => tcm.transactions
-    case _ => Seq()
+    case _ => Seq.empty
   }
 
 
@@ -138,7 +137,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private def trimChainSuffix(suffix: IndexedSeq[ErgoPersistentModifier],
                               rollbackPoint: scorex.util.ModifierId): IndexedSeq[ErgoPersistentModifier] = {
     val idx = suffix.indexWhere(_.id == rollbackPoint)
-    if (idx == -1) IndexedSeq() else suffix.drop(idx)
+    if (idx == -1) IndexedSeq.empty else suffix.drop(idx)
   }
 
   /**
@@ -185,7 +184,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       val branchingPoint = progressInfo.branchPoint.get //todo: .get
       if (state.version != branchingPoint) {
         state.rollbackTo(idToVersion(branchingPoint)) -> trimChainSuffix(suffixApplied, branchingPoint)
-      } else Success(state) -> IndexedSeq()
+      } else Success(state) -> IndexedSeq.empty
     } else Success(state) -> suffixApplied
 
     stateToApplyTry match {
@@ -265,13 +264,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[ErgoPersistentModifier]@unchecked) =>
       @tailrec
-      def applyFromCacheLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
+      def applyFromCacheLoop(): Unit = {
         modifiersCache.popCandidate(history()) match {
           case Some(mod) =>
             pmodModify(mod, local = false)
-            applyFromCacheLoop(mod +: applied)
+            applyFromCacheLoop()
           case None =>
-            applied
+            ()
         }
       }
 
@@ -279,10 +278,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         case Some(h) if h.isInstanceOf[Header] => // modifiers are always of the same type
           val sorted = mods.sortBy(_.asInstanceOf[Header].height)
 
-          val applied0 = if (sorted.head.asInstanceOf[Header].height == history().headersHeight + 1) {
-
+          if (sorted.head.asInstanceOf[Header].height == history().headersHeight + 1) {
             // we apply sorted headers while headers sequence is not broken
-            val appliedBuffer = mutable.Buffer[Header]()
             var expectedHeight = history().headersHeight + 1
             var linkBroken = false
 
@@ -290,7 +287,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
               val header = sorted(idx).asInstanceOf[Header]
               if (!linkBroken && header.height == expectedHeight) {
                 pmodModify(header, local = false)
-                header +=: appliedBuffer // prepend header, to be consistent with applyFromCacheLoop
                 expectedHeight += 1
               } else {
                 if (!linkBroken) {
@@ -300,26 +296,24 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 modifiersCache.put(header.id, header)
               }
             }
-            appliedBuffer
           } else {
             mods.foreach(h => modifiersCache.put(h.id, h))
-            Seq.empty
           }
 
-          val applied = applyFromCacheLoop(applied0)
+          applyFromCacheLoop()
 
           val cleared = modifiersCache.cleanOverfull()
-          context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
+          context.system.eventStream.publish(ModifiersRemovedFromCache(cleared))
           log.debug(s"Cache size after: ${modifiersCache.size}")
         case _ =>
           mods.foreach(m => modifiersCache.put(m.id, m))
 
           log.debug(s"Cache size before: ${modifiersCache.size}")
 
-          val applied = applyFromCacheLoop(Seq())
+          applyFromCacheLoop()
           val cleared = modifiersCache.cleanOverfull()
 
-          context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
+          context.system.eventStream.publish(ModifiersRemovedFromCache(cleared))
           log.debug(s"Cache size after: ${modifiersCache.size}")
       }
   }
@@ -405,7 +399,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           if (progressInfo.toApply.nonEmpty) {
             val (newHistory, newStateTry, blocksApplied) =
-              updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq())
+              updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq.empty)
 
             newStateTry match {
               case Success(newMinState) =>
@@ -448,8 +442,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         case Failure(CriticalSystemException(error)) =>
           log.error(error)
           ErgoApp.shutdownSystem()(context.system)
+        case Failure(e: RecoverableModifierError) =>
+          log.warn(s"Can`t yet apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
+          context.system.eventStream.publish(RecoverableFailedModification(pmod, e))
         case Failure(e) =>
-          log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
+          log.warn(s"Can`t apply invalid persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
           context.system.eventStream.publish(SyntacticallyFailedModification(pmod, e))
       }
     } else {

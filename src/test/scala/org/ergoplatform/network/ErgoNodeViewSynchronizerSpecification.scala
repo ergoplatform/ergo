@@ -16,7 +16,7 @@ import org.scalatest.matchers.should.Matchers
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.DownloadRequest
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.PersistentNodeViewModifier
-import scorex.core.network.ConnectedPeer
+import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.network.NetworkController.ReceivableMessages.{RegisterMessageSpecs, SendToNetwork}
 import ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.message.{InvData, InvSpec, Message, MessageSpec}
@@ -48,14 +48,16 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
                         syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                         settings: ErgoSettings,
                         timeProvider: NetworkTimeProvider,
-                        syncTracker: ErgoSyncTracker)
+                        syncTracker: ErgoSyncTracker,
+                        deliveryTracker: DeliveryTracker)
                        (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
     networkControllerRef,
     viewHolderRef,
     syncInfoSpec,
     settings,
     timeProvider,
-    syncTracker)(ec) {
+    syncTracker,
+    deliveryTracker)(ec) {
 
     override def preStart(): Unit = {
       // register as a handler for synchronization-specific types of messages
@@ -71,7 +73,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPool]])
       context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
       context.system.eventStream.subscribe(self, classOf[DownloadRequest])
-      context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
+      context.system.eventStream.subscribe(self, classOf[ModifiersRemovedFromCache])
 
       // subscribe for history and mempool changes
       viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
@@ -142,6 +144,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
     val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
+    val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
+
     val ref = system.actorOf(Props(
       new SyncronizerMock(
         ncProbe.ref,
@@ -149,7 +153,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         ErgoSyncInfoMessageSpec,
         settings,
         tp,
-        syncTracker)
+        syncTracker,
+        deliveryTracker)
     ))
     val m = totallyValidModifier(h, s)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))

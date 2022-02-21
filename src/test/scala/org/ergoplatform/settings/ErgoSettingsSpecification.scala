@@ -8,6 +8,7 @@ import scala.concurrent.duration._
 class ErgoSettingsSpecification extends ErgoPropertyTest {
 
   private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
+  private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
 
   property("should keep data user home  by default") {
     val settings = ErgoSettings.read()
@@ -24,13 +25,14 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
       miningPubKeyHex                           = None,
       offlineGeneration                         = false,
       keepVersions                              = 200,
-      acceptableChainUpdateDelay                = 15.minutes,
+      acceptableChainUpdateDelay                = 30.minutes,
       mempoolCapacity                           = 100000,
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
@@ -39,7 +41,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        100, 1000
+        12, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -66,13 +68,14 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
       miningPubKeyHex                           = None,
       offlineGeneration                         = false,
       keepVersions                              = 200,
-      acceptableChainUpdateDelay                = 15.minutes,
+      acceptableChainUpdateDelay                = 30.minutes,
       mempoolCapacity                           = 100000,
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
@@ -81,7 +84,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        100, 1000
+        12, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -108,6 +111,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
@@ -123,7 +127,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        100, 1000
+        12, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,

@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.22"
+  version: "4.0.24"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -31,12 +31,6 @@ components:
           $ref: '#/components/schemas/TransactionBoxId'
         spendingProof:
           $ref: '#/components/schemas/SpendingProof'
-        extension:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/SValue'
-          example:
-            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     ErgoTransactionDataInput:
       type: object
@@ -45,12 +39,6 @@ components:
       properties:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
-        extension:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/SValue'
-          example:
-            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     ErgoTransactionUnsignedInput:
       type: object
@@ -1580,7 +1568,7 @@ components:
           type: integer
           example: 2880
 
-    PeerInfo:
+    SyncInfo:
       type: object
       required:
         - address
@@ -1605,6 +1593,67 @@ components:
         height:
           type: integer
           example: 65780
+
+    RequestedInfo:
+      type: object
+      required:
+        - checks
+      properties:
+        address:
+          type: string
+          example: '127.0.0.1:5673'
+        version:
+          type: string
+          example: '4.0.24'
+        checks:
+          type: integer
+          description: How many times we checked for modifier delivery status
+          example: 4
+
+    RequestedInfoByModifierId:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/RequestedInfo'
+
+    ConnectedPeer:
+      type: object
+      required:
+        - address
+      properties:
+        address:
+          type: string
+          example: '127.0.0.1:5673'
+        version:
+          type: string
+          example: '4.0.24'
+        lastMessage:
+          $ref: '#/components/schemas/Timestamp'
+
+    ConnectedPeerByModifierId:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/ConnectedPeer'
+
+    TrackInfo:
+      type: object
+      required:
+        - invalidModifierApproxSize
+        - requested
+        - received
+      properties:
+        invalidModifierApproxSize:
+          type: integer
+          example: 65780
+        requested:
+          type: object
+          description: Currently requested modifiers
+          additionalProperties:
+            $ref: '#/components/schemas/RequestedInfoByModifierId'
+        received:
+          type: object
+          description: Received modifiers
+          additionalProperties:
+            $ref: '#/components/schemas/ConnectedPeerByModifierId'
 
     BlacklistedPeers:
       type: object
@@ -2848,7 +2897,7 @@ paths:
   /peers/syncInfo:
     get:
       summary: Get sync info reported by peers, including versions, current status and height (if available)
-      operationId: getPeersFullInfo
+      operationId: getPeersSyncInfo
       tags:
         - peers
       responses:
@@ -2859,7 +2908,29 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PeerInfo'
+                  $ref: '#/components/schemas/SyncInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /peers/trackInfo:
+    get:
+      summary: Get track info reported by peers, including count of invalid modifiers and details of requested and received modifiers
+      operationId: getPeersTrackInfo
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Network status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrackInfo'
         default:
           description: Error
           content:

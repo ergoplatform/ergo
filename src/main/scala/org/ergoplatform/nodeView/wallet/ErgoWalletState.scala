@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoS
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
-import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import scorex.util.ScorexLogging
 
@@ -26,6 +26,7 @@ case class ErgoWalletState(
     mempoolReaderOpt: Option[ErgoMemPoolReader],
     utxoStateReaderOpt: Option[UtxoStateReader],
     parameters: Parameters,
+    maxInputsToUse: Int,
     error: Option[String] = None
   ) extends ScorexLogging {
 
@@ -119,7 +120,7 @@ case class ErgoWalletState(
     */
   def getBoxesToSpend: Seq[TrackedBox] = {
     require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
-    (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
+    (registry.walletUnspentBoxes(maxInputsToUse * BoxSelector.ScanDepthFactor) ++ offChainRegistry.offChainBoxes).distinct
   }
 
 }
@@ -138,6 +139,7 @@ object ErgoWalletState {
       val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)(ergoSettings.addressEncoder)
       val offChainRegistry = OffChainRegistry.init(registry)
       val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
+      val maxInputsToUse = ergoSettings.walletSettings.maxInputs
       ErgoWalletState(
         ergoStorage,
         secretStorageOpt = None,
@@ -148,7 +150,8 @@ object ErgoWalletState {
         stateReaderOpt = None,
         mempoolReaderOpt = None,
         utxoStateReaderOpt = None,
-        parameters
+        parameters,
+        maxInputsToUse
       )
     }
   }

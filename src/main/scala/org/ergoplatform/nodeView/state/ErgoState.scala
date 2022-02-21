@@ -8,7 +8,7 @@ import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
+import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
@@ -17,18 +17,21 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
+import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.AtLeast
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
+import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
+import scala.collection.breakOut
 
 /**
   * Implementation of minimal state concept in Scorex. Minimal state (or just state from now) is some data structure
@@ -73,12 +76,11 @@ object ErgoState extends ScorexLogging {
     *         if some box was created and later spent in this sequence - it is not included in the result at all
     *         if box was first spent and created after that - it is in both toInsert and toRemove
     */
-  def stateChanges(txs: Seq[ErgoTransaction]): StateChanges = {
-    val (toRemove, toInsert) = boxChanges(txs)
-    val toRemoveChanges = toRemove.map(id => Removal(id))
-    val toInsertChanges = toInsert.map(b => Insertion(b))
-    val toLookup = txs.flatMap(_.dataInputs).map(b => Lookup(b.boxId))
-    StateChanges(toRemoveChanges, toInsertChanges, toLookup)
+  def stateChanges(txs: Seq[ErgoTransaction]): Try[StateChanges] = {
+    boxChanges(txs).map { case (toRemoveChanges, toInsertChanges) =>
+      val toLookup: IndexedSeq[Lookup] = txs.flatMap(_.dataInputs).map(b => Lookup(b.boxId))(breakOut)
+      StateChanges(toRemoveChanges, toInsertChanges, toLookup)
+    }
   }
 
   /**
@@ -149,20 +151,38 @@ object ErgoState extends ScorexLogging {
     *         if box was first spend and created after that - it is in both toInsert and toRemove,
     *         and an error will be thrown further during tree modification
     */
-  def boxChanges(txs: Seq[ErgoTransaction]): (Seq[ADKey], Seq[ErgoBox]) = {
-    val toInsert: mutable.HashMap[ModifierId, ErgoBox] = mutable.HashMap.empty
-    val toRemove: mutable.ArrayBuffer[(ModifierId, ADKey)] = mutable.ArrayBuffer()
-    txs.foreach { tx =>
+  def boxChanges(txs: Seq[ErgoTransaction]): Try[(Vector[Remove], Vector[Insert])] = Try {
+    val toInsert: mutable.TreeMap[ModifierId, Insert] = mutable.TreeMap.empty
+    val toRemove: mutable.TreeMap[ModifierId, Remove] = mutable.TreeMap.empty
+
+    cfor(0)(_ < txs.length, _ + 1) { i =>
+      val tx = txs(i)
       tx.inputs.foreach { i =>
-        val wrapped = bytesToId(i.boxId)
-        toInsert.remove(wrapped) match {
-          case None => toRemove.append((wrapped, i.boxId))
+        val wrappedBoxId = bytesToId(i.boxId)
+        toInsert.remove(wrappedBoxId) match {
+          case None =>
+            if (toRemove.put(wrappedBoxId, Remove(i.boxId)).nonEmpty) {
+              throw new IllegalArgumentException(s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId")
+            }
           case _ => // old value removed, do nothing
         }
       }
-      tx.outputs.foreach(o => toInsert += bytesToId(o.id) -> o)
+      tx.outputs.foreach(o => toInsert += bytesToId(o.id) -> Insert(o.id, ADValue @@ o.bytes))
     }
-    (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
+    (toRemove.map(_._2)(breakOut), toInsert.map(_._2)(breakOut))
+  }
+
+  /**
+    * @param txs - sequence of transactions
+    * @return new ErgoBoxes produced by the transactions
+    */
+  def newBoxes(txs: Seq[ErgoTransaction]): Vector[ErgoBox] = {
+    val newBoxes: mutable.TreeMap[ModifierId, ErgoBox] = mutable.TreeMap.empty
+    txs.foreach { tx =>
+      tx.inputs.foreach(i => newBoxes.remove(bytesToId(i.boxId)))
+      tx.outputs.foreach(o => newBoxes += bytesToId(o.id) -> o)
+    }
+    newBoxes.map(_._2)(breakOut)
   }
 
   /**

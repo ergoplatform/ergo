@@ -210,7 +210,7 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
     val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false)
     val popowChain = popowHeaderChain(chain)
     val params = PoPowParams(m, k)
-    popowAlgos.prove(popowChain)(params).get
+    nipopowAlgos.prove(popowChain)(params).get
   }
 
 }

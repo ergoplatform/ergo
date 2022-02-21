@@ -14,7 +14,8 @@ import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
 import scorex.core.VersionTag
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.avltree.batch.Remove
+import scorex.crypto.authds.ADDigest
 import scorex.db.ByteArrayWrapper
 import scorex.testkit.TestkitHelpers
 
@@ -203,11 +204,11 @@ trait ValidBlocksGenerators
 
     val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(timeProvider.time())
     val interlinks = parentOpt.toSeq.flatMap { block =>
-      popowAlgos.updateInterlinks(block.header, NipopowAlgos.unpackInterlinks(block.extension.fields).get)
+      nipopowAlgos.updateInterlinks(block.header, NipopowAlgos.unpackInterlinks(block.extension.fields).get)
     }
     val extension: ExtensionCandidate =
       parameters.toExtensionCandidate ++
-        popowAlgos.interlinksToExtension(interlinks) ++
+        nipopowAlgos.interlinksToExtension(interlinks) ++
         utxoState.stateContext.validationSettings.toExtensionCandidate
     val votes = Array.fill(3)(0: Byte)
 
@@ -231,7 +232,7 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val interlinksExtension = popowAlgos.interlinksToExtension(popowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
+    val interlinksExtension = nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
     val extension: ExtensionCandidate = parameters.toExtensionCandidate ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)
 
@@ -242,7 +243,7 @@ trait ValidBlocksGenerators
   private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {
     transactions.foreach(_.statelessValidity() shouldBe 'success)
     transactions.nonEmpty shouldBe true
-    ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
+    ErgoState.boxChanges(transactions).get._1.foreach { case Remove(boxId) =>
       assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
     }
   }

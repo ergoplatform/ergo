@@ -1,20 +1,9 @@
 package scorex.db
 
-
 import java.io.Serializable
-import java.nio.ByteBuffer
 import java.util
 
 import scorex.ByteUtils
-
-object ByteArrayWrapper {
-
-  def fromLong(id: Long): ByteArrayWrapper = {
-    val b = ByteBuffer.allocate(8)
-    b.putLong(0, id)
-    ByteArrayWrapper(b.array())
-  }
-}
 
 /**
   * Wraps byte array and provides hashCode, equals and compare methods.
@@ -26,8 +15,6 @@ case class ByteArrayWrapper(data: Array[Byte])
 
   /** alternative constructor which takes array size and creates new empty array */
   def this(size:Int) = this(new Array[Byte](size))
-
-  def size = data.length
 
   require(data != null)
 
@@ -44,7 +31,7 @@ case class ByteArrayWrapper(data: Array[Byte])
   override def compare(that: ByteArrayWrapper): Int = compareTo(that)
 
   override def toString: String = {
-    val v = if (size == 8) {
+    val v = if (data.length == 8) {
       //if size is 8, display as a number
       ByteUtils.getLong(data, 0).toString + "L"
     } else {

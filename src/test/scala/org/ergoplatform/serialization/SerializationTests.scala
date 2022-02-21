@@ -35,7 +35,7 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
   }
 
   property("PoPowProof serialization") {
-    checkSerializationRoundtrip(poPowProofGen, new NipopowProofSerializer(popowAlgos))
+    checkSerializationRoundtrip(poPowProofGen, new NipopowProofSerializer(nipopowAlgos))
   }
 
   property("Header serialization") {

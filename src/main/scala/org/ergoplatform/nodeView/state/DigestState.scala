@@ -44,13 +44,19 @@ class DigestState protected(override val version: VersionTag,
                                           proofs: ADProofs,
                                           currentStateContext: ErgoStateContext): Try[Unit] = {
     // Check modifications, returning sequence of old values
-    val boxesFromProofs: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(transactions), rootHash, expectedHash)
-      .get.map(v => ErgoBoxSerializer.parseBytes(v))
-    val knownBoxes = (transactions.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+    val knownBoxesTry =
+      ErgoState.stateChanges(transactions).map { stateChanges =>
+        val boxesFromProofs: Seq[ErgoBox] =
+          proofs.verify(stateChanges, rootHash, expectedHash).get.map(v => ErgoBoxSerializer.parseBytes(v))
+        (transactions.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+      }
 
-    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = knownBoxes
-      .get(ByteArrayWrapper(id))
-      .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] =
+      knownBoxesTry.flatMap { knownBoxes =>
+        knownBoxes
+        .get(ByteArrayWrapper(id))
+        .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+      }
 
     ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
       .toTry
@@ -158,7 +164,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
               dir: File,
               constants: StateConstants,
               parameters: Parameters): Try[DigestState] = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(scorex.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
@@ -171,7 +177,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              dir: File,
              constants: StateConstants,
              parameters: Parameters): DigestState = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     Try {
       val context = ErgoStateReader.storageStateContext(store, constants, parameters)
       (versionOpt, rootHashOpt) match {

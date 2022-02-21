@@ -119,7 +119,7 @@ object ErgoState extends ScorexLogging {
     }
 
     // Skip v1 block transactions validation if corresponding setting is on
-    if (currentStateContext.currentHeight < 670000) {
+    if (currentStateContext.currentHeight <= 688000) {
       Valid(0L)
     } else {
       import spire.syntax.all.cfor

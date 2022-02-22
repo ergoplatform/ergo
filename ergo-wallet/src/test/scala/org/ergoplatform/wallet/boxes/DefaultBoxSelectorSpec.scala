@@ -24,10 +24,14 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
   private val noFilter: TrackedBox => Boolean = _ => true
   private val onChainFilter = {box: TrackedBox => box.chainStatus.onChain}
-  val parentTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
+  private val parentTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
 
-  val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
-  val StartHeight: Int = 0
+  private val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
+  private val StartHeight: Int = 0
+
+  private def genTokens(count: Int) = {
+    (0 until count).map { i => Digest32 @@ idToBytes(bytesToId(Blake2b256(i.toString))) -> i.toLong }
+  }
 
   property("returns error when it is impossible to select coins") {
     val box = testBox(1, TrueLeaf, creationHeight = StartHeight)
@@ -199,9 +203,6 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
   }
 
   property("Select boxes such that change boxes are grouped by MaxAssetsPerBox") {
-    def genTokens(count: Int) =
-      (0 until count).map { i => Digest32 @@ idToBytes(bytesToId(Blake2b256(i.toString))) -> i.toLong }
-
     // make selection such that '2 * MaxAssetsPerBox + 1' tokens generates exactly 2 change boxes with MaxAssetsPerBox tokens
     val box1 = testBox(3 * MinBoxValue, TrueLeaf, StartHeight, genTokens(2 * MaxAssetsPerBox + 1))
     val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
@@ -218,4 +219,20 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     s2.right.get.changeBoxes.size shouldBe 3
     s2.right.get.changeBoxes.exists(_.tokens.size == 1) shouldBe true
   }
+
+  property("i1644") {
+    def tokenData = genTokens(1)
+
+    val ergValue = 10 * MinBoxValue
+
+    val box1 = testBox(ergValue, TrueLeaf, StartHeight, tokenData)
+    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
+    val box2 = testBox(ergValue, TrueLeaf, StartHeight)
+    val uBox2 = TrackedBox(parentTx, 0, Some(100), box2, Set(PaymentsScanId))
+
+    val s1 = select(Iterator(uBox1, uBox2), noFilter, ergValue, Map.empty)
+    s1 shouldBe 'right
+    s1.right.get.changeBoxes.size shouldBe 1
+  }
+
 }

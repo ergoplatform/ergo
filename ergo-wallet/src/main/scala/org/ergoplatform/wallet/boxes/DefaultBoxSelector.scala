@@ -40,10 +40,20 @@ object DefaultBoxSelector extends BoxSelector {
       res += unspentBox
     }
 
-    def balanceMet = currentBalance >= targetBalance
+    def balanceMet: Boolean = {
+      val diff = currentBalance - targetBalance
+      val diffThreshold = if (currentAssets.isEmpty) {
+        0
+      } else {
+        MinBoxValue * (currentAssets.size / MaxAssetsPerBox + 1)
+      }
+      diff >= diffThreshold
+    }
 
-    def assetsMet = targetAssets.forall {
-      case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
+    def assetsMet: Boolean = {
+      targetAssets.forall {
+        case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
+      }
     }
 
     @tailrec

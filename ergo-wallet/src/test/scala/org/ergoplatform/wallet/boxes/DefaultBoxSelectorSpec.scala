@@ -221,7 +221,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
   }
 
   property("i1644") {
-    def tokenData = genTokens(1)
+    val tokenData = genTokens(1)
 
     val ergValue = 10 * MinBoxValue
 
@@ -233,6 +233,13 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val s1 = select(Iterator(uBox1, uBox2), noFilter, ergValue, Map.empty)
     s1 shouldBe 'right
     s1.right.get.changeBoxes.size shouldBe 1
+
+    val box3 = testBox(ergValue, TrueLeaf, StartHeight)
+    val uBox3 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
+
+    val s2 = select(Iterator(uBox2, uBox3), noFilter, ergValue, Map.empty)
+    s2 shouldBe 'right
+    s2.right.get.changeBoxes.size shouldBe 0
   }
 
 }

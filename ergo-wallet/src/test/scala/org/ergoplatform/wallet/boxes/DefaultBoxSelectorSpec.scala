@@ -12,7 +12,6 @@ import scorex.util.{bytesToId, idToBytes}
 import org.scalatest.EitherValues
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughErgsError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughTokensError
-import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsForChangeBoxesError
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 
@@ -167,19 +166,17 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val s1 = select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId3 -> 11))
     s1 shouldBe 'right
 
-    s1.right.get.boxes.size shouldBe 2
-    s1.right.get.boxes should contain theSameElementsAs(Seq(uBox1, uBox3))
+    s1.right.get.boxes.size shouldBe 3
+    s1.right.get.boxes should contain theSameElementsAs(Seq(uBox1, uBox2, uBox3))
 
     s1.right.get.changeBoxes.size shouldBe 1
-    s1.right.get.changeBoxes(0).value shouldBe 100 * MinBoxValue
+    s1.right.get.changeBoxes(0).value shouldBe 110 * MinBoxValue
     s1.right.get.changeBoxes(0).tokens(assetId1) shouldBe 1
     s1.right.get.changeBoxes(0).tokens(assetId2) shouldBe 1
     s1.right.get.changeBoxes(0).tokens(assetId3) shouldBe 90
     s1.right.get.changeBoxes(0).tokens(assetId4) shouldBe 101
-    s1.right.get.changeBoxes(0).tokens(assetId5) shouldBe 100
-    s1.right.get.changeBoxes(0).tokens(assetId6) shouldBe 100
-
-    s1.right.get.boxes shouldBe Seq(uBox1, uBox3)
+    s1.right.get.changeBoxes(0).tokens(assetId5) shouldBe 110
+    s1.right.get.changeBoxes(0).tokens(assetId6) shouldBe 110
 
     val s2 = select(uBoxes.toIterator, noFilter, 10 * MinBoxValue,
       Map(assetId1 -> 1, assetId2 -> 1, assetId3 -> 1, assetId4 -> 1))
@@ -190,8 +187,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     s2.right.get.changeBoxes(0).tokens(assetId7) shouldBe 10
     s2.right.get.changeBoxes(0).tokens(assetId8) shouldBe 10
 
-    //todo: should selector fail in this case (if there's no monetary value to create a new box w. assets) ?
-    select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1)).left.value shouldBe a [NotEnoughCoinsForChangeBoxesError]
+    select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1)).isRight shouldBe true
   }
 
   property("Size of a box with MaxAssetsPerBox tokens should not cross MaxBoxSize") {
@@ -204,7 +200,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
   property("Select boxes such that change boxes are grouped by MaxAssetsPerBox") {
     // make selection such that '2 * MaxAssetsPerBox + 1' tokens generates exactly 2 change boxes with MaxAssetsPerBox tokens
-    val box1 = testBox(3 * MinBoxValue, TrueLeaf, StartHeight, genTokens(2 * MaxAssetsPerBox + 1))
+    val box1 = testBox(4 * MinBoxValue, TrueLeaf, StartHeight, genTokens(2 * MaxAssetsPerBox + 1))
     val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
     val s1 = select(Iterator(uBox1), noFilter, 1 * MinBoxValue, Map(bytesToId(Blake2b256("1")) -> 1))
     s1 shouldBe 'right
@@ -220,7 +216,8 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     s2.right.get.changeBoxes.exists(_.tokens.size == 1) shouldBe true
   }
 
-  property("i1644") {
+  // test which shows that https://github.com/ergoplatform/ergo/issues/1644 fixed
+  property("i1644: should collect needed inputs when needed for change in presence of assets") {
     val tokenData = genTokens(1)
 
     val ergValue = 10 * MinBoxValue

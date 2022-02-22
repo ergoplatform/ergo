@@ -40,16 +40,26 @@ object DefaultBoxSelector extends BoxSelector {
       res += unspentBox
     }
 
+    /**
+      * Helper functions which checks whether enough ERGs collected
+      */
     def balanceMet: Boolean = {
       val diff = currentBalance - targetBalance
-      val diffThreshold = if (currentAssets.isEmpty) {
+
+      // We estimate how many ERG needed for assets in change boxes
+      val assetsDiff = currentAssets.size - targetAssets.size
+      val diffThreshold = if (assetsDiff <= 0) {
         0
       } else {
-        MinBoxValue * (currentAssets.size / MaxAssetsPerBox + 1)
+        MinBoxValue * (assetsDiff / MaxAssetsPerBox + 1)
       }
+
       diff >= diffThreshold
     }
 
+    /**
+      * Helper functions which checks whether enough assets collected
+      */
     def assetsMet: Boolean = {
       targetAssets.forall {
         case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt

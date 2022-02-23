@@ -55,6 +55,12 @@ object BoxSelector {
   private val MinValuePerByteDefault = 30 * 12
   val MinBoxValue: Long = (MaxBoxSize.value / 2L) * MinValuePerByteDefault
 
+  /**
+    * Factor which is showing how many inputs selector is going through to optimize inputs.
+    * Bigger factor is slowing down inputs selection but minimizing chance of transaction failure.
+    */
+  val ScanDepthFactor = 300
+
   final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
 
   def valueOf[T <: ErgoBoxAssets](box: T)(reemissionDataOpt: Option[ReemissionData]): Long = {

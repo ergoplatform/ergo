@@ -626,10 +626,8 @@ object CandidateGenerator extends ScorexLogging {
 
     val inputs = txs.flatMap(_.inputs)
     val feeBoxes: Seq[ErgoBox] = ErgoState
-      .boxChanges(txs)
-      ._2
-      .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes))
-      .filter(b => !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
+      .newBoxes(txs)
+      .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
     val nextHeight = currentHeight + 1
     val minerProp =
       ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)

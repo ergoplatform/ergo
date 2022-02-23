@@ -50,7 +50,8 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
       stateReaderOpt = Option.empty,
       mempoolReaderOpt = Option.empty,
       utxoStateReaderOpt = Option.empty,
-      parameters
+      parameters,
+      maxInputsToUse = 1000
     )
   }
 

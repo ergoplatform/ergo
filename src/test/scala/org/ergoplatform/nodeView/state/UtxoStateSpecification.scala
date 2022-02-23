@@ -275,8 +275,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
       val txs1 = IndexedSeq(headTx, nextTx)
       val txs2 = IndexedSeq(txWithDataInputs, nextTx)
-      val sc1 = ErgoState.stateChanges(txs1)
-      val sc2 = ErgoState.stateChanges(IndexedSeq(txWithDataInputs, nextTx))
+      val sc1 = ErgoState.stateChanges(txs1).get
+      val sc2 = ErgoState.stateChanges(IndexedSeq(txWithDataInputs, nextTx)).get
       // check that the only difference between txs1 and txs2 are dataInputs and Lookup tree operations
       txs1.flatMap(_.inputs) shouldBe txs2.flatMap(_.inputs)
       txs1.flatMap(_.outputCandidates) shouldBe txs2.flatMap(_.outputCandidates)

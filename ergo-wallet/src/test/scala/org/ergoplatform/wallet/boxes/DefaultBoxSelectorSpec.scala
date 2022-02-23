@@ -8,7 +8,7 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
 import sigmastate.helpers.TestingHelpers._
-import scorex.util.{bytesToId, idToBytes}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 import org.scalatest.EitherValues
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughErgsError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughTokensError
@@ -218,11 +218,12 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
   // test which shows that https://github.com/ergoplatform/ergo/issues/1644 fixed
   property("i1644: should collect needed inputs when needed for change in presence of assets") {
-    val tokenData = genTokens(1)
+    val tokenData = genTokens(3).last
+    tokenData._2 shouldBe 2
 
     val ergValue = 10 * MinBoxValue
 
-    val box1 = testBox(ergValue, TrueLeaf, StartHeight, tokenData)
+    val box1 = testBox(ergValue, TrueLeaf, StartHeight, Seq(tokenData))
     val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
     val box2 = testBox(ergValue, TrueLeaf, StartHeight)
     val uBox2 = TrackedBox(parentTx, 0, Some(100), box2, Set(PaymentsScanId))
@@ -237,6 +238,11 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val s2 = select(Iterator(uBox2, uBox3), noFilter, ergValue, Map.empty)
     s2 shouldBe 'right
     s2.right.get.changeBoxes.size shouldBe 0
+
+    val s3 = select(Iterator(uBox1, uBox2), noFilter, ergValue, Map((ModifierId @@ bytesToId(tokenData._1)) -> 1))
+    s3 shouldBe 'right
+    s3.right.get.changeBoxes.size shouldBe 1
+
   }
 
 }

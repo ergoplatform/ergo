@@ -13,7 +13,7 @@ case class CacheSettings(
   mempool: MempoolCacheSettings
 )
 
-case class HistoryCacheSettings(modifiersCacheSize: Int, indexesCacheSize: Int)
+case class HistoryCacheSettings(blockSectionsCacheSize: Int, headersCacheSize: Int, indexesCacheSize: Int)
 
 case class NetworkCacheSettings(
   invalidModifiersBloomFilterCapacity: Int,

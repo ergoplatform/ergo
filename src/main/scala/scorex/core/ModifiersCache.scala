@@ -22,7 +22,7 @@ trait ModifiersCache[PMOD <: PersistentNodeViewModifier, H <: HistoryReader[PMOD
   type K = scorex.util.ModifierId
   type V = PMOD
 
-  protected val cache: mutable.Map[K, V] = mutable.Map[K, V]()
+  protected val cache: mutable.Map[K, V] = mutable.LinkedHashMap[K, V]()
 
   override def modifierById(modifierId: scorex.util.ModifierId): Option[PMOD] = cache.get(modifierId)
 

@@ -78,8 +78,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
       persistentProver.synchronized {
-        val mods = ErgoState.stateChanges(transactions).operations
-        val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+        val resultTry =
+          ErgoState.stateChanges(transactions).map { stateChanges =>
+          val mods = stateChanges.operations
+          Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+        }
         ModifierValidator(stateContext.validationSettings)
           .validateNoFailure(fbOperationFailed, resultTry)
           .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)

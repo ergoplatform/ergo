@@ -1,6 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
+
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
@@ -72,6 +73,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       Restart
   }
 
+  private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
+
+  private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   protected val deliveryTimeout: FiniteDuration = networkSettings.deliveryTimeout
@@ -80,8 +85,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val requestModifierSpec = new RequestModifierSpec(networkSettings.maxInvObjects)
   protected val modifiersSpec = new ModifiersSpec(networkSettings.maxPacketSize)
 
-  private val minModifiersPerBucket = 20 // minimum of persistent modifiers (excl. headers) to download by single peer
-  private val maxModifiersPerBucket = 50 // maximum of persistent modifiers (excl. headers) to download by single peer
+  private val minModifiersPerBucket = 8 // minimum of persistent modifiers (excl. headers) to download by single peer
+  private val maxModifiersPerBucket = 12 // maximum of persistent modifiers (excl. headers) to download by single peer
 
   private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
@@ -140,6 +145,30 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     deliveryTracker.status(id, modifierTypeId, Array(historyReader)) == ModifiersStatus.Unknown
   }
 
+  /** Get V1 sync info from cache or load it from history and add to cache */
+  private def getV1SyncInfo(history: ErgoHistory): ErgoSyncInfoV1 = {
+    val headersHeight = history.headersHeight
+    syncInfoV1CacheByHeadersHeight
+      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+      .getOrElse {
+        val v1SyncInfo = history.syncInfoV1
+        syncInfoV1CacheByHeadersHeight = Some(headersHeight -> v1SyncInfo)
+        v1SyncInfo
+      }
+  }
+
+  /** Get V2 sync info from cache or load it from history and add to cache */
+  private def getV2SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV2 = {
+    val headersHeight = history.headersHeight
+    syncInfoV2CacheByHeadersHeight
+      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+      .getOrElse {
+        val v2SyncInfo = history.syncInfoV2(full)
+        syncInfoV2CacheByHeadersHeight = Some(headersHeight -> v2SyncInfo)
+        v2SyncInfo
+      }
+  }
+
   /**
     * Whether neighbour peer `remote` supports sync protocol V2.
     */
@@ -164,12 +193,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
     if (peersV1.nonEmpty) {
-      val v1SyncInfo = history.syncInfoV1
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v1SyncInfo), None), SendToPeers(peersV1))
+      val msg = Message(syncInfoSpec, Right(getV1SyncInfo(history)), None)
+      networkControllerRef ! SendToNetwork(msg, SendToPeers(peersV1))
     }
     if (peersV2.nonEmpty) {
       //todo: send only last header to peers which are equal or younger
-      val v2SyncInfo = history.syncInfoV2(full = true)
+      val v2SyncInfo = getV2SyncInfo(history, full = true)
       networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
     }
   }
@@ -271,7 +300,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
 
     if ((oldStatus != status) || syncTracker.notSyncedOrOutdated(remote) || status == Older || status == Fork) {
-      val ownSyncInfo = hr.syncInfoV1
+      val ownSyncInfo = getV1SyncInfo(hr)
       sendSyncToPeer(remote, ownSyncInfo)
     }
   }
@@ -316,7 +345,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
 
     if ((oldStatus != status) || syncTracker.notSyncedOrOutdated(remote) || status == Older || status == Fork) {
-      val ownSyncInfo = hr.syncInfoV2(full = true)
+      val ownSyncInfo = getV2SyncInfo(hr, full = true)
       sendSyncToPeer(remote, ownSyncInfo)
     }
   }
@@ -422,9 +451,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // send sync message to the peer to get new headers quickly
           if (valid.head.isInstanceOf[Header]) {
             val syncInfo = if (syncV2Supported(remote)) {
-              hr.syncInfoV2(full = false)
+              getV2SyncInfo(hr, full = false)
             } else {
-              hr.syncInfoV1
+              getV1SyncInfo(hr)
             }
             sendSyncToPeer(remote, syncInfo)
           }
@@ -447,9 +476,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                             serializer: ScorexSerializer[M],
                                             remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
-      if (typeId == Transaction.ModifierTypeId && bytes.size > settings.nodeSettings.maxTransactionSize) {
+      if (typeId == Transaction.ModifierTypeId && bytes.length > settings.nodeSettings.maxTransactionSize) {
         penalizeMisbehavingPeer(remote)
-        log.warn(s"Transaction size ${bytes.size} from ${remote.toString} exceeds limit ${settings.nodeSettings.maxTransactionSize}")
+        log.warn(s"Transaction size ${bytes.length} from ${remote.toString} exceeds limit ${settings.nodeSettings.maxTransactionSize}")
         None
       } else {
         serializer.parseBytesTry(bytes) match {
@@ -749,10 +778,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
 
-    case SyntacticallyFailedModification(mod, _) =>
+    case RecoverableFailedModification(_, _) =>
+      // we ignore this one as we should try to apply this modifier again
+
+    case SyntacticallyFailedModification(mod, e) =>
+      logger.debug(s"Invalidating syntactically failed modifier ${mod.id}", e)
       deliveryTracker.setInvalid(mod.id, mod.modifierTypeId).foreach(penalizeMisbehavingPeer)
 
-    case SemanticallyFailedModification(mod, _) =>
+    case SemanticallyFailedModification(mod, e) =>
+      logger.debug(s"Invalidating semantically failed modifier ${mod.id}", e)
       deliveryTracker.setInvalid(mod.id, mod.modifierTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
@@ -922,6 +956,8 @@ object ErgoNodeViewSynchronizer {
     case class FailedTransaction(transactionId: ModifierId, error: Throwable, immediateFailure: Boolean) extends ModificationOutcome
 
     case class SuccessfulTransaction(transaction: ErgoTransaction) extends ModificationOutcome
+
+    case class RecoverableFailedModification(modifier: ErgoPersistentModifier, error: Throwable) extends ModificationOutcome
 
     case class SyntacticallyFailedModification(modifier: ErgoPersistentModifier, error: Throwable) extends ModificationOutcome
 

@@ -221,6 +221,8 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val tokenData = genTokens(3).last
     tokenData._2 shouldBe 2
 
+    val tokenId = ModifierId @@ bytesToId(tokenData._1)
+
     val ergValue = 10 * MinBoxValue
 
     val box1 = testBox(ergValue, TrueLeaf, StartHeight, Seq(tokenData))
@@ -231,15 +233,16 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val s1 = select(Iterator(uBox1, uBox2), noFilter, ergValue, Map.empty)
     s1 shouldBe 'right
     s1.right.get.changeBoxes.size shouldBe 1
+    s1.right.get.changeBoxes.head.tokens(tokenId) shouldBe 2
 
     val box3 = testBox(ergValue, TrueLeaf, StartHeight)
-    val uBox3 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
+    val uBox3 = TrackedBox(parentTx, 0, Some(100), box3, Set(PaymentsScanId))
 
     val s2 = select(Iterator(uBox2, uBox3), noFilter, ergValue, Map.empty)
     s2 shouldBe 'right
     s2.right.get.changeBoxes.size shouldBe 0
 
-    val s3 = select(Iterator(uBox1, uBox2), noFilter, ergValue, Map((ModifierId @@ bytesToId(tokenData._1)) -> 1))
+    val s3 = select(Iterator(uBox1, uBox2), noFilter, ergValue, Map(tokenId -> 1))
     s3 shouldBe 'right
     s3.right.get.changeBoxes.size shouldBe 1
 

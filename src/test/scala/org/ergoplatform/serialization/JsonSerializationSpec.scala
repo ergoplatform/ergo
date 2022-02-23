@@ -71,6 +71,22 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
+  property("BurnTokensRequest should be serialized to json") {
+    implicit val requestEncoder: Encoder[BurnTokensRequest] = new BurnTokensRequestEncoder()
+    implicit val requestDecoder: Decoder[BurnTokensRequest] = new BurnTokensRequestDecoder()
+    forAll(burnTokensRequestGen) { request =>
+      val json = request.asJson
+      val parsingResult = json.as[BurnTokensRequest]
+      parsingResult.isRight shouldBe true
+      val restored = parsingResult.value
+      Inspectors.forAll(restored.assetsToBurn.zip(request.assetsToBurn)) {
+        case ((restoredToken, restoredValue), (requestToken, requestValue)) =>
+          restoredToken shouldEqual requestToken
+          restoredValue shouldEqual requestValue
+      }
+    }
+  }
+
   property("AssetIssueRequest should be serialized to json") {
     val ergoSettings = ErgoSettings.read()
     implicit val requestEncoder: Encoder[AssetIssueRequest] = new AssetIssueRequestEncoder(ergoSettings)
@@ -133,9 +149,9 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   property("PopowProof roundtrip"){
     forAll(poPowProofGen){ pp =>
       val json = pp.asJson
-      implicit val decoder = NipopowProof.nipopowProofDecoder(popowAlgos)
+      implicit val decoder: Decoder[NipopowProof] = NipopowProof.nipopowProofDecoder(nipopowAlgos)
       val parsedProof = json.as[NipopowProof].toOption.get
-      parsedProof shouldBe pp
+      parsedProof shouldEqual pp
     }
   }
 

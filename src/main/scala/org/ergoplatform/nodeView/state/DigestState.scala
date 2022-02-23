@@ -1,12 +1,12 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
@@ -35,7 +35,7 @@ class DigestState protected(override val version: VersionTag,
   store.lastVersionID
     .foreach(id => require(version == bytesToVersion(id), "version should always be equal to store.lastVersionID"))
 
-  override val constants: StateConstants = StateConstants(None, ergoSettings)
+  override val constants: StateConstants = StateConstants(ergoSettings)
 
   private lazy val nodeSettings = ergoSettings.nodeSettings
 
@@ -78,7 +78,7 @@ class DigestState protected(override val version: VersionTag,
       Failure(new Exception(s"Modifier not validated: $a"))
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] =
+  override def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[DigestState] =
     (processFullBlock orElse processHeader orElse processOther) (mod)
 
   @SuppressWarnings(Array("OptionGet"))
@@ -158,7 +158,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
               dir: File,
               constants: StateConstants,
               parameters: Parameters): Try[DigestState] = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(scorex.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
@@ -171,7 +171,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              dir: File,
              constants: StateConstants,
              parameters: Parameters): DigestState = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     Try {
       val context = ErgoStateReader.storageStateContext(store, constants, parameters)
       (versionOpt, rootHashOpt) match {

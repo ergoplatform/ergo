@@ -219,8 +219,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val (isCostValid, scriptCost) =
           costTry match {
             case Failure(t) =>
-              log.info(s"Tx $id verification failed: ${t.getMessage} : " , t)
-              log.info(s"Tx $id verification context: " +
+              log.warn(s"Tx $id verification failed: ${t.getMessage} : " , t)
+              log.warn(s"Tx $id verification context: " +
                 s"${JsonCodecsWrapper.ergoLikeContextEncoder.apply(ctx)} " +
                 s"input context: $inputContext " +
                 s"proof: $proof" +
@@ -279,7 +279,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
 
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction =
-    ErgoTransaction(inputs, IndexedSeq(), outputCandidates, None)
+    ErgoTransaction(inputs, IndexedSeq.empty, outputCandidates, None)
 
   def apply(tx: ErgoLikeTransaction): ErgoTransaction =
     ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)

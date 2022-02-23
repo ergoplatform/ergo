@@ -37,6 +37,9 @@ trait ErgoHistoryReader
 
   protected val settings: ErgoSettings
 
+  private val Valid = 1.toByte
+  private val Invalid = 0.toByte
+
   /**
     * True if there's no history, even genesis block
     */
@@ -314,15 +317,26 @@ trait ErgoHistoryReader
     * @return
     */
   def syncInfoV1: ErgoSyncInfo = {
-    if (isEmpty) {
-      ErgoSyncInfoV1(Seq.empty)
-    } else {
-      val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
-      if (startingPoints.headOption.exists(_.isGenesis)) {
-        ErgoSyncInfoV1((PreGenesisHeader +: startingPoints).map(_.id))
-      } else {
-        ErgoSyncInfoV1(startingPoints.map(_.id))
+    /**
+      * Return last count headers from best headers chain if exist or chain up to genesis otherwise
+      */
+    def lastHeaderIds(count: Int): IndexedSeq[ModifierId] = {
+      val currentHeight = headersHeight
+      val from = Math.max(currentHeight - count + 1, 1)
+      val res = (from to currentHeight).flatMap{h =>
+        bestHeaderIdAtHeight(h)
       }
+      if(from == 1) {
+        PreGenesisHeader.id +: res
+      } else {
+        res
+      }
+    }
+
+    if (isEmpty) {
+      ErgoSyncInfoV1(Nil)
+    } else {
+      ErgoSyncInfoV1(lastHeaderIds(ErgoSyncInfo.MaxBlockIds))
     }
   }
 
@@ -334,7 +348,7 @@ trait ErgoHistoryReader
     */
   def syncInfoV2(full: Boolean): ErgoSyncInfoV2 = {
     if (isEmpty) {
-      ErgoSyncInfoV2(Seq.empty)
+      ErgoSyncInfoV2(Nil)
     } else {
       val h = headersHeight
 
@@ -470,8 +484,8 @@ trait ErgoHistoryReader
 
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {
-      case Some(b) if b.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
-      case Some(b) if b.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
+      case Some(b) if b.headOption.contains(Valid) => ModifierSemanticValidity.Valid
+      case Some(b) if b.headOption.contains(Invalid) => ModifierSemanticValidity.Invalid
       case None if contains(modifierId) => ModifierSemanticValidity.Unknown
       case None => ModifierSemanticValidity.Absent
       case m =>
@@ -488,7 +502,7 @@ trait ErgoHistoryReader
   def bestHeadersAfter(header: Header, howMany: Int): Seq[Header] = {
     @tailrec
     def accumulateHeaders(height: Int, accumulator: Seq[Header], left: Int): Seq[Header] = {
-      if(left == 0){
+      if (left == 0) {
         accumulator
       } else {
         bestHeaderAtHeight(height) match {
@@ -506,13 +520,17 @@ trait ErgoHistoryReader
     * Constructs popow header against given header identifier
     *
     * @param headerId - identifier of the header
-    * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
+    * @return PoPowHeader(header + interlinks + interlinkProof) or
+    *         None if header of extension of a corresponding block are not available
     */
   def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
     typedModifierById[Header](headerId).flatMap(h =>
       typedModifierById[Extension](h.extensionId).flatMap { ext =>
-        NipopowAlgos.unpackInterlinks(ext.fields).toOption.map { interlinks =>
-          PoPowHeader(h, interlinks)
+        val interlinks = NipopowAlgos.unpackInterlinks(ext.fields).toOption
+        val interlinkProof = NipopowAlgos.proofForInterlinkVector(ext)
+        (interlinks, interlinkProof) match {
+          case (Some(links), Some(proof)) => Some(PoPowHeader(h, links, proof))
+          case _ => None
         }
       }
     )

@@ -9,7 +9,6 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
-import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
@@ -38,35 +37,28 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
-  private def getStateAndPool: Future[(ErgoStateReader, ErgoMemPoolReader)] =
-    (readersHolder ? GetReaders).mapTo[Readers].map { rs =>
-      (rs.s, rs.m)
-    }
-
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getMemPool.map { p =>
     p.getAll.slice(offset, offset + limit).map(_.asJson).asJson
   }
 
   private def validateTransactionAndProcess(tx: ErgoTransaction)(processFn: ErgoTransaction => Any): Route = {
-    onSuccess {
-      getStateAndPool
-        .map {
-          case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
-            val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
-            utxo.withMempool(mp).validateWithCost(tx, maxTxCost)
-          case _ =>
-            tx.statelessValidity()
-        }
-    } {
-      _.fold(
-        e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
-        _ => {
-          processFn(tx)
-          ApiResponse(tx.id)
-        }
-      )
+    if (tx.size > ergoSettings.nodeSettings.maxTransactionSize) {
+      BadRequest(s"Transaction $tx has too large size ${tx.size}")
+    } else {
+      onSuccess {
+        verifyTransaction(tx, readersHolder, ergoSettings)
+      } {
+        _.fold(
+          e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
+          _ => {
+            processFn(tx)
+            ApiResponse(tx.id)
+          }
+        )
+      }
     }
   }
+
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
     validateTransactionAndProcess(tx) { tx =>

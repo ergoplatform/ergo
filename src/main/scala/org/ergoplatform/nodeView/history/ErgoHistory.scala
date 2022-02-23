@@ -17,7 +17,6 @@ import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
-import scorex.db.LDBFactory
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
@@ -85,12 +84,14 @@ trait ErgoHistory
         if (nonMarkedIds.nonEmpty) {
           historyStorage.insert(
             nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
-            Seq.empty).map(_ => this)
-        } else Success(this)
+            Nil).map(_ => this)
+        } else {
+          Success(this)
+        }
       case _ =>
         historyStorage.insert(
-          Seq(validityKey(modifier.id) -> Array(1.toByte)),
-          Seq.empty).map(_ => this)
+          Array(validityKey(modifier.id) -> Array(1.toByte)),
+          Nil).map(_ => this)
     }
   }
 
@@ -104,7 +105,7 @@ trait ErgoHistory
   override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
                                        progressInfo: ProgressInfo[ErgoPersistentModifier]
                                       ): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
-    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
+    log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
         val invalidatedHeaders = continuationHeaderChains(invalidatedHeader, _ => true).flatten.distinct
@@ -117,7 +118,7 @@ trait ErgoHistory
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
-            historyStorage.insert(validityRow, Seq.empty).map { _ =>
+            historyStorage.insert(validityRow, Nil).map { _ =>
               this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
             }
           case _ =>
@@ -165,11 +166,9 @@ trait ErgoHistory
       case None =>
         //No headers become invalid. Just mark this modifier as invalid
         log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
-        historyStorage.insert(
-          Seq(validityKey(modifier.id) -> Array(0.toByte)),
-          Seq.empty).map { _ =>
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
-         }
+        historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), Nil).map { _ =>
+          this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+        }
     }
   }
 
@@ -190,16 +189,20 @@ trait ErgoHistory
     * @return
     */
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
-    typedModifierById[Header](headerId).foreach { h =>
-      historyStorage.remove(
-        indicesToRemove = Seq(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
-        idsToRemove = Seq(headerId)
-      ).get
+    val hOpt = typedModifierById[Header](headerId)
+      val hRes = historyStorage.remove(
+        indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
+        idsToRemove = Array(headerId)
+      )
+    log.info(s"Result of removing header $headerId: " + hRes)
+
+    hOpt.foreach { h =>
       requiredModifiersForHeader(h).foreach { case (_, mId) =>
-        historyStorage.remove(
-          indicesToRemove = Seq(validityKey(mId)),
-          idsToRemove = Seq(mId)
-        ).get
+        val mRes = historyStorage.remove(
+          indicesToRemove = Array(validityKey(mId)),
+          idsToRemove = Array(mId)
+        )
+        log.info(s"Result of removing modifier $mId: " + mRes)
       }
     }
   }
@@ -227,16 +230,17 @@ object ErgoHistory extends ScorexLogging {
 
   // check if there is possible database corruption when there is header after
   // recognized blockchain tip marked as invalid
-  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = {
+  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
+    val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
-    if (afterHeaders.nonEmpty) {
+    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
       log.warn("Found suspicious continuation, clearing it...")
       afterHeaders.map { hId =>
         history.forgetHeader(hId)
       }
-      history.historyStorage.remove(Seq(history.heightIdsKey(bestHeaderHeight + 1)), Seq.empty)
+      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Nil)
       true
     } else {
       false
@@ -244,9 +248,7 @@ object ErgoHistory extends ScorexLogging {
   }
 
   def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
-    val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
-    val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
-    val db = new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
+    val db = HistoryStorage(ergoSettings)
     val nodeSettings = ergoSettings.nodeSettings
 
     val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {

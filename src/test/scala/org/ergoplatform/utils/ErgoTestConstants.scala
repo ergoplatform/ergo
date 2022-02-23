@@ -56,7 +56,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   implicit val settings: ErgoSettings = initSettings
 
-  val popowAlgos = new NipopowAlgos(powScheme)
+  val nipopowAlgos = new NipopowAlgos(powScheme)
 
   val lightModeSettings: ErgoSettings = initSettings.copy(
     nodeSettings = initSettings.nodeSettings.copy(stateType = StateType.Digest)
@@ -64,7 +64,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val emission: EmissionRules = settings.chainSettings.emissionRules
   val coinsTotal: Long = emission.coinsTotal
-  val stateConstants: StateConstants = StateConstants(None, settings)
+  val stateConstants: StateConstants = StateConstants(settings)
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
   val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
 

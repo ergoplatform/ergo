@@ -1,6 +1,5 @@
 package org.ergoplatform.utils.generators
 
-import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -26,9 +25,8 @@ import scala.util.{Failure, Random, Success}
 trait ValidBlocksGenerators
   extends TestkitHelpers with TestFileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
-  def createUtxoState(parameters: Parameters, nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
-    val constants = StateConstants(nodeViewHolderRef, settings)
-    createUtxoState(constants, parameters)
+  def createUtxoState(parameters: Parameters): (UtxoState, BoxHolder) = {
+    createUtxoState(StateConstants(settings), parameters)
   }
 
   def createUtxoState(constants: StateConstants, parameters: Parameters): (UtxoState, BoxHolder) = {
@@ -205,11 +203,11 @@ trait ValidBlocksGenerators
 
     val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(timeProvider.time())
     val interlinks = parentOpt.toSeq.flatMap { block =>
-      popowAlgos.updateInterlinks(block.header, NipopowAlgos.unpackInterlinks(block.extension.fields).get)
+      nipopowAlgos.updateInterlinks(block.header, NipopowAlgos.unpackInterlinks(block.extension.fields).get)
     }
     val extension: ExtensionCandidate =
       parameters.toExtensionCandidate ++
-        popowAlgos.interlinksToExtension(interlinks) ++
+        nipopowAlgos.interlinksToExtension(interlinks) ++
         utxoState.stateContext.validationSettings.toExtensionCandidate
     val votes = Array.fill(3)(0: Byte)
 
@@ -233,7 +231,7 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val interlinksExtension = popowAlgos.interlinksToExtension(popowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
+    val interlinksExtension = nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
     val extension: ExtensionCandidate = parameters.toExtensionCandidate ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)
 

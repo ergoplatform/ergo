@@ -77,18 +77,16 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
-      persistentProver.synchronized {
-        val resultTry =
-          ErgoState.stateChanges(transactions).map { stateChanges =>
+      val resultTry =
+        ErgoState.stateChanges(transactions).map { stateChanges =>
           val mods = stateChanges.operations
           Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
         }
-        ModifierValidator(stateContext.validationSettings)
-          .validateNoFailure(fbOperationFailed, resultTry)
-          .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
-          .result
-          .toTry
-      }
+      ModifierValidator(stateContext.validationSettings)
+        .validateNoFailure(fbOperationFailed, resultTry)
+        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
+        .result
+        .toTry
     } else {
       txProcessing.toTry.map(_ => ())
     }
@@ -146,6 +144,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               val mods = ErgoState.stateChanges(fb.blockTransactions.txs).operations
               mods.foreach(persistentProver.performOneOperation)
 
+              // meta is the same as it is block-specific
               proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
               proofHash = ADProofs.proofDigest(proofBytes)
 
@@ -200,6 +199,7 @@ object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
+  // block-specific metadata to write into database (in addition to AVL+ tree)
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,
                        currentEmissionBoxOpt: Option[ErgoBox],

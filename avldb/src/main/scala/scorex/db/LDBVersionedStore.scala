@@ -355,8 +355,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
         try {
           var undoing = true
           iterator.seekToFirst()
-          while (undoing) {
-            assert(iterator.hasNext)
+          while (undoing && iterator.hasNext) {
             val entry = iterator.next()
             val undo = deserializeUndo(entry.getValue)
             if (undo.versionID.sameElements(versionID)) {

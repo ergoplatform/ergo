@@ -31,6 +31,8 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
 
   type LSN = Long // logical serial number: type used to provide order of records in undo list
 
+  private val last_version_key = Blake2b256("last_version")
+
   private var keepVersions: Int = initialKeepVersions
 
   override val db: DB = createDB(dir, "ldb_main") // storage for main data
@@ -43,6 +45,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
   // mutable array of all the kept versions
   private val versions: ArrayBuffer[VersionID] = getAllVersions
   private var lastVersion: Option[VersionID] = versions.lastOption
+
 
   //default write options, no sync!
   private val writeOptions = new WriteOptions()
@@ -69,7 +72,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     oldKeepVersions
   }
 
-  def getKeepVersions(): Int = keepVersions
+  def getKeepVersions: Int = keepVersions
 
   /** returns value associated with the key or throws `NoSuchElementException` */
   def apply(key: K): V = getOrElse(key, {
@@ -183,9 +186,10 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     if (versions.nonEmpty) {
       versions.reverse
     } else {
-      val dbVersion = db.get(Blake2b256("best_version"))
+      val dbVersion = db.get(last_version_key)
       if (dbVersion != null) {
         versions += dbVersion
+        versionLsn += lastLsn
       }
       versions
     }
@@ -265,9 +269,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
         }
       } else {
         //keepVersions = 0
-        batch.put(Blake2b256("best_version"), versionID)
-        versions.clear()
-        versions += versionID
+        if (lastVersion.isEmpty || !versionID.sameElements(lastVersion.get)) {
+          batch.put(last_version_key, versionID)
+          versions.clear()
+          versions += versionID
+        }
       }
 
       db.write(batch, writeOptions)
@@ -288,9 +294,9 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
   // Keep last "count"+1 versions and remove undo information for older versions
   private def cleanStart(count: Int): Unit = {
     val deteriorated = versions.size - count - 1
-    if (deteriorated > 0) {
+    if (deteriorated >= 0) {
       val fromLsn = versionLsn(0)
-      val tillLsn = versionLsn(deteriorated)
+      val tillLsn = if (deteriorated+1 < versions.size) versionLsn(deteriorated+1) else lsn+1
       val batch = undo.createWriteBatch()
       try {
         for (lsn <- fromLsn until tillLsn) {
@@ -300,8 +306,12 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
       } finally {
         batch.close()
       }
+
       versions.remove(0, deteriorated)
       versionLsn.remove(0, deteriorated)
+      if (count == 0) {
+        db.put(last_version_key, versions(0))
+      }
     }
   }
 
@@ -336,7 +346,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     lock.writeLock().lock()
     try {
       val versionIndex = versions.indexWhere(_.sameElements(versionID))
-      if (versionIndex >= 0) {
+      if (versionIndex >= 0 && versionIndex != versions.size-1) {
         val batch = db.createWriteBatch()
         val undoBatch = undo.createWriteBatch()
         var nUndoRecords: Long = 0

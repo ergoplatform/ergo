@@ -273,6 +273,9 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
           batch.put(last_version_key, versionID)
           versions.clear()
           versions += versionID
+          if (versionLsn.isEmpty) {
+            versionLsn += lastLsn
+          }
         }
       }
 

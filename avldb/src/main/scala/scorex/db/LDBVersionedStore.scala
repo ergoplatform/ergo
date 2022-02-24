@@ -346,49 +346,53 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     lock.writeLock().lock()
     try {
       val versionIndex = versions.indexWhere(_.sameElements(versionID))
-      if (versionIndex >= 0 && versionIndex != versions.size-1) {
-        val batch = db.createWriteBatch()
-        val undoBatch = undo.createWriteBatch()
-        var nUndoRecords: Long = 0
-        val iterator = undo.iterator()
-        var lastLsn: LSN = 0
-        try {
-          var undoing = true
-          iterator.seekToFirst()
-          while (undoing && iterator.hasNext) {
-            val entry = iterator.next()
-            val undo = deserializeUndo(entry.getValue)
-            if (undo.versionID.sameElements(versionID)) {
-              undoing = false
-              lastLsn = decodeLSN(entry.getKey)
-            } else {
-              undoBatch.delete(entry.getKey)
-              nUndoRecords += 1
-              if (undo.value == null) {
-                if (undo.key.length != 0) { // dummy record
-                  batch.delete(undo.key)
-                }
+      if (versionIndex >= 0) {
+        if (versionIndex != versions.size-1) {
+          val batch = db.createWriteBatch()
+          val undoBatch = undo.createWriteBatch()
+          var nUndoRecords: Long = 0
+          val iterator = undo.iterator()
+          var lastLsn: LSN = 0
+          try {
+            var undoing = true
+            iterator.seekToFirst()
+            while (undoing && iterator.hasNext) {
+              val entry = iterator.next()
+              val undo = deserializeUndo(entry.getValue)
+              if (undo.versionID.sameElements(versionID)) {
+                undoing = false
+                lastLsn = decodeLSN(entry.getKey)
               } else {
-                batch.put(undo.key, undo.value)
+                undoBatch.delete(entry.getKey)
+                nUndoRecords += 1
+                if (undo.value == null) {
+                  if (undo.key.length != 0) { // dummy record
+                    batch.delete(undo.key)
+                  }
+                } else {
+                  batch.put(undo.key, undo.value)
+                }
               }
             }
+            db.write(batch, writeOptions)
+            undo.write(undoBatch, writeOptions)
+          } finally {
+            // Make sure you close the batch to avoid resource leaks.
+            iterator.close()
+            batch.close()
+            undoBatch.close()
           }
-          db.write(batch, writeOptions)
-          undo.write(undoBatch, writeOptions)
-        } finally {
-          // Make sure you close the batch to avoid resource leaks.
-          iterator.close()
-          batch.close()
-          undoBatch.close()
+          val nVersions = versions.size
+          assert((versionIndex + 1 == nVersions && nUndoRecords == 0) || (versionIndex + 1 < nVersions && lsn - versionLsn(versionIndex + 1) + 1 == nUndoRecords))
+          versions.remove(versionIndex + 1, nVersions - versionIndex - 1)
+          versionLsn.remove(versionIndex + 1, nVersions - versionIndex - 1)
+          lsn -= nUndoRecords // reuse deleted LSN to avoid holes in LSNs
+          assert(lsn == lastLsn)
+          assert(versions.last.sameElements(versionID))
+          lastVersion = Some(versionID)
+        } else {
+          assert(lastVersion.get.sameElements(versionID))
         }
-        val nVersions = versions.size
-        assert((versionIndex + 1 == nVersions && nUndoRecords == 0) || (versionIndex + 1 < nVersions && lsn - versionLsn(versionIndex + 1) + 1 == nUndoRecords))
-        versions.remove(versionIndex + 1, nVersions - versionIndex - 1)
-        versionLsn.remove(versionIndex + 1, nVersions - versionIndex - 1)
-        lsn -= nUndoRecords // reuse deleted LSN to avoid holes in LSNs
-        assert(lsn == lastLsn)
-        assert(versions.last.sameElements(versionID))
-        lastVersion = Some(versionID)
       } else {
         throw new NoSuchElementException("versionID not found, can not rollback")
       }

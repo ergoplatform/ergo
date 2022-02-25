@@ -43,7 +43,7 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
           case ct: TransactionsCarryingPersistentNodeViewModifier =>
             // You can not get block with transactions not being of ErgoTransaction type so no type checks here.
 
-            val changes = ErgoState.stateChanges(ct.transactions)
+            val changes = ErgoState.stateChanges(ct.transactions).get
             val updHolder = versionedBoxHolder.applyChanges(
               us.version,
               changes.toRemove.map(_.key).map(ByteArrayWrapper.apply),

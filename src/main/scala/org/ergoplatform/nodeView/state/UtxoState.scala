@@ -111,11 +111,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             var proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
 
             if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
-              throw new Error("Storage kept roothash is not equal to the declared one")
+              throw new Exception("Storage kept roothash is not equal to the declared one")
             }
 
             if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
-              throw new Error("Calculated stateRoot is not equal to the declared one")
+              throw new Exception("Calculated stateRoot is not equal to the declared one")
             }
 
             var proofHash = ADProofs.proofDigest(proofBytes)
@@ -141,15 +141,20 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               persistentProver.rollback(inRoot)
                 .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
 
-              val mods = ErgoState.stateChanges(fb.blockTransactions.txs).operations
-              mods.foreach(persistentProver.performOneOperation)
+              ErgoState.stateChanges(fb.blockTransactions.txs) match {
+                case Success(stateChanges) =>
+                 val mods = stateChanges.operations
+                  mods.foreach(persistentProver.performOneOperation)
 
-              // meta is the same as it is block-specific
-              proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
-              proofHash = ADProofs.proofDigest(proofBytes)
+                  // meta is the same as it is block-specific
+                  proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
+                  proofHash = ADProofs.proofDigest(proofBytes)
 
-              if(!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
-                throw new Error("Regenerated proofHash is not equal to the declared one")
+                  if(!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+                    throw new Exception("Regenerated proofHash is not equal to the declared one")
+                  }
+                case Failure(e) =>
+                  throw new Exception("Can't generate state changes on proof regeneration ", e)
               }
             }
 

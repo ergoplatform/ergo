@@ -52,8 +52,7 @@ val apiDependencies = Seq(
 libraryDependencies ++= Seq(
   effectiveSigma.force()
     .exclude("ch.qos.logback", "logback-classic")
-    .exclude("org.scorexfoundation", "scrypto")
-    .exclude("org.bouncycastle", "bcprov-jdk15to18"),
+    .exclude("org.scorexfoundation", "scrypto"),
 
   // network dependencies 
   "com.typesafe.akka" %% "akka-actor" % akkaVersion,

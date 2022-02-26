@@ -118,8 +118,8 @@ object ErgoState extends ScorexLogging {
       }
     }
 
-    // Skip v1 block transactions validation if corresponding setting is on
-    if (currentStateContext.currentHeight <= 688000) {
+    val checkpointHeight = currentStateContext.ergoSettings.nodeSettings.checkpoint.map(_.height).getOrElse(0)
+    if (currentStateContext.currentHeight <= checkpointHeight) {
       Valid(0L)
     } else {
       import spire.syntax.all.cfor

@@ -16,7 +16,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.{Success, Try}
-import scala.language.implicitConversions
 
 class VersionedLDBAVLStorageSpecification extends AnyPropSpec
   with ScalaCheckPropertyChecks

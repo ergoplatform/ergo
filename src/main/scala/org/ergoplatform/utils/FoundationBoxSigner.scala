@@ -53,14 +53,14 @@ object FoundationBoxSigner extends App {
   val preSign: ACTION = 1
   val sign: ACTION = 2
 
-  val height = 675000
+  val height = 680000
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
   val action: ACTION = generateCommitment
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = None
+  val commitmentStringOpt: Option[String] = Some("02166d617e7627bea33c6ee0fd7b52a0dbc104d7cfdf3bed7a9f12de540a9adc0a")
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignatureStringOpt: Option[String] = None
   //signer is generating commitment and final valid sig

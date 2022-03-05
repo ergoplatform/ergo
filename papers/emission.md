@@ -166,7 +166,7 @@ TODO:
 Activation Details
 ------------------
 
-On emission height, NFT and reemission tokens to be injected into the emission contract by spending
+On emission height, emission NFT and reemission tokens to be injected into the emission contract by spending
 a box we are calling injection box.
 
 The injection box is protected by the script 
@@ -190,11 +190,13 @@ API Methods Changed
 Testnet Data
 ------------ 
 
-Emission contract NFT id: *not set yet*
+Emission contract NFT id: **00594148f3b4205ec8d33f9f664b1baae20252df3592c8dbff5e9bdc30c77c44**
 
-Re-emission token id: *not set yet*
+Re-emission token id: **004b1528123ef62ce2bbb7036ad2dd553e6a64252f86746a706729fa253b24cd**
 
-Reemission contract NFT id: *not set yet*
+Reemission contract NFT id: **001b81ceed43f4328754e368fc6a34c367ab8e00d1272be33c565bf247ad5748**
+
+Activation height: **179457**
 
 
 Mainnet Data

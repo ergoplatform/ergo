@@ -170,9 +170,14 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private def run(): Future[ServerBinding] = {
     require(scorexSettings.network.agentName.length <= ErgoApp.ApplicationNameLimit)
 
-    log.debug(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
-    log.debug(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
-    log.debug(s"RPC is allowed at ${scorexSettings.restApi.bindAddress.toString}")
+    log.info(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
+    log.info(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
+    log.info(s"RPC is allowed at ${scorexSettings.restApi.bindAddress.toString}")
+
+    if (ergoSettings.chainSettings.reemission.checkReemissionRules) {
+      log.info("Checking re-emission rules enabled")
+      log.info(s"EIP27 activation height: " + ergoSettings.chainSettings.reemission.activationHeight)
+    }
 
     val bindAddress = scorexSettings.restApi.bindAddress
 

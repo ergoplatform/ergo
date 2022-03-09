@@ -647,7 +647,7 @@ object CandidateGenerator extends ScorexLogging {
         emissionBox.additionalTokens
       }
 
-      val updEmissionAssets = if(nextHeight >= reemissionActivationHeight) {
+      val updEmissionAssets = if (nextHeight >= reemissionActivationHeight) {
         // deduct reemission from emission box
         val reemissionTokens = emissionBoxAssets.apply(1)._2
         val updAmount = reemissionTokens - reemissionAmount

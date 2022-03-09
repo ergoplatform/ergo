@@ -196,7 +196,7 @@ Re-emission token id: **004b1528123ef62ce2bbb7036ad2dd553e6a64252f86746a706729fa
 
 Reemission contract NFT id: **001b81ceed43f4328754e368fc6a34c367ab8e00d1272be33c565bf247ad5748**
 
-Activation height: **179457**
+Activation height: ****
 
 
 Mainnet Data

@@ -236,10 +236,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         if (box.value > 100000 * EmissionRules.CoinsInOneErgo) { // for efficiency, skip boxes with less than 100,000 ERG
           // on activation height, emissionNft is not in emission box yet, but in injection box
           if (box.tokens.contains(emissionNftId) ||
-                height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId)) {
+            (height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId))) {
 
             // if emission contract NFT is in the input, remission tokens should be there also
-            val reemissionTokensIn = box.tokens.getOrElse(reemissionTokenId, 0L)
+            val reemissionTokensIn = if(height == activationHeight) {
+              boxesToSpend(1).tokens.getOrElse(reemissionTokenId, 0L)
+            } else {
+              box.tokens.getOrElse(reemissionTokenId, 0L)
+            }
             require(reemissionTokensIn > 0)
 
             // output positions guaranteed by emission contract

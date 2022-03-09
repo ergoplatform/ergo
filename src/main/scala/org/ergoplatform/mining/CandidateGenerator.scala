@@ -684,7 +684,7 @@ object CandidateGenerator extends ScorexLogging {
 
       val emissionTx = ErgoTransaction(
         inputs,
-        IndexedSeq(),
+        dataInputs = IndexedSeq.empty,
         IndexedSeq(newEmissionBox, minerBox)
       )
       log.info(s"Emission tx for nextHeight = $nextHeight: $emissionTx")
@@ -805,7 +805,7 @@ object CandidateGenerator extends ScorexLogging {
                     }
                 }
               case Failure(e) =>
-                log.debug(s"Not included transaction ${tx.id} due to ${e.getMessage}")
+                log.debug(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
                 loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
             }
           }
@@ -815,7 +815,7 @@ object CandidateGenerator extends ScorexLogging {
     }
 
     val res = loop(transactions, Seq.empty, None, Seq.empty)
-    log.info(
+    log.debug(
       s"Collected ${res._1.length} transactions for block #$nextHeight, " +
       s"${res._2.length} transactions turned out to be invalid"
     )

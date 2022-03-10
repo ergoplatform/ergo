@@ -63,8 +63,6 @@ object ReemissionRules {
     println(new ErgoAddressEncoder(ErgoAddressEncoder.TestnetNetworkPrefix).fromString(p2sAddress.toString()))
     println("injectioon box p2s: " + p2sAddress)
 
-    System.exit(10)
-
     val settings = ErgoSettings.read()
 
     println("Monetary settings: " + settings.chainSettings.monetary)
@@ -97,7 +95,7 @@ object ReemissionRules {
       r
     }.sum
 
-    val totalBlocks = total / 3 // 3 erg per block
+    val totalBlocks = total / 2 // 3 erg per block
     println("Total reemission: " + total + " ERG")
     println("Total reemission is enough for: " + totalBlocks + " blocks (" + totalBlocks / 720.0 / 365.0 + " years")
   }

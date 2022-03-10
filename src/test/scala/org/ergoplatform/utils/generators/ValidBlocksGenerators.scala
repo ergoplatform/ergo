@@ -14,7 +14,8 @@ import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
 import scorex.core.VersionTag
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.avltree.batch.Remove
+import scorex.crypto.authds.ADDigest
 import scorex.db.ByteArrayWrapper
 import scorex.testkit.TestkitHelpers
 
@@ -242,7 +243,7 @@ trait ValidBlocksGenerators
   private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {
     transactions.foreach(_.statelessValidity() shouldBe 'success)
     transactions.nonEmpty shouldBe true
-    ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
+    ErgoState.boxChanges(transactions).get._1.foreach { case Remove(boxId) =>
       assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
     }
   }

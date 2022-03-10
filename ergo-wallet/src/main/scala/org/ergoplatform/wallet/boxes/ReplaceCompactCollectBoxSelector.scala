@@ -29,12 +29,6 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
   import ReplaceCompactCollectBoxSelector._
 
   /**
-    * Factor which is showing how many input selector is going through to optimize inputs.
-    * Bigger factor is slowing down inputs selection but minimizing chance of transaction failure.
-    */
-  val ScanDepthFactor = 300
-
-  /**
     * A method which is selecting boxes to spend in order to collect needed amounts of ergo tokens and assets.
     *
     * @param inputBoxes    - unspent boxes to choose from.
@@ -52,7 +46,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                                           targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     // First picking up boxes in given order (1,2,3,4,...) by using DefaultBoxSelector
     DefaultBoxSelector.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMapRight { initialSelection =>
-      val tail = inputBoxes.take(maxInputs * ScanDepthFactor).filter(filterFn).toSeq
+      val tail = inputBoxes.take(maxInputs * BoxSelector.ScanDepthFactor).filter(filterFn).toSeq
       // if number of inputs exceeds the limit, the selector is sorting remaining boxes(actually, only 10*maximum
       // boxes) by value in descending order and replaces small-value boxes in the inputs by big-value from the tail (1,2,3,4 => 10)
       (if (initialSelection.boxes.length > maxInputs) {

@@ -236,6 +236,9 @@ class WalletRegistrySpec
         reg.getBox(tb1.box.id).get.scans shouldBe Set(appId1)
         reg.unspentBoxes(appId1).length shouldBe 1
         reg.unspentBoxes(appId2).length shouldBe 0
+        // limit should by applied
+        reg.unspentBoxes(appId1, limit = 1).length shouldBe 1
+        reg.unspentBoxes(appId1, limit = 0).length shouldBe 0
       }
     }
   }

@@ -340,7 +340,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       */
     private def checkpointCondition(header: Header): Boolean = {
       settings.nodeSettings.checkpoint.map { checkpoint =>
-        if (checkpoint.height == header.height && settings.networkType.isMainNet) {
+        if (checkpoint.height == header.height) {
           header.id == checkpoint.blockId
         } else {
           true

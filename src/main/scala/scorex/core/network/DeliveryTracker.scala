@@ -54,8 +54,10 @@ class DeliveryTracker(maxDeliveryChecks: Int,
 
   private val desiredSizeOfExpectingHeaderQueue: Int = desiredSizeOfExpectingModifierQueue * 5
 
-  /** Bloom Filter with invalid modifier ids */
-  private var invalidModifierBF = {
+  /** Bloom Filter based cache with invalid modifier ids */
+  private var invalidModifierCache = emptyExpiringApproximateCache
+
+  private def emptyExpiringApproximateCache = {
     val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
     val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
     val frontCacheSize = cacheSettings.invalidModifiersCacheSize
@@ -63,7 +65,14 @@ class DeliveryTracker(maxDeliveryChecks: Int,
     ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration)
   }
 
-  def fullInfo: FullInfo = DeliveryTracker.FullInfo(invalidModifierBF.approximateElementCount, requested.toSeq, received.toSeq)
+  def fullInfo: FullInfo = DeliveryTracker.FullInfo(invalidModifierCache.approximateElementCount, requested.toSeq, received.toSeq)
+
+  def reset(): Unit = {
+    log.info(s"Resetting state of DeliveryTracker...")
+    requested.clear()
+    received.clear()
+    invalidModifierCache = emptyExpiringApproximateCache
+  }
 
   /**
     * @return how many header modifiers to download
@@ -93,7 +102,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
   def status(modifierId: ModifierId, modifierTypeId: ModifierTypeId, modifierKeepers: Seq[ContainsModifiers[_]]): ModifiersStatus =
     if (received.get(modifierTypeId).exists(_.contains(modifierId))) Received
     else if (requested.get(modifierTypeId).exists(_.contains(modifierId))) Requested
-    else if (invalidModifierBF.mightContain(modifierId)) Invalid
+    else if (invalidModifierCache.mightContain(modifierId)) Invalid
     else if (modifierKeepers.exists(_.contains(modifierId))) Held
     else Unknown
 
@@ -183,7 +192,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
           case _ =>
             None
         }
-        invalidModifierBF = invalidModifierBF.put(id)
+        invalidModifierCache = invalidModifierCache.put(id)
         senderOpt
       }
   }
@@ -295,7 +304,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
     }
 
   override def toString: String = {
-    val invalidModCount = s"invalid modifiers count : ${invalidModifierBF.approximateElementCount}"
+    val invalidModCount = s"invalid modifiers count : ${invalidModifierCache.approximateElementCount}"
     val requestedStr =
       requested.map { case (mType, infoByMid) =>
         val peersCheckTimes =

@@ -334,10 +334,10 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   }
 
   property("transaction cost") {
-    def paramsWith(manualCost: Int) = new Parameters(
-      height = 0,
-      parametersTable = Parameters.DefaultParameters + (MaxBlockCostIncrease -> manualCost),
-      proposedUpdate = ErgoValidationSettingsUpdate.empty
+    def paramsWith(manualCost: Int) = Parameters(
+      0,
+      Parameters.DefaultParameters + (MaxBlockCostIncrease -> manualCost),
+      ErgoValidationSettingsUpdate.empty
     )
 
     val gen = validErgoTransactionGenTemplate(0, 0,10, trueLeafGen)

@@ -44,11 +44,7 @@ trait ErgoTestConstants extends ScorexLogging {
       MaxBlockCostIncrease -> Math.ceil(parameters.parametersTable(MaxBlockCostIncrease) * 1.2).toInt,
       MinValuePerByteIncrease -> (parameters.parametersTable(MinValuePerByteIncrease) - 30)
     )
-    new Parameters(
-      height = 0,
-      parametersTable = Parameters.DefaultParameters ++ extension,
-      proposedUpdate = ErgoValidationSettingsUpdate.empty
-    )
+    Parameters(0, Parameters.DefaultParameters ++ extension, ErgoValidationSettingsUpdate.empty)
   }
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider

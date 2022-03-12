@@ -33,7 +33,8 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
                                 override val currentParameters: Parameters,
                                 override val validationSettings: ErgoValidationSettings,
                                 override val votingData: VotingData)(implicit ergoSettings: ErgoSettings)
-  extends ErgoStateContext(lastHeaders, lastExtensionOpt, genesisStateDigest, currentParameters, validationSettings, votingData)(ergoSettings) {
+  extends ErgoStateContext(lastHeaders, lastExtensionOpt, genesisStateDigest, currentParameters,
+                            validationSettings, votingData)(ergoSettings) {
 
   override def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
@@ -115,7 +116,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
     val (calculatedParams, updated) = currentParameters.update(height, forkVote, votingData.epochVotes, proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
-    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
+    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
+                          calculatedValidationSettings, votingData)
   }
 
   protected def checkForkVote(height: Height): Unit = {
@@ -314,6 +316,8 @@ object ErgoStateContext {
 
   /**
     * Recovers state context at the beginning of the voting epoch.
+    *
+    * Used in the digest mode only.
     */
   def recover(genesisStateDigest: ADDigest,
               extension: Extension,

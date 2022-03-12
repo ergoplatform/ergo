@@ -19,7 +19,8 @@ import Extension.SystemParametersPrefix
   */
 class Parameters(val height: Height,
                  val parametersTable: Map[Byte, Int],
-                 val proposedUpdate: ErgoValidationSettingsUpdate)
+                 val proposedUpdate: ErgoValidationSettingsUpdate,
+                 val eip27Supported: Boolean)
   extends ErgoLikeParameters {
 
   import Parameters._
@@ -76,7 +77,20 @@ class Parameters(val height: Height,
              votingSettings: VotingSettings): (Parameters, ErgoValidationSettingsUpdate) = {
     val (table1, activatedUpdate) = updateFork(height, parametersTable, forkVote, epochVotes, proposedUpdate, votingSettings)
     val table2 = updateParams(table1, epochVotes, votingSettings)
-    (Parameters(height, table2, proposedUpdate), activatedUpdate)
+    val eip27Supported = updateEip27Supported(epochVotes)
+    (Parameters(height, table2, proposedUpdate, eip27Supported), activatedUpdate)
+  }
+
+  def updateEip27Supported(epochVotes: Seq[(Byte, Int)]): Boolean = {
+    if (this.eip27Supported) {
+      true
+    } else {
+      if (epochVotes.find(_._1 == 5.toByte).map(_._2).getOrElse(0) >= 920) { // about 90%
+        true
+      } else {
+        false
+      }
+    }
   }
 
   def updateFork(height: Height,
@@ -148,7 +162,7 @@ class Parameters(val height: Height,
 
       if (votingSettings.changeApproved(count)) {
         val currentValue = parametersTable(paramIdAbs)
-        val maxValue = maxValues.getOrElse(paramIdAbs, Int.MaxValue / 2) //todo: more precise upper-bound
+        val maxValue = maxValues.getOrElse(paramIdAbs, Int.MaxValue / 2)
         val minValue = minValues.getOrElse(paramIdAbs, 0)
         val step = stepsTable.getOrElse(paramIdAbs, Math.max(1, currentValue / 100))
 
@@ -327,7 +341,12 @@ object Parameters {
 
   val ParamVotesCount = 2
 
-  def apply(h: Height, paramsTable: Map[Byte, Int], update: ErgoValidationSettingsUpdate): Parameters = new Parameters(h, paramsTable, update)
+  def apply(h: Height,
+            paramsTable: Map[Byte, Int],
+            update: ErgoValidationSettingsUpdate,
+            eip27Supported: Boolean = false): Parameters = {
+    new Parameters(h, paramsTable, update, eip27Supported)
+  }
 
   def parseExtension(h: Height, extension: Extension): Try[Parameters] = Try {
     val paramsTable = extension.fields.flatMap { case (k, v) =>
@@ -346,7 +365,7 @@ object Parameters {
       .getOrElse(ErgoValidationSettingsUpdate.empty)
 
     require(paramsTable.nonEmpty, s"Parameters table is empty in extension: $extension")
-    Parameters(h, paramsTable, proposedUpdate)
+    Parameters(h, paramsTable, proposedUpdate, eip27Supported = false)
   }
 
   /**
@@ -379,7 +398,16 @@ object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs 
   override def serialize(params: Parameters, w: Writer): Unit = {
     require(params.parametersTable.nonEmpty, s"$params is empty")
     w.putUInt(params.height)
-    w.putUInt(params.parametersTable.size)
+
+    val paramsSize = params.parametersTable.size
+
+    val paramsSizeAndEip27 = if(params.eip27Supported) {
+      Int.MaxValue - paramsSize
+    } else {
+      paramsSize
+    }
+
+    w.putUInt(paramsSizeAndEip27)
     params.parametersTable.foreach { case (k, v) =>
       w.put(k)
       w.putInt(v)
@@ -389,12 +417,17 @@ object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs 
 
   override def parse(r: Reader): Parameters = {
     val height = r.getUInt().toIntExact
-    val tableLength = r.getUInt().toIntExact
+    val paramsSizeAndEip27 = r.getUInt().toIntExact
+    val (tableLength, eip27Supported) = if(paramsSizeAndEip27 > Int.MaxValue / 2){
+      (Int.MaxValue - paramsSizeAndEip27, true)
+    } else {
+      (paramsSizeAndEip27, false)
+    }
     val table = (0 until tableLength).map { _ =>
       r.getByte() -> r.getInt()
     }
     val proposedUpdate = ErgoValidationSettingsUpdateSerializer.parse(r)
-    Parameters(height, table.toMap, proposedUpdate)
+    Parameters(height, table.toMap, proposedUpdate, eip27Supported)
   }
 
   implicit val jsonEncoder: Encoder[Parameters] = { p: Parameters =>

@@ -376,6 +376,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         Option(peersByStatus.getOrElse(Unknown, mutable.WrappedArray.empty) ++ peersByStatus.getOrElse(Fork, mutable.WrappedArray.empty))
           .filter(_.nonEmpty)
           .map(PeerSyncState.UnknownOrFork -> _)
+      }.map { case (syncState, peers) =>
+        val peersFiltered =
+          if (settings.nodeSettings.stateType == StateType.Digest) {
+            // 4.0.21.1 allows for downloading ADProofs that are too big in block at 667614
+            val requiredVersion = Version(4, 0, 22)
+            peers.filter { cp =>
+              val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
+              version.compare(requiredVersion) >= 0
+            }
+          } else {
+            // filter out peers of 4.0.17 or 4.0.18 version as they are delivering broken modifiers
+            peers.filterNot { cp =>
+              val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
+              version == Version.v4017 || version == Version.v4018
+            }
+          }
+        syncState -> peersFiltered
       }
   }
 
@@ -393,23 +410,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit =
     getPeersOpt
       .foreach { case (peerStatus, peers) =>
-        val peersFiltered =
-          if (settings.nodeSettings.stateType == StateType.Digest) {
-            // 4.0.21.1 allows for downloading ADProofs that are too big in block at 667614
-            val requiredVersion = Version(4, 0, 22)
-            peers.filter { cp =>
-              val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
-              version.compare(requiredVersion) >= 0
-            }
-          } else {
-            // filter out peers of 4.0.17 or 4.0.18 version as they are delivering broken modifiers
-            peers.filterNot { cp =>
-              val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
-              version == Version.v4017 || version == Version.v4018
-            }
-          }
-
-        val modifiersByBucket = ElementPartitioner.distribute(peersFiltered, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
+        val modifiersByBucket = ElementPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
         // collect and log useful downloading progress information, don't worry it does not run frequently
         modifiersByBucket.headOption.foreach { _ =>
           modifiersByBucket
@@ -686,15 +687,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
               val sendingStrategy =
                 if (modifierTypeId == ADProofs.modifierTypeId) {
-                  val requiredVersion = Version(4, 0, 22)
-                  val peers =
-                    getPeersForDownloadingBlocks.map { case (_, peers) =>
-                      peers.filter { cp =>
-                        val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
-                        version.compare(requiredVersion) >= 0
-                      }.toSeq
-                    }
-                  peers.map(SendToRandomFromChosen).getOrElse(SendToRandom)
+                  getPeersForDownloadingBlocks
+                    .map { case (_, peers) => SendToRandomFromChosen(peers.toSeq) }
+                    .getOrElse(SendToRandom)
                 } else {
                   SendToRandom
                 }

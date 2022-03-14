@@ -54,8 +54,8 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     val expectedReward = emission.minersRewardAtHeight(us.stateContext.currentHeight)
 
     val incorrectTxs =
-      CandidateGenerator.collectEmission(us, proveDlogGen.sample.get, settings.chainSettings).toSeq
-    val txs = CandidateGenerator.collectEmission(us, defaultMinerPk, settings.chainSettings).toSeq
+      CandidateGenerator.collectEmission(us, proveDlogGen.sample.get, emptyStateContext).toSeq
+    val txs = CandidateGenerator.collectEmission(us, defaultMinerPk, emptyStateContext).toSeq
 
     txs.size shouldBe 1
     val emissionTx = txs.head
@@ -79,9 +79,9 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     )
 
     val txs =
-      CandidateGenerator.collectFees(height, Seq(blockTx), defaultMinerPk, settings.chainSettings).toSeq
+      CandidateGenerator.collectFees(height, Seq(blockTx), defaultMinerPk, emptyStateContext).toSeq
     val incorrect = CandidateGenerator
-      .collectFees(height, Seq(blockTx), proveDlogGen.sample.get, settings.chainSettings)
+      .collectFees(height, Seq(blockTx), proveDlogGen.sample.get, emptyStateContext)
       .toSeq
     txs.length shouldBe 1
     val feeTx = txs.head
@@ -204,7 +204,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     val blockTx =
       validTransactionFromBoxes(txBoxes.head, outputsProposition = feeProposition)
     val txs = CandidateGenerator
-      .collectFees(height, Seq(blockTx), defaultMinerPk, settings.chainSettings)
+      .collectFees(height, Seq(blockTx), defaultMinerPk, emptyStateContext)
       .toSeq
     val block = validFullBlock(None, us, blockTx +: txs)
 
@@ -249,7 +249,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
         height,
         blockTxs,
         defaultMinerPk,
-        settings.chainSettings
+        emptyStateContext
       )
       txs.length shouldBe 2
 

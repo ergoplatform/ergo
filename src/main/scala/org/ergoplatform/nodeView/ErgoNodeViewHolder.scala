@@ -366,7 +366,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val constants = StateConstants(settings)
     restoreConsistentState(ErgoState.readOrGenerate(settings, constants, parameters).asInstanceOf[State], history) match {
       case Success(state) =>
-        log.info("State database read, state synchronized")
+        log.info(s"State database read, state synchronized, " +
+                  s"eip27 supported == ${state.stateContext.currentParameters.eip27Supported}")
         val wallet = ErgoWallet.readOrGenerate(
           history.getReader.asInstanceOf[ErgoHistoryReader],
           settings,

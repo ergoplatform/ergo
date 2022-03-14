@@ -227,7 +227,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       lazy val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
 
       lazy val height = stateContext.currentHeight
-      lazy val activationHeight = reemissionSettings.activationHeight
+      lazy val eip27Supported = stateContext.currentParameters.eip27Supported
+      lazy val activationHeight = if(eip27Supported) {
+        reemissionSettings.activationHeight
+      } else {
+        Int.MaxValue
+      }
 
       // reemission logic below
       var reemissionSpending = false

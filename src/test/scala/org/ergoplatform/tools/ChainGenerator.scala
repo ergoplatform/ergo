@@ -189,7 +189,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
       }
     }.getOrElse((interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion))
 
-    val emissionTxOpt = CandidateGenerator.collectEmission(state, minerPk, cs)
+    val emissionTxOpt = CandidateGenerator.collectEmission(state, minerPk, emptyStateContext)
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>

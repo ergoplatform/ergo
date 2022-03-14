@@ -19,7 +19,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, ErgoValidationSettingsUpdate}
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
@@ -338,14 +338,16 @@ object CandidateGenerator extends ScorexLogging {
       inputsNotSpent(tx, s)
     }
 
+    val stateContext = s.stateContext
+
     //only transactions valid from against the current utxo state we take from the mem pool
     lazy val poolTransactions = m.getAllPrioritized
 
     lazy val emissionTxOpt =
-      CandidateGenerator.collectEmission(s, pk, ergoSettings.chainSettings)
+      CandidateGenerator.collectEmission(s, pk, stateContext)
 
     def chainSynced =
-      h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)
+      h.bestFullBlockOpt.map(_.id) == stateContext.lastHeaderOpt.map(_.id)
 
     def hasAnyMemPoolOrMinerTx =
       poolTransactions.nonEmpty || unspentTxsToInclude.nonEmpty || emissionTxOpt.nonEmpty
@@ -583,14 +585,14 @@ object CandidateGenerator extends ScorexLogging {
   def collectEmission(
     state: UtxoStateReader,
     minerPk: ProveDlog,
-    chainSettings: ChainSettings
+    stateContext: ErgoStateContext
   ): Option[ErgoTransaction] = {
     collectRewards(
       state.emissionBoxOpt,
       state.stateContext.currentHeight,
       Seq.empty,
       minerPk,
-      chainSettings,
+      stateContext,
       Colls.emptyColl
     ).headOption
   }
@@ -599,9 +601,9 @@ object CandidateGenerator extends ScorexLogging {
     currentHeight: Int,
     txs: Seq[ErgoTransaction],
     minerPk: ProveDlog,
-    chainSettings: ChainSettings
+    stateContext: ErgoStateContext
   ): Option[ErgoTransaction] = {
-    collectRewards(None, currentHeight, txs, minerPk, chainSettings, Colls.emptyColl).headOption
+    collectRewards(None, currentHeight, txs, minerPk, stateContext, Colls.emptyColl).headOption
   }
 
   /**
@@ -613,9 +615,10 @@ object CandidateGenerator extends ScorexLogging {
     currentHeight: Int,
     txs: Seq[ErgoTransaction],
     minerPk: ProveDlog,
-    chainSettings: ChainSettings,
+    stateContext: ErgoStateContext,
     assets: Coll[(TokenId, Long)] = Colls.emptyColl
   ): Seq[ErgoTransaction] = {
+    val chainSettings = stateContext.ergoSettings.chainSettings
     val propositionBytes = chainSettings.monetary.feePropositionBytes
     val emission = chainSettings.emissionRules
 
@@ -774,8 +777,7 @@ object CandidateGenerator extends ScorexLogging {
                 val newTxs   = acc :+ (tx -> costConsumed)
                 val newBoxes = newTxs.flatMap(_._1.outputs)
 
-                val chainSettings = stateWithTxs.constants.settings.chainSettings
-                collectFees(currentHeight, newTxs.map(_._1), minerPk, chainSettings) match {
+                collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
                   case Some(feeTx) =>
                     val boxesToSpend = feeTx.inputs.flatMap(i =>
                       newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))

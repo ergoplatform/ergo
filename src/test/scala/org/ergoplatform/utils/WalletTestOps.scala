@@ -82,7 +82,7 @@ trait WalletTestOps extends NodeViewBaseOps {
       ErgoHistory.EmptyHistoryHeight,
       Seq.empty,
       publicKey,
-      settings.chainSettings,
+      emptyStateContext,
       Colls.fromArray(assets.toArray)).head
   }
 

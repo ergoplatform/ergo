@@ -224,7 +224,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       lazy val emissionNftId = ModifierId @@ reemissionSettings.emissionNftId
       lazy val emissionNftIdBytes = reemissionSettings.emissionNftIdBytes
 
-      lazy val emissionRules = stateContext.ergoSettings.chainSettings.emissionRules
+      lazy val chainSettings = stateContext.ergoSettings.chainSettings
+      lazy val emissionRules = chainSettings.emissionRules
 
       lazy val height = stateContext.currentHeight
       lazy val eip27Supported = stateContext.currentParameters.eip27Supported
@@ -268,8 +269,16 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
             val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
             require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
+          } else {
+            //this path can be removed after EIP-27 activation
+            if (height >= activationHeight && box.ergoTree == chainSettings.monetary.emissionBoxProposition) {
+              //we require emission contract NFT and reemission token to be presented in emission output
+              val emissionOutTokens = outputCandidates(0).tokens
+              require(emissionOutTokens.contains(emissionNftId))
+              require(emissionOutTokens.contains(reemissionTokenId))
+            }
           }
-        } else if (box.tokens.contains(reemissionTokenId) && height > reemissionSettings.activationHeight) {
+        } else if (box.tokens.contains(reemissionTokenId) && height > activationHeight) {
           // reemission tokens spent after EIP-27 activation
           reemissionSpending = true
         }

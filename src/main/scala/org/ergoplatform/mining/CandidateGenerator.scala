@@ -624,7 +624,12 @@ object CandidateGenerator extends ScorexLogging {
 
     val reemissionSettings = chainSettings.reemission
     val reemissionRules = reemissionSettings.reemissionRules
-    val reemissionActivationHeight = reemissionSettings.activationHeight
+    val eip27Supported = stateContext.currentParameters.eip27Supported
+    val eip27ActivationHeight = if (eip27Supported) {
+      reemissionSettings.activationHeight
+    } else {
+      Int.MaxValue
+    }
     val reemissionTokenId = Digest32 @@ reemissionSettings.reemissionTokenIdBytes
 
     val inputs = txs.flatMap(_.inputs)
@@ -642,7 +647,7 @@ object CandidateGenerator extends ScorexLogging {
       // how many nanoERG should be re-emitted
       lazy val reemissionAmount = reemissionRules.reemissionForHeight(nextHeight, emission)
 
-      val emissionBoxAssets = if (nextHeight == reemissionActivationHeight) {
+      val emissionBoxAssets = if (nextHeight == eip27ActivationHeight) {
         // we inject emission box NFT and reemission tokens on activation height
         // see "Activation Details" section of EIP-27
         reemissionSettings.injectionBox.additionalTokens
@@ -650,7 +655,7 @@ object CandidateGenerator extends ScorexLogging {
         emissionBox.additionalTokens
       }
 
-      val updEmissionAssets = if (nextHeight >= reemissionActivationHeight) {
+      val updEmissionAssets = if (nextHeight >= eip27ActivationHeight) {
         // deduct reemission from emission box
         val reemissionTokens = emissionBoxAssets.apply(1)._2
         val updAmount = reemissionTokens - reemissionAmount
@@ -661,7 +666,7 @@ object CandidateGenerator extends ScorexLogging {
 
       val newEmissionBox: ErgoBoxCandidate =
         new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, nextHeight, updEmissionAssets)
-      val inputs = if (nextHeight == reemissionActivationHeight) {
+      val inputs = if (nextHeight == eip27ActivationHeight) {
         // injection - second input is injection box
         IndexedSeq(
           new Input(emissionBox.id, ProverResult.empty),
@@ -671,13 +676,13 @@ object CandidateGenerator extends ScorexLogging {
         IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
       }
 
-      val minerAmt = if (nextHeight == reemissionActivationHeight) {
+      val minerAmt = if (nextHeight == eip27ActivationHeight) {
         // injection - inhection box value going to miner
         emissionAmount + reemissionSettings.injectionBox.value
       } else {
         emissionAmount
       }
-      val minersAssets = if (nextHeight >= reemissionActivationHeight) {
+      val minersAssets = if (nextHeight >= eip27ActivationHeight) {
         // miner is getting reemission tokens
         assets.append(Colls.fromItems(reemissionTokenId -> reemissionAmount))
       } else {

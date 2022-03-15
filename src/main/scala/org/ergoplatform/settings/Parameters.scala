@@ -70,6 +70,10 @@ class Parameters(val height: Height,
 
   lazy val blockVersion: Byte = parametersTable(BlockVersion).toByte
 
+  def withEip27Supported(eip27SupportedValue: Boolean): Parameters = {
+    new Parameters(this.height, this.parametersTable, this.proposedUpdate, eip27SupportedValue)
+  }
+
   def update(height: Height,
              forkVote: Boolean,
              epochVotes: Seq[(Byte, Int)],
@@ -77,20 +81,7 @@ class Parameters(val height: Height,
              votingSettings: VotingSettings): (Parameters, ErgoValidationSettingsUpdate) = {
     val (table1, activatedUpdate) = updateFork(height, parametersTable, forkVote, epochVotes, proposedUpdate, votingSettings)
     val table2 = updateParams(table1, epochVotes, votingSettings)
-    val eip27Supported = updateEip27Supported(epochVotes)
     (Parameters(height, table2, proposedUpdate, eip27Supported), activatedUpdate)
-  }
-
-  def updateEip27Supported(epochVotes: Seq[(Byte, Int)]): Boolean = {
-    if (this.eip27Supported) {
-      true
-    } else {
-      if (epochVotes.find(_._1 == 5.toByte).map(_._2).getOrElse(0) >= 920) { // about 90%
-        true
-      } else {
-        false
-      }
-    }
   }
 
   def updateFork(height: Height,

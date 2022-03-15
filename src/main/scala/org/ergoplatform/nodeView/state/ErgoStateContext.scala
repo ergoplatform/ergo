@@ -134,6 +134,21 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
+  def updateEip27Supported(parameters: Parameters,
+                           epochVotes: Seq[(Byte, Int)],
+                           votingSettings: VotingSettings): Boolean = {
+    if (parameters.eip27Supported) {
+      true
+    } else {
+      val threshold = votingSettings.votingLength / 10 * 9 // about 90% for large enough epochs
+      if (epochVotes.find(_._1 == 8.toByte).map(_._2).getOrElse(0) >= threshold) {
+        true
+      } else {
+        false
+      }
+    }
+  }
+
   /**
     * Called at the beginning of the epoch.
     * Extracts parameters and validationSettings from `Extension` and compares them to locally calculated once.
@@ -200,7 +215,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
             val extractedValidationSettings = processed._2
             val proposedVotes = votes.map(_ -> 1)
             val newVoting = VotingData(proposedVotes)
-            new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, params, extractedValidationSettings, newVoting)(ergoSettings)
+            val eip27Supported = updateEip27Supported(params, votingData.epochVotes, ergoSettings.chainSettings.voting)
+            val ps = params.withEip27Supported(eip27Supported)
+            new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, ps, extractedValidationSettings, newVoting)(ergoSettings)
           }
         case _ =>
           val newVotes = votes

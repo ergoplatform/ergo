@@ -327,15 +327,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.warn(s"Got nonsense status in v2 for $remote")
 
       case Younger =>
-        // send extension (up to 400 header ids) to a peer which chain is less developed or forked
+        // send extension (up to 400 header ids) to a peer which chain is less developed
         val ext = hr.continuationIds(syncInfo, size = 400)
         if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
-        log.debug(s"Sending extension of length ${ext.length}")
+        log.debug(s"Sending extension of length ${ext.length} to younger peer $remote")
         log.debug(s"Extension ids: ${idsToString(ext)}")
         sendExtension(remote, ext)
 
       case Fork =>
-        log.info(s"Fork detected with peer $remote, its sync message $syncInfo")
+        // send extension (up to 400 header ids) to a peer which chain is forked
+        val ext = hr.continuationIds(syncInfo, size = 400)
+        if (ext.isEmpty) log.warn("Extension is empty while comparison is fork")
+        log.debug(s"Sending extension of length ${ext.length} to forked peer $remote")
+        log.debug(s"Extension ids: ${idsToString(ext)}")
+        sendExtension(remote, ext)
 
       case Older =>
         log.debug(s"Peer $remote is older, its height ${syncInfo.height}")

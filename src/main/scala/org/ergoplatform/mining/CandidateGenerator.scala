@@ -661,7 +661,7 @@ object CandidateGenerator extends ScorexLogging {
         val updAmount = reemissionTokens - reemissionAmount
         emissionBoxAssets.updated(1, reemissionTokenId -> updAmount)
       } else {
-        emissionBoxAssets
+        Colls.emptyColl[(ErgoBox.TokenId, Long)] // emissionBoxAssets
       }
 
       val newEmissionBox: ErgoBoxCandidate =

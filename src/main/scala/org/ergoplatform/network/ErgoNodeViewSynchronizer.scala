@@ -127,8 +127,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val interval = networkSettings.syncInterval
     context.system.scheduler.scheduleWithFixedDelay(2.seconds, interval, self, SendLocalSyncInfo)
 
+    val healthCheckDelay = settings.nodeSettings.acceptableChainUpdateDelay
     val healthCheckRate = settings.nodeSettings.acceptableChainUpdateDelay / 3
-    context.system.scheduler.scheduleAtFixedRate(healthCheckRate, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
+    context.system.scheduler.scheduleAtFixedRate(healthCheckDelay, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
   }
 
   protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
@@ -817,6 +818,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case ChainIsStuck(error) =>
       log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
+      deliveryTracker.reset()
   }
 
   /** get handlers of messages coming from peers */

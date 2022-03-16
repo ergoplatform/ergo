@@ -143,8 +143,7 @@ object ValidationRules {
     hdrVotesUnknown -> RuleStatus(s => fatal(s"First header of an epoch should not contain a vote for unknown parameter. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = true),
-    hdrCheckpointV2 -> RuleStatus(s => fatal(s"First version 2 header on the mainnet on height 417,729 should have " +
-      s"ID = 0ba60a7db44877aade553beb05200f7d67b586945418d733e455840d283e0508. $s"),
+    hdrCheckpoint -> RuleStatus(s => fatal(s"Chain is failing checkpoint validation"),
       Seq(classOf[Header]),
       mayBeDisabled = false),
 
@@ -268,7 +267,7 @@ object ValidationRules {
   val hdrVotesDuplicates: Short = 213
   val hdrVotesContradictory: Short = 214
   val hdrVotesUnknown: Short = 215
-  val hdrCheckpointV2: Short = 216
+  val hdrCheckpoint: Short = 216
 
   // block sections validation
   val alreadyApplied: Short = 300

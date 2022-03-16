@@ -2,9 +2,22 @@ package org.ergoplatform.settings
 
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.StateType
+import scorex.util.ModifierId
 
 import scala.concurrent.duration.FiniteDuration
+
+case class CheckpointSettings(height: Height, blockId: ModifierId)
+
+trait CheckpointingSettingsReader extends ModifierIdReader {
+  implicit val checkpointSettingsReader: ValueReader[CheckpointSettings] = { (cfg, path) =>
+    CheckpointSettings(
+      cfg.as[Int](s"$path.height"),
+      ModifierId @@ cfg.as[String](s"$path.blockId")
+    )
+  }
+}
 
 /**
   * Configuration file for Ergo node regime
@@ -32,7 +45,7 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      minimalFeeAmount: Long,
                                      headerChainDiff: Int,
                                      blacklistedTransactions: Seq[String] = Seq.empty,
-                                     skipV1TransactionsValidation: Boolean = false) {
+                                     checkpoint: Option[CheckpointSettings] = None) {
   /**
     * Whether the node keeping all the full blocks of the blockchain or not.
     * @return true if the blockchain is pruned, false if not
@@ -40,8 +53,7 @@ case class NodeConfigurationSettings(stateType: StateType,
   val isFullBlocksPruned: Boolean = blocksToKeep >= 0
 }
 
-trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
-
+trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettingsReader with ModifierIdReader {
 
   implicit val nodeConfigurationReader: ValueReader[NodeConfigurationSettings] = { (cfg, path) =>
     val stateTypeKey = s"$path.stateType"
@@ -68,7 +80,7 @@ trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
       cfg.as[Long](s"$path.minimalFeeAmount"),
       cfg.as[Int](s"$path.headerChainDiff"),
       cfg.as[Seq[String]](s"$path.blacklistedTransactions"),
-      cfg.as[Boolean](s"$path.skipV1TransactionsValidation")
+      cfg.as[Option[CheckpointSettings]](s"$path.checkpoint")
     )
   }
 

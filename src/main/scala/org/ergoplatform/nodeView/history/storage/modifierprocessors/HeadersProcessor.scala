@@ -331,19 +331,23 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validate(hdrCheckpointV2, checkpointV2Condition(header), "Wrong V2 checkpoint")
+        .validate(hdrCheckpoint, checkpointCondition(header), "Wrong checkpoint")
         .result
     }
 
     /**
-      * Helper method to check v2 checkpoint (first v2 block)
+      * Helper method to validate checkpoint given in config, if it is provided.
+      *
+      * Checks that block at checkpoint height has id provided.
       */
-    private def checkpointV2Condition(header: Header): Boolean = {
-      if (header.height == 417792 && settings.networkType.isMainNet) {
-        header.id == "0ba60a7db44877aade553beb05200f7d67b586945418d733e455840d283e0508"
-      } else {
-        true
-      }
+    private def checkpointCondition(header: Header): Boolean = {
+      settings.nodeSettings.checkpoint.map { checkpoint =>
+        if (checkpoint.height == header.height) {
+          header.id == checkpoint.blockId
+        } else {
+          true
+        }
+      }.getOrElse(true)
     }
 
   }

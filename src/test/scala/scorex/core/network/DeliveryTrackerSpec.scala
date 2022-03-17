@@ -54,6 +54,12 @@ class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {
           "104" -> Json.obj()
         )
       )
+
+      tracker.reset()
+      val fullInfoAfterReset = tracker.fullInfo
+      fullInfoAfterReset.invalidModifierApproxSize shouldBe 0
+      fullInfoAfterReset.requested.size shouldBe 0
+      fullInfoAfterReset.received.size shouldBe 0
     }
   }
 

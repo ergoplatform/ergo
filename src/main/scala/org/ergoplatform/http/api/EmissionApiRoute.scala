@@ -53,7 +53,7 @@ object EmissionApiRoute {
                            emissionRules: EmissionRules,
                            reemissionSettings: ReemissionSettings): EmissionInfo = {
     val reemissionAmt = reemissionSettings.reemissionRules.reemissionForHeight(height.toInt, emissionRules)
-    val minerReward = emissionRules.emissionAtHeight(height) - reemissionAmt
+    val minerReward = emissionRules.minersRewardAtHeight(height) - reemissionAmt
     val totalCoinsIssued = emissionRules.issuedCoinsAfterHeight(height)
     val totalRemainCoins = emissionRules.coinsTotal - totalCoinsIssued
     EmissionInfo(minerReward, totalCoinsIssued, totalRemainCoins, reemissionAmt)

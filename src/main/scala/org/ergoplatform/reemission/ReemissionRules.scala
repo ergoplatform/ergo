@@ -26,7 +26,8 @@ class ReemissionRules(reemissionSettings: ReemissionSettings) extends Reemission
     if (height >= reemissionSettings.activationHeight &&
       emission >= (basicChargeAmount + 3) * EmissionRules.CoinsInOneErgo) {
       basicChargeAmount * EmissionRules.CoinsInOneErgo
-    } else if (emission > 3 * EmissionRules.CoinsInOneErgo) {
+    } else if (height >= reemissionSettings.activationHeight &&
+      emission > 3 * EmissionRules.CoinsInOneErgo) {
       emission - 3 * EmissionRules.CoinsInOneErgo
     } else {
       0L

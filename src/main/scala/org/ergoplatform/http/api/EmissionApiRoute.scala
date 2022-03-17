@@ -17,11 +17,12 @@ case class EmissionApiRoute(ergoSettings: ErgoSettings)
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  private val emissionRules = ergoSettings.chainSettings.emissionRules
+  private val chainSettings = ergoSettings.chainSettings
+  private val emissionRules = chainSettings.emissionRules
 
-  private val reemissionSettings = ergoSettings.chainSettings.reemission
+  private val reemissionSettings = chainSettings.reemission
 
-  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
+  private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(chainSettings.addressPrefix)
 
   override def route: Route = pathPrefix("emission") {
     emissionAt ~ scripts

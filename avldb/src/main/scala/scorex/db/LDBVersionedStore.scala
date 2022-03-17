@@ -285,16 +285,12 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
   def remove(versionID: VersionID, toRemove: Seq[K]): Try[Unit] = update(versionID, toRemove, Seq.empty)
 
 
-  // Keep last "count" versions and remove undo information for older versions
+  // Keep last "count"+1 versions and remove undo information for older versions
   private def cleanStart(count: Int): Unit = {
-    val deteriorated = versions.size - count
+    val deteriorated = versions.size - count - 1
     if (deteriorated > 0) {
       val fromLsn = versionLsn(0)
-      val tillLsn = if (count > 0) {
-        versionLsn(deteriorated)
-      } else {
-        versionLsn.last + 1 /* exclusive boundary */
-      }
+      val tillLsn = versionLsn(deteriorated)
       val batch = undo.createWriteBatch()
       try {
         for (lsn <- fromLsn until tillLsn) {
@@ -306,7 +302,6 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
       }
       versions.remove(0, deteriorated)
       versionLsn.remove(0, deteriorated)
-      lastVersion = versions.lastOption
     }
   }
 

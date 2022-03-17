@@ -15,8 +15,8 @@ import scala.util.Try
 
 class ReemissionRules(reemissionSettings: ReemissionSettings) extends ReemissionContracts {
 
-  override val reemissionNftIdBytes = reemissionSettings.reemissionNftIdBytes
-  override val reemissionStartHeight = reemissionSettings.reemissionStartHeight
+  override val reemissionNftIdBytes: Array[Byte] = reemissionSettings.reemissionNftIdBytes
+  override val reemissionStartHeight: Height = reemissionSettings.reemissionStartHeight
 
   val basicChargeAmount = 12 // in ERG
 

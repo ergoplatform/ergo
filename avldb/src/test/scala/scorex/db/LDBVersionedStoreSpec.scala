@@ -86,6 +86,7 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
   property("alter keepVersions") {
     val version1 = Longs.toByteArray(Long.MaxValue + 1)
     val version2 = Longs.toByteArray(Long.MaxValue + 2)
+    val version3 = Longs.toByteArray(Long.MaxValue + 3)
     val k1 = Longs.toByteArray(1)
     val v1 = Longs.toByteArray(100)
     store.update(version1, Seq.empty, Seq(k1 -> v1)).get
@@ -96,5 +97,11 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     store.versionIdExists(version1) shouldBe false
     store.versionIdExists(version2) shouldBe true
     store.setKeepVersions(10) shouldBe 0
+    store.update(version3, Seq.empty, Seq(k1 -> v1)).get
+    store.rollbackTo(version2).isSuccess shouldBe true
+    store.versionIdExists(version2) shouldBe true
+    store.versionIdExists(version3) shouldBe false
+    store.update(version3, Seq.empty, Seq(k1 -> v1)).get
+    store.versionIdExists(version3) shouldBe true
    }
 }

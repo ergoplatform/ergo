@@ -48,6 +48,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
   property(propertyNameGenerator("apply valid modifier after rollback")) {
     forAll(stateGenWithValidModifier) { case (s, m) =>
       val ver = s.version
+      s.store.setKeepVersions(10)
       val sTry = s.applyModifier(m, None)(_ => ())
       sTry.isSuccess shouldBe true
       val s2 = sTry.get
@@ -67,7 +68,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
 
   property(propertyNameGenerator("application after rollback is possible")) {
     forAll(stateGen) { s =>
-
+      s.store.setKeepVersions(10)
       val maxRollbackDepth = s match {
         case ds: DigestState =>
           ds.store.rollbackVersions().size

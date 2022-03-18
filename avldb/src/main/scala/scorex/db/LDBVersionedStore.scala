@@ -390,7 +390,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
           versions.remove(versionIndex + 1, nVersions - versionIndex - 1)
           versionLsn.remove(versionIndex + 1, nVersions - versionIndex - 1)
           lsn -= nUndoRecords // reuse deleted LSN to avoid holes in LSNs
-          assert(lsn == lastLsn)
+          assert(lastLsn == 0 || lsn == lastLsn)
           assert(versions.last.sameElements(versionID))
           lastVersion = Some(versionID)
         } else {

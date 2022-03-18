@@ -401,13 +401,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * @param pmod Remote or local persistent modifier
     */
   protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit = {
-    if (pmod.modifierTypeId == ADProofs.modifierTypeId && local) {
+    if (false && pmod.modifierTypeId == ADProofs.modifierTypeId && local) {
       log.info("Dumping ad proofs for") // todo: remove after testing
       val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
       history().justPutToHistory(pmod.serializedId, bytes)
       return
     }
-
     if (!history().contains(pmod.id)) {
       context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 

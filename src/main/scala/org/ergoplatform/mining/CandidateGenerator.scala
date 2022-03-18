@@ -647,7 +647,7 @@ object CandidateGenerator extends ScorexLogging {
       // how many nanoERG should be re-emitted
       lazy val reemissionAmount = reemissionRules.reemissionForHeight(nextHeight, emission)
 
-      val emissionBoxAssets = if (nextHeight == eip27ActivationHeight) {
+      val emissionBoxAssets = if (currentHeight == eip27ActivationHeight) {
         // we inject emission box NFT and reemission tokens on activation height
         // see "Activation Details" section of EIP-27
         reemissionSettings.injectionBox.additionalTokens

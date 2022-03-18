@@ -647,10 +647,17 @@ object CandidateGenerator extends ScorexLogging {
       // how many nanoERG should be re-emitted
       lazy val reemissionAmount = reemissionRules.reemissionForHeight(nextHeight, emission)
 
-      val emissionBoxAssets = if (currentHeight == eip27ActivationHeight) {
+      val emissionBoxAssets: Coll[(TokenId, Long)] = if (nextHeight == eip27ActivationHeight) {
         // we inject emission box NFT and reemission tokens on activation height
         // see "Activation Details" section of EIP-27
-        reemissionSettings.injectionBox.additionalTokens
+        val injTokens = reemissionSettings.injectionBox.additionalTokens
+
+        //swap tokens if emission NFT is going after reemission
+        if (injTokens.apply(1)._2 == 1) {
+          Colls.fromItems(injTokens.apply(1), injTokens.apply(0))
+        } else {
+          injTokens
+        }
       } else {
         emissionBox.additionalTokens
       }
@@ -812,7 +819,7 @@ object CandidateGenerator extends ScorexLogging {
                     }
                 }
               case Failure(e) =>
-                log.debug(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
+                log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
                 loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
             }
           }
@@ -823,7 +830,7 @@ object CandidateGenerator extends ScorexLogging {
 
     val res = loop(transactions, Seq.empty, None, Seq.empty)
     log.debug(
-      s"Collected ${res._1.length} transactions for block #$nextHeight, " +
+      s"Collected ${res._1.length} transactions for block #$currentHeight, " +
       s"${res._2.length} transactions turned out to be invalid"
     )
     log.whenDebugEnabled {

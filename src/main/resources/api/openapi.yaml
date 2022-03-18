@@ -428,6 +428,8 @@ components:
           items:
             description: Pair of TokenId and Long
             type: array
+            minItems: 2
+            maxItems: 2
             items:
               description: TokenId or Long
               anyOf:

@@ -37,8 +37,9 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
     case Failure(e) => Failure(e)
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height] = None)(generate: LocallyGeneratedModifier => Unit): Try[WrappedUtxoState] =
-    super.applyModifier(mod, None)(generate) match {
+  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height] = None)
+                            (generate: LocallyGeneratedModifier => Unit): Try[WrappedUtxoState] =
+    super.applyModifier(mod, estimatedTip)(generate) match {
       case Success(us) =>
         mod match {
           case ct: TransactionsCarryingPersistentNodeViewModifier =>

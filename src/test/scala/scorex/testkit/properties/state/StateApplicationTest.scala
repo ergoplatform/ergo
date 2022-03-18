@@ -49,7 +49,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
     forAll(stateGenWithValidModifier) { case (s, m) =>
       val ver = s.version
       s.store.setKeepVersions(10)
-      val sTry = s.applyModifier(m, None)(_ => ())
+      val sTry = s.applyModifier(m, Some(0))(_ => ())
       sTry.isSuccess shouldBe true
       val s2 = sTry.get
       s2.version == ver shouldBe false
@@ -83,7 +83,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
       val s2 = (0 until rollbackDepth).foldLeft(s) { case (state, _) =>
         val modifier = semanticallyValidModifier(state)
         buf += modifier
-        val sTry = state.applyModifier(modifier, None)(_ => ())
+        val sTry = state.applyModifier(modifier, Some(rollbackDepth))(_ => ())
         sTry shouldBe 'success
         sTry.get
       }
@@ -95,7 +95,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
       s3.version == ver shouldBe true
 
       val s4 = buf.foldLeft(s3) { case (state, m) =>
-        val sTry = state.applyModifier(m, None)(_ => ())
+        val sTry = state.applyModifier(m, Some(0))(_ => ())
         sTry shouldBe 'success
         sTry.get
       }

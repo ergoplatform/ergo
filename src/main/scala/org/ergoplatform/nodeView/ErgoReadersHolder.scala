@@ -45,7 +45,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
         case m =>
           val msgSender = sender()
           context.system.scheduler.scheduleOnce(2.seconds)(self.tell(GetReaders, msgSender))(context.system.dispatcher)
-          log.debug(s"Readers are not initialized yet : $m")
+          log.info(s"Readers are not initialized yet : $m")
       }
 
     case GetDataFromHistory(f) =>

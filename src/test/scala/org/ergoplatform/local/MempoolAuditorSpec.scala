@@ -53,7 +53,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
 
-    val boxes = ErgoState.boxChanges(genesis.transactions)._2.find(_.ergoTree == Constants.TrueLeaf)
+    val boxes = ErgoState.newBoxes(genesis.transactions).find(_.ergoTree == Constants.TrueLeaf)
     boxes.nonEmpty shouldBe true
 
     val script = s"{sigmaProp(HEIGHT == ${genesis.height})}"

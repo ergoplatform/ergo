@@ -135,7 +135,9 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
       Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}. " +
         "Possible reason - state update is in process."))
     } else {
-      persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations)
+      ErgoState.stateChanges(txs).flatMap { stateChanges =>
+        persistentProver.avlProver.generateProofForOperations(stateChanges.operations)
+      }
     }
   }
 

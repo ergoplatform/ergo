@@ -84,7 +84,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
   private val networkControllerRef: ActorRef = NetworkControllerRef(
-    "networkController", scorexSettings.network, peerManagerRef, scorexContext)
+    "networkController", scorexSettings, peerManagerRef, scorexContext)
 
   private val parameters = LaunchParameters
 

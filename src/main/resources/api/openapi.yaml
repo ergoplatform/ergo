@@ -1523,6 +1523,10 @@ components:
         address:
           type: string
           example: '127.0.0.1:5673'
+        restApiAddress:
+          type: string
+          example: 'https://example.com'
+          nullable: true
         name:
           type: string
           example: mynode

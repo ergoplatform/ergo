@@ -24,7 +24,8 @@ case class PeerSpec(agentName: String,
                     protocolVersion: Version,
                     nodeName: String,
                     declaredAddress: Option[InetSocketAddress],
-                    features: Seq[PeerFeature]) {
+                    features: Seq[PeerFeature],
+                    restApiAddress: Option[InetSocketAddress]) {
 
   lazy val localAddressOpt: Option[InetSocketAddress] = {
     features.collectFirst { case LocalAddressPeerFeature(addr) => addr }
@@ -58,6 +59,13 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
       w.putUShort(fBytes.length.toShortExact)
       w.putBytes(fBytes)
     }
+
+    w.putOption(obj.restApiAddress: Option[InetSocketAddress]) { (writer, isa) =>
+      val addr = isa.getAddress.getAddress
+      writer.put((addr.size + 4).toByteExact)
+      writer.putBytes(addr)
+      writer.putUInt(isa.getPort)
+    }
   }
 
   override def parse(r: Reader): PeerSpec = {
@@ -87,7 +95,14 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
       }
     }
 
-    PeerSpec(appName, protocolVersion, nodeName, declaredAddressOpt, feats)
+    val restApiAddressOpt = r.getOption {
+      val fas = r.getUByte()
+      val fa = r.getBytes(fas - 4)
+      val port = r.getUInt().toIntExact
+      new InetSocketAddress(InetAddress.getByAddress(fa), port)
+    }
+
+    PeerSpec(appName, protocolVersion, nodeName, declaredAddressOpt, feats, restApiAddressOpt)
   }
 
 }

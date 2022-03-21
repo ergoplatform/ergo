@@ -15,7 +15,8 @@ import scala.concurrent.duration._
 case class RESTApiSettings(bindAddress: InetSocketAddress,
                            apiKeyHash: Option[String],
                            corsAllowedOrigin: Option[String],
-                           timeout: FiniteDuration)
+                           timeout: FiniteDuration,
+                           restApiAddress: Option[InetSocketAddress])
 
 case class NetworkSettings(nodeName: String,
                            addedMaxDelay: Option[FiniteDuration],

@@ -37,7 +37,7 @@ object PeerInfo {
     * (e.g. we got this information from config or from API)
     */
   def fromAddress(address: InetSocketAddress): PeerInfo = {
-    val peerSpec = PeerSpec("unknown", Version.initial, s"unknown-$address", Some(address), Seq())
+    val peerSpec = PeerSpec("unknown", Version.initial, s"unknown-$address", Some(address), Seq(), None)
     PeerInfo(peerSpec, 0L, None)
   }
 

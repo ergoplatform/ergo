@@ -1523,7 +1523,7 @@ components:
         address:
           type: string
           example: '127.0.0.1:5673'
-        restApiAddress:
+        restApiUrl:
           type: string
           example: 'https://example.com'
           nullable: true

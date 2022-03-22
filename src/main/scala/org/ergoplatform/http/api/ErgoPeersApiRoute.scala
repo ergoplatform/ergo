@@ -60,7 +60,7 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
             lastHandshake = peerInfo.lastHandshake,
             name = peerInfo.peerSpec.nodeName,
             connectionType = peerInfo.connectionType.map(_.toString),
-            restApiAddress = peerInfo.peerSpec.restApiAddress.map(_.toString)
+            restApiUrl = peerInfo.peerSpec.restApiUrl.map(_.toString)
           )
         }
       }
@@ -118,7 +118,7 @@ object ErgoPeersApiRoute {
                               lastHandshake: Long,
                               name: String,
                               connectionType: Option[String],
-                              restApiAddress: Option[String])
+                              restApiUrl: Option[String])
 
   object PeerInfoResponse {
     def fromAddressAndInfo(address: InetSocketAddress, peerInfo: PeerInfo): PeerInfoResponse = PeerInfoResponse(
@@ -127,7 +127,7 @@ object ErgoPeersApiRoute {
       peerInfo.lastHandshake,
       peerInfo.peerSpec.nodeName,
       peerInfo.connectionType.map(_.toString),
-      peerInfo.peerSpec.restApiAddress.map(_.toString)
+      peerInfo.peerSpec.restApiUrl.map(_.toString)
     )
 
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))

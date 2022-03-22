@@ -56,8 +56,8 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
         peer.peerInfo.get.peerSpec.address.foreach { address =>
           c.downField("address").as[String] shouldEqual Right(address.toString)
         }
-        peer.peerInfo.get.peerSpec.restApiAddress.foreach { address =>
-          c.downField("restApiAddress").as[String] shouldEqual Right(address.toString)
+        peer.peerInfo.get.peerSpec.restApiUrl.foreach { address =>
+          c.downField("restApiUrl").as[String] shouldEqual Right(address.toString)
         }
 
         c.downField("lastMessage").as[Long] shouldEqual Right(0L)

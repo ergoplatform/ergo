@@ -63,7 +63,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       apiKeyHash = None,
       corsAllowedOrigin = Some("*"),
       timeout = 5.seconds,
-      restApiUrl = Some(new URL("https://example.com:80"))
+      publicUrl = Some(new URL("https://example.com:80"))
     )
   }
 

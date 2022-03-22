@@ -15,7 +15,7 @@ case class RESTApiSettings(bindAddress: InetSocketAddress,
                            apiKeyHash: Option[String],
                            corsAllowedOrigin: Option[String],
                            timeout: FiniteDuration,
-                           restApiUrl: Option[URL])
+                           publicUrl: Option[URL])
 
 case class NetworkSettings(nodeName: String,
                            addedMaxDelay: Option[FiniteDuration],

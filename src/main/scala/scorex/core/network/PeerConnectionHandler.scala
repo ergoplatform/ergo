@@ -246,7 +246,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
         networkSettings.nodeName,
         ownSocketAddress,
         localFeatures,
-        scorexSettings.restApi.restApiUrl
+        scorexSettings.restApi.publicUrl
       ),
       scorexContext.timeProvider.time()
     )

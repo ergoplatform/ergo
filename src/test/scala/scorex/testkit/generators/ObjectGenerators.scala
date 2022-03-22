@@ -1,13 +1,14 @@
 package scorex.testkit.generators
 
 import java.net.{InetAddress, InetSocketAddress}
-
 import akka.actor.ActorRef
 import akka.util.ByteString
+import org.scalacheck.Gen.{const, some}
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.core.app.Version
 import scorex.core.network.message.{InvData, ModifiersData}
 import scorex.core.network._
+import scorex.core.network.peer.PeerInfo
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.{ModifierTypeId, NodeViewModifier}
 import scorex.util.serialization._
@@ -96,8 +97,19 @@ trait ObjectGenerators {
     direction <- Gen.oneOf[ConnectionDirection](Seq[ConnectionDirection](Incoming, Outgoing))
   } yield ConnectionId(ip1, ip2, direction)
 
+  def peerInfoGen: Gen[PeerInfo] = for {
+    peerSpec <- peerSpecGen
+  } yield PeerInfo(peerSpec, 0L, Some(Incoming))
+
   def connectedPeerGen(peerRef: ActorRef): Gen[ConnectedPeer] = for {
     connectionId <- connectionIdGen
-  } yield ConnectedPeer(connectionId, peerRef, 0, None)
+    peerInfo <- peerInfoGen
+  } yield ConnectedPeer(connectionId, peerRef, 0, Some(peerInfo))
 
+  def peerSpecGen: Gen[PeerSpec] = for {
+    declaredAddress <- Gen.frequency(5 -> const(None), 5 -> some(inetSocketAddressGen))
+    restApiAddress <- Gen.frequency(5 -> const(None), 5 -> some(inetSocketAddressGen))
+    features <- Gen.frequency(5 -> const(None), 5 -> some(Gen.oneOf(Seq(FullNodePeerFeature))))
+    version <- appVersionGen
+  } yield PeerSpec("ergoref", version, "ergo-node", declaredAddress, features.toSeq, restApiAddress)
 }

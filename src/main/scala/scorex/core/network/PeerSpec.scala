@@ -94,13 +94,19 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
         featureSerializer.parseTry(r.newReader(featChunk)).toOption
       }
     }
-
-    val restApiAddressOpt = r.getOption {
-      val fas = r.getUByte()
-      val fa = r.getBytes(fas - 4)
-      val port = r.getUInt().toIntExact
-      new InetSocketAddress(InetAddress.getByAddress(fa), port)
-    }
+    // backward compatibility hack, as writer.putOption does put(0.toByte)
+    // so old blobs has 0 missing in case of restApiAddress = None
+    val restApiAddressOpt =
+      if (r.remaining > 0) {
+        r.getOption {
+          val fas = r.getUByte()
+          val fa = r.getBytes(fas - 4)
+          val port = r.getUInt().toIntExact
+          new InetSocketAddress(InetAddress.getByAddress(fa), port)
+        }
+    } else {
+        None
+      }
 
     PeerSpec(appName, protocolVersion, nodeName, declaredAddressOpt, feats, restApiAddressOpt)
   }

@@ -2,13 +2,13 @@ package scorex.core.network.peer
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.net.{InetAddress, InetSocketAddress}
-
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.utils.TimeProvider
 import scorex.db.LDBFactory
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
+import scala.util.Try
 
 /**
   * In-memory peer database implementation supporting temporal blacklisting.
@@ -17,7 +17,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
 
   private val objectStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
 
-  private var peers = loadPeers()
+  private var peers = loadPeers.getOrElse(Map.empty)
 
   /**
     * banned peer ip -> ban expiration timestamp
@@ -51,7 +51,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
   /*
    * Load peers from persistent storage
    */
-  private def loadPeers(): Map[InetSocketAddress, PeerInfo] = {
+  private def loadPeers: Try[Map[InetSocketAddress, PeerInfo]] = Try {
     var peers = Map.empty[InetSocketAddress, PeerInfo]
     for ((addr,peer) <- objectStore.getAll) {
       val address = deserialize(addr).asInstanceOf[InetSocketAddress]

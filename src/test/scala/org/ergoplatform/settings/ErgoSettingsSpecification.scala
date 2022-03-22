@@ -37,7 +37,8 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
-      headerChainDiff                           = 100
+      headerChainDiff                           = 100,
+      adProofsSuffixLength                      = 112*1024
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
@@ -80,7 +81,8 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
-      headerChainDiff                           = 100
+      headerChainDiff                           = 100,
+      adProofsSuffixLength                      = 112*1024
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
@@ -123,7 +125,8 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
-      headerChainDiff                           = 100
+      headerChainDiff                           = 100,
+      adProofsSuffixLength                      = 112*1024
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(

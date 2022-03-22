@@ -167,8 +167,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             }
 
             if (fb.adProofs.isEmpty) {
-              val adProofs = ADProofs(fb.header.id, proofBytes)
-              generate(LocallyGeneratedModifier(adProofs))
+              if (fb.height >= estimatedTip.getOrElse(Int.MaxValue) - stateContext.ergoSettings.nodeSettings.adProofsSuffixLength) {
+                val adProofs = ADProofs(fb.header.id, proofBytes)
+                generate(LocallyGeneratedModifier(adProofs))
+              }
             }
 
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +

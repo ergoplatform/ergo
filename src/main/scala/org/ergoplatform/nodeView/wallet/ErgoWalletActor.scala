@@ -293,12 +293,14 @@ class ErgoWalletActor(settings: ErgoSettings,
       context stop self
 
     // We do wallet rescan by closing the wallet's database, deleting it from the disk, then reopening it and sending a rescan signal.
-    case RescanWallet =>
-      log.info(s"Rescanning the wallet")
+    case RescanWallet(fromHeight) =>
+      log.info(s"Rescanning the wallet from height: $fromHeight")
       ergoWalletService.recreateRegistry(state, settings) match {
         case Success(newState) =>
           context.become(loadedWallet(newState))
-          self ! ScanInThePast(newState.getWalletHeight) // walletHeight() corresponds to empty wallet state now
+          // walletHeight() corresponds to empty wallet state now
+          val heightToScanFrom = Math.min(newState.fullHeight, Math.max(fromHeight, newState.getWalletHeight))
+          self ! ScanInThePast(heightToScanFrom)
         case f@Failure(t) =>
           log.error("Error during rescan attempt: ", t)
           sender() ! f
@@ -713,7 +715,7 @@ object ErgoWalletActor extends ScorexLogging {
   /**
     * Rescan wallet
     */
-  case object RescanWallet
+  case class RescanWallet(fromHeight: Int)
 
   /**
     * Get wallet status

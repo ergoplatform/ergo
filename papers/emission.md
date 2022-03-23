@@ -184,6 +184,7 @@ API Methods Changed
 -------------------
 
 * /emission/at
+* /emission/scripts
 * /wallet/balances
 * /wallet/balances/withUnconfirmed
 

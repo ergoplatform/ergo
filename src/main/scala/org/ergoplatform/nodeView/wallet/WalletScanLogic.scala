@@ -43,11 +43,12 @@ object WalletScanLogic extends ScorexLogging {
                             offChainRegistry: OffChainRegistry,
                             walletVars: WalletVars,
                             block: ErgoFullBlock,
-                            cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
+                            cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
+                            dustLimit: Option[Long]
                            ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
     scanBlockTransactions(
       registry, offChainRegistry, walletVars,
-      block.height, block.id, block.transactions, cachedOutputsFilter)
+      block.height, block.id, block.transactions, cachedOutputsFilter, dustLimit)
   }
 
   /**
@@ -68,7 +69,8 @@ object WalletScanLogic extends ScorexLogging {
                             height: Int,
                             blockId: ModifierId,
                             transactions: Seq[ErgoTransaction],
-                            cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
+                            cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
+                            dustLimit: Option[Long]
                            ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
 
     // Take unspent wallet outputs Bloom Filter from cache
@@ -105,7 +107,7 @@ object WalletScanLogic extends ScorexLogging {
     val scanRes = transactions.foldLeft(initialScanResults) { case (scanResults, tx) =>
 
       // extract wallet- (and external scans) related outputs from the transaction
-      val myOutputs = extractWalletOutputs(tx, Some(height), walletVars)
+      val myOutputs = extractWalletOutputs(tx, Some(height), walletVars, dustLimit)
 
       // add extracted outputs to the filter
       myOutputs.foreach { out =>
@@ -180,13 +182,18 @@ object WalletScanLogic extends ScorexLogging {
     */
   def extractWalletOutputs(tx: ErgoTransaction,
                            inclusionHeight: Option[Int],
-                           walletVars: WalletVars): Seq[TrackedBox] = {
+                           walletVars: WalletVars,
+                           dustLimit: Option[Long]): Seq[TrackedBox] = {
 
     val trackedBytes: Seq[Array[Byte]] = walletVars.trackedBytes
     val miningScriptsBytes: Seq[Array[Byte]] = walletVars.miningScriptsBytes
     val externalScans: Seq[Scan] = walletVars.externalScans
 
-    tx.outputs.flatMap { bx =>
+    tx.outputs.flatMap {
+      case bx if dustLimit.exists(bx.value <= _) =>
+        // filter out boxes with value that is considered dust
+        None
+      case bx  =>
 
       // First, we check apps triggered by the tx output
       val appsTriggered =

@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.24"
+  version: "4.0.25"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1604,7 +1604,7 @@ components:
           example: '127.0.0.1:5673'
         version:
           type: string
-          example: '4.0.24'
+          example: '4.0.25'
         checks:
           type: integer
           description: How many times we checked for modifier delivery status
@@ -1625,7 +1625,7 @@ components:
           example: '127.0.0.1:5673'
         version:
           type: string
-          example: '4.0.24'
+          example: '4.0.25'
         lastMessage:
           $ref: '#/components/schemas/Timestamp'
 

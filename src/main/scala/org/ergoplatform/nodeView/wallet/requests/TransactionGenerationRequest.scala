@@ -15,6 +15,7 @@ class TransactionRequestEncoder(settings: ErgoSettings) extends Encoder[Transact
   def apply(request: TransactionGenerationRequest): Json = request match {
     case pr: PaymentRequest => new PaymentRequestEncoder(settings)(pr)
     case ar: AssetIssueRequest => new AssetIssueRequestEncoder(settings)(ar)
+    case br: BurnTokensRequest => new BurnTokensRequestEncoder()(br)
     case other => throw new Exception(s"Unknown TransactionRequest type: $other")
   }
 
@@ -24,12 +25,22 @@ class TransactionRequestDecoder(settings: ErgoSettings) extends Decoder[Transact
 
   val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(settings)
   val assetIssueRequestDecoder: AssetIssueRequestDecoder = new AssetIssueRequestDecoder(settings)
+  val burnTokensRequestDecoder: BurnTokensRequestDecoder = new BurnTokensRequestDecoder()
 
   def apply(cursor: HCursor): Decoder.Result[TransactionGenerationRequest] = {
-    Seq(paymentRequestDecoder, assetIssueRequestDecoder)
-      .map(_.apply(cursor))
-      .find(_.isRight)
-      .getOrElse(Left(DecodingFailure("Can not find suitable decoder", cursor.history)))
+    val paymentRequestDecoderResult = paymentRequestDecoder.apply(cursor)
+    val assetIssueRequestDecoderResult = assetIssueRequestDecoder.apply(cursor)
+    val burnTokensRequestDecoderResult = burnTokensRequestDecoder.apply(cursor)
+    if (paymentRequestDecoderResult.isLeft &&
+        assetIssueRequestDecoderResult.isLeft &&
+        burnTokensRequestDecoderResult.isLeft
+    ) {
+      paymentRequestDecoderResult
+    } else {
+      Seq(paymentRequestDecoderResult, assetIssueRequestDecoderResult, burnTokensRequestDecoderResult)
+        .find(_.isRight)
+        .get
+    }
   }
 
 }

@@ -12,15 +12,13 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.db.LDBKVStore
-import scorex.testkit.utils.FileUtils
 
 class WalletStorageSpec
   extends AnyFlatSpec
     with Matchers
     with WalletGenerators
     with ScalaCheckPropertyChecks
-    with DBSpec
-    with FileUtils {
+    with DBSpec {
 
   private implicit val addressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
@@ -33,7 +31,7 @@ class WalletStorageSpec
           val bytes = DerivationPathSerializer.toBytes(path)
           acc ++ Ints.toByteArray(bytes.length) ++ bytes
         }
-      store.insert(Seq(SecretPathsKey -> toInsert))
+      store.insert(Seq(SecretPathsKey -> toInsert)).get
     }
 
     forAll(Gen.nonEmptyListOf(derivationPathGen)) { paths =>
@@ -49,7 +47,7 @@ class WalletStorageSpec
     forAll(extendedPubKeyListGen) { pubKeys =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        pubKeys.foreach(storage.addKey)
+        pubKeys.foreach(storage.addPublicKeys(_).get)
         val keysRead = storage.readAllKeys()
         keysRead.length shouldBe pubKeys.length
         keysRead should contain theSameElementsAs pubKeys.toSet
@@ -64,10 +62,10 @@ class WalletStorageSpec
         externalScanReqs.foreach(req => storage.addScan(req))
         val storageApps = storage.allScans
         val storageRequests = storageApps.map { app =>
-          ScanRequest(app.scanName, app.trackingRule, Some(ScanWalletInteraction.Off))
+          ScanRequest(app.scanName, app.trackingRule, Some(ScanWalletInteraction.Off), Some(true))
         }
         storageRequests.foreach(r => externalScanReqs.contains(r) shouldBe true)
-        storageApps.map(_.scanId).foreach(storage.removeScan)
+        storageApps.map(_.scanId).foreach(storage.removeScan(_).get)
         storage.allScans.length shouldBe 0
       }
     }
@@ -81,7 +79,7 @@ class WalletStorageSpec
 
         storage.lastUsedScanId shouldBe scan.scanId
 
-        storage.removeScan(scan.scanId)
+        storage.removeScan(scan.scanId).get
         storage.lastUsedScanId shouldBe scan.scanId
 
         val scan2 = storage.addScan(externalScanReq).get

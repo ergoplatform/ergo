@@ -56,7 +56,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       val cost = json.hcursor.downField("cost").as[Int].right.get
       value shouldEqual -45
       condition shouldEqual true
-      cost shouldEqual 40
+      cost shouldEqual 50
     }
     val json = io.circe.parser.parse(req)
     Post(prefix + suffix, json) ~> route ~> check(assertion(responseAs[Json]))

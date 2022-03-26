@@ -10,6 +10,8 @@ import scorex.util.serialization.{Reader, Writer}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.CryptoConstants
 
+import scala.annotation.tailrec
+
 /**
   * Public key, its chain code and path in key tree.
   * (see: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
@@ -17,7 +19,9 @@ import sigmastate.interpreter.CryptoConstants
 final class ExtendedPublicKey(val keyBytes: Array[Byte],
                               val chainCode: Array[Byte],
                               val path: DerivationPath)
-  extends ExtendedKey {
+  extends ExtendedKey[ExtendedPublicKey] {
+
+  def selfReflection: ExtendedPublicKey = this
 
   def key: ProveDlog = ProveDlog(
     CryptoConstants.dlogGroup.curve.decodePoint(keyBytes).asInstanceOf[CryptoConstants.EcPointType]
@@ -41,11 +45,11 @@ final class ExtendedPublicKey(val keyBytes: Array[Byte],
   }
 
   override def toString: String = s"ExtendedPublicKey($path : $key)"
-
 }
 
 object ExtendedPublicKey {
 
+  @tailrec
   def deriveChildPublicKey(parentKey: ExtendedPublicKey, idx: Int): ExtendedPublicKey = {
     require(!Index.isHardened(idx), "Hardened public keys derivation is not supported")
     val (childKeyProto, childChainCode) = HmacSHA512

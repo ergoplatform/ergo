@@ -1,6 +1,5 @@
 package org.ergoplatform.modifiers.history
 
-import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
@@ -29,7 +28,7 @@ case class ADProofs(headerId: ModifierId,
 
   override type M = ADProofs
 
-  override lazy val serializer: ScorexSerializer[ADProofs] = ADProofSerializer
+  override lazy val serializer: ScorexSerializer[ADProofs] = ADProofsSerializer
 
   override def toString: String = s"ADProofs(Id:$id,HeaderId:$headerId)"
 
@@ -47,7 +46,7 @@ case class ADProofs(headerId: ModifierId,
 
     def applyChanges(verifier: BatchAVLVerifier[Digest32, HF],
                      changes: StateChanges): Try[Seq[ADValue]] = Try {
-      changes.operations.flatMap(o => verifier.performOneOperation(ADProofs.changeToMod(o)).get)
+      changes.operations.flatMap(o => verifier.performOneOperation(o).get)
     }
 
     val verifier = new BatchAVLVerifier[Digest32, HF](previousHash, proofBytes, ADProofs.KL,
@@ -76,22 +75,6 @@ object ADProofs extends ApiCodecs {
 
   def proofDigest(proofBytes: SerializedAdProof): Digest32 = Algos.hash(proofBytes)
 
-  /**
-    * Convert operation over a box into an AVL+ tree operations
-    *
-    * @param change - operation over a box
-    * @return AVL+ tree modification
-    */
-  def changeToMod(change: StateChangeOperation): Operation =
-    change match {
-      case i: Insertion =>
-        Insert(i.box.id, ADValue @@ i.box.bytes)
-      case r: Removal =>
-        Remove(r.boxId)
-      case r: Lookup =>
-        scorex.crypto.authds.avltree.batch.Lookup(r.boxId)
-    }
-
   implicit val jsonEncoder: Encoder[ADProofs] = { proof: ADProofs =>
     Map(
       "headerId" -> Algos.encode(proof.headerId).asJson,
@@ -110,7 +93,7 @@ object ADProofs extends ApiCodecs {
   }
 }
 
-object ADProofSerializer extends ScorexSerializer[ADProofs] {
+object ADProofsSerializer extends ScorexSerializer[ADProofs] {
 
   override def serialize(obj: ADProofs, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.headerId))
@@ -124,4 +107,5 @@ object ADProofSerializer extends ScorexSerializer[ADProofs] {
     val proofBytes = SerializedAdProof @@ r.getBytes(size)
     ADProofs(headerId, proofBytes, Some(size + Constants.ModifierIdSize))
   }
+
 }

@@ -1,0 +1,27 @@
+package org.ergoplatform.local
+
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.popow.NipopowProof
+import scorex.util.ModifierId
+
+/**
+  * A verifier for PoPoW proofs. During its lifetime, it processes many proofs with the aim of deducing at any given
+  * point what is the best (sub)chain rooted at the specified genesis.
+  *
+  * @param genesisId    - the block id of the genesis block
+  */
+class NipopowVerifier(genesisId: ModifierId) {
+  var bestProof: Option[NipopowProof] = None
+
+  def bestChain: Seq[Header] = {
+    bestProof.map(_.headersChain).getOrElse(Seq())
+  }
+
+  def process(newProof: NipopowProof) {
+    if (newProof.headersChain.head.id == genesisId &&
+      !bestProof.exists(_.isBetterThan(newProof))) {
+      bestProof = Some(newProof)
+    }
+  }
+
+}

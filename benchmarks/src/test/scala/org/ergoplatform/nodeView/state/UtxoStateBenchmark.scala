@@ -7,11 +7,11 @@ import org.ergoplatform.nodeView.NVBenchmark
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.HistoryTestHelpers
 
-object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark with App {
+object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark {
 
   val WarmupRuns = 2
 
-  override def main(args: Array[String]): Unit = {
+  def main(args: Array[String]): Unit = {
 
     val startTs = System.currentTimeMillis()
 
@@ -22,10 +22,10 @@ object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark with App {
     val transactionsQty = blocks.flatMap(_.transactions).size
 
     def bench(mods: Seq[ErgoPersistentModifier]): Long = {
-      val state = ErgoState.generateGenesisUtxoState(createTempDir, StateConstants(None, realNetworkSetting))._1
+      val state = ErgoState.generateGenesisUtxoState(createTempDir, StateConstants(realNetworkSetting), parameters)._1
       Utils.time {
         mods.foldLeft(state) { case (st, mod) =>
-          st.applyModifier(mod).get
+          st.applyModifier(mod)(_ => ()).get
         }
       }.toLong
     }

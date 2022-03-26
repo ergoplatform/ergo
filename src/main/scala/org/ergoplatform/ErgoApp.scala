@@ -1,34 +1,31 @@
 package org.ergoplatform
 
-import java.net.InetSocketAddress
-
-import akka.actor.{ActorRef, PoisonPill, ActorSystem}
+import akka.Done
+import akka.actor.{ActorRef, ActorSystem, CoordinatedShutdown}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler}
-import akka.stream.{Materializer, SystemMaterializer}
+import akka.http.scaladsl.Http.ServerBinding
 import org.ergoplatform.http._
-import org.ergoplatform.mining.ErgoMiner.StartMining
-import org.ergoplatform.http.api.{ScanApiRoute, _}
+import org.ergoplatform.http.api._
 import org.ergoplatform.local._
-import org.ergoplatform.mining.ErgoMinerRef
-import org.ergoplatform.network.{ModeFeature, ErgoNodeViewSynchronizer}
+import org.ergoplatform.mining.ErgoMiner
+import org.ergoplatform.mining.ErgoMiner.StartMining
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.{ErgoReadersHolderRef, ErgoNodeViewRef}
-import org.ergoplatform.settings.{Args, NetworkType, ErgoSettings}
+import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.settings.{Args, ErgoSettings, LaunchParameters, NetworkType}
 import scorex.core.api.http._
-import scorex.core.app.{Application, ScorexContext}
+import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
+import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
-import scorex.core.network.{PeerSynchronizerRef, UPnP, UPnPGateway, PeerFeature, NetworkControllerRef}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
+import java.net.InetSocketAddress
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
-import scala.util.{Success, Failure}
 
 class ErgoApp(args: Args) extends ScorexLogging {
 
@@ -36,37 +33,38 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val ergoSettings: ErgoSettings = ErgoSettings.read(args)
 
-  implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
+  require(ergoSettings.scorexSettings.restApi.apiKeyHash.isDefined, "API key hash must be set")
 
-  implicit def exceptionHandler: ExceptionHandler = ApiErrorHandler.exceptionHandler
+  log.info(s"Working directory: ${ergoSettings.directory}")
+  log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")
 
-  implicit def rejectionHandler: RejectionHandler = ApiRejectionHandler.rejectionHandler
+  implicit private def scorexSettings: ScorexSettings = ergoSettings.scorexSettings
 
-  implicit private val actorSystem: ActorSystem = ActorSystem(settings.network.agentName)
+  implicit private val actorSystem: ActorSystem = ActorSystem(scorexSettings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
 
   private val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
   private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
 
-  private val timeProvider = new NetworkTimeProvider(settings.ntp)
+  private val timeProvider = new NetworkTimeProvider(scorexSettings.ntp)
 
   private val upnpGateway: Option[UPnPGateway] =
-    if (settings.network.upnpEnabled) UPnP.getValidGateway(settings.network) else None
-  upnpGateway.foreach(_.addPort(settings.network.bindAddress.getPort))
+    if (scorexSettings.network.upnpEnabled) UPnP.getValidGateway(scorexSettings.network) else None
+  upnpGateway.foreach(_.addPort(scorexSettings.network.bindAddress.getPort))
 
   //an address to send to peers
   private val externalSocketAddress: Option[InetSocketAddress] =
-    settings.network.declaredAddress orElse {
-      upnpGateway.map(u => new InetSocketAddress(u.externalAddress, settings.network.bindAddress.getPort))
+    scorexSettings.network.declaredAddress orElse {
+      upnpGateway.map(u => new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort))
     }
 
   private val basicSpecs = {
-    val invSpec = new InvSpec(settings.network.maxInvObjects)
-    val requestModifierSpec = new RequestModifierSpec(settings.network.maxInvObjects)
-    val modifiersSpec = new ModifiersSpec(settings.network.maxPacketSize)
+    val invSpec = new InvSpec(scorexSettings.network.maxInvObjects)
+    val requestModifierSpec = new RequestModifierSpec(scorexSettings.network.maxInvObjects)
+    val modifiersSpec = new ModifiersSpec(scorexSettings.network.maxPacketSize)
     Seq(
       GetPeersSpec,
-      new PeersSpec(featureSerializers, settings.network.maxPeerSpecObjects),
+      new PeersSpec(featureSerializers, scorexSettings.network.maxPeerSpecObjects),
       invSpec,
       requestModifierSpec,
       modifiersSpec
@@ -83,49 +81,62 @@ class ErgoApp(args: Args) extends ScorexLogging {
     externalNodeAddress = externalSocketAddress
   )
 
-  private val peerManagerRef = PeerManagerRef(settings, scorexContext)
+  private val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
   private val networkControllerRef: ActorRef = NetworkControllerRef(
-    "networkController", settings.network, peerManagerRef, scorexContext)
+    "networkController", scorexSettings.network, peerManagerRef, scorexContext)
 
-  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+  private val parameters = LaunchParameters
+
+  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, parameters)
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
   // Create an instance of ErgoMiner actor if "mining = true" in config
   private val minerRefOpt: Option[ActorRef] =
     if (ergoSettings.nodeSettings.mining) {
-      Some(ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider))
+      Some(ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider))
     } else {
       None
     }
 
   private val statsCollectorRef: ActorRef =
-    ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
+    ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider, parameters)
 
-  private val nodeViewSynchronizer: ActorRef =
-    ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      ergoSettings, timeProvider)
+  private val syncTracker = ErgoSyncTracker(actorSystem, scorexSettings.network, timeProvider)
+  private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
+
+  // touch it to run preStart method of the actor which is in turn running schedulers
+  ErgoNodeViewSynchronizer(
+    networkControllerRef,
+    nodeViewHolderRef,
+    ErgoSyncInfoMessageSpec,
+    ergoSettings,
+    timeProvider,
+    syncTracker,
+    deliveryTracker
+  )
 
   // Launching PeerSynchronizer actor which is then registering itself at network controller
-  private val peerSynchronizer: ActorRef = PeerSynchronizerRef("PeerSynchronizer",
-    networkControllerRef, peerManagerRef, settings.network, featureSerializers)
+  PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network, featureSerializers)
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
-    PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
-    InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
+    ErgoPeersApiRoute(peerManagerRef, networkControllerRef, syncTracker, deliveryTracker, scorexSettings.restApi),
+    InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
+    NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-    UtxoApiRoute(readersHolderRef, settings.restApi),
+    UtxoApiRoute(readersHolderRef, scorexSettings.restApi),
     ScriptApiRoute(readersHolderRef, ergoSettings),
-    ScanApiRoute(readersHolderRef, ergoSettings)
+    ScanApiRoute(readersHolderRef, ergoSettings),
+    NodeApiRoute(ergoSettings)
   ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
 
 
-  private val swaggerRoute = SwaggerRoute(settings.restApi, swaggerConfig)
+  private val swaggerRoute = SwaggerRoute(scorexSettings.restApi, swaggerConfig)
   private val panelRoute = NodePanelRoute()
 
   private val httpService = ErgoHttpService(apiRoutes, swaggerRoute, panelRoute)
@@ -134,19 +145,21 @@ class ErgoApp(args: Args) extends ScorexLogging {
   // Useful for local blockchains (devnet)
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     require(minerRefOpt.isDefined, "Miner does not exist but mining = true in config")
+    log.info(s"Starting mining with offlineGeneration")
     minerRefOpt.get ! StartMining
   }
 
-  private val actorsToStop: Seq[ActorRef] = Seq(
-    peerManagerRef,
+  private val coordinatedShutdown = CoordinatedShutdown(actorSystem)
+  coordinatedShutdown.addActorTerminationTask(
+    CoordinatedShutdown.PhaseBeforeServiceUnbind,
+    s"closing-network",
     networkControllerRef,
-    readersHolderRef,
-    nodeViewSynchronizer,
-    statsCollectorRef,
-    nodeViewHolderRef
-  ) ++ minerRefOpt.toSeq
+    Some(ShutdownNetwork)
+  )
 
-  sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
+  coordinatedShutdown.addTask(CoordinatedShutdown.PhaseBeforeServiceUnbind, "stop-upnpGateway") { () =>
+    Future(upnpGateway.foreach(_.deletePort(scorexSettings.network.bindAddress.getPort))).map(_ => Done)
+  }
 
   if (!ergoSettings.nodeSettings.stateType.requireProofs) {
     MempoolAuditorRef(nodeViewHolderRef, networkControllerRef, ergoSettings)
@@ -154,64 +167,62 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private def swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
-  private def run(): Unit = {
-    require(settings.network.agentName.length <= Application.ApplicationNameLimit)
+  private def run(): Future[ServerBinding] = {
+    require(scorexSettings.network.agentName.length <= ErgoApp.ApplicationNameLimit)
 
     log.debug(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
     log.debug(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
-    log.debug(s"RPC is allowed at ${settings.restApi.bindAddress.toString}")
+    log.debug(s"RPC is allowed at ${scorexSettings.restApi.bindAddress.toString}")
 
-    implicit val mat: SystemMaterializer = SystemMaterializer.get(actorSystem)
-    val bindAddress = settings.restApi.bindAddress
+    val bindAddress = scorexSettings.restApi.bindAddress
 
     Http().newServerAt(bindAddress.getAddress.getHostAddress, bindAddress.getPort).bindFlow(httpService.compositeRoute)
-
-    //on unexpected shutdown
-    Runtime.getRuntime.addShutdownHook(new Thread() {
-      override def run() {
-        log.error("Unexpected shutdown")
-        stopAll()
-      }
-    })
   }
-
-  private def stopAll(): Unit = synchronized {
-    log.info("Stopping network services")
-    upnpGateway.foreach(_.deletePort(settings.network.bindAddress.getPort))
-    networkControllerRef ! ShutdownNetwork
-
-    log.info("Stopping actors (incl. block generator)")
-    actorSystem.terminate().onComplete { _ =>
-      log.info("Exiting from the app...")
-      System.exit(0)
-    }
-  }
-
 }
 
 object ErgoApp extends ScorexLogging {
-
-  import com.joefkelley.argyle._
-
-  val argParser: Arg[Args] = (
-    optional[String]("--config", "-c") and
-      optionalOneOf[NetworkType](NetworkType.all.map(x => s"--${x.verboseName}" -> x): _*)
-    ).to[Args]
-
-  def main(args: Array[String]): Unit = argParser.parse(args) match {
-    case Success(argsParsed) => new ErgoApp(argsParsed).run()
-    case Failure(e) => throw e
+  val ApplicationNameLimit: Int = 50
+  val argParser = new scopt.OptionParser[Args]("ergo") {
+      opt[String]("config")
+        .abbr("c")
+        .action((x, c) => c.copy(userConfigPathOpt = Some(x)))
+        .text("location of ergo node configuration")
+        .optional()
+      opt[Unit]("devnet")
+        .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.DevNet)))
+        .text("set network to devnet")
+        .optional()
+      opt[Unit]("testnet")
+        .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.TestNet)))
+        .text("set network to testnet")
+        .optional()
+      opt[Unit]("mainnet")
+        .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.MainNet)))
+        .text("set network to mainnet")
+        .optional()
+      help("help").text("prints this usage text")
   }
 
+  /** Internal failure causing shutdown */
+  case object InternalShutdown extends CoordinatedShutdown.Reason
+
+  /** Intentional user invoked remote shutdown */
+  case object RemoteShutdown extends CoordinatedShutdown.Reason
+
+  /** Exception that triggers proper system shutdown */
+  case class CriticalSystemException(message: String) extends Exception(message)
+
+  /** hard application exit in case actor system is not started yet*/
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
 
-  def shutdown(system: ActorSystem, actors: Seq[ActorRef]): Unit = {
-    log.warn("Terminating Actors")
-    actors.foreach { a => a ! PoisonPill }
-    log.warn("Terminating ActorSystem")
-    val termination = system.terminate()
-    Await.result(termination, 60.seconds)
-    log.warn("Application has been terminated.")
+  /** The only proper way of application shutdown after actor system initialization */
+  def shutdownSystem(reason: CoordinatedShutdown.Reason = InternalShutdown)
+                    (implicit system: ActorSystem): Future[Done] =
+    CoordinatedShutdown(system).run(reason)
+
+  def main(args: Array[String]): Unit =
+    argParser.parse(args, Args()).foreach { argsParsed =>
+      new ErgoApp(argsParsed).run()
   }
 
 }

@@ -3,12 +3,14 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
+import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Constants, _}
+import org.ergoplatform.settings._
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
-import scorex.core.block.Block
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, ValidationState}
@@ -68,7 +70,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   private val votingSettings = ergoSettings.chainSettings.voting
   private val powScheme = ergoSettings.chainSettings.powScheme
-  private val popowAlgos = new PoPowAlgos(powScheme)
+  private val popowAlgos = new NipopowAlgos(powScheme)
 
   override def sigmaPreHeader: special.sigma.PreHeader =
     PreHeader.toSigma(lastHeaders.headOption.getOrElse(PreHeader.fake))
@@ -94,7 +96,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   /**
     * @return block version of the protocol
     */
-  def blockVersion: Block.Version = currentParameters.blockVersion
+  def blockVersion: Header.Version = currentParameters.blockVersion
 
   private def votingEpochLength: Int = votingSettings.votingLength
 
@@ -229,7 +231,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
-  def appendHeader(header: Header, votingSettings: VotingSettings): Try[ErgoStateContext] = {
+  def appendHeader(header: Header): Try[ErgoStateContext] = {
     validateVotes(header)
       .result
       .toTry
@@ -294,19 +296,19 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
 object ErgoStateContext {
 
-  def empty(constants: StateConstants): ErgoStateContext = {
-    empty(constants.settings.chainSettings.genesisStateDigest, constants.settings)
+  def empty(constants: StateConstants, parameters: Parameters): ErgoStateContext = {
+    empty(constants.settings.chainSettings.genesisStateDigest, constants.settings, parameters)
   }
 
-  def empty(settings: ErgoSettings): ErgoStateContext = {
-    empty(settings.chainSettings.genesisStateDigest, settings)
+  def empty(settings: ErgoSettings, parameters: Parameters): ErgoStateContext = {
+    empty(settings.chainSettings.genesisStateDigest, settings, parameters)
   }
 
   /**
     * Initialize empty state context
     */
-  def empty(genesisStateDigest: ADDigest, settings: ErgoSettings): ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, ErgoValidationSettings.initial,
+  def empty(genesisStateDigest: ADDigest, settings: ErgoSettings, parameters: Parameters): ErgoStateContext = {
+    new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters, ErgoValidationSettings.initial,
       VotingData.empty)(settings)
   }
 

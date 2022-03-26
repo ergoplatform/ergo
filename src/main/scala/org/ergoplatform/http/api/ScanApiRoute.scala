@@ -1,7 +1,7 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive, Route}
+import akka.http.scaladsl.server.Route
 import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
@@ -23,11 +23,10 @@ import org.ergoplatform.wallet.Constants.ScanId
   *
   * See EIP-0001 (https://github.com/ergoplatform/eips/blob/master/eip-0001.md) for motivation behind this API.
   */
-
 case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                        (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
-  import org.ergoplatform.nodeView.wallet.scanning.ScanJsonCodecs._
+  import org.ergoplatform.nodeView.wallet.scanning.ScanJsonCodecs.{scanReqDecoder, scanEncoder}
 
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   implicit val walletBoxEncoder: Encoder[WalletBox] = WalletBox.encoder
@@ -82,5 +81,4 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       case Success(_) => ApiResponse(scanIdsBox.box.id)
     }
   }
-
 }

@@ -1,13 +1,12 @@
 package org.ergoplatform.http.routes
 
-import akka.http.scaladsl.model.{ContentTypes, StatusCodes, HttpEntity, UniversalEntity}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.http.api.BlocksApiRoute
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
@@ -34,7 +33,7 @@ class BlocksApiRouteSpec extends AnyFlatSpec
   }
 
   it should "post block correctly" in {
-    val (st, bh) = createUtxoState()
+    val (st, bh) = createUtxoState(parameters)
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
     val blockJson: UniversalEntity = HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
     Post(prefix, blockJson) ~> route ~> check {

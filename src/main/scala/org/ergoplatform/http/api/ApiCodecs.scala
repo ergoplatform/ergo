@@ -29,6 +29,10 @@ import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
+import org.ergoplatform.wallet.interface4j.SecretString
+import scorex.crypto.authds.{LeafData, Side}
+import scorex.crypto.authds.merkle.MerkleProof
+import scorex.crypto.hash.Digest
 import sigmastate.serialization.OpCodes
 import special.sigma.AnyValue
 
@@ -40,6 +44,23 @@ trait ApiCodecs extends JsonCodecs {
   def fromValidation[T](validationResult: ValidationResult[T])
                        (implicit cursor: ACursor): Either[DecodingFailure, T] = {
     fromTry(validationResult.toTry)
+  }
+
+  implicit val leafDataEncoder: Encoder[LeafData] = xs => Base16.encode(xs).asJson
+
+  implicit val digestEncoder: Encoder[Digest] = x => Base16.encode(x).asJson
+
+  implicit val sideEncoder: Encoder[Side] = _.toByte.asJson
+
+  protected implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = { proof =>
+    Json.obj(
+      "leafData" -> proof.leafData.asJson,
+      "levels" -> proof.levels.asJson,
+    )
+  }
+
+  implicit val secretStringEncoder: Encoder[SecretString] = { secret =>
+    secret.toStringUnsecure.asJson
   }
 
   implicit val bigIntEncoder: Encoder[BigInt] = { bigInt =>
@@ -309,7 +330,7 @@ trait ApiCodecs extends JsonCodecs {
       "hint" -> proofType.asJson,
       "challenge" -> Base16.encode(sp.challenge).asJson,
       "pubkey" -> sp.image.asJson,
-      "proof" -> SigSerializer.toBytes(sp.uncheckedTree).asJson,
+      "proof" -> SigSerializer.toProofBytes(sp.uncheckedTree).asJson,
       "position" -> sp.position.asJson
     )
   }

@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.viewholder
 
+import akka.actor.ActorRef
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -7,7 +8,7 @@ import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.settings.{ErgoSettings, VotingSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.testkit.utils.NoShrink
 
 import scala.concurrent.duration._
@@ -35,11 +36,11 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     )
   }
 
-  def genFullChain(genesisState: WrappedUtxoState, howMany: Int): Seq[ErgoFullBlock] = {
+  def genFullChain(genesisState: WrappedUtxoState, howMany: Int, nodeViewHolderRef: ActorRef): Seq[ErgoFullBlock] = {
     (1 to howMany).foldLeft((Seq[ErgoFullBlock](), genesisState, None: Option[ErgoFullBlock])) { case ((chain, wus, parentOpt), h) =>
       val time = System.currentTimeMillis() - (howMany - h) * (BlockInterval.toMillis * 20)
       val block = validFullBlock(parentOpt, wus, time)
-      val newState = wus.applyModifier(block).get
+      val newState = wus.applyModifier(block)(mod => nodeViewHolderRef ! mod).get
       (chain :+ block, newState, Some(block))
     }._1
   }
@@ -47,10 +48,10 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
   private def testCode(fixture: NodeViewFixture, toSkip: Int, totalBlocks: Int = 20) = {
     import fixture._
 
-    val (us, bh) = createUtxoState(stateConstants)
-    val wus = WrappedUtxoState(us, bh, stateConstants)
+    val (us, bh) = createUtxoState(stateConstants, parameters)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters)
 
-    val fullChain = genFullChain(wus, totalBlocks)
+    val fullChain = genFullChain(wus, totalBlocks, nodeViewHolderRef)
 
     fullChain.foreach { block =>
       applyHeader(block.header).isSuccess shouldBe true
@@ -69,19 +70,19 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
   }
 
   property(s"pruned chain bootstrapping - blocksToKeep = -1 - all the blocks are to be applied to the state") {
-    new NodeViewFixture(prunedSettings(-1)).apply(f => testCode(f, 0))
+    new NodeViewFixture(prunedSettings(-1), parameters).apply(f => testCode(f, 0))
   }
 
   property(s"pruned chain bootstrapping - blocksToKeep = 3 - first 9 blocks out of 20 are not to be applied to the state") {
-    new NodeViewFixture(prunedSettings(3)).apply(f => testCode(f, 9))
+    new NodeViewFixture(prunedSettings(3), parameters).apply(f => testCode(f, 9))
   }
 
   property(s"pruned chain bootstrapping - blocksToKeep = 15 - all the blocks are to be applied to the state") {
-    new NodeViewFixture(prunedSettings(15)).apply(f => testCode(f, 0))
+    new NodeViewFixture(prunedSettings(15), parameters).apply(f => testCode(f, 0))
   }
 
   property(s"pruned chain bootstrapping - total = 30, blocksToKeep = 15 - first 9 blocks are not to be applied to the state") {
-    new NodeViewFixture(prunedSettings(15)).apply(f => testCode(f, 9, 30))
+    new NodeViewFixture(prunedSettings(15), parameters).apply(f => testCode(f, 9, 30))
   }
 
 }

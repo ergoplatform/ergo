@@ -1,10 +1,9 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.ErgoBoxAssets
-import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 import org.ergoplatform.SigmaConstants.MaxBoxSize
 import org.ergoplatform.wallet.TokensMap
+import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectionResult}
 
 
 /**
@@ -43,7 +42,13 @@ object BoxSelector {
 
   // from https://github.com/ergoplatform/ergo/blob/2ce78a0380977b8ca354518edca93a5269ac9f53/src/main/scala/org/ergoplatform/settings/Parameters.scala#L258-L258
   private val MinValuePerByteDefault = 30 * 12
-  val MinBoxValue: Long = (MaxBoxSize.value / 2) * MinValuePerByteDefault
+  val MinBoxValue: Long = (MaxBoxSize.value / 2L) * MinValuePerByteDefault
+
+  /**
+    * Factor which is showing how many inputs selector is going through to optimize inputs.
+    * Bigger factor is slowing down inputs selection but minimizing chance of transaction failure.
+    */
+  val ScanDepthFactor = 300
 
   final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
 

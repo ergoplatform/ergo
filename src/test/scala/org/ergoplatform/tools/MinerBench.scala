@@ -4,7 +4,8 @@ import com.google.common.primitives.Bytes
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.utils.ErgoTestHelpers
 import scorex.crypto.hash.{Blake2b256, Blake2b512, CryptographicHash, Digest}
 
@@ -18,7 +19,7 @@ object MinerBench extends App with ErgoTestHelpers {
   def numericHashBench(): Unit = {
     val Steps = 100000000
 
-    def numericHash(input0: Array[Byte], hf: CryptographicHash[_ <: Digest], validRange: BigInt): Unit = {
+    def numericHash(hf: CryptographicHash[_ <: Digest], validRange: BigInt): Unit = {
       @tailrec
       def hash(input: Array[Byte]): BigInt = {
         val hashed = hf.apply(input)
@@ -37,19 +38,19 @@ object MinerBench extends App with ErgoTestHelpers {
     val validRange256: BigInt = (BigInt(2).pow(Blake2b256.DigestSize * 8) / q) * q
 
     // prepare JVM
-    (0 until Steps).foreach(_ => numericHash(data, Blake2b256, validRange256))
+    (0 until Steps).foreach(_ => numericHash(Blake2b256, validRange256))
 
     val st = System.currentTimeMillis()
-    (0 until Steps).foreach(_ => numericHash(data, Blake2b256, validRange256))
+    (0 until Steps).foreach(_ => numericHash(Blake2b256, validRange256))
     val st2 = System.currentTimeMillis()
 
     val validRange512: BigInt = (BigInt(2).pow(Blake2b512.DigestSize * 8) / q) * q
 
     // prepare JVM
-    (0 until Steps).foreach(_ => numericHash(data, Blake2b512, validRange512))
+    (0 until Steps).foreach(_ => numericHash(Blake2b512, validRange512))
 
     val st3 = System.currentTimeMillis()
-    (0 until Steps).foreach(_ => numericHash(data, Blake2b512, validRange512))
+    (0 until Steps).foreach(_ => numericHash(Blake2b512, validRange512))
     val st4 = System.currentTimeMillis()
 
     println(s"Calculation time of $Steps numberic hashes over ${data.length} bytes")

@@ -1,35 +1,37 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
-import org.ergoplatform.ErgoBox.{R4, TokenId, allZerosModifierId, AdditionalRegisters}
+import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
+import org.ergoplatform.modifiers.state.StateChanges
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
+import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, Parameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
+import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.AtLeast
-import sigmastate.Values.{ByteArrayConstant, SigmaPropConstant, IntConstant, ErgoTree}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.CostingSigmaDslBuilder
 import sigmastate.serialization.ValueSerializer
+import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.util.Try
+import scala.reflect.ClassTag
+import scala.util.{Failure, Success, Try}
+import scala.collection.breakOut
 
 /**
   * Implementation of minimal state concept in Scorex. Minimal state (or just state from now) is some data structure
@@ -39,24 +41,27 @@ import scala.util.Try
   * transformations of UTXO set presented in form of authenticated dynamic dictionary are needed to check validity of
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
-trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
-  extends MinimalState[ErgoPersistentModifier, IState] with ErgoStateReader {
+trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   self: IState =>
 
+  /**
+    *
+    * @param mod modifire to apply to the state
+    * @param generate function that handles newly created modifier as a result of application the current one
+    * @return new State
+    */
+  def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[IState]
 
-  def closeStorage(): Unit = {
-    log.warn("Closing state's store.")
-    store.close()
-  }
-
-  override def applyModifier(mod: ErgoPersistentModifier): Try[IState]
-
-  override def rollbackTo(version: VersionTag): Try[IState]
+  def rollbackTo(version: VersionTag): Try[IState]
 
   def rollbackVersions: Iterable[VersionTag]
 
-  override type NVCT = this.type
+  /**
+    * @return read-only view of this state
+    */
+  def getReader: ErgoStateReader = this
+
 }
 
 object ErgoState extends ScorexLogging {
@@ -68,55 +73,75 @@ object ErgoState extends ScorexLogging {
   /**
     * @param txs - sequence of transactions
     * @return ordered sequence of operations on UTXO set from this sequence of transactions
-    *         if some box was created and later spend in this sequence - it is not included in the result at all
-    *         if box was first spend and created after that - it is in both toInsert and toRemove
+    *         if some box was created and later spent in this sequence - it is not included in the result at all
+    *         if box was first spent and created after that - it is in both toInsert and toRemove
     */
-  def stateChanges(txs: Seq[ErgoTransaction]): StateChanges = {
-    val (toRemove, toInsert) = boxChanges(txs)
-    val toRemoveChanges = toRemove.map(id => Removal(id))
-    val toInsertChanges = toInsert.map(b => Insertion(b))
-    val toLookup = txs.flatMap(_.dataInputs).map(b => Lookup(b.boxId))
-    StateChanges(toRemoveChanges, toInsertChanges, toLookup)
+  def stateChanges(txs: Seq[ErgoTransaction]): Try[StateChanges] = {
+    boxChanges(txs).map { case (toRemoveChanges, toInsertChanges) =>
+      val toLookup: IndexedSeq[Lookup] = txs.flatMap(_.dataInputs).map(b => Lookup(b.boxId))(breakOut)
+      StateChanges(toRemoveChanges, toInsertChanges, toLookup)
+    }
   }
 
   /**
     * Tries to validate and execute transactions.
-    *
+    * @param transactions to be validated and executed
+    * @param currentStateContext to be used for tx execution
+    * @param checkBoxExistence function to provide ErgoBox by BoxId
     * @return Result of transactions execution with total cost inside
     */
   def execTransactions(transactions: Seq[ErgoTransaction],
                        currentStateContext: ErgoStateContext)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
-    import cats.implicits._
-    implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
+    val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
-    @tailrec
-    def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {
-      case (tx :: tail, r: Valid[Long]) =>
-        val boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
-          .map(in => checkBoxExistence(in.boxId))
-          .sequence
-
-        lazy val dataBoxesTry: Try[List[ErgoBox]] = tx.dataInputs.toList
-          .map(in => checkBoxExistence(in.boxId))
-          .sequence
-
-        lazy val boxes: Try[(List[ErgoBox], List[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
-
-        val vs = tx.validateStateless()
-          .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
-          .validateNoFailure(txDataBoxes, dataBoxesTry)
-          .payload[Long](r.value)
-          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
-            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value)(verifier).result
-          }
-
-        execTx(tail, vs)
-      case _ =>
-        accCostTry
+    def preAllocatedBuilder[T: ClassTag](sizeHint: Int): mutable.ArrayBuilder[T] = {
+      val b = mutable.ArrayBuilder.make[T]()
+      b.sizeHint(sizeHint)
+      b
     }
 
-    execTx(transactions.toList, Valid[Long](0L))
+    @tailrec
+    def collectBoxesById(
+                 remainingBoxIds: Iterator[ErgoBox.BoxId],
+                 resultingBoxes: Try[mutable.ArrayBuilder[ErgoBox]]
+               ): Try[IndexedSeq[ErgoBox]] = {
+      if (!remainingBoxIds.hasNext) {
+        resultingBoxes.map(_.result())
+      } else {
+        checkBoxExistence(remainingBoxIds.next()) match {
+          case Success(box) =>
+            collectBoxesById(remainingBoxIds, resultingBoxes.map(_ += box))
+          case Failure(ex) =>
+            Failure(ex)
+        }
+      }
+    }
+
+    val checkpointHeight = currentStateContext.ergoSettings.nodeSettings.checkpoint.map(_.height).getOrElse(0)
+    if (currentStateContext.currentHeight <= checkpointHeight) {
+      Valid(0L)
+    } else {
+      import spire.syntax.all.cfor
+      var costResult: ValidationResult[Long] = Valid[Long](0L)
+      cfor(0)(_ < transactions.length && costResult.isValid, _ + 1) { i =>
+        val validCostResult = costResult.asInstanceOf[Valid[Long]]
+        val tx = transactions(i)
+        val boxesToSpendTry: Try[IndexedSeq[ErgoBox]] =
+          collectBoxesById(tx.inputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
+        lazy val dataBoxesTry: Try[IndexedSeq[ErgoBox]] =
+          collectBoxesById(tx.dataInputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
+        lazy val boxes: Try[(IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
+        costResult = tx.validateStateless()
+          .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
+          .validateNoFailure(txDataBoxes, dataBoxesTry)
+          .payload[Long](validCostResult.value)
+          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
+            tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value)(verifier).result
+          }
+      }
+      costResult
+    }
   }
 
   /**
@@ -126,30 +151,54 @@ object ErgoState extends ScorexLogging {
     *         if box was first spend and created after that - it is in both toInsert and toRemove,
     *         and an error will be thrown further during tree modification
     */
-  def boxChanges(txs: Seq[ErgoTransaction]): (Seq[ADKey], Seq[ErgoBox]) = {
-    val toInsert: mutable.HashMap[ModifierId, ErgoBox] = mutable.HashMap.empty
-    val toRemove: mutable.ArrayBuffer[(ModifierId, ADKey)] = mutable.ArrayBuffer()
-    txs.foreach { tx =>
+  def boxChanges(txs: Seq[ErgoTransaction]): Try[(Vector[Remove], Vector[Insert])] = Try {
+    val toInsert: mutable.TreeMap[ModifierId, Insert] = mutable.TreeMap.empty
+    val toRemove: mutable.TreeMap[ModifierId, Remove] = mutable.TreeMap.empty
+
+    cfor(0)(_ < txs.length, _ + 1) { i =>
+      val tx = txs(i)
       tx.inputs.foreach { i =>
-        val wrapped = bytesToId(i.boxId)
-        toInsert.remove(wrapped) match {
-          case None => toRemove.append((wrapped, i.boxId))
+        val wrappedBoxId = bytesToId(i.boxId)
+        toInsert.remove(wrappedBoxId) match {
+          case None =>
+            if (toRemove.put(wrappedBoxId, Remove(i.boxId)).nonEmpty) {
+              throw new IllegalArgumentException(s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId")
+            }
           case _ => // old value removed, do nothing
         }
       }
-      tx.outputs.foreach(o => toInsert += bytesToId(o.id) -> o)
+      tx.outputs.foreach(o => toInsert += bytesToId(o.id) -> Insert(o.id, ADValue @@ o.bytes))
     }
-    (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
+    (toRemove.map(_._2)(breakOut), toInsert.map(_._2)(breakOut))
   }
 
-  private def createBox(value: Long,
+  /**
+    * @param txs - sequence of transactions
+    * @return new ErgoBoxes produced by the transactions
+    */
+  def newBoxes(txs: Seq[ErgoTransaction]): Vector[ErgoBox] = {
+    val newBoxes: mutable.TreeMap[ModifierId, ErgoBox] = mutable.TreeMap.empty
+    txs.foreach { tx =>
+      tx.inputs.foreach(i => newBoxes.remove(bytesToId(i.boxId)))
+      tx.outputs.foreach(o => newBoxes += bytesToId(o.id) -> o)
+    }
+    newBoxes.map(_._2)(breakOut)
+  }
+
+  /**
+    * Helper method used to construct boxes for pre-genesis state (state before a genesis block)
+    */
+  private def createGenesisBox(value: Long,
                         ergoTree: ErgoTree,
-                        creationHeight: Int,
-                        additionalTokens: Seq[(TokenId, Long)] = Nil,
-                        additionalRegisters: AdditionalRegisters = Map.empty,
-                        transactionId: ModifierId = ErgoBox.allZerosModifierId,
-                        boxIndex: Short = 0): ErgoBox = {
+                        additionalTokens: Seq[(TokenId, Long)] = Seq.empty,
+                        additionalRegisters: AdditionalRegisters = Map.empty): ErgoBox = {
     import sigmastate.eval._
+
+    val creationHeight: Int = ErgoHistory.EmptyHistoryHeight
+
+    val transactionId: ModifierId = ErgoBox.allZerosModifierId
+    val boxIndex: Short = 0: Short
+
     new ErgoBox(value, ergoTree,
       CostingSigmaDslBuilder.Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
       additionalRegisters,
@@ -170,7 +219,7 @@ object ErgoState extends ScorexLogging {
     val protectionBytes = ValueSerializer.serialize(protection)
     val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
     val prop = ErgoScriptPredef.foundationScript(settings.monetary)
-    createBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> ByteArrayConstant(protectionBytes)))
+    createGenesisBox(value, prop, Seq.empty, Map(R4 -> ByteArrayConstant(protectionBytes)))
   }
 
   /**
@@ -180,7 +229,7 @@ object ErgoState extends ScorexLogging {
   private def genesisEmissionBox(chainSettings: ChainSettings): ErgoBox = {
     val value = chainSettings.emissionRules.minersCoinsTotal
     val prop = chainSettings.monetary.emissionBoxProposition
-    createBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
+    createGenesisBox(value, prop)
   }
 
   /**
@@ -190,7 +239,7 @@ object ErgoState extends ScorexLogging {
   private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
     val proofsBytes = chainSettings.noPremineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
     val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
-    createBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
+    createGenesisBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, Seq.empty, proofs)
   }
 
   /**
@@ -202,21 +251,22 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisUtxoState(stateDir: File,
-                               constants: StateConstants): (UtxoState, BoxHolder) = {
+                               constants: StateConstants,
+                               parameters: Parameters): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
     val boxes = genesisBoxes(constants.settings.chainSettings)
     val bh = BoxHolder(boxes)
 
-    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants, parameters).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
       java.util.Arrays.equals(us.rootHash, constants.settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 
-  def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
+  def generateGenesisDigestState(stateDir: File, settings: ErgoSettings, parameters: Parameters): DigestState = {
     DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest),
-      stateDir, StateConstants(None, settings))
+      stateDir, StateConstants(settings), parameters)
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
@@ -224,14 +274,15 @@ object ErgoState extends ScorexLogging {
   lazy val genesisStateVersion: VersionTag = idToVersion(Header.GenesisParentId)
 
   def readOrGenerate(settings: ErgoSettings,
-                     constants: StateConstants): ErgoState[_] = {
+                     constants: StateConstants,
+                     parameters: Parameters): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
-      case StateType.Digest => DigestState.create(None, None, dir, constants)
-      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
-      case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
+      case StateType.Digest => DigestState.create(None, None, dir, constants, parameters)
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants, parameters)
+      case _ => ErgoState.generateGenesisUtxoState(dir, constants, parameters)._1
     }
   }
 

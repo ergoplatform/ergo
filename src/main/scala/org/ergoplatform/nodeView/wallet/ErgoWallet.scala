@@ -1,13 +1,12 @@
 package org.ergoplatform.nodeView.wallet
 
-import akka.actor.{ActorRef, ActorSystem, Props}
-import org.ergoplatform.GlobalConstants
+import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.boxes.ReplaceCompactCollectBoxSelector
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
@@ -15,28 +14,22 @@ import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
-class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
+class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, parameters: Parameters)
                 (implicit val actorSystem: ActorSystem)
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
     with ErgoWalletReader
     with ScorexLogging {
 
+  private val walletSettings = settings.walletSettings
+
   // A replace-compact-collect selector is parameterized with max number of inputs a transaction could has,
   // and also optimal number of inputs(a selector is collecting dust if transaction has less inputs than optimal).
-  // Now these settings are hard-coded, however, they should be parameterized
-  // https://github.com/ergoplatform/ergo/issues/856
-  val maxInputs = 64
-  val optimalInputs = 3
+  private val maxInputs = walletSettings.maxInputs
+  private val optimalInputs = walletSettings.optimalInputs
+  private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
 
-  val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
-
-  override type NVCT = this.type
-
-  override val walletActor: ActorRef = {
-    val props = Props(classOf[ErgoWalletActor], settings, boxSelector, historyReader)
-                  .withDispatcher(GlobalConstants.ApiDispatcher)
-    actorSystem.actorOf(props)
-  }
+  override val walletActor: ActorRef =
+    ErgoWalletActor(settings, parameters, new ErgoWalletServiceImpl, boxSelector, historyReader)
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)
@@ -76,8 +69,9 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
 object ErgoWallet {
 
   def readOrGenerate(historyReader: ErgoHistoryReader,
-                     settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
-    new ErgoWallet(historyReader, settings)
+                     settings: ErgoSettings,
+                     parameters: Parameters)(implicit actorSystem: ActorSystem): ErgoWallet = {
+    new ErgoWallet(historyReader, settings, parameters)
   }
 
 }

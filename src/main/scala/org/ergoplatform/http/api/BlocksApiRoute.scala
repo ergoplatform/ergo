@@ -5,15 +5,18 @@ import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+import scorex.crypto.authds.merkle.MerkleProof
+import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 
 import scala.concurrent.Future
@@ -21,7 +24,12 @@ import scala.concurrent.Future
 case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
+  // Limit for requests returning headers, to avoid too heavy requests
+  private val MaxHeaders = 16384
+
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
+
+  val blocksPaging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 1, "limit".as[Int] ? 50)
 
   override val route: Route = pathPrefix("blocks") {
     getBlocksR ~
@@ -31,6 +39,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getBlockIdsAtHeightR ~
       getBlockHeaderByHeaderIdR ~
       getBlockTransactionsByHeaderIdR ~
+      getProofForTxR ~
       getFullBlockByHeaderIdR ~
       getModifierByIdR
   }
@@ -52,7 +61,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   private def getHeaderIds(offset: Int, limit: Int): Future[Json] =
     getHistory.map { history =>
-      history.headerIdsAt(offset, limit).toList.asJson
+      history.headerIdsAt(offset, limit).asJson
     }
 
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] =
@@ -62,6 +71,21 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   private def getModifierById(modifierId: ModifierId): Future[Option[ErgoPersistentModifier]] =
     getHistory.map(_.modifierById(modifierId))
+
+  private def getProofForTx(headerId: ModifierId, txId: ModifierId): Future[Option[MerkleProof[Digest32]]] =
+    getModifierById(headerId).flatMap {
+      case Some(header: Header) =>
+        val blockTxsId = BlockSection.computeId(
+          BlockTransactions.modifierTypeId,
+          headerId,
+          header.transactionsRoot.asInstanceOf[Array[Byte]]
+        )
+        getModifierById(blockTxsId).map {
+          case Some(txs: BlockTransactions) => txs.proofFor(txId)
+          case _ => None
+        }
+      case _ => Future(None)
+    }
 
   private def getChainSlice(fromHeight: Int, toHeight: Int): Future[Json] =
     getHistory.map { history =>
@@ -82,10 +106,18 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     }
 
   private val chainPagination: Directive[(Int, Int)] =
-    parameters("fromHeight".as[Int] ? 0, "toHeight".as[Int] ? -1)
+    parameters("fromHeight".as[Int] ? 1, "toHeight".as[Int] ? MaxHeaders)
 
-  def getBlocksR: Route = (pathEndOrSingleSlash & get & paging) { (offset, limit) =>
-    ApiResponse(getHeaderIds(offset, limit))
+  def getBlocksR: Route = (pathEndOrSingleSlash & get & blocksPaging) { (offset, limit) =>
+    if (offset < 0) {
+      BadRequest("offset is negative")
+    } else if (limit < 0) {
+      BadRequest("limit is negative")
+    } else if (limit > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders headers can be requested")
+    } else {
+      ApiResponse(getHeaderIds(offset, limit))
+    }
   }
 
   def postBlocksR: Route = (post & entity(as[ErgoFullBlock])) { block =>
@@ -93,7 +125,9 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       log.info("Received a new valid block through the API: " + block)
 
       viewHolderRef ! LocallyGeneratedModifier(block.header)
-      block.blockSections.foreach { viewHolderRef ! LocallyGeneratedModifier(_) }
+      block.blockSections.foreach {
+        viewHolderRef ! LocallyGeneratedModifier(_)
+      }
 
       ApiResponse.OK
     } else {
@@ -102,15 +136,29 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   }
 
   def getChainSliceR: Route = (pathPrefix("chainSlice") & chainPagination) { (fromHeight, toHeight) =>
-    ApiResponse(getChainSlice(fromHeight, toHeight))
+    if (toHeight < fromHeight) {
+      BadRequest("toHeight < fromHeight")
+    } else if (fromHeight - toHeight > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders headers can be requested")
+    } else {
+      ApiResponse(getChainSlice(fromHeight, toHeight))
+    }
   }
 
   def getModifierByIdR: Route = (pathPrefix("modifier") & modifierId & get) { id =>
     ApiResponse(getModifierById(id))
   }
 
+  def getProofForTxR: Route = (modifierId & pathPrefix("proofFor") & modifierId & get) { (headerId, txId) =>
+    ApiResponse(getProofForTx(headerId, txId))
+  }
+
   def getLastHeadersR: Route = (pathPrefix("lastHeaders" / IntNumber) & get) { count =>
-    ApiResponse(getLastHeaders(count))
+    if (count > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders headers can be requested")
+    } else {
+      ApiResponse(getLastHeaders(count))
+    }
   }
 
   def getBlockIdsAtHeightR: Route = (pathPrefix("at" / IntNumber) & get) { height =>

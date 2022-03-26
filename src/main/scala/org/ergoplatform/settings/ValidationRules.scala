@@ -2,9 +2,12 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import scorex.core.validation.ModifierValidator
 import scorex.core.validation.ValidationResult.Invalid
 
@@ -46,7 +49,7 @@ object ValidationRules {
     txInputsUnique -> RuleStatus(s => fatal(s"There should be no duplicate inputs. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txAssetsInOneBox -> RuleStatus(s => fatal(s"A number of tokens within a box should not exceed ${ErgoTransaction.MaxAssetsPerBox}" +
+    txAssetsInOneBox -> RuleStatus(s => fatal(s"A number of tokens within a box should not exceed ${ErgoBoxAssetExtractor.MaxAssetsPerBox}" +
       s" and sum of assets of one type should not exceed ${Long.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
@@ -74,7 +77,7 @@ object ValidationRules {
     txAssetsPreservation -> RuleStatus(s => fatal(s"For every token, its amount in outputs should not exceed its amount in inputs. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txBoxToSpend -> RuleStatus(s => recoverable(s"Box id doesn't match the input. $s"),
+    txBoxToSpend -> RuleStatus(s => fatal(s"Box id doesn't match the input. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
     txScriptValidation -> RuleStatus(s => fatal(s"Scripts of all transaction inputs should pass verification. $s"),
@@ -137,6 +140,9 @@ object ValidationRules {
     hdrVotesUnknown -> RuleStatus(s => fatal(s"First header of an epoch should not contain a vote for unknown parameter. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = true),
+    hdrCheckpoint -> RuleStatus(s => fatal(s"Chain is failing checkpoint validation"),
+      Seq(classOf[Header]),
+      mayBeDisabled = false),
 
     // block sections validation
     bsNoHeader -> RuleStatus(s => recoverable(s"A header for a modifier $s is not defined"),
@@ -148,7 +154,7 @@ object ValidationRules {
     bsHeaderValid -> RuleStatus(s => fatal(s"A header for the block section should not be marked as invalid. $s"),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
-    bsHeadersChainSynced -> RuleStatus(s => recoverable(s"Headers-chain is not synchronized yet"),
+    bsHeadersChainSynced -> RuleStatus(_ => recoverable(s"Headers-chain is not synchronized yet"),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
     bsTooOld -> RuleStatus(s => fatal(s"Block section should correspond to a block header that is not pruned yet. $s"),
@@ -257,6 +263,7 @@ object ValidationRules {
   val hdrVotesDuplicates: Short = 213
   val hdrVotesContradictory: Short = 214
   val hdrVotesUnknown: Short = 215
+  val hdrCheckpoint: Short = 216
 
   // block sections validation
   val alreadyApplied: Short = 300

@@ -3,6 +3,7 @@ devnet
 
 # IDE/Editor files
 .idea
+.bsp
 .ensime
 .ensime_cache/
 scorex.yaml
@@ -45,6 +46,7 @@ my*.conf
 *.data
 ergo/
 .ergo/
+.ergo_test/
 
 # for temporary experiments
 sheet.scala

@@ -5,7 +5,7 @@ name := "avldb"
 libraryDependencies ++= Seq(
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "org.scorexfoundation" %% "scrypto" % "2.1.10"
+  "org.scorexfoundation" %% "scrypto" % "2.2.1"
 )
 
 libraryDependencies ++= Seq(
@@ -45,3 +45,6 @@ scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
 // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
 // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
 scalacOptions in(Compile, compile) ++= Seq("-release", "8")
+scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard")
+
+enablePlugins(ReproducibleBuildsPlugin)

@@ -4,14 +4,15 @@ import java.io.File
 
 import cats.Traverse
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
-import org.ergoplatform.settings.{Algos, VotingSettings}
+import org.ergoplatform.settings.{Algos, Parameters}
 import org.ergoplatform.utils.LoggingUtil
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
@@ -34,9 +35,10 @@ import scala.util.{Failure, Success, Try}
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: LDBVersionedStore,
-                override val constants: StateConstants)
+                override val constants: StateConstants,
+                override val parameters: Parameters)
   extends ErgoState[UtxoState]
-    with TransactionValidation[ErgoTransaction]
+    with TransactionValidation
     with UtxoStateReader
     with ScorexEncoding {
 
@@ -44,14 +46,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     persistentProver.digest
   }
 
-  private def onAdProofGenerated(proof: ADProofs): Unit = {
-    if (constants.nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
-    constants.nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
-  }
-
   import UtxoState.metadata
-
-  override val maxRollbackDepth = 10
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
@@ -60,7 +55,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
-          new UtxoState(p, version, store, constants)
+          new UtxoState(p, version, store, constants, parameters)
         }
         store.clean(constants.keepVersions)
         rollbackResult
@@ -82,22 +77,22 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
-      persistentProver.synchronized {
-        val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-        val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
-        ModifierValidator(stateContext.validationSettings)
-          .validateNoFailure(fbOperationFailed, resultTry)
-          .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
-          .result
-          .toTry
-      }
+      val resultTry =
+        ErgoState.stateChanges(transactions).map { stateChanges =>
+          val mods = stateChanges.operations
+          Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+        }
+      ModifierValidator(stateContext.validationSettings)
+        .validateNoFailure(fbOperationFailed, resultTry)
+        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
+        .result
+        .toTry
     } else {
       txProcessing.toTry.map(_ => ())
     }
   }
 
-  //todo: utxo snapshot could go here
-  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
+  override def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       persistentProver.synchronized {
         val height = fb.header.height
@@ -107,23 +102,70 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
+          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+
+          txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
-            val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
-            val proofHash = ADProofs.proofDigest(proofBytes)
-            if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+
+            var proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
 
             if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
-              throw new Error("Storage kept roothash is not equal to the declared one")
-            } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
-              throw new Error("Calculated proofHash is not equal to the declared one")
-            } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
-              throw new Error("Calculated stateRoot is not equal to the declared one")
+              throw new Exception("Storage kept roothash is not equal to the declared one")
             }
+
+            if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
+              throw new Exception("Calculated stateRoot is not equal to the declared one")
+            }
+
+            var proofHash = ADProofs.proofDigest(proofBytes)
+
+            if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+
+              log.error("Calculated proofHash is not equal to the declared one, doing another attempt")
+
+              /**
+                * Proof generated was different from one announced.
+                *
+                * In most cases, announced proof is okay, and as proof is already checked, problem in some
+                * extra bytes added to the proof.
+                *
+                * Could be related to https://github.com/ergoplatform/ergo/issues/1614
+                *
+                * So the problem could appear on mining nodes only, and caused by
+                * proofsForTransactions() wasting the tree unexpectedly.
+                *
+                * We are trying to generate proof again now.
+                */
+
+              persistentProver.rollback(inRoot)
+                .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
+
+              ErgoState.stateChanges(fb.blockTransactions.txs) match {
+                case Success(stateChanges) =>
+                 val mods = stateChanges.operations
+                  mods.foreach(persistentProver.performOneOperation)
+
+                  // meta is the same as it is block-specific
+                  proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
+                  proofHash = ADProofs.proofDigest(proofBytes)
+
+                  if(!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+                    throw new Exception("Regenerated proofHash is not equal to the declared one")
+                  }
+                case Failure(e) =>
+                  throw new Exception("Can't generate state changes on proof regeneration ", e)
+              }
+            }
+
+            if (fb.adProofs.isEmpty) {
+              val adProofs = ADProofs(fb.header.id, proofBytes)
+              generate(LocallyGeneratedModifier(adProofs))
+            }
+
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
-            new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
+            new UtxoState(persistentProver, idToVersion(fb.id), store, constants, parameters)
           }
         }
         stateTry.recoverWith[UtxoState] { case e =>
@@ -141,10 +183,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       //todo: update state context with headers (when snapshot downloading is done), so
       //todo: application of the first full block after the snapshot should have correct state context
       //todo: (in particular, "lastHeaders" field of it)
-      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
+      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants, parameters))
 
     case a: Any =>
-      log.info(s"Unhandled modifier: $a")
+      log.error(s"Unhandled unknown modifier: $a")
       Failure(new Exception("unknown modifier"))
   }
 
@@ -162,6 +204,7 @@ object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
+  // block-specific metadata to write into database (in addition to AVL+ tree)
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,
                        currentEmissionBoxOpt: Option[ErgoBox],
@@ -173,11 +216,11 @@ object UtxoState {
     val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
-    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
+    Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
-  def create(dir: File, constants: StateConstants): UtxoState = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+  def create(dir: File, constants: StateConstants, parameters: Parameters): UtxoState = {
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
@@ -186,24 +229,26 @@ object UtxoState {
       val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
-    new UtxoState(persistentProver, version, store, constants)
+    new UtxoState(persistentProver, version, store, constants, parameters)
   }
 
+  /**
+    * Used in tests and to generate a genesis state.
+    */
   @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder,
                     currentEmissionBoxOpt: Option[ErgoBox],
                     dir: File,
-                    constants: StateConstants): UtxoState = {
+                    constants: StateConstants,
+                    parameters: Parameters): UtxoState = {
     val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
     bh.sortedBoxes.foreach { b =>
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
 
-    implicit val votingSettings: VotingSettings = constants.votingSettings
-
-    val defaultStateContext = ErgoStateContext.empty(constants)
+    val defaultStateContext = ErgoStateContext.empty(constants, parameters)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
     val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(
@@ -213,7 +258,7 @@ object UtxoState {
       paranoidChecks = true
     ).get
 
-    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
+    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants, parameters)
   }
 
 }

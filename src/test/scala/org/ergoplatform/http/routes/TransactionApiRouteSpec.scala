@@ -29,7 +29,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   val prefix = "/transactions"
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
-  val route: Route = TransactionsApiRoute(utxoReadersRef, nodeViewRef, restApiSettings).route
+  val route: Route = TransactionsApiRoute(utxoReadersRef, nodeViewRef, settings).route
 
   val inputBox: ErgoBox = utxoState.takeBoxes(1).head
   val input = Input(inputBox.id, emptyProverResult)
@@ -51,7 +51,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
       }
     }
     val readers2 = system.actorOf(Props(new UtxoReadersStub2))
-    TransactionsApiRoute(readers2, nodeViewRef, restApiSettings).route
+    TransactionsApiRoute(readers2, nodeViewRef, settings).route
   }
 
   it should "post transaction" in {
@@ -113,5 +113,4 @@ class TransactionApiRouteSpec extends AnyFlatSpec
       memPool.getAll.slice(offset, offset + limit) shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
-
 }

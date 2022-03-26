@@ -19,7 +19,9 @@ import sigmastate.interpreter.CryptoConstants
 final class ExtendedSecretKey(val keyBytes: Array[Byte],
                               val chainCode: Array[Byte],
                               val path: DerivationPath)
-  extends ExtendedKey with SecretKey {
+  extends ExtendedKey[ExtendedSecretKey] with SecretKey {
+
+  def selfReflection: ExtendedSecretKey = this
 
   override def privateInput: DLogProverInput = DLogProverInput(BigIntegers.fromUnsignedByteArray(keyBytes))
 

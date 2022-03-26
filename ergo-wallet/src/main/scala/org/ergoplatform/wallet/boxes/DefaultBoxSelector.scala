@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.boxes
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoBoxAssets
 import org.ergoplatform.ErgoBoxAssetsHolder
-import org.ergoplatform.ErgoBox.MaxTokens
+import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 
 import scala.annotation.tailrec
@@ -19,11 +19,22 @@ object DefaultBoxSelector extends BoxSelector {
 
   import BoxSelector._
 
-  final case class NotEnoughErgsError(message: String) extends BoxSelectionError
+  final case class NotEnoughErgsError(message: String, balanceFound: Long) extends BoxSelectionError
 
-  final case class NotEnoughTokensError(message: String) extends BoxSelectionError
+  final case class NotEnoughTokensError(message: String, tokensFound: Map[ModifierId, Long]) extends BoxSelectionError
 
   final case class NotEnoughCoinsForChangeBoxesError(message: String) extends BoxSelectionError
+
+  // helper function which returns count of assets in `initialMap` not fully spent in `subtractor`
+  private def diffCount(initialMap: mutable.Map[ModifierId, Long], subtractor: TokensMap): Int = {
+    initialMap.foldLeft(0){case (cnt, (tokenId, tokenAmt)) =>
+      if (tokenAmt - subtractor.getOrElse(tokenId, 0L) > 0) {
+        cnt + 1
+      } else {
+        cnt
+      }
+    }
+  }
 
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                                           externalFilter: T => Boolean,
@@ -40,10 +51,30 @@ object DefaultBoxSelector extends BoxSelector {
       res += unspentBox
     }
 
-    def balanceMet = currentBalance >= targetBalance
+    /**
+      * Helper functions which checks whether enough ERGs collected
+      */
+    def balanceMet: Boolean = {
+      val diff = currentBalance - targetBalance
 
-    def assetsMet = targetAssets.forall {
-      case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
+      // We estimate how many ERG needed for assets in change boxes
+      val assetsDiff = diffCount(currentAssets, targetAssets)
+      val diffThreshold = if (assetsDiff <= 0) {
+        0
+      } else {
+        MinBoxValue * (assetsDiff / MaxAssetsPerBox + 1)
+      }
+
+      diff >= diffThreshold
+    }
+
+    /**
+      * Helper functions which checks whether enough assets collected
+      */
+    def assetsMet: Boolean = {
+      targetAssets.forall {
+        case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
+      }
     }
 
     @tailrec
@@ -78,10 +109,14 @@ object DefaultBoxSelector extends BoxSelector {
           BoxSelectionResult(res, changeBoxes)
         }
       } else {
-        Left(NotEnoughTokensError(s"not enough boxes to meet token needs $targetAssets (found only $currentAssets)"))
+        Left(NotEnoughTokensError(
+          s"not enough boxes to meet token needs $targetAssets (found only $currentAssets)", currentAssets.toMap)
+        )
       }
     } else {
-      Left(NotEnoughErgsError(s"not enough boxes to meet ERG needs $targetBalance (found only $currentBalance)"))
+      Left(NotEnoughErgsError(
+        s"not enough boxes to meet ERG needs $targetBalance (found only $currentBalance)", currentBalance)
+      )
     }
   }
 
@@ -92,12 +127,12 @@ object DefaultBoxSelector extends BoxSelector {
                        targetBoxAssets: TokensMap
                      ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     AssetUtils.subtractAssetsMut(foundBoxAssets, targetBoxAssets)
-    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxTokens).toSeq
+    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxAssetsPerBox).toSeq
     val changeBalance = foundBalance - targetBalance
     //at least a minimum amount of ERG should be assigned per a created box
     if (changeBoxesAssets.size * MinBoxValue > changeBalance) {
       Left(NotEnoughCoinsForChangeBoxesError(
-        s"Not enough ERG $changeBalance to create ${changeBoxesAssets.size} change boxes, \nfor $changeBoxesAssets"
+        s"Not enough nanoERGs ($changeBalance nanoERG) to create ${changeBoxesAssets.size} change boxes, \nfor $changeBoxesAssets"
       ))
     } else {
       val changeBoxes = if (changeBoxesAssets.nonEmpty) {

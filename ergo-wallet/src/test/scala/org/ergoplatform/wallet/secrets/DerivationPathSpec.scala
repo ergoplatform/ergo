@@ -3,6 +3,7 @@ package org.ergoplatform.wallet.secrets
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -30,18 +31,18 @@ class DerivationPathSpec
     val mnemonic = "liar exercise solve delay betray sheriff method empower disease river recall vacuum"
     val address = "9hAymcGaRfTX7bMADNdfWfk7CKzi2ZpvRBCmtEf6d92n8E26Ax7"
 
-    val seed = Mnemonic.toSeed(mnemonic, None)
+    val seed = Mnemonic.toSeed(SecretString.create(mnemonic), None)
 
     val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
     val dp = DerivationPath.nextPath(IndexedSeq(masterKey), usePreEip3Derivation = false).get
-    val sk = masterKey.derive(dp).asInstanceOf[ExtendedSecretKey]
+    val sk = masterKey.derive(dp)
     val pk = sk.publicKey.key
 
     // The first derived key corresponds to m/44'/429'/0'/0/0 and the same as the key in CoinBarn
     // (and the first key in Yoroi)
     P2PKAddress(pk).toString() shouldBe address
 
-    val pk2 = masterKey.derive(DerivationPath.fromEncoded("m/44'/429'/0'/0/0").get).asInstanceOf[ExtendedSecretKey].publicKey.key
+    val pk2 = masterKey.derive(DerivationPath.fromEncoded("m/44'/429'/0'/0/0").get).publicKey.key
     P2PKAddress(pk2).toString() shouldBe address
 
     // next path should be m/44'/429'/0'/0/1
@@ -49,7 +50,7 @@ class DerivationPathSpec
     dp2 shouldBe DerivationPath.fromEncoded("m/44'/429'/0'/0/1").get
 
     // on top of old paths, derivation works as before EIP, m/1 -> m/2
-    val sk2 = masterKey.derive(DerivationPath.fromEncoded("m/1").get).asInstanceOf[ExtendedSecretKey]
+    val sk2 = masterKey.derive(DerivationPath.fromEncoded("m/1").get)
     val dp3 = DerivationPath.nextPath(IndexedSeq(masterKey, sk2), usePreEip3Derivation = false).get
     dp3 shouldBe DerivationPath.fromEncoded("m/2").get
 
@@ -66,11 +67,11 @@ class DerivationPathSpec
     val mnemonic = "liar exercise solve delay betray sheriff method empower disease river recall vacuum"
     val address = "9h7f11AC9RMHkhFbXg46XfYHq3HNnb1A9UtMmMYo6hAuQzWxVWu"
 
-    val seed = Mnemonic.toSeed(mnemonic, None)
+    val seed = Mnemonic.toSeed(SecretString.create(mnemonic), None)
 
     val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
     val dp = DerivationPath.nextPath(IndexedSeq(masterKey), usePreEip3Derivation = true).get
-    val sk = masterKey.derive(dp).asInstanceOf[ExtendedSecretKey]
+    val sk = masterKey.derive(dp)
     val pk = sk.publicKey.key
     P2PKAddress(pk).toString() shouldBe address
 
@@ -78,7 +79,7 @@ class DerivationPathSpec
     val dp2 = DerivationPath.nextPath(IndexedSeq(masterKey, sk), usePreEip3Derivation = false).get
     dp2 shouldBe DerivationPath.fromEncoded("m/2").get
 
-    val sk2 = masterKey.derive(DerivationPath.fromEncoded("m/1/1").get).asInstanceOf[ExtendedSecretKey]
+    val sk2 = masterKey.derive(DerivationPath.fromEncoded("m/1/1").get)
 
     // Derivation procedure (post-EIP3) should get m/2 after m/1/1 (like pre-EIP3)
     val dp3 = DerivationPath.nextPath(IndexedSeq(masterKey, sk, sk2), usePreEip3Derivation = false).get
@@ -86,7 +87,7 @@ class DerivationPathSpec
 
 
     // Once a user adds EIP-3 path (e.g. m/44'/429'/0'/0/0), post-EIP3 derivation applied
-    val sk3 = masterKey.derive(DerivationPath.fromEncoded("m/44'/429'/0'/0/0").get).asInstanceOf[ExtendedSecretKey]
+    val sk3 = masterKey.derive(DerivationPath.fromEncoded("m/44'/429'/0'/0/0").get)
     val dp4 = DerivationPath.nextPath(IndexedSeq(masterKey, sk, sk3), usePreEip3Derivation = false).get
     dp4 shouldBe DerivationPath.fromEncoded("m/44'/429'/0'/0/1").get
   }
@@ -103,7 +104,7 @@ class DerivationPathSpec
     val mnemonic = "liar exercise solve delay betray sheriff method empower disease river recall vacuum"
     val address = "9hXkYAHd1hWDroNMA3w9t6st2QyS3aTVe5w6GwWPKK5q4SmpUDL"
 
-    val seed = Mnemonic.toSeed(mnemonic, None)
+    val seed = Mnemonic.toSeed(SecretString.create(mnemonic), None)
 
     val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
     P2PKAddress(masterKey.publicKey.key).toString() shouldBe address
@@ -112,7 +113,7 @@ class DerivationPathSpec
 
     masterKeyDerivation.isMaster shouldBe true
 
-    val sk = masterKey.derive(masterKeyDerivation).asInstanceOf[ExtendedSecretKey]
+    val sk = masterKey.derive(masterKeyDerivation)
     val pk = sk.publicKey.key
     sk.path.isMaster shouldBe true
     P2PKAddress(pk).toString() shouldBe address

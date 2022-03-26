@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
@@ -12,6 +13,7 @@ import scala.annotation.tailrec
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
 trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
+  import ToDownloadProcessor._
 
   protected val timeProvider: NetworkTimeProvider
 
@@ -36,20 +38,26 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     */
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
-  /** Returns Next `howMany` modifier ids satisfying `filter` condition our node should download
-    * to synchronize full blocks
+  /**
+    * Get modifier ids to download to synchronize full blocks
+    * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
+    * @param condition filter only ModifierIds that pass this condition
+    * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
-  def nextModifiersToDownload(howMany: Int, condition: ModifierId => Boolean): Seq[(ModifierTypeId, ModifierId)] = {
+  def nextModifiersToDownload(howManyPerType: Int, condition: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
     @tailrec
-    def continuation(height: Int, acc: Seq[(ModifierTypeId, ModifierId)]): Seq[(ModifierTypeId, ModifierId)] = {
-      if (acc.lengthCompare(howMany) >= 0) {
-        acc.take(howMany)
+    def continuation(height: Int, acc: Map[ModifierTypeId, Vector[ModifierId]]): Map[ModifierTypeId, Vector[ModifierId]] = {
+      // return if at least one of Modifier types reaches howManyPerType limit for modifier ids
+      if (acc.values.exists(_.lengthCompare(howManyPerType) >= 0)) {
+        acc.mapValues(_.take(howManyPerType)).view.force
       } else {
         val headersAtThisHeight = headerIdsAtHeight(height).flatMap(id => typedModifierById[Header](id))
 
         if (headersAtThisHeight.nonEmpty) {
-          val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter(m => condition(m._2))
-          continuation(height + 1, acc ++ toDownload)
+          val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter{ case (mtid, mid) => condition(mtid, mid) }
+          // add new modifiers to download to accumulator
+          val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId)) }
+          continuation(height + 1, newAcc)
         } else {
           acc
         }
@@ -58,15 +66,15 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
     bestFullBlockOpt match {
       case _ if !isHeadersChainSynced || !nodeSettings.verifyTransactions =>
-        // do not download full blocks if no headers-chain synced yet or SPV mode
-        Seq.empty
+        // do not download full blocks if no headers-chain synced yet and suffix enabled or SPV mode
+        Map.empty
       case Some(fb) =>
         // download children blocks of last 100 full blocks applied to the best chain
         val minHeight = Math.max(1, fb.header.height - 100)
-        continuation(minHeight, Seq.empty)
+        continuation(minHeight, Map.empty)
       case _ =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
-        continuation(pruningProcessor.minimalFullBlockHeight, Seq.empty)
+        continuation(pruningProcessor.minimalFullBlockHeight, Map.empty)
     }
   }
 
@@ -84,20 +92,32 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
       // Headers chain is synced after this header. Start downloading full blocks
       pruningProcessor.updateBestFullBlock(header)
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
-      Seq.empty
+      Nil
     } else {
-      Seq.empty
+      Nil
     }
   }
 
-  private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
+  def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
-      Seq.empty
+      Nil
     } else if (nodeSettings.stateType.requireProofs) {
       h.sectionIds
     } else {
-      h.sectionIds.tail
+      h.sectionIds.tail // do not download UTXO set transformation proofs if UTXO set is stored
     }
   }
 
+}
+
+object ToDownloadProcessor {
+  implicit class MapPimp[K, V](underlying: Map[K, V]) {
+    /**
+      * One liner for updating a Map with the possibility to handle case of missing Key
+      * @param k map key
+      * @param f function that is passed Option depending on Key being present or missing, returning new Value
+      * @return new Map with value updated under given key
+      */
+    def adjust(k: K)(f: Option[V] => V): Map[K, V] = underlying.updated(k, f(underlying.get(k)))
+  }
 }

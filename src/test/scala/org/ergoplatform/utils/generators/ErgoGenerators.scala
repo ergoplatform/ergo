@@ -2,16 +2,19 @@ package org.ergoplatform.utils.generators
 
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{Header, ADProofs, Extension}
+import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
+import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowParams}
 import org.ergoplatform.network.ModeFeature
-import org.ergoplatform.nodeView.history.ErgoSyncInfo
+import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Constants, ErgoValidationSettingsUpdate, ErgoValidationSettings, ValidationRules}
+import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
 import org.ergoplatform.utils.ErgoTestConstants
-import org.ergoplatform.validation.{DisabledRule, ChangedRule, ReplacedRule, EnabledRule}
+import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -20,14 +23,14 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
-import sigmastate.basics.{ProveDHTuple, DiffieHellmanTupleProverInput}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{ProverResult, CryptoConstants}
+import sigmastate.interpreter.{CryptoConstants, ProverResult}
 
 import scala.util.Random
 
-trait ErgoGenerators extends CoreGenerators with Generators with Matchers with ErgoTestConstants {
+trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators with Matchers with ErgoTestConstants {
 
   lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(Constants.TrueLeaf)
   lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(Constants.FalseLeaf)
@@ -46,8 +49,8 @@ trait ErgoGenerators extends CoreGenerators with Generators with Matchers with E
     secret <- genBytes(32).map(seed => BigIntegers.fromUnsignedByteArray(seed))
     g <- genECPoint
     h <- genECPoint
-    u: EcPointType = CryptoConstants.dlogGroup.exponentiate(g, secret)
-    v: EcPointType = CryptoConstants.dlogGroup.exponentiate(h, secret)
+    u = CryptoConstants.dlogGroup.exponentiate(g, secret)
+    v = CryptoConstants.dlogGroup.exponentiate(h, secret)
     dhtpi = DiffieHellmanTupleProverInput(secret, ProveDHTuple(g, h, u, v))
   } yield (dhtpi, dhtpi.publicImage)
 
@@ -61,9 +64,13 @@ trait ErgoGenerators extends CoreGenerators with Generators with Matchers with E
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
-  lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
+  lazy val ergoSyncInfoV1Gen: Gen[ErgoSyncInfoV1] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
-  } yield ErgoSyncInfo(ids)
+  } yield ErgoSyncInfoV1(ids)
+
+  lazy val ergoSyncInfoV2Gen: Gen[ErgoSyncInfoV2] = for {
+    hds <- Gen.nonEmptyListOf(invalidHeaderGen).map(_.take(5))
+  } yield ErgoSyncInfoV2(hds)
 
   lazy val digest32Gen: Gen[Digest32] = {
     val x = Digest32 @@ genBytes(32)
@@ -189,6 +196,21 @@ trait ErgoGenerators extends CoreGenerators with Generators with Matchers with E
     */
   def randomLong(maximum: Long = Long.MaxValue): Long = {
     if (maximum < 3) 1 else Math.abs(Random.nextLong()) % (maximum - 2) + 1
+  }
+
+  lazy val poPowProofGen: Gen[NipopowProof] = for {
+    m <- Gen.chooseNum(1, 128)
+    k <- Gen.chooseNum(1, 128)
+    proof <- validNiPoPowProofGen(m, k)
+  } yield proof
+
+  def validNiPoPowProofGen(m: Int, k: Int): Gen[NipopowProof] = for {
+    mulM <- Gen.chooseNum(1, 20)
+  } yield {
+    val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false)
+    val popowChain = popowHeaderChain(chain)
+    val params = PoPowParams(m, k)
+    nipopowAlgos.prove(popowChain)(params).get
   }
 
 }

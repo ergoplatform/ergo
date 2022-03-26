@@ -6,17 +6,15 @@ import akka.actor.ActorRef
 import org.ergoplatform.bench.misc.{CrawlerConfig, TempDir}
 import org.ergoplatform.http.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoApiRoute, TransactionsApiRoute}
 import org.ergoplatform.local.ErgoStatsCollectorRef
-import org.ergoplatform.mining.ErgoMinerRef
+import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings}
-import scorex.core.api.http.{ApiRoute, PeersApiRoute}
+import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.settings.{Args, ErgoSettings, LaunchParameters}
+import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
-import scorex.core.network.PeerFeature
+import scorex.core.network.{DeliveryTracker, PeerFeature}
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
 
@@ -24,10 +22,6 @@ import scala.concurrent.ExecutionContextExecutor
 import scala.io.Source
 
 class CrawlerRunner(args: Array[String]) extends Application {
-
-  override type TX = ErgoTransaction
-  override type PMOD = ErgoPersistentModifier
-  override type NVHT = ErgoNodeViewHolder[_]
 
   lazy val fileToSave: String = args.headOption.getOrElse("/")
   lazy val threshold: Int = args.lift(1).getOrElse("15000").toInt
@@ -42,36 +36,40 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 
-  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
+  override val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
 
   lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, LaunchParameters)
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
+  val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
-  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, ergoSettings, timeProvider)
+  val statsCollectorRef: ActorRef =
+    ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, ergoSettings, timeProvider, LaunchParameters)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     ErgoUtilsApiRoute(ergoSettings),
-    PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
     InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
+  private val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
+
+  private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
+
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      ergoSettings, timeProvider)
+      ergoSettings, timeProvider, syncTracker, deliveryTracker)
 
 }
 
 object CrawlerRunner {
-  def main(args: Array[String]): Unit = new CrawlerRunner(args).run
+  def main(args: Array[String]): Unit = new CrawlerRunner(args).run()
 }

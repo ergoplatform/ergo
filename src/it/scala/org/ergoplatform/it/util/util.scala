@@ -21,4 +21,9 @@ package object util {
                      (implicit ec: ExecutionContext): Future[A] =
       f.flatMap(v => if (cond(v)) Future.successful(v) else schedule(retryUntil(f, cond, retryInterval), retryInterval))
   }
+  implicit class RichEither[A](e: Either[String, A]) {
+    def toFuture: Future[A] = Future.fromTry(e.left.map(new Exception(_)).toTry)
+
+    def get: A = e.fold(e => throw new Exception(e), identity)
+  }
 }

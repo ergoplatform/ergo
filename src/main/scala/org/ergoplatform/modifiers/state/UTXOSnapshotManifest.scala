@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.state
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
@@ -21,7 +21,7 @@ case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: Modi
 
   override type M = UTXOSnapshotManifest
 
-  override lazy val serializer: ScorexSerializer[UTXOSnapshotManifest] = ???
+  override def serializer: ScorexSerializer[UTXOSnapshotManifest] = ???
 
   override def parentId: ModifierId = ???
 

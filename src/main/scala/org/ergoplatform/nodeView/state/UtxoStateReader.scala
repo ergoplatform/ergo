@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.Algos
@@ -10,13 +9,15 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
-import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.core.transaction.state.TransactionValidation.TooHighCostError
+import scorex.core.validation.MalformedModifierError
+import scorex.crypto.authds.avltree.batch.{Lookup, NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTransaction] {
+trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
 
   protected implicit val hf: HF = Algos.hash
 
@@ -27,25 +28,41 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
+  def generateBatchProofForBoxes(boxes: Seq[ErgoBox.BoxId]): SerializedAdProof = persistentProver.synchronized {
+    boxes.map { box => persistentProver.performOneOperation(Lookup(ADKey @@ box)) }
+    persistentProver.prover().generateProof()
+  }
+
   /**
     * Validate transaction against provided state context, if specified,
     * or state context from the previous block if not
     */
   def validateWithCost(tx: ErgoTransaction,
                        stateContextOpt: Option[ErgoStateContext],
-                       complexityLimit: Int): Try[Long] = {
-    val verifier = ErgoInterpreter(stateContext.currentParameters)
+                       costLimit: Long,
+                       interpreterOpt: Option[ErgoInterpreter]): Try[Long] = {
     val context = stateContextOpt.getOrElse(stateContext)
+
+    val verifier = interpreterOpt.getOrElse(ErgoInterpreter(context.currentParameters))
+
+    val maxBlockCost = context.currentParameters.maxBlockCost
+    val startCost = maxBlockCost - costLimit
+
     tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
-      val txComplexity = boxesToSpend.map(_.ergoTree.complexity).sum
-      if (txComplexity > complexityLimit) {
-        throw new Exception(s"Transaction $tx has too high complexity $txComplexity")
-      }
       tx.statefulValidity(
-        boxesToSpend,
-        tx.dataInputs.flatMap(i => boxById(i.boxId)),
-        context)(verifier)
+          boxesToSpend,
+          tx.dataInputs.flatMap(i => boxById(i.boxId)),
+          context,
+          startCost)(verifier).map(_ - startCost) match {
+            case Success(txCost) if txCost > costLimit =>
+              Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
+            case Success(txCost) =>
+              Success(txCost)
+            case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
+              Failure(TooHighCostError(s"Transaction $tx has too high cost"))
+            case f: Failure[_] => f
+        }
     }
   }
 
@@ -54,8 +71,11 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     * This validation does not guarantee that transaction will be valid in future
     * as soon as state (both UTXO set and state context) will change.
     *
+    * Used in mempool.
     */
-  override def validate(tx: ErgoTransaction): Try[Unit] = validateWithCost(tx, None, Int.MaxValue).map(_ => Unit)
+  override def validateWithCost(tx: ErgoTransaction, maxTxCost: Long): Try[Long] = {
+    validateWithCost(tx, None, maxTxCost, None)
+  }
 
   /**
     *
@@ -95,6 +115,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     }
   }
 
+  // used in tests only
   def randomBox(): Option[ErgoBox] = persistentProver.synchronized {
     persistentProver.avlProver.randomWalk().map(_._1).flatMap(boxById)
   }
@@ -114,7 +135,9 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}. " +
         "Possible reason - state update is in process."))
     } else {
-      persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations.map(ADProofs.changeToMod))
+      ErgoState.stateChanges(txs).flatMap { stateChanges =>
+        persistentProver.avlProver.generateProofForOperations(stateChanges.operations)
+      }
     }
   }
 
@@ -123,7 +146,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     * Useful when checking mempool transactions.
     */
   def withTransactions(txns: Seq[ErgoTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, constants) {
+    new UtxoState(persistentProver, version, store, constants, parameters) {
       lazy val createdBoxes: Seq[ErgoBox] = txns.flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {

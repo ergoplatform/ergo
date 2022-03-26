@@ -5,6 +5,7 @@ import java.io.File
 import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -16,10 +17,9 @@ import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
-import scorex.db.LDBFactory
-import scorex.util.{ScorexLogging, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * History implementation. It is processing persistent modifiers generated locally or coming from the network.
@@ -42,7 +42,6 @@ trait ErgoHistory
   extends History[ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with ErgoHistoryReader {
 
-  override type NVCT = ErgoHistory
   override protected lazy val requireProofs: Boolean = nodeSettings.stateType.requireProofs
 
   def closeStorage(): Unit = historyStorage.close()
@@ -50,20 +49,20 @@ trait ErgoHistory
   /**
     * Append ErgoPersistentModifier to History if valid
     */
-  override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = {
+  override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
     log.debug(s"Trying to append modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} to history")
-    applicableTry(modifier).map { _ =>
+    applicableTry(modifier).flatMap { _ =>
       modifier match {
         case header: Header =>
-          (this, process(header))
+          process(header)
         case section: BlockSection =>
-          (this, process(section))
-        case poPoWProof: PoPoWProof =>
-          (this, process(poPoWProof))
+          process(section)
+        case poPoWProof: NipopowProofModifier =>
+          process(poPoWProof)
         case chunk: UTXOSnapshotChunk =>
-          (this, process(chunk))
+          process(chunk)
       }
-    }.recoverWith { case e =>
+    }.map(this -> _).recoverWith { case e =>
       if (!e.isInstanceOf[RecoverableModifierError]) {
         log.warn(s"Error while applying modifier ${modifier.encodedId} of type ${modifier.modifierTypeId}, " +
           s"reason: ${LoggingUtil.getReasonMsg(e)} ")
@@ -75,7 +74,7 @@ trait ErgoHistory
   /**
     * Mark modifier as valid
     */
-  override def reportModifierIsValid(modifier: ErgoPersistentModifier): ErgoHistory = {
+  override def reportModifierIsValid(modifier: ErgoPersistentModifier): Try[ErgoHistory] = synchronized {
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
     modifier match {
       case fb: ErgoFullBlock =>
@@ -85,14 +84,15 @@ trait ErgoHistory
         if (nonMarkedIds.nonEmpty) {
           historyStorage.insert(
             nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
-            Seq.empty)
+            Nil).map(_ => this)
+        } else {
+          Success(this)
         }
       case _ =>
         historyStorage.insert(
-          Seq(validityKey(modifier.id) -> Array(1.toByte)),
-          Seq.empty)
+          Array(validityKey(modifier.id) -> Array(1.toByte)),
+          Nil).map(_ => this)
     }
-    this
   }
 
   /**
@@ -104,8 +104,8 @@ trait ErgoHistory
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
   override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
                                        progressInfo: ProgressInfo[ErgoPersistentModifier]
-                                      ): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
-    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
+                                      ): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
+    log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
         val invalidatedHeaders = continuationHeaderChains(invalidatedHeader, _ => true).flatten.distinct
@@ -118,8 +118,9 @@ trait ErgoHistory
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
-            historyStorage.insert(validityRow, Seq.empty)
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+            historyStorage.insert(validityRow, Nil).map { _ =>
+              this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+            }
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
             val newBestHeaderOpt = loopHeightDown(headersHeight, id => !invalidatedIds.contains(id))
@@ -129,8 +130,9 @@ trait ErgoHistory
               historyStorage.insert(
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq,
                 Seq.empty
-              )
-              this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+              ).map { _ =>
+                this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+              }
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
                 .flatMap(f => headerChainBack(fullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)).headers)
@@ -155,18 +157,18 @@ trait ErgoHistory
               val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
-              historyStorage.insert(toInsert, Seq.empty)
-              val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
-
-              this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
+              historyStorage.insert(toInsert, Seq.empty).map { _ =>
+                val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
+                this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
+              }
             }
         }
       case None =>
-        //No headers become invalid. Just valid this modifier as invalid
-        historyStorage.insert(
-          Seq(validityKey(modifier.id) -> Array(0.toByte)),
-          Seq.empty)
-        this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+        //No headers become invalid. Just mark this modifier as invalid
+        log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
+        historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), Nil).map { _ =>
+          this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+        }
     }
   }
 
@@ -181,6 +183,29 @@ trait ErgoHistory
     case _ => None
   }
 
+  /**
+    * Remove header, corresponding block parts, and corresponding indexes from storage and caches
+    * @param headerId - header id
+    * @return
+    */
+  def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
+    val hOpt = typedModifierById[Header](headerId)
+      val hRes = historyStorage.remove(
+        indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
+        idsToRemove = Array(headerId)
+      )
+    log.info(s"Result of removing header $headerId: " + hRes)
+
+    hOpt.foreach { h =>
+      requiredModifiersForHeader(h).foreach { case (_, mId) =>
+        val mRes = historyStorage.remove(
+          indicesToRemove = Array(validityKey(mId)),
+          idsToRemove = Array(mId)
+        )
+        log.info(s"Result of removing modifier $mId: " + mRes)
+      }
+    }
+  }
 }
 
 object ErgoHistory extends ScorexLogging {
@@ -193,7 +218,7 @@ object ErgoHistory extends ScorexLogging {
   val CharsetName = "UTF-8"
 
   val EmptyHistoryHeight: Int = 0
-  val GenesisHeight: Int = EmptyHistoryHeight + 1
+  val GenesisHeight: Int = EmptyHistoryHeight + 1 // first block has height == 1
 
   def heightOf(headerOpt: Option[Header]): Int = headerOpt.map(_.height).getOrElse(EmptyHistoryHeight)
 
@@ -203,10 +228,27 @@ object ErgoHistory extends ScorexLogging {
     dir
   }
 
+  // check if there is possible database corruption when there is header after
+  // recognized blockchain tip marked as invalid
+  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
+    val bestHeaderHeight = history.headersHeight
+    val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
+    val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
+
+    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
+      log.warn("Found suspicious continuation, clearing it...")
+      afterHeaders.map { hId =>
+        history.forgetHeader(hId)
+      }
+      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Nil)
+      true
+    } else {
+      false
+    }
+  }
+
   def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
-    val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
-    val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
-    val db = new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
+    val db = HistoryStorage(ergoSettings)
     val nodeSettings = ergoSettings.nodeSettings
 
     val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {
@@ -246,6 +288,10 @@ object ErgoHistory extends ScorexLogging {
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
     }
+
+    repairIfNeeded(history)
+
+    log.info("History database read")
     history
   }
 

@@ -3,7 +3,7 @@ package org.ergoplatform.http.routes
 import akka.actor.ActorRef
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.pattern.ask
 import akka.testkit.TestDuration
 import akka.util.Timeout
@@ -15,12 +15,12 @@ import org.ergoplatform.local.ErgoStatsCollector.NodeInfo.difficultyEncoder
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.ChangedHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedHistory
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.NetworkTimeProvider
 
@@ -39,7 +39,7 @@ class InfoApiRoutesSpec extends AnyFlatSpec
 
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
-  val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, networkControllerRef, settings, fakeTimeProvider)
+  val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, networkControllerRef, settings, fakeTimeProvider, parameters)
   val route: Route = InfoApiRoute(statsCollector, settings.scorexSettings.restApi, fakeTimeProvider).route
   val requiredDifficulty = BigInt(1)
 

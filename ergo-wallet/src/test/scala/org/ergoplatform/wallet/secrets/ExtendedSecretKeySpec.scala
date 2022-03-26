@@ -1,6 +1,7 @@
 package org.ergoplatform.wallet.secrets
 
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.scalatest.Assertion
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -13,7 +14,7 @@ class ExtendedSecretKeySpec
     with ScalaCheckPropertyChecks {
 
   val seedStr = "edge talent poet tortoise trumpet dose"
-  val seed: Array[Byte] = Mnemonic.toSeed(seedStr)
+  val seed: Array[Byte] = Mnemonic.toSeed(SecretString.create(seedStr))
 
   property("key tree derivation from seed (test vectors from BIP32 check)") {
     val expectedRoot = "4rEDKLd17LX4xNR8ss4ithdqFRc3iFnTiTtQbanWJbCT"

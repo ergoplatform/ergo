@@ -2,13 +2,14 @@ package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Longs
 import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.Assertion
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
-import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
+import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.util.encode.Base16
-import scorex.crypto.hash.{Digest32, Blake2b256}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
 import scorex.utils.{Random => RandomBytes}
 
@@ -63,7 +64,7 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
   }
 
   // Read-only access to some elements in parallel should not affect modifications application
-  val parallelReadTest: PERSISTENT_PROVER => Unit = {
+  val parallelReadTest: PERSISTENT_PROVER => Try[Unit] = {
     def performModifications(prover: PERSISTENT_PROVER, inserts: Seq[Insert]) = {
       inserts.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
         t.flatMap(_ => prover.performOneOperation(m))
@@ -109,7 +110,7 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
 
 
   // Test similar to blockchain workflow - generate proofs for some modifications, rollback, apply modifications
-  val blockchainWorkflowTest: PERSISTENT_PROVER => Unit = { prover: PERSISTENT_PROVER =>
+  val blockchainWorkflowTest: PERSISTENT_PROVER => SerializedAdProof = { prover: PERSISTENT_PROVER =>
     def metadata(modId: Array[Byte], stateRoot: ADDigest): Seq[(Array[Byte], Array[Byte])] = {
       val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modId -> stateRoot
       val stateDigestIdIdxElem = Blake2b256(stateRoot) -> modId
@@ -189,7 +190,7 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
     prover2.checkTree(postProof = true)
   }
 
-  val rollbackVersionsTest: (PERSISTENT_PROVER, STORAGE) => Unit = { (prover: PERSISTENT_PROVER, storage: STORAGE) =>
+  val rollbackVersionsTest: (PERSISTENT_PROVER, STORAGE) => Assertion = { (prover: PERSISTENT_PROVER, storage: STORAGE) =>
     (0L until 50L).foreach { long =>
       val insert = Insert(ADKey @@ RandomBytes.randomBytes(32),
         ADValue @@ com.google.common.primitives.Longs.toByteArray(long))
@@ -200,7 +201,7 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
     noException should be thrownBy storage.rollbackVersions.foreach(v => prover.rollback(v).get)
   }
 
-  def testAddInfoSaving(createStore: Int => LDBVersionedStore): Unit = {
+  def testAddInfoSaving(createStore: Int => LDBVersionedStore): Assertion = {
     val store = createStore(1000)
     val storage = createVersionedStorage(store)
     val prover = createPersistentProver(storage)
@@ -241,7 +242,6 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
 
     store.get(addInfo1._1) shouldBe None
     store.get(addInfo2._1) shouldBe None
-
   }
 
   def removeFromLargerSetSingleRandomElementTest(createStore: Int => LDBVersionedStore): Unit = {

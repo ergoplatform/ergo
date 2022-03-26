@@ -1,13 +1,13 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.ValidationRules.rulesSpec
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.validation.{DisabledRule, ReplacedRule, ValidationRules => VR}
 import scorex.crypto.authds.ADDigest
 
-import scala.language.implicitConversions
 import scala.util.Try
 
 class VotingSpecification extends ErgoPropertyTest {
@@ -38,12 +38,12 @@ class VotingSpecification extends ErgoPropertyTest {
     Seq(VR.CheckDeserializedScriptType.id -> DisabledRule, VR.CheckValidOpCode.id -> ReplacedRule((VR.FirstRuleId + 11).toShort)))
   private val proposedUpdate2 = ErgoValidationSettingsUpdate(Seq(ValidationRules.fbOperationFailed), Seq())
   val ctx: ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, validationSettingsNoIl, VotingData.empty)(updSettings)
+    new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters, validationSettingsNoIl, VotingData.empty)(updSettings)
       .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), emptyVSUpdate, 0.toByte)
   }
   val initialVs: ErgoValidationSettings = ctx.validationSettings
   val extensionWithAllParams: ExtensionCandidate = {
-    LaunchParameters.toExtensionCandidate ++ initialVs.toExtensionCandidate
+    parameters.toExtensionCandidate ++ initialVs.toExtensionCandidate
   }
 
   val emptyParameters = Parameters(0, Map.empty, ErgoValidationSettingsUpdate.empty)
@@ -84,7 +84,7 @@ class VotingSpecification extends ErgoPropertyTest {
     }
     val invalidExtBlock2 = { // extension contains redundant parameter
       lastBlock.copy(extension = lastBlock.extension.copy(
-        fields = LaunchParameters.toExtensionCandidate.fields :+ Array(0: Byte, 99: Byte) -> Array.fill(4)(2: Byte))
+        fields = parameters.toExtensionCandidate.fields :+ Array(0: Byte, 99: Byte) -> Array.fill(4)(2: Byte))
       )
     }
     val invalidExtBlock3 = { // extension does not contain params at all
@@ -226,7 +226,7 @@ class VotingSpecification extends ErgoPropertyTest {
     // next epoch after activation height - soft-fork related parameters are cleared
     val h14b = h13.copy(height = 14, votes = emptyVotes)
     val expectedParameters14a = Parameters(14, Map(BlockVersion -> 1), proposedUpdate2)
-    val esc14b = process(esc13, expectedParameters14a, h14b).get
+    process(esc13, expectedParameters14a, h14b).get
     checkValidationSettings(esc14.validationSettings, proposedUpdate)
   }
 
@@ -291,18 +291,18 @@ class VotingSpecification extends ErgoPropertyTest {
     // a new fork voting is proposed on the first block of the second epoch after voting (which has not gathered enough)
     val h8 = h7.copy(height = 8, votes = forkVote)
     val expectedParameters8 = Parameters(8, Map(SoftForkStartingHeight -> 8, SoftForkVotesCollected -> 0, BlockVersion -> 0), proposedUpdate)
-    val esc8 = process(esc7, expectedParameters8, h8).get
+    process(esc7, expectedParameters8, h8).get
 
     // on the second epoch after voting (not old enough) parameters are to be cleared,
     // and block version to be the same
     val h8e = h7.copy(height = 8, votes = emptyVotes)
     val expectedParameters8e = Parameters(8, Map(BlockVersion -> 0), proposedUpdate)
-    val esc8e = process(esc7, expectedParameters8e, h8e).get
+    process(esc7, expectedParameters8e, h8e).get
   }
 
   property("hardfork - v2 - activation") {
     val vr: VotingData = VotingData.empty
-    val esc0 = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), LaunchParameters, ErgoValidationSettings.initial, vr)(updSettings)
+    val esc0 = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), parameters, ErgoValidationSettings.initial, vr)(updSettings)
     val h1 = defaultHeaderGen.sample.get.copy(votes = Array.empty, version = 1: Byte, height = hfActivationHeight - 1)
     val expectedParameters1 = Parameters(hfActivationHeight - 1, DefaultParameters, ErgoValidationSettingsUpdate.empty)
     val esc1 = process(esc0, expectedParameters1, h1).get

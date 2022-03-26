@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 import java.io.File
 
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
@@ -14,11 +13,14 @@ import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.modifiers.history.header.PreGenesisHeader
 import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.wallet.transactions.TransactionBuilder
+import scorex.util.encode.Base16
 
 import scala.collection.mutable
 
@@ -55,7 +57,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
 
 
   /**
-    * Read wallet-related boxes with metadata, see [[getBox()]]
+    * Read wallet-related boxes with metadata, see getBox()
     *
     * @param ids - box identifier
     * @return wallet related boxes (optional result for each box)
@@ -82,9 +84,9 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param scanId - scan identifier
     * @return sequences of scan-related unspent boxes found in the database
     */
-  def unspentBoxes(scanId: ScanId): Seq[TrackedBox] = {
+  def unspentBoxes(scanId: ScanId, limit: Int = Int.MaxValue): Seq[TrackedBox] = {
     store
-      .getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId))
+      .getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId), limit)
       .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
   }
 
@@ -104,7 +106,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   /**
     * Unspent boxes belong to the wallet (payments scan)
     */
-  def walletUnspentBoxes(): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId)
+  def walletUnspentBoxes(limit: Int = Int.MaxValue): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId, limit)
 
   /**
     * Spent boxes belong to the wallet (payments scan)
@@ -151,6 +153,33 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   }
 
   /**
+    * Read wallet-related transactions for certain heights
+    *
+    * @param heightFrom - height to start from (inclusive)
+    * @param heightTo - height to finish at (inclusive)
+    * @return - wallet transactions for the heights range provided
+    */
+  def walletTxsBetween(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[WalletTransaction] = {
+    val firstKey = firstIncludedScanTransactionSpaceKey(scanId, heightFrom)
+    val lastKey = lastIncludedScanTransactionSpaceKey(scanId, heightTo)
+
+    // Get wallet transactions from heightFrom (inclusive) to heightTo (inclusive)
+    val range = store.getRange(firstKey, lastKey)
+    range.flatMap { case (_, txId) =>
+      store.get(txKey(txId)) match {
+        case Some(txBytes) => WalletTransactionSerializer.parseBytesTry(txBytes) match {
+          case Success(tx) =>
+            Some(tx)
+          case Failure(t) =>
+            log.error(s"Transaction ${Base16.encode(txId)} can't be read from the db", t); None
+        }
+        case None =>
+          log.error(s"Transaction ${Base16.encode(txId)} is found in indexes but not db"); None
+      }
+    }
+  }
+
+  /**
     * Read aggregate wallet information
     *
     * @return wallet digest
@@ -165,10 +194,8 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   /**
     * Update aggregate wallet information
     */
-  def updateDigest(bag: KeyValuePairsBag)(updateF: WalletDigest => WalletDigest): KeyValuePairsBag = {
-    val digest = fetchDigest()
-    putDigest(bag, updateF(digest))
-  }
+  def updateDigest(bag: KeyValuePairsBag)(updateF: WalletDigest => Try[WalletDigest]): Try[KeyValuePairsBag] =
+    updateF(fetchDigest()).map(digest => putDigest(bag, digest))
 
   /**
     *
@@ -178,7 +205,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param blockId     - block identifier
     * @param blockHeight - block height
     */
-  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Unit = {
+  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = {
 
     // first, put newly created outputs and related transactions into key-value bag
     val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
@@ -189,7 +216,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
 
     // and update wallet digest
-    val bag4 = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
+    updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
@@ -224,13 +251,13 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
 
       val receivedAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
-      require(
-        (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
-        "Balance could not be negative")
-      WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq)
+      if ((newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined)
+        Success(WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq))
+      else
+        Failure(new IllegalStateException("Balance could not be negative"))
+    }.flatMap { bag4 =>
+      bag4.transact(store, idToBytes(blockId))
     }
-
-    bag4.transact(store, idToBytes(blockId))
   }
 
   def rollback(version: VersionTag): Try[Unit] =
@@ -364,18 +391,19 @@ object WalletRegistry {
 
   def registryFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/registry")
 
-  def apply(settings: ErgoSettings): WalletRegistry = {
-    val dir = registryFolder(settings)
-    dir.mkdirs()
-
-    val store = new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
-
-    // Create pre-genesis state checkpoint
-    if (!store.versionIdExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)
-
-    new WalletRegistry(store)(settings.walletSettings)
-  }
-
+  def apply(settings: ErgoSettings): Try[WalletRegistry] = Try {
+      val dir = registryFolder(settings)
+      dir.mkdirs()
+      new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
+    }.flatMap {
+      case store if !store.versionIdExists(PreGenesisStateVersion) =>
+        // Create pre-genesis state checkpoint
+        store.update(PreGenesisStateVersion, Seq.empty, Seq.empty).map { _ =>
+          new WalletRegistry(store)(settings.walletSettings)
+        }
+      case store =>
+        Success(new WalletRegistry(store)(settings.walletSettings))
+    }
 
   private val BoxKeyPrefix: Byte = 0x01
   private val TxKeyPrefix: Byte = 0x02
@@ -428,6 +456,16 @@ object WalletRegistry {
     res
   }
 
+  /** Same as [[composeKey()]] with additional height parameter. */
+  private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int): Array[Byte] = {
+    val res = new Array[Byte](39) // 1 byte for prefix + 2 for scanId + 4 for height + 32 for suffix
+    res(0) = prefix
+    putShort(res, pos = 1, scanId)
+    putInt(res, pos = 3, height)
+    res
+  }
+
+
   /** Same as [[composeKey()]] with additional height parameter and suffix given by id. */
   private[persistence] final def composeKeyWithHeightAndId(prefix: Byte, scanId: ScanId,
                                                            height: Int, suffixId: Array[Byte]): Array[Byte] = {
@@ -451,11 +489,19 @@ object WalletRegistry {
   private def lastSpentScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(SpentIndexPrefix, scanId, -1)
 
+/*
   private def firstIncludedScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, height, 0)
 
   private def lastIncludedScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, Int.MaxValue, -1)
+*/
+
+  private def firstIncludedScanTransactionSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKey(InclusionHeightScanTxPrefix, scanId, height)
+
+  private def lastIncludedScanTransactionSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKey(InclusionHeightScanTxPrefix, scanId, height, -1)
 
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 
@@ -464,6 +510,8 @@ object WalletRegistry {
   private def boxKey(id: BoxId): Array[Byte] = BoxKeyPrefix +: id
 
   private def txKey(id: ModifierId): Array[Byte] = TxKeyPrefix +: idToBytes(id)
+
+  private def txKey(id: Array[Byte]): Array[Byte] = TxKeyPrefix +: id
 
   private def boxToKvPair(box: TrackedBox) = boxKey(box) -> TrackedBoxSerializer.toBytes(box)
 
@@ -547,7 +595,7 @@ object WalletRegistry {
 
   private[persistence] def putDigest(bag: KeyValuePairsBag, digest: WalletDigest): KeyValuePairsBag = {
     val registryBytes = WalletDigestSerializer.toBytes(digest)
-    bag.copy(toInsert = bag.toInsert :+ (RegistrySummaryKey, registryBytes))
+    bag.copy(toInsert = bag.toInsert :+ RegistrySummaryKey -> registryBytes)
   }
 }
 
@@ -564,16 +612,18 @@ case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])],
     * Applies non-versioned transaction to a given `store`.
     *
     */
-  def transact(store: LDBVersionedStore): Unit = transact(store, None)
+  def transact(store: LDBVersionedStore): Try[Unit] = transact(store, None)
 
   /**
     * Applies versioned transaction to a given `store`.
     */
-  def transact(store: LDBVersionedStore, version: Array[Byte]): Unit = transact(store, Some(version))
+  def transact(store: LDBVersionedStore, version: Array[Byte]): Try[Unit] = transact(store, Some(version))
 
-  private def transact(store: LDBVersionedStore, versionOpt: Option[Array[Byte]]): Unit =
+  private def transact(store: LDBVersionedStore, versionOpt: Option[Array[Byte]]): Try[Unit] =
     if (toInsert.nonEmpty || toRemove.nonEmpty) {
       store.update(versionOpt.getOrElse(scorex.utils.Random.randomBytes()), toRemove, toInsert)
+    } else {
+      Success(())
     }
 
 }

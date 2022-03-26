@@ -3,13 +3,13 @@ package org.ergoplatform.db
 import com.google.common.primitives.Ints
 import org.ergoplatform.Utils
 import org.ergoplatform.settings.Algos
-import scorex.testkit.utils.FileUtils
+import org.ergoplatform.wallet.utils.TestFileUtils
 import scorex.util.Random
 import scorex.db.LDBVersionedStore
 
-object LDBVersionedStoreRollbackBench extends App with FileUtils {
+object LDBVersionedStoreRollbackBench extends App with TestFileUtils {
 
-  private val store = new LDBVersionedStore(createTempDir, keepVersions = 400)
+  private val store = new LDBVersionedStore(createTempDir, initialKeepVersions = 400)
 
   private val numEpochs = 10000
   private val elemsAtStep = 500
@@ -23,7 +23,7 @@ object LDBVersionedStoreRollbackBench extends App with FileUtils {
     val toRemove =
       if (i > 1) (0 to (elemsAtStep / 2)).map(_ => key(scala.util.Random.nextInt((i - 1) * elemsAtStep))) else Seq.empty
     val version = Algos.hash(key(i))
-    store.update(version, toRemove, toInsert)
+    store.update(version, toRemove, toInsert).get
   }
 
   private val version = store.rollbackVersions().head

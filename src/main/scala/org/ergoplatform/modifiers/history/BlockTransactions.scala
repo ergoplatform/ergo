@@ -4,11 +4,12 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
-import scorex.core.block.Block.Version
+import org.ergoplatform.modifiers.history.header.Header.Version
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
@@ -16,6 +17,8 @@ import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.Extensions._
+
+import scala.collection.mutable
 
 
 /**
@@ -30,7 +33,7 @@ case class BlockTransactions(headerId: ModifierId,
                              blockVersion: Version,
                              txs: Seq[ErgoTransaction],
                              override val sizeOpt: Option[Int] = None)
-  extends BlockSection with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
+  extends BlockSection with TransactionsCarryingPersistentNodeViewModifier {
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 
@@ -120,7 +123,7 @@ object BlockTransactions extends ApiCodecs {
   implicit val jsonDecoder: Decoder[BlockTransactions] = { c: HCursor =>
     for {
       headerId <- c.downField("headerId").as[ModifierId]
-      transactions <- c.downField("transactions").as[List[ErgoTransaction]]
+      transactions <- c.downField("transactions").as[mutable.WrappedArray[ErgoTransaction]]
       blockVersion <- c.downField("blockVersion").as[Version]
       size <- c.downField("size").as[Int]
     } yield BlockTransactions(headerId, blockVersion, transactions, Some(size))

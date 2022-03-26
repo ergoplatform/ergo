@@ -7,8 +7,8 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
-import scorex.core.NodeViewHolder.ReceivableMessages._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
@@ -45,7 +45,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
         case m =>
           val msgSender = sender()
           context.system.scheduler.scheduleOnce(2.seconds)(self.tell(GetReaders, msgSender))(context.system.dispatcher)
-          log.warn(s"Got GetReaders request in state $m")
+          log.info(s"Readers are not initialized yet : $m")
       }
 
     case GetDataFromHistory(f) =>

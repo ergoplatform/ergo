@@ -3,23 +3,16 @@ package org.ergoplatform.nodeView.wallet
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.ErgoContext
-import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanWalletInteraction}
-import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
 import scorex.util.{ModifierId, ScorexLogging}
-import sigmastate.interpreter.ContextExtension
-import sigmastate.utxo.CostTable
 import scorex.util.bytesToId
 
 import scala.collection.mutable
+import scala.util.Try
 
 /**
   * Functions which do scan boxes, transactions and blocks to find boxes which belong to wallet's keys.
@@ -46,44 +39,14 @@ object WalletScanLogic extends ScorexLogging {
                          inputsSpent: Seq[SpentInputData],
                          relatedTransactions: Seq[WalletTransaction])
 
-  /**
-    * Tries to prove the given box in order to define whether it could be spent by this wallet.
-    *
-    * todo: currently used only to decide that a box with mining rewards could be spent,
-    * do special efficient method for that? The method would just use height, not doing signing.
-    */
-  private def resolve(box: ErgoBox,
-                      proverOpt: Option[ErgoProvingInterpreter],
-                      stateContext: ErgoStateContext,
-                      height: Int): Boolean = {
-    log.info(s"Resolving box ${Algos.encode(box.id)}")
-    val testingTx = UnsignedErgoLikeTransaction(
-      IndexedSeq(new UnsignedInput(box.id)),
-      IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
-    )
-
-    val inputContext = InputContext(0, ContextExtension.empty)
-
-    val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx)
-
-    val context = new ErgoContext(stateContext, transactionContext, inputContext,
-      LaunchParameters.maxBlockCost, CostTable.interpreterInitCost)
-
-    proverOpt.flatMap { prover =>
-      prover.IR.resetContext()
-      prover.prove(box.ergoTree, context, testingTx.messageToSign).toOption
-    }.isDefined
-  }
-
   def scanBlockTransactions(registry: WalletRegistry,
                             offChainRegistry: OffChainRegistry,
-                            stateContext: ErgoStateContext,
                             walletVars: WalletVars,
                             block: ErgoFullBlock,
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
-                           ): (WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]]) = {
+                           ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
     scanBlockTransactions(
-      registry, offChainRegistry, stateContext, walletVars,
+      registry, offChainRegistry, walletVars,
       block.height, block.id, block.transactions, cachedOutputsFilter)
   }
 
@@ -92,7 +55,6 @@ object WalletScanLogic extends ScorexLogging {
     *
     * @param registry            - versioned wallet database which is tracking on-chain state
     * @param offChainRegistry    - in-memory snapshot of current state, including off-chain transactions
-    * @param stateContext        - current blockchain and state context (used to check mining rewards only)
     * @param walletVars          - current wallet state
     * @param height              - block height
     * @param blockId             - block id
@@ -102,13 +64,12 @@ object WalletScanLogic extends ScorexLogging {
     */
   def scanBlockTransactions(registry: WalletRegistry,
                             offChainRegistry: OffChainRegistry,
-                            stateContext: ErgoStateContext,
                             walletVars: WalletVars,
                             height: Int,
                             blockId: ModifierId,
                             transactions: Seq[ErgoTransaction],
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
-                           ): (WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]]) = {
+                           ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
 
     // Take unspent wallet outputs Bloom Filter from cache
     // or recreate it from unspent outputs stored in the database
@@ -128,17 +89,10 @@ object WalletScanLogic extends ScorexLogging {
     // (i.e. miningRewardDelay blocks passed since a mining reward box mined)
     val maxMiningHeight = height - walletVars.settings.miningRewardDelay
     val miningBoxes = registry.unspentBoxes(MiningScanId).filter(_.inclusionHeightOpt.getOrElse(0) <= maxMiningHeight)
-    val resolvedBoxes = if (miningBoxes.nonEmpty) {
-      miningBoxes.flatMap { tb =>
-        val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
-        if (spendable) {
-          registry.removeScan(tb.box.id, MiningScanId)
-          Some(tb.copy(scans = Set(PaymentsScanId)))
-        } else {
-          None
-        }
-      }
-    } else Seq.empty
+    val resolvedBoxes = miningBoxes.map { tb =>
+      registry.removeScan(tb.box.id, MiningScanId)
+      tb.copy(scans = Set(PaymentsScanId))
+    }
 
     val initialScanResults = ScanResults(resolvedBoxes, Seq.empty, Seq.empty)
 
@@ -210,13 +164,14 @@ object WalletScanLogic extends ScorexLogging {
 
     // function effects: updating registry and offchainRegistry datasets
     registry.updateOnBlock(scanRes, blockId, height)
+      .map { _ =>
+        //data needed to update the offchain-registry
+        val walletUnspent = registry.walletUnspentBoxes()
+        val newOnChainIds = scanRes.outputs.map(x => encodedBoxId(x.box.id))
+        val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
 
-    //data needed to update the offchain-registry
-    val walletUnspent = registry.walletUnspentBoxes()
-    val newOnChainIds = scanRes.outputs.map(x => encodedBoxId(x.box.id))
-    val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
-
-    (registry, updatedOffchainRegistry, outputsFilter)
+        (registry, updatedOffchainRegistry, outputsFilter)
+      }
   }
 
 

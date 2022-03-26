@@ -21,13 +21,15 @@ import scala.util.Try
   * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is not possible.
   *
   * @param dir - folder to store data
-  * @param keepVersions - number of versions to keep
+  * @param initialKeepVersions - number of versions to keep when the store is created. Can be changed after.
   *
   */
-class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends KVStoreReader {
+class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) extends KVStoreReader {
   type VersionID = Array[Byte]
 
   type LSN = Long // logical serial number: type used to provide order of records in undo list
+
+  private var keepVersions: Int = initialKeepVersions;
 
   override val db: DB = createDB(dir, "ldb_main") // storage for main data
   override val lock = new ReentrantReadWriteLock()
@@ -48,6 +50,21 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     op.createIfMissing(true)
     op.paranoidChecks(true)
     factory.open(new File(dir, storeName), op)
+  }
+
+  /** Set new keep versions threshold, remove not needed versions and return old value of keep versions */
+  def setKeepVersions(newKeepVersions: Int): Int = {
+    lock.writeLock().lock()
+    val oldKeepVersions = keepVersions
+    try {
+      if (newKeepVersions < oldKeepVersions) {
+        cleanStart(newKeepVersions)
+      }
+      keepVersions = newKeepVersions
+    } finally {
+      lock.writeLock().unlock()
+    }
+    oldKeepVersions
   }
 
   /** returns value associated with the key or throws `NoSuchElementException` */
@@ -189,11 +206,17 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     val valueSize = undo.length - versionSize - keySize - 2
     val versionID = undo.slice(2, 2 + versionSize)
     val key = undo.slice(2 + versionSize, 2 + versionSize + keySize)
-    val value = if (valueSize == 0) null else undo.slice(2 + versionSize + keySize, undo.length)
+    val value = if (valueSize == 0){
+      null
+    } else{
+      undo.slice(2 + versionSize + keySize, undo.length)
+    }
     Undo(versionID, key, value)
   }
 
-  def update(versionID: VersionID, toRemove: Iterable[Array[Byte]], toUpdate: Iterable[(Array[Byte], Array[Byte])]): Unit = {
+  def update(versionID: VersionID,
+             toRemove: Iterable[Array[Byte]],
+             toUpdate: Iterable[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
     lock.writeLock().lock()
     val lastLsn = lsn // remember current LSN value
     val batch = db.createWriteBatch()
@@ -237,9 +260,9 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     }
   }
 
-  def insert(versionID: VersionID, toInsert: Seq[(K, V)]): Unit = update(versionID, Seq.empty, toInsert)
+  def insert(versionID: VersionID, toInsert: Seq[(K, V)]): Try[Unit] = update(versionID, Seq.empty, toInsert)
 
-  def remove(versionID: VersionID, toRemove: Seq[K]): Unit = update(versionID, toRemove, Seq.empty)
+  def remove(versionID: VersionID, toRemove: Seq[K]): Try[Unit] = update(versionID, toRemove, Seq.empty)
 
 
   // Keep last "count" versions and remove undo information for older versions

@@ -4,7 +4,7 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning._
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.wallet.Constants.ScanId
@@ -12,8 +12,6 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen
 import sigmastate.Values.ByteArrayConstant
-
-import scala.collection.mutable
 
 trait WalletGenerators extends ErgoTransactionGenerators with Generators {
 
@@ -88,6 +86,12 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
     } yield PaymentRequest(Pay2SAddress(Constants.FalseLeaf), value, assets, registers)
   }
 
+  def burnTokensRequestGen: Gen[BurnTokensRequest] = {
+    for {
+      assets <- additionalTokensGen
+    } yield BurnTokensRequest(assets)
+  }
+
   def assetIssueRequestGen: Gen[AssetIssueRequest] = {
     for {
       amount <- Gen.choose(1L, 100000L)
@@ -141,7 +145,7 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
   def externalScanReqGen: Gen[ScanRequest] = for {
     appName <- Gen.alphaNumStr
     pred <- scanningPredicateGen
-  } yield ScanRequest(appName, pred, Some(ScanWalletInteraction.Off))
+  } yield ScanRequest(appName, pred, Some(ScanWalletInteraction.Off), Some(true))
 
   def externalAppGen: Gen[Scan] = for {
     scanId <- Gen.posNum[Short]

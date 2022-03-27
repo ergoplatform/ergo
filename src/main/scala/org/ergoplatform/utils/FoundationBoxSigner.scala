@@ -5,8 +5,8 @@ import java.math.BigInteger
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform._
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
@@ -53,14 +53,14 @@ object FoundationBoxSigner extends App {
   val preSign: ACTION = 1
   val sign: ACTION = 2
 
-  val height = 685000
+  val height = 700000
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
   val action: ACTION = generateCommitment
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = None
+  val commitmentStringOpt: Option[String] = Some("0290a152528fd9b83dd70a777c86a607e87213b4e6effe760cd13ac79df486c99a")
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignatureStringOpt: Option[String] = None
   //signer is generating commitment and final valid sig
@@ -116,7 +116,7 @@ object FoundationBoxSigner extends App {
   //waves gateway address for Ergo Waves account
   val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
 
-  val addr = enc.fromString("9iE2MadGSrn1ivHmRZJWRxzHffuAk6bPmEv6uJmPHuadBY8td5u").get
+  val addr = enc.fromString("9g1ReLmsbGevkTjfPGMdRMoFRdrAVskZVmSBpaEdVW2DfG4HDWm").get
 
   val withdrawalAmount = 36000 * EmissionRules.CoinsInOneErgo
   val withdrawalOutputs = IndexedSeq(new ErgoBoxCandidate(withdrawalAmount, addr.script, height))

@@ -1,5 +1,6 @@
 package org.ergoplatform.utils
 
+/*
 import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.history.Header
@@ -18,6 +19,7 @@ import sigmastate.lang.Terms._
 import sigmastate.interpreter._
 import scorex.util.bytesToId
 import scorex.util.encode.Base16
+ */
 
 object FounderSpender
 

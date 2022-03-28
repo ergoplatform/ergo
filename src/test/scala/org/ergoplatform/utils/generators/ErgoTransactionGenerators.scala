@@ -96,7 +96,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   lazy val walletTransactionGen: Gen[WalletTransaction] = for {
     tx <- invalidErgoTransactionGen
     inclusionHeight <- Gen.posNum[Int]
-    scanId <- ScanId @@ Gen.posNum[Short]
+    scanId <- ScanId @@ Gen.posNum[Int]
   } yield WalletTransaction(tx, inclusionHeight, Seq(scanId))
 
   lazy val augWalletTransactionGen: Gen[AugWalletTransaction] = for {

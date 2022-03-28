@@ -59,7 +59,7 @@ class WalletStorageSpec
     forAll(Gen.nonEmptyListOf(externalScanReqGen)) { externalScanReqs =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        externalScanReqs.foreach(req => storage.addScan(req))
+        externalScanReqs.foreach(req => storage.addScanRequest(req))
         val storageApps = storage.allScans
         val storageRequests = storageApps.map { app =>
           ScanRequest(app.scanName, app.trackingRule, Some(ScanWalletInteraction.Off), Some(true))
@@ -75,14 +75,14 @@ class WalletStorageSpec
     forAll(externalScanReqGen) { externalScanReq =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        val scan = storage.addScan(externalScanReq).get
+        val scan = storage.addScanRequest(externalScanReq).get
 
         storage.lastUsedScanId shouldBe scan.scanId
 
         storage.removeScan(scan.scanId).get
         storage.lastUsedScanId shouldBe scan.scanId
 
-        val scan2 = storage.addScan(externalScanReq).get
+        val scan2 = storage.addScanRequest(externalScanReq).get
         storage.lastUsedScanId shouldBe scan2.scanId
         storage.lastUsedScanId shouldBe (scan.scanId +1)
       }

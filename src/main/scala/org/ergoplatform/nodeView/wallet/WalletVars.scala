@@ -1,13 +1,16 @@
 package org.ergoplatform.nodeView.wallet
 
+import cats.implicits._
+import cats.Traverse
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
-import org.ergoplatform.nodeView.wallet.scanning.Scan
+import org.ergoplatform.nodeView.wallet.scanning.{LegacyScan, Scan}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
+import scorex.core.app.Version
 import scorex.util.ScorexLogging
 
 import scala.util.Try
@@ -109,6 +112,19 @@ object WalletVars {
     } else {
       None
     }
+    if (Version(settings.scorexSettings.network.appVersion) == Version(4, 0, 26)) {
+      Traverse[List].sequence {
+        storage.getLegacyScans.map { scan =>
+          storage.removeLegacyScan(scan.scanId).map(_ => scan)
+        }.toList
+      }.map { removedScans =>
+        removedScans.foreach { case LegacyScan(id, name, trackingRule, walletInteraction, removeOffchain) =>
+          val intScanId = ScanId @@ id.intValue()
+          storage.addScan(Scan(intScanId, name, trackingRule, walletInteraction, removeOffchain))
+        }
+      }
+    }
+
     WalletVars(None, storage.allScans, cacheOpt)(settings)
   }
 

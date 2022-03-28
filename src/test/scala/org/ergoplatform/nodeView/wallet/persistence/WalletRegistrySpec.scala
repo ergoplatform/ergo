@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import com.google.common.primitives.{Ints, Shorts}
+import com.google.common.primitives.Ints
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{ScanResults, SpentInputData}
@@ -39,7 +39,7 @@ class WalletRegistrySpec
         registry.walletUnspentBoxes() shouldBe Seq(unspentBox)
 
         //put app box
-        val appId = ScanId @@ (PaymentsScanId + 1).toShort
+        val appId = ScanId @@ (PaymentsScanId + 1)
         val unspentAppBox = box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(appId))
         WalletRegistry.putBox(emptyBag, unspentAppBox).transact(store).get
         registry.walletUnspentBoxes() shouldBe Seq(unspentBox)
@@ -171,7 +171,7 @@ class WalletRegistrySpec
         WalletRegistry.putBoxes(emptyBag, tbs).transact(store).get
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs tbs.map(Some.apply)
         val updateFn = (tb: TrackedBox) => tb.copy(spendingHeightOpt = Some(0),
-          scans = Set(PaymentsScanId, ScanId @@ 2.toShort))
+          scans = Set(PaymentsScanId, ScanId @@ 2))
         val updatedBoxes = tbs.map(updateFn)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)
         WalletRegistry.removeBoxes(emptyBag, tbs).transact(store).get
@@ -220,8 +220,8 @@ class WalletRegistrySpec
   }
 
   it should "update scans correctly" in {
-    val appId1: ScanId = ScanId @@ 21.toShort
-    val appId2: ScanId = ScanId @@ 22.toShort
+    val appId1: ScanId = ScanId @@ 21
+    val appId2: ScanId = ScanId @@ 22
 
     forAll(trackedBoxGen) { tb0 =>
       withVersionedStore(10) { store =>
@@ -244,7 +244,7 @@ class WalletRegistrySpec
   }
 
   it should "remove application from a box correctly" in {
-    val appId: ScanId = ScanId @@ 20.toShort
+    val appId: ScanId = ScanId @@ 20
 
     forAll(trackedBoxGen) { tb0 =>
       val tb = tb0.copy(scans = Set(appId))
@@ -260,7 +260,7 @@ class WalletRegistrySpec
   }
 
   it should "remove box-scan correspondence and then rollback - one app" in {
-    val scanId: ScanId = ScanId @@ 20.toShort
+    val scanId: ScanId = ScanId @@ 20
 
     forAll(trackedBoxGen) { tb0 =>
       val tb = tb0.copy(scans = Set(scanId))
@@ -279,7 +279,7 @@ class WalletRegistrySpec
   }
 
   it should "remove box-scan correspondence and then rollback - multiple apps" in {
-    val scanId: ScanId = ScanId @@ 20.toShort
+    val scanId: ScanId = ScanId @@ 20
 
     forAll(trackedBoxGen) { tb0 =>
       val tb = tb0.copy(scans = Set(PaymentsScanId, scanId))
@@ -301,18 +301,18 @@ class WalletRegistrySpec
   it should "compose keys correctly" in {
     val box = trackedBoxGen.sample.get
 
-    forAll { (prefix: Byte, scanId: Short, height: Int, suffix: Byte) =>
-      val key1 = (prefix +: Shorts.toByteArray(scanId)) ++ Array.fill(32)(suffix)
+    forAll { (prefix: Byte, scanId: Int, height: Int, suffix: Byte) =>
+      val key1 = (prefix +: Ints.toByteArray(scanId)) ++ Array.fill(32)(suffix)
       WalletRegistry.composeKey(prefix, ScanId @@ scanId, suffix) shouldBe key1
 
-      val key2 = (prefix +: Shorts.toByteArray(scanId)) ++ Ints.toByteArray(height) ++ Array.fill(32)(suffix)
+      val key2 = (prefix +: Ints.toByteArray(scanId)) ++ Ints.toByteArray(height) ++ Array.fill(32)(suffix)
       WalletRegistry.composeKey(prefix, ScanId @@ scanId, height, suffix) shouldBe key2
 
       val id = box.box.id
-      val key3 = (prefix +: Shorts.toByteArray(scanId)) ++ id
+      val key3 = (prefix +: Ints.toByteArray(scanId)) ++ id
       WalletRegistry.composeKeyWithId(prefix, ScanId @@ scanId, id) shouldBe key3
 
-      val key4 = (prefix +: Shorts.toByteArray(scanId)) ++ Ints.toByteArray(height) ++ id
+      val key4 = (prefix +: Ints.toByteArray(scanId)) ++ Ints.toByteArray(height) ++ id
       WalletRegistry.composeKeyWithHeightAndId(prefix, ScanId @@ scanId, height, id) shouldBe key4
     }
   }

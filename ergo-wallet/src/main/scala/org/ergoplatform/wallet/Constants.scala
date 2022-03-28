@@ -4,7 +4,7 @@ import org.ergoplatform.wallet.secrets.DerivationPath
 import supertagged.TaggedType
 
 object Constants {
-  object ScanId extends TaggedType[Short]
+  object ScanId extends TaggedType[Int]
   type ScanId = ScanId.Type
 
   /** part of the protocol, do not change */
@@ -21,10 +21,10 @@ object Constants {
   // Ids below 9 are reserved. Ids from 11 (inclusive) are for user scans
 
   /** SimplePayments scan identifier */
-  val PaymentsScanId: ScanId = ScanId @@ 10.toShort
+  val PaymentsScanId: ScanId = ScanId @@ 10
 
   /** Scan which is checking mining rewards */
-  val MiningScanId: ScanId = ScanId @@ 9.toShort
+  val MiningScanId: ScanId = ScanId @@ 9
 
 
   /**

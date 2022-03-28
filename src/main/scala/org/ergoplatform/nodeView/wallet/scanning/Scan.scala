@@ -5,6 +5,7 @@ import org.ergoplatform.nodeView.wallet.scanning.ScanWalletInteraction.ScanWalle
 import org.ergoplatform.wallet.Constants.ScanId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
+import scorex.util.Extensions._
 
 import scala.util.{Failure, Success, Try}
 
@@ -28,6 +29,13 @@ case class Scan(scanId: ScanId,
                 walletInteraction: ScanWalletInteraction.Value,
                 removeOffchain: Boolean)
 
+case class LegacyScan(scanId: Short,
+                scanName: String,
+                trackingRule: ScanningPredicate,
+                walletInteraction: ScanWalletInteraction.Value,
+                removeOffchain: Boolean)
+
+
 object Scan {
 
   val MaxScanNameLength = 255
@@ -40,7 +48,7 @@ object ScanSerializer extends ScorexSerializer[Scan] {
   private val falseNeg: Byte = -2
 
   override def serialize(app: Scan, w: Writer): Unit = {
-    w.putShort(app.scanId)
+    w.putUInt(app.scanId)
     w.putShortString(app.scanName)
     w.put(ScanWalletInteraction.toByte(app.walletInteraction))
     if (app.removeOffchain) {
@@ -52,7 +60,7 @@ object ScanSerializer extends ScorexSerializer[Scan] {
   }
 
   override def parse(r: Reader): Scan = {
-    val scanId = ScanId @@ r.getShort()
+    val scanId = ScanId @@ r.getUInt().toIntExact
     val appName = r.getShortString()
 
     // hack to read scans serialized with previous versions (they will have positive first byte)
@@ -75,6 +83,32 @@ object ScanSerializer extends ScorexSerializer[Scan] {
     Scan(scanId, appName, sp, interactionFlag, removeOffchain)
   }
 
+  /**
+    * This method is a compatibility bridge to version 4.0.26 where ScanId changed from Short to Int
+    */
+  def legacyParse(r: Reader): LegacyScan = {
+    val scanId = r.getShort()
+    val appName = r.getShortString()
+
+    // hack to read scans serialized with previous versions (they will have positive first byte)
+    // for scans written with previous versions, walletInteraction flag is set to "off"
+    val (interactionFlag, removeOffchain) = r.peekByte() match {
+      case x: Byte if x < 0 => {
+        r.getByte()
+        val wi = ScanWalletInteraction.fromByte(x)
+        r.peekByte() match {
+          case x: Byte if x < 0 =>
+            val b = r.getByte()
+            val ro = if (b == trueNeg) true else false
+            (wi, ro)
+          case _ => (wi, true) // default value for removeOffchain
+        }
+      }
+      case _ => (ScanWalletInteraction.Off, true) // default values
+    }
+    val sp = ScanningPredicateSerializer.parse(r)
+    LegacyScan(scanId, appName, sp, interactionFlag, removeOffchain)
+  }
 }
 
 /**

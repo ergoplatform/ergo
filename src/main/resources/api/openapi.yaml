@@ -14,7 +14,9 @@ info:
 
 servers:
   - url: http://127.0.0.1:9053
-    description: Local full node
+    description: Local full node on mainnet
+  - url: http://127.0.0.1:9052
+    description: Local full node on testnet
   - url: http://213.239.193.208:9053
     description: Known public node
 

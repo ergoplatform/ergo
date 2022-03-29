@@ -176,7 +176,9 @@ object ErgoWalletState extends ScorexLogging {
             }
           } match {
             case Success(migrationResults) =>
-              log.info(s"${migrationResults.length} scans successfully migrated")
+              if (migrationResults.nonEmpty) {
+                log.info(s"${migrationResults.length} scans successfully migrated")
+              }
               Success(buildState)
             case Failure(ex) =>
               log.error("Failed to migrate scans, please report this error to developer support")

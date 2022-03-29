@@ -163,8 +163,13 @@ object ErgoWalletState extends ScorexLogging {
 
       // compatibility bridge to version 4.0.26 where ScanId changed from Short to Int, let's migrate them
       if (Version(ergoSettings.scorexSettings.network.appVersion).compare(Version(4, 0, 26)) >= 0) {
+        val legacyScans = ergoStorage.getLegacyScans
+        if (legacyScans.exists(_.scanId.intValue < 0)) {
+          log.info(s"Scans already migrated")
+          Success(buildState)
+        } else {
           Traverse[Vector].sequence {
-            ergoStorage.getLegacyScans.map { scan =>
+            legacyScans.map { scan =>
               ergoStorage.removeLegacyScan(scan.scanId).map(_ => scan)
             }.toVector
           }.flatMap { removedScans =>
@@ -184,10 +189,10 @@ object ErgoWalletState extends ScorexLogging {
               log.error("Failed to migrate scans, please report this error to developer support")
               Failure(ex)
           }
+        }
       } else {
         Success(buildState)
       }
-
     }
   }
 }

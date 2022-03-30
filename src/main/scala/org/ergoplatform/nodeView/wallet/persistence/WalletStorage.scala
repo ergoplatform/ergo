@@ -179,26 +179,19 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     * Compatibility bridge to version 4.0.26 where ScanId changed from Short to Int, let's migrate them
     * @return migration status
     */
-  def migrateScans(): Try[Vector[Unit]] = {
-    val legacyScans = getLegacyScans
-    if (legacyScans.exists(_.scanId.intValue < 0)) {
-      log.info(s"Scans already migrated")
-      Success(Vector.empty)
-    } else {
+  def migrateScans(): Try[Vector[Unit]] =
+    Traverse[Vector].sequence {
+      getLegacyScans.map { scan =>
+        removeLegacyScan(scan.scanId).map(_ => scan)
+      }.toVector
+    }.flatMap { removedScans =>
       Traverse[Vector].sequence {
-        legacyScans.map { scan =>
-          removeLegacyScan(scan.scanId).map(_ => scan)
-        }.toVector
-      }.flatMap { removedScans =>
-        Traverse[Vector].sequence {
-          removedScans.map { case LegacyScan(id, name, trackingRule, walletInteraction, removeOffchain) =>
-            val intScanId = ScanId @@ id.intValue()
-            addScan(Scan(intScanId, name, trackingRule, walletInteraction, removeOffchain))
-          }
+        removedScans.map { case LegacyScan(id, name, trackingRule, walletInteraction, removeOffchain) =>
+          val intScanId = ScanId @@ id.intValue()
+          addScan(Scan(intScanId, name, trackingRule, walletInteraction, removeOffchain))
         }
       }
     }
-  }
 
   /**
     * Remove an scan from the database

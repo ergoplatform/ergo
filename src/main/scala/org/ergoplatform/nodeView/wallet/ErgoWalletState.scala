@@ -1,7 +1,5 @@
 package org.ergoplatform.nodeView.wallet
 
-import cats.Traverse
-import cats.implicits._
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
@@ -10,15 +8,12 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
-import org.ergoplatform.nodeView.wallet.scanning.{LegacyScan, Scan}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
-import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
-import scorex.core.app.Version
 import scorex.util.ScorexLogging
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 case class ErgoWalletState(
     storage: WalletStorage,
@@ -140,59 +135,25 @@ object ErgoWalletState extends ScorexLogging {
   val noWalletFilter: FilterFn = (_: TrackedBox) => true
 
   def initial(ergoSettings: ErgoSettings, parameters: Parameters): Try[ErgoWalletState] = {
-    WalletRegistry.apply(ergoSettings).flatMap { registry =>
+    WalletRegistry.apply(ergoSettings).map { registry =>
       val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)(ergoSettings.addressEncoder)
       val offChainRegistry = OffChainRegistry.init(registry)
       val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
       val maxInputsToUse = ergoSettings.walletSettings.maxInputs
 
-      def buildState =
-        ErgoWalletState(
-          ergoStorage,
-          secretStorageOpt = None,
-          registry,
-          offChainRegistry,
-          outputsFilter = None,
-          walletVars,
-          stateReaderOpt = None,
-          mempoolReaderOpt = None,
-          utxoStateReaderOpt = None,
-          parameters,
-          maxInputsToUse
-        )
-
-      // compatibility bridge to version 4.0.26 where ScanId changed from Short to Int, let's migrate them
-      if (Version(ergoSettings.scorexSettings.network.appVersion).compare(Version(4, 0, 26)) >= 0) {
-        val legacyScans = ergoStorage.getLegacyScans
-        if (legacyScans.exists(_.scanId.intValue < 0)) {
-          log.info(s"Scans already migrated")
-          Success(buildState)
-        } else {
-          Traverse[Vector].sequence {
-            legacyScans.map { scan =>
-              ergoStorage.removeLegacyScan(scan.scanId).map(_ => scan)
-            }.toVector
-          }.flatMap { removedScans =>
-            Traverse[Vector].sequence {
-              removedScans.map { case LegacyScan(id, name, trackingRule, walletInteraction, removeOffchain) =>
-                val intScanId = ScanId @@ id.intValue()
-                ergoStorage.addScan(Scan(intScanId, name, trackingRule, walletInteraction, removeOffchain))
-              }
-            }
-          } match {
-            case Success(migrationResults) =>
-              if (migrationResults.nonEmpty) {
-                log.info(s"${migrationResults.length} scans successfully migrated")
-              }
-              Success(buildState)
-            case Failure(ex) =>
-              log.error("Failed to migrate scans, please report this error to developer support")
-              Failure(ex)
-          }
-        }
-      } else {
-        Success(buildState)
-      }
+      ErgoWalletState(
+        ergoStorage,
+        secretStorageOpt = None,
+        registry,
+        offChainRegistry,
+        outputsFilter = None,
+        walletVars,
+        stateReaderOpt = None,
+        mempoolReaderOpt = None,
+        utxoStateReaderOpt = None,
+        parameters,
+        maxInputsToUse
+      )
     }
   }
 }

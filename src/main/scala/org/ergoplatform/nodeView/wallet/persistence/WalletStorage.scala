@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import cats.Traverse
+import cats.implicits._
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{LegacyScan, Scan, ScanRequest, ScanSerializer}
@@ -11,8 +13,8 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.db.{LDBFactory, LDBKVStore}
 
 import java.io.File
-import scorex.util.ScorexLogging
-import scorex.util.serialization.VLQByteBufferReader
+import scorex.util.{ByteArrayBuilder, ScorexLogging}
+import scorex.util.serialization.{VLQByteBufferReader, VLQByteBufferWriter}
 
 import java.nio.ByteBuffer
 import scala.util.{Failure, Success, Try}
@@ -158,6 +160,47 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     )
 
   /**
+    * Register a legacy scan (according to EIP-1)
+    * @param scan to register
+    * @return persistence status
+    */
+  def addLegacyScan(scan: LegacyScan): Try[Unit] = {
+    val scanPrefixKey = LegacyScanPrefixArray ++ Shorts.toByteArray(scan.scanId)
+    val writer = new VLQByteBufferWriter(new ByteArrayBuilder())
+    ScanSerializer.legacySerialize(scan, writer)
+    store.insert(
+      Seq(
+        scanPrefixKey -> writer.result().toBytes,
+      )
+    )
+  }
+
+  /**
+    * Compatibility bridge to version 4.0.26 where ScanId changed from Short to Int, let's migrate them
+    * @return migration status
+    */
+  def migrateScans(): Try[Vector[Unit]] = {
+    val legacyScans = getLegacyScans
+    if (legacyScans.exists(_.scanId.intValue < 0)) {
+      log.info(s"Scans already migrated")
+      Success(Vector.empty)
+    } else {
+      Traverse[Vector].sequence {
+        legacyScans.map { scan =>
+          removeLegacyScan(scan.scanId).map(_ => scan)
+        }.toVector
+      }.flatMap { removedScans =>
+        Traverse[Vector].sequence {
+          removedScans.map { case LegacyScan(id, name, trackingRule, walletInteraction, removeOffchain) =>
+            val intScanId = ScanId @@ id.intValue()
+            addScan(Scan(intScanId, name, trackingRule, walletInteraction, removeOffchain))
+          }
+        }
+      }
+    }
+  }
+
+  /**
     * Remove an scan from the database
     * @param id scan identifier
     */
@@ -170,7 +213,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     * @param scanId scan identifier
     */
   def removeLegacyScan(scanId: Short): Try[Unit] = {
-    val scanPrefixKey = ScanPrefixArray ++ Shorts.toByteArray(scanId)
+    val scanPrefixKey = LegacyScanPrefixArray ++ Shorts.toByteArray(scanId)
     store.remove(Seq(scanPrefixKey))
   }
 
@@ -180,8 +223,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     * @return scans stored in the database
     */
   def getLegacyScans: Seq[LegacyScan] = {
-    val smallestScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(0)
-    val biggestScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
+    val smallestScanId: Array[Byte] = LegacyScanPrefixArray ++ Shorts.toByteArray(0)
+    val biggestScanId: Array[Byte] = LegacyScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
     store.getRange(smallestScanId, biggestScanId)
       .map { case (_, v) =>
         val reader = new VLQByteBufferReader(ByteBuffer.wrap(v))
@@ -249,7 +292,8 @@ object WalletStorage {
     */
   val PublicKeyPrefixByte: Byte = 2: Byte
 
-  val ScanPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ScanPrefixByte)
+  val ScanPrefixArray: Array[Byte] = Array(RangedKeyPrefix, RangedKeyPrefix, ScanPrefixByte)
+  val LegacyScanPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ScanPrefixByte)
   val PublicKeyPrefixArray: Array[Byte] = Array(RangedKeyPrefix, PublicKeyPrefixByte)
 
   // scans key space to iterate over all of them

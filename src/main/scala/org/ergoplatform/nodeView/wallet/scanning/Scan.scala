@@ -83,6 +83,18 @@ object ScanSerializer extends ScorexSerializer[Scan] {
     Scan(scanId, appName, sp, interactionFlag, removeOffchain)
   }
 
+  def legacySerialize(scan: LegacyScan, w: Writer): Unit = {
+    w.putShort(scan.scanId)
+    w.putShortString(scan.scanName)
+    w.put(ScanWalletInteraction.toByte(scan.walletInteraction))
+    if (scan.removeOffchain) {
+      w.put(trueNeg)
+    } else {
+      w.put(falseNeg)
+    }
+    ScanningPredicateSerializer.serialize(scan.trackingRule, w)
+  }
+
   /**
     * This method is a compatibility bridge to version 4.0.26 where ScanId changed from Short to Int
     */

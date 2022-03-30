@@ -4,9 +4,9 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
-import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.nodeView.wallet.scanning.{LegacyScan, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.utils.generators.WalletGenerators
-import org.ergoplatform.wallet.secrets.{DerivationPathSerializer, DerivationPath}
+import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -71,6 +71,53 @@ class WalletStorageSpec
     }
   }
 
+  it should "create and remove legacy scans" in {
+    forAll(Gen.nonEmptyListOf(externalAppGen)) { scans =>
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        scans.foreach { scan =>
+          val legacyScan =
+            LegacyScan(scan.scanId.toShort,
+              scan.scanName,
+              scan.trackingRule,
+              scan.walletInteraction,
+              scan.removeOffchain
+            )
+          storage.addLegacyScan(legacyScan).get
+        }
+        storage.getLegacyScans shouldNot be(empty)
+        storage.getLegacyScans.foreach { scan =>
+          storage.removeLegacyScan(scan.scanId).get
+        }
+        scans.foreach(storage.addScan)
+        storage.getLegacyScans shouldBe empty
+      }
+    }
+  }
+
+  it should "migrate legacy scans" in {
+    forAll(Gen.nonEmptyListOf(externalAppGen)) { scans =>
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        scans.foreach { scan =>
+          val legacyScan =
+            LegacyScan(scan.scanId.toShort,
+              scan.scanName,
+              scan.trackingRule,
+              scan.walletInteraction,
+              scan.removeOffchain
+            )
+          storage.addLegacyScan(legacyScan).get
+        }
+        storage.getLegacyScans shouldNot be(empty)
+        val legacyScanCount = storage.getLegacyScans.size
+        storage.migrateScans().get.size shouldBe legacyScanCount
+        storage.getLegacyScans shouldBe empty
+        storage.allScans.size shouldBe legacyScanCount
+      }
+    }
+  }
+
   it should "always increase ids" in {
     forAll(externalScanReqGen) { externalScanReq =>
       withStore { store =>
@@ -84,7 +131,7 @@ class WalletStorageSpec
 
         val scan2 = storage.addScanRequest(externalScanReq).get
         storage.lastUsedScanId shouldBe scan2.scanId
-        storage.lastUsedScanId shouldBe (scan.scanId +1)
+        storage.lastUsedScanId shouldBe (scan.scanId + 1)
       }
     }
   }

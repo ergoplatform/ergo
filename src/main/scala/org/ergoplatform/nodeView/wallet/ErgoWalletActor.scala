@@ -74,19 +74,21 @@ class ErgoWalletActor(settings: ErgoSettings,
       case Success(state) =>
         val appVersion = Version(settings.scorexSettings.network.appVersion)
         if (appVersion.compare(Version(4, 0, 26)) >= 0) {
-          state.storage.migrateScans() match {
-            case Success(migrationResults) =>
+          state.migrateScans(settings) match {
+            case Success((migrationResults, newState)) =>
               if (migrationResults.nonEmpty) {
                 log.info(s"${migrationResults.length} scans successfully migrated")
               }
+              self ! ReadWallet(newState)
             case Failure(ex) =>
               log.error("Unable to migrate scans, please report this error to developer support", ex)
               ErgoApp.shutdownSystem()(context.system)
           }
+        } else {
+          self ! ReadWallet(state)
         }
         context.system.eventStream.subscribe(self, classOf[ChangedState])
         context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
-        self ! ReadWallet(state)
       case Failure(ex) =>
         log.error("Unable to initialize wallet", ex)
         ErgoApp.shutdownSystem()(context.system)

@@ -1,7 +1,5 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import cats.Traverse
-import cats.implicits._
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{LegacyScan, Scan, ScanRequest, ScanSerializer}
@@ -174,24 +172,6 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
       )
     )
   }
-
-  /**
-    * Compatibility bridge to version 4.0.26 where ScanId changed from Short to Int, let's migrate them
-    * @return migration status
-    */
-  def migrateScans(): Try[Vector[Unit]] =
-    Traverse[Vector].sequence {
-      getLegacyScans.map { scan =>
-        removeLegacyScan(scan.scanId).map(_ => scan)
-      }.toVector
-    }.flatMap { removedScans =>
-      Traverse[Vector].sequence {
-        removedScans.map { case LegacyScan(id, name, trackingRule, walletInteraction, removeOffchain) =>
-          val intScanId = ScanId @@ id.intValue()
-          addScan(Scan(intScanId, name, trackingRule, walletInteraction, removeOffchain))
-        }
-      }
-    }
 
   /**
     * Remove an scan from the database

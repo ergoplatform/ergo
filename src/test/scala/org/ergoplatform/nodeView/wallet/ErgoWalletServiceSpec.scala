@@ -7,8 +7,9 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.scanning.LegacyScan
 import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform.utils.generators.ErgoTransactionGenerators
+import org.ergoplatform.utils.generators.{ErgoTransactionGenerators, WalletGenerators}
 import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.PaymentsScanId
@@ -27,7 +28,8 @@ import sigmastate.{SType, Values}
 
 import scala.util.Random
 
-class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with ErgoWalletSupport with ErgoTransactionGenerators with DBSpec with BeforeAndAfterAll {
+class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletGenerators with WalletTestOps
+  with ErgoWalletSupport with ErgoTransactionGenerators with DBSpec with BeforeAndAfterAll {
 
   private implicit val x: WalletFixture = new WalletFixture(settings, parameters, getCurrentView(_).vault)
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 4)
@@ -214,6 +216,34 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
         unlockedWalletState.storage.readAllKeys().size shouldBe 1
         unlockedWalletState.storage.readChangeAddress shouldNot be(empty)
         unlockedWalletState.walletVars.proverOpt shouldNot be(empty)
+      }
+    }
+  }
+
+  property("it should migrate legacy scans") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        forAll(Gen.nonEmptyListOf(externalAppGen)) { scans =>
+          val state = initialState(store, versionedStore)
+          val storage = new WalletStorage(store, settings)
+          scans.foreach { scan =>
+            val legacyScan =
+              LegacyScan(scan.scanId.toShort,
+                scan.scanName,
+                scan.trackingRule,
+                scan.walletInteraction,
+                scan.removeOffchain
+              )
+            storage.addLegacyScan(legacyScan).get
+          }
+          storage.getLegacyScans shouldNot be(empty)
+          val legacyScanCount = storage.getLegacyScans.size
+          val (newScans, newState) = state.migrateScans(settings).get
+          newScans.size shouldBe legacyScanCount
+          newState.walletVars.externalScans shouldBe newScans
+          storage.getLegacyScans shouldBe empty
+          storage.allScans.size shouldBe legacyScanCount
+        }
       }
     }
   }

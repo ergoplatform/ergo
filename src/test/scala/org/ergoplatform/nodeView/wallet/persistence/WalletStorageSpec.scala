@@ -95,29 +95,6 @@ class WalletStorageSpec
     }
   }
 
-  it should "migrate legacy scans" in {
-    forAll(Gen.nonEmptyListOf(externalAppGen)) { scans =>
-      withStore { store =>
-        val storage = new WalletStorage(store, settings)
-        scans.foreach { scan =>
-          val legacyScan =
-            LegacyScan(scan.scanId.toShort,
-              scan.scanName,
-              scan.trackingRule,
-              scan.walletInteraction,
-              scan.removeOffchain
-            )
-          storage.addLegacyScan(legacyScan).get
-        }
-        storage.getLegacyScans shouldNot be(empty)
-        val legacyScanCount = storage.getLegacyScans.size
-        storage.migrateScans().get.size shouldBe legacyScanCount
-        storage.getLegacyScans shouldBe empty
-        storage.allScans.size shouldBe legacyScanCount
-      }
-    }
-  }
-
   it should "always increase ids" in {
     forAll(externalScanReqGen) { externalScanReq =>
       withStore { store =>

@@ -225,7 +225,6 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletGenerators with 
       withStore { store =>
         forAll(Gen.nonEmptyListOf(externalAppGen)) { scans =>
           val state = initialState(store, versionedStore)
-          val storage = new WalletStorage(store, settings)
           scans.foreach { scan =>
             val legacyScan =
               LegacyScan(scan.scanId.toShort,
@@ -234,15 +233,15 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletGenerators with 
                 scan.walletInteraction,
                 scan.removeOffchain
               )
-            storage.addLegacyScan(legacyScan).get
+            state.storage.addLegacyScan(legacyScan).get
           }
-          storage.getLegacyScans shouldNot be(empty)
-          val legacyScanCount = storage.getLegacyScans.size
+          state.storage.getLegacyScans shouldNot be(empty)
+          val legacyScanCount = state.storage.getLegacyScans.size
           val (newScans, newState) = state.migrateScans(settings).get
           newScans.size shouldBe legacyScanCount
           newState.walletVars.externalScans shouldBe newScans
-          storage.getLegacyScans shouldBe empty
-          storage.allScans.size shouldBe legacyScanCount
+          state.storage.getLegacyScans shouldBe empty
+          state.storage.allScans.size shouldBe legacyScanCount
         }
       }
     }

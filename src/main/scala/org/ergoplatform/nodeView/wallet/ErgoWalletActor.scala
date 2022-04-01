@@ -200,9 +200,9 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       context.become(loadedWallet(newState))
 
-    case ScanInThePast(blockHeight) =>
+    case ScanInThePast(blockHeight, forceScan) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
-      if (nextBlockHeight == blockHeight) {
+      if (nextBlockHeight == blockHeight || forceScan) {
         val newState =
           historyReader.bestFullBlockAt(blockHeight) match {
             case Some(block) =>
@@ -220,7 +220,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         }
         context.become(loadedWallet(newState))
         if (blockHeight < newState.fullHeight) {
-          self ! ScanInThePast(blockHeight + 1)
+          self ! ScanInThePast(blockHeight + 1, forceScan)
         }
       }
 
@@ -242,7 +242,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           context.become(loadedWallet(newState))
         } else if (nextBlockHeight < newBlock.height) {
           log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
-          self ! ScanInThePast(nextBlockHeight)
+          self ! ScanInThePast(nextBlockHeight, false)
         } else {
           log.warn(s"Wallet: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
         }
@@ -299,7 +299,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         case Success(newState) =>
           context.become(loadedWallet(newState))
           val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
-          self ! ScanInThePast(heightToScanFrom)
+          self ! ScanInThePast(heightToScanFrom, forceScan = true)
         case f@Failure(t) =>
           log.error("Error during rescan attempt: ", t)
           sender() ! f
@@ -469,7 +469,7 @@ object ErgoWalletActor extends ScorexLogging {
     *
     * @param blockHeight - height of a block to scan
     */
-  private final case class ScanInThePast(blockHeight: ErgoHistory.Height)
+  private final case class ScanInThePast(blockHeight: ErgoHistory.Height, forceScan: Boolean)
 
 
   // Publicly available signals for the wallet actor

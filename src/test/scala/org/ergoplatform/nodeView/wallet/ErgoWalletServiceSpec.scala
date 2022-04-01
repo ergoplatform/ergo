@@ -221,9 +221,9 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletGenerators with 
   }
 
   property("it should migrate legacy scans") {
-    withVersionedStore(2) { versionedStore =>
-      withStore { store =>
-        forAll(Gen.nonEmptyListOf(externalAppGen)) { scans =>
+    forAll(Gen.nonEmptyListOf(externalAppGen)) { scans =>
+      withVersionedStore(2) { versionedStore =>
+        withStore { store =>
           val state = initialState(store, versionedStore)
           scans.foreach { scan =>
             val legacyScan =

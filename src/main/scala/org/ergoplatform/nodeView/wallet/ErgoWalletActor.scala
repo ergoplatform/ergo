@@ -298,8 +298,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       ergoWalletService.recreateRegistry(state, settings) match {
         case Success(newState) =>
           context.become(loadedWallet(newState))
-          // walletHeight() corresponds to empty wallet state now
-          val heightToScanFrom = Math.min(newState.fullHeight, Math.max(fromHeight, newState.getWalletHeight))
+          val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
           self ! ScanInThePast(heightToScanFrom)
         case f@Failure(t) =>
           log.error("Error during rescan attempt: ", t)

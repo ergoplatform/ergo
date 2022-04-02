@@ -20,7 +20,7 @@ object OOMTest extends App {
   protected implicit val hf = Blake2b256
 
   val dir: File = Files.createTempDirectory("oom-test").toFile
-  val store = new LDBVersionedStore(dir, keepVersions = 200)
+  val store = new LDBVersionedStore(dir, initialKeepVersions = 200)
 
   val bestVersionKey = Blake2b256("best state version")
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)

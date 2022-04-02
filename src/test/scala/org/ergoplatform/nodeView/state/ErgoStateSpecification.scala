@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalacheck.Gen
 import scorex.core.bytesToVersion
 import scorex.core.validation.ValidationResult.Valid
@@ -23,20 +24,18 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
       val validBlock = validFullBlock(None, us, bh)
       val dsTxs = validBlock.transactions ++ validBlock.transactions
-      val changes = ErgoState.stateChanges(dsTxs)
-      val toRemove = changes.toRemove.map(_.boxId)
-      toRemove.count(boxId => java.util.Arrays.equals(toRemove.head, boxId)) shouldBe 2
+      ErgoState.stateChanges(dsTxs) shouldBe 'failure
 
       val dsRoot = BlockTransactions.transactionsRoot(dsTxs, version)
       val dsHeader = validBlock.header.copy(transactionsRoot = dsRoot)
       val bt = BlockTransactions(dsHeader.id, version, dsTxs)
       val doubleSpendBlock = ErgoFullBlock(dsHeader, bt, validBlock.extension, validBlock.adProofs)
 
-      us.applyModifier(doubleSpendBlock) shouldBe 'failure
-      us.applyModifier(validBlock) shouldBe 'success
+      us.applyModifier(doubleSpendBlock)(_ => ()) shouldBe 'failure
+      us.applyModifier(validBlock)(_ => ()) shouldBe 'success
 
-      ds.applyModifier(doubleSpendBlock) shouldBe 'failure
-      ds.applyModifier(validBlock) shouldBe 'success
+      ds.applyModifier(doubleSpendBlock)(_ => ()) shouldBe 'failure
+      ds.applyModifier(validBlock)(_ => ()) shouldBe 'success
     }
   }
 
@@ -59,8 +58,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val blBh = validFullBlockWithBoxHolder(lastBlocks.headOption, us, bh, new RandomWrapper(Some(seed)))
       val block = blBh._1
       bh = blBh._2
-      ds = ds.applyModifier(block).get
-      us = us.applyModifier(block).get
+      ds = ds.applyModifier(block)(_ => ()).get
+      us = us.applyModifier(block)(_ => ()).get
       lastBlocks = block +: lastBlocks
       requireEqualStateContexts(us.stateContext, ds.stateContext, lastBlocks.map(_.header))
     }
@@ -83,10 +82,10 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val block = blBh._1
       parentOpt = Some(block)
       bh = blBh._2
-      us = us.applyModifier(block).get
+      us = us.applyModifier(block)(_ => ()).get
 
-      val changes1 = ErgoState.boxChanges(block.transactions)
-      val changes2 = ErgoState.boxChanges(block.transactions)
+      val changes1 = ErgoState.boxChanges(block.transactions).get
+      val changes2 = ErgoState.boxChanges(block.transactions).get
       changes1._1 shouldBe changes2._1
       changes1._2 shouldBe changes2._2
     }
@@ -100,8 +99,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val txs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(seed)))._1
       whenever(txs.lengthCompare(2) > 0) {
         // valid transaction should spend the only existing genesis box
-        ErgoState.boxChanges(txs)._1.length shouldBe 1
-        ErgoState.boxChanges(txs)._1.head shouldBe emissionBox.id
+        ErgoState.boxChanges(txs).get._1.length shouldBe 1
+        ErgoState.boxChanges(txs).get._1.head.key shouldBe emissionBox.id
 
         // second transaction input should be an input created by the first transaction
         val inputToDoubleSpend = txs(1).inputs.head
@@ -111,7 +110,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
         invalidTxs.length shouldBe txs.length
         invalidTxs.count(_.inputs.contains(inputToDoubleSpend)) shouldBe 2
 
-        ErgoState.boxChanges(invalidTxs)._1.length shouldBe 2
+        ErgoState.boxChanges(invalidTxs).get._1.length shouldBe 2
       }
     }
   }
@@ -123,20 +122,20 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     forAll { seed: Int =>
       val txs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(seed)))._1
       whenever(txs.lengthCompare(1) > 0) {
-        val changes = ErgoState.stateChanges(txs)
+        val changes = ErgoState.stateChanges(txs).get
         val removals = changes.toRemove
         // should remove the only genesis box from the state
         removals.length shouldBe 1
-        removals.head.boxId shouldEqual emissionBox.id
+        removals.head.key shouldEqual emissionBox.id
         // number of inputs should be more than 1 - we create boxes and spend them in the same block
         txs.flatMap(_.inputs).length should be > 1
 
         val insertions = changes.toAppend
         // sum of coins in outputs should equal to genesis value
-        insertions.map(_.box.value).sum shouldBe emissionBox.value
+        insertions.map(_.value).map(ErgoBoxSerializer.parseBytes).map(_.value).sum shouldBe emissionBox.value
 
         // if output was spend and then created - it is in both toInsert and toRemove
-        val changesRev = ErgoState.stateChanges(txs.reverse)
+        val changesRev = ErgoState.stateChanges(txs.reverse).get
         val removalsRev = changesRev.toRemove
         val insertionsRev = changesRev.toAppend
         removalsRev.length should be > removals.length

@@ -10,6 +10,4 @@ object GlobalConstants {
     * (to avoid clashing between blockchain processing and API actors)
     */
   val ApiDispatcher = "api-dispatcher"
-
-  val NetworkDispatcher = "network-dispatcher"
 }

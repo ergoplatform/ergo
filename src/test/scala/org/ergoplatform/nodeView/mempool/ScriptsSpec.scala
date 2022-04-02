@@ -6,7 +6,7 @@ import org.ergoplatform.{ErgoBox, ErgoScriptPredef, Height, Self}
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
-import scorex.crypto.authds.ADKey
+import scorex.crypto.authds.avltree.batch.Remove
 import sigmastate._
 import sigmastate.Values._
 import sigmastate.lang.Terms._
@@ -72,10 +72,10 @@ class ScriptsSpec extends ErgoPropertyTest {
     val tx = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
     tx.size shouldBe 1
     tx.head.inputs.size shouldBe 2
-    ErgoState.boxChanges(tx)._1.foreach { boxId: ADKey =>
+    ErgoState.boxChanges(tx).get._1.foreach { case Remove(boxId) =>
       assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
     }
     val block = validFullBlock(None, us, tx, Some(1234L))
-    us.applyModifier(block)
+    us.applyModifier(block)(_ => ())
   }
 }

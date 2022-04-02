@@ -9,8 +9,6 @@ import scorex.core._
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ProverResult
 
-import scala.util.Try
-
 class DigestStateSpecification extends ErgoPropertyTest {
 
   private val emptyVersion: VersionTag = bytesToVersion(Array.fill(32)(0: Byte))
@@ -24,7 +22,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
       val fb = validFullBlock(parentOpt = None, us, bh)
       val dir2 = createTempDir
       val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, stateConstants, parameters)
-      ds.applyModifier(fb) shouldBe 'success
+      ds.applyModifier(fb)(_ => ()) shouldBe 'success
       ds.close()
 
       val state = DigestState.create(None, None, dir2, stateConstants, parameters)
@@ -42,8 +40,8 @@ class DigestStateSpecification extends ErgoPropertyTest {
       val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new RandomWrapper(Some(seed)))
       val block = blBh._1
       bh = blBh._2
-      ds = ds.applyModifier(block).get
-      us = us.applyModifier(block).get
+      ds = ds.applyModifier(block)(_ => ()).get
+      us = us.applyModifier(block)(_ => ()).get
       parentOpt = Some(block)
     }
   }
@@ -64,14 +62,14 @@ class DigestStateSpecification extends ErgoPropertyTest {
       block.blockTransactions.transactions.exists(_.dataInputs.nonEmpty) shouldBe true
 
       val ds = createDigestState(us.version, us.rootHash, parameters)
-      ds.applyModifier(block) shouldBe 'success
+      ds.applyModifier(block)(_ => ()) shouldBe 'success
     }
   }
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
       val state = createDigestState(emptyVersion, emptyAdDigest, parameters)
-      state.applyModifier(b).isFailure shouldBe true
+      state.applyModifier(b)(_ => ()).isFailure shouldBe true
     }
   }
 
@@ -86,7 +84,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       ds.rollbackVersions.size shouldEqual 1
 
-      val ds2 = ds.applyModifier(block).get
+      val ds2 = ds.applyModifier(block)(_ => ()).get
 
       ds2.rollbackVersions.size shouldEqual 2
 
@@ -99,7 +97,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       ds3.stateContext.lastHeaders.size shouldEqual 0
 
-      ds3.applyModifier(block).get.rootHash shouldBe ds2.rootHash
+      ds3.applyModifier(block)(_ => ()).get.rootHash shouldBe ds2.rootHash
     }
   }
 
@@ -121,15 +119,15 @@ class DigestStateSpecification extends ErgoPropertyTest {
       val txs1 = IndexedSeq(headTx, nextTx, txWithDataInputs)
       val (proofBytes1, digest1) = us.proofsForTransactions(txs1).get
       val proof1 = ADProofs(defaultHeaderGen.sample.get.id, proofBytes1)
-      Try(ds.validateTransactions(txs1, digest1, proof1, emptyStateContext)) shouldBe 'success
+      ds.validateTransactions(txs1, digest1, proof1, emptyStateContext) shouldBe 'success
 
       val txs2 = IndexedSeq(headTx, txWithDataInputs, nextTx)
       val (proofBytes2, digest2) = us.proofsForTransactions(txs2).get
       val proof2 = ADProofs(defaultHeaderGen.sample.get.id, proofBytes2)
-      Try(ds.validateTransactions(txs2, digest2, proof2, emptyStateContext)) shouldBe 'success
+      ds.validateTransactions(txs2, digest2, proof2, emptyStateContext) shouldBe 'success
 
       val txs3 = IndexedSeq(txWithDataInputs, headTx, nextTx)
-      Try(ds.validateTransactions(txs3, digest2, proof2, emptyStateContext)) shouldBe 'failure
+      ds.validateTransactions(txs3, digest2, proof2, emptyStateContext) shouldBe 'failure
     }
   }
 

@@ -1,20 +1,19 @@
 package scorex.core.network
 
-import akka.actor.{ActorRef, ActorSystem, Cancellable}
+import akka.actor.Cancellable
+import io.circe.{Encoder, Json}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.CheckDelivery
 import org.ergoplatform.nodeView.mempool.ExpiringApproximateCache
 import org.ergoplatform.settings.{ErgoSettings, NetworkCacheSettings}
+import scorex.core.ModifierTypeId
 import scorex.core.consensus.ContainsModifiers
 import scorex.core.network.DeliveryTracker._
 import scorex.core.network.ModifiersStatus._
 import scorex.core.utils.ScorexEncoding
-import scorex.core.ModifierTypeId
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext
-import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Try}
 
 /**
@@ -38,21 +37,14 @@ import scala.util.{Failure, Try}
   * This class is not thread-save so it should be used only as a local field of an actor
   * and its methods should not be called from lambdas, Future, Future.map, etc.
 
-  * @param deliveryTimeout of a single check for transition of modifier from Requested to Received
   * @param maxDeliveryChecks how many times to check whether modifier was delivered in given timeout
   * @param cacheSettings network cache settings
   * @param desiredSizeOfExpectingModifierQueue Approximate number of modifiers to be downloaded simultaneously,
   *                                            headers are much faster to process
-  * @param nvsRef nodeViewSynchronizer actor reference
   */
-class DeliveryTracker(system: ActorSystem,
-                      deliveryTimeout: FiniteDuration,
-                      maxDeliveryChecks: Int,
+class DeliveryTracker(maxDeliveryChecks: Int,
                       cacheSettings: NetworkCacheSettings,
-                      desiredSizeOfExpectingModifierQueue: Int,
-                      nvsRef: ActorRef) extends ScorexLogging with ScorexEncoding {
-
-  protected case class RequestedInfo(peer: Option[ConnectedPeer], cancellable: Cancellable, checks: Int)
+                      desiredSizeOfExpectingModifierQueue: Int) extends ScorexLogging with ScorexEncoding {
 
   // when a remote peer is asked for a modifier we add the requested data to `requested`
   protected val requested: mutable.Map[ModifierTypeId, Map[ModifierId, RequestedInfo]] = mutable.Map()
@@ -62,13 +54,24 @@ class DeliveryTracker(system: ActorSystem,
 
   private val desiredSizeOfExpectingHeaderQueue: Int = desiredSizeOfExpectingModifierQueue * 5
 
-  /** Bloom Filter with invalid modifier ids */
-  private var invalidModifierBF = {
+  /** Bloom Filter based cache with invalid modifier ids */
+  private var invalidModifierCache = emptyExpiringApproximateCache
+
+  private def emptyExpiringApproximateCache = {
     val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
     val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
     val frontCacheSize = cacheSettings.invalidModifiersCacheSize
     val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
     ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration)
+  }
+
+  def fullInfo: FullInfo = DeliveryTracker.FullInfo(invalidModifierCache.approximateElementCount, requested.toSeq, received.toSeq)
+
+  def reset(): Unit = {
+    log.info(s"Resetting state of DeliveryTracker...")
+    requested.clear()
+    received.clear()
+    invalidModifierCache = emptyExpiringApproximateCache
   }
 
   /**
@@ -99,7 +102,7 @@ class DeliveryTracker(system: ActorSystem,
   def status(modifierId: ModifierId, modifierTypeId: ModifierTypeId, modifierKeepers: Seq[ContainsModifiers[_]]): ModifiersStatus =
     if (received.get(modifierTypeId).exists(_.contains(modifierId))) Received
     else if (requested.get(modifierTypeId).exists(_.contains(modifierId))) Requested
-    else if (invalidModifierBF.mightContain(modifierId)) Invalid
+    else if (invalidModifierCache.mightContain(modifierId)) Invalid
     else if (modifierKeepers.exists(_.contains(modifierId))) Held
     else Unknown
 
@@ -108,35 +111,38 @@ class DeliveryTracker(system: ActorSystem,
   }
 
   /**
-    *
     * Our node have requested a modifier, but did not received it yet.
     * Stops processing and if the number of checks did not exceed the maximum continue to waiting.
-    *
+    * @param schedule that schedules a delivery check message
     * @return `true` if number of checks was not exceed, `false` otherwise
     */
   def onStillWaiting(cp: ConnectedPeer, modifierTypeId: ModifierTypeId, modifierId: ModifierId)
-                    (implicit ec: ExecutionContext): Try[Unit] =
+                    (schedule: CheckDelivery => Cancellable): Try[Unit] =
     tryWithLogging {
       val checks = requested(modifierTypeId)(modifierId).checks + 1
       setUnknown(modifierId, modifierTypeId)
-      if (checks < maxDeliveryChecks) setRequested(modifierId, modifierTypeId,  Some(cp), checks)
+      if (checks < maxDeliveryChecks) setRequested(modifierId, modifierTypeId,  Some(cp), checks)(schedule)
       else throw new StopExpectingError(modifierId, modifierTypeId, checks)
     }
 
   /**
     * Set status of modifier with id `id` to `Requested`
     */
-  def setRequested(id: ModifierId, typeId: ModifierTypeId, supplierOpt: Option[ConnectedPeer], checksDone: Int = 0)
-                  (implicit ec: ExecutionContext): Unit =
+  private def setRequested(id: ModifierId, typeId: ModifierTypeId, supplierOpt: Option[ConnectedPeer], checksDone: Int = 0)
+                  (schedule: CheckDelivery => Cancellable): Unit =
     tryWithLogging {
       requireStatus(status(id, typeId, Seq.empty), Requested)
-      val cancellable = system.scheduler.scheduleOnce(deliveryTimeout, nvsRef, CheckDelivery(supplierOpt, typeId, id))
+      val cancellable = schedule(CheckDelivery(supplierOpt, typeId, id))
       val requestedInfo = RequestedInfo(supplierOpt, cancellable, checksDone)
       requested.adjust(typeId)(_.fold(Map(id -> requestedInfo))(_.updated(id, requestedInfo)))
     }
 
+  /**
+    * Set status of multiple modifiers to `Requested`
+    * @param schedule function that schedules a delivery check message
+    */
   def setRequested(ids: Seq[ModifierId], typeId: ModifierTypeId, cp: Option[ConnectedPeer])
-                  (implicit ec: ExecutionContext): Unit = ids.foreach(setRequested(_, typeId, cp))
+                  (schedule: CheckDelivery => Cancellable): Unit = ids.foreach(setRequested(_, typeId, cp)(schedule))
 
   /** Get peer we're communicating with in regards with modifier `id` **/
   def getSource(id: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
@@ -186,7 +192,7 @@ class DeliveryTracker(system: ActorSystem,
           case _ =>
             None
         }
-        invalidModifierBF = invalidModifierBF.put(id)
+        invalidModifierCache = invalidModifierCache.put(id)
         senderOpt
       }
   }
@@ -298,7 +304,7 @@ class DeliveryTracker(system: ActorSystem,
     }
 
   override def toString: String = {
-    val invalidModCount = s"invalid modifiers count : ${invalidModifierBF.approximateElementCount}"
+    val invalidModCount = s"invalid modifiers count : ${invalidModifierCache.approximateElementCount}"
     val requestedStr =
       requested.map { case (mType, infoByMid) =>
         val peersCheckTimes =
@@ -318,18 +324,54 @@ class DeliveryTracker(system: ActorSystem,
 }
 
 object DeliveryTracker {
-  def empty(system: ActorSystem,
-            deliveryTimeout: FiniteDuration,
-            maxDeliveryChecks: Int,
-            nvsRef: ActorRef,
-            settings: ErgoSettings): DeliveryTracker = {
+
+  case class RequestedInfo(peer: Option[ConnectedPeer], cancellable: Cancellable, checks: Int)
+
+  object RequestedInfo {
+    import io.circe.syntax._
+
+    implicit val jsonEncoder: Encoder[RequestedInfo] = { info: RequestedInfo =>
+      val checksField = "checks" -> info.checks.asJson
+      val optionalFields =
+        List(
+          info.peer.map(_.connectionId.remoteAddress.toString).map("address" -> _.asJson),
+          info.peer.flatMap(_.peerInfo.map(_.peerSpec.protocolVersion.toString)).map("version" -> _.asJson)
+        ).flatten
+      val fields = checksField :: optionalFields
+      Json.obj(fields:_*)
+    }
+  }
+
+  case class FullInfo(
+    invalidModifierApproxSize: Long,
+    requested: Seq[(ModifierTypeId, Map[ModifierId, RequestedInfo])],
+    received: Seq[(ModifierTypeId, Map[ModifierId, ConnectedPeer])]
+  )
+
+  object FullInfo {
+    import io.circe.syntax._
+    implicit val encodeState: Encoder[FullInfo] = new Encoder[FullInfo] {
+
+      def nestedMapAsJson[T : Encoder](requested: Seq[(ModifierTypeId, Map[ModifierId, T])]): Json =
+        Json.obj(
+          requested.map { case (k, v) =>
+            k.toString -> Json.obj(v.mapValues(_.asJson).toSeq:_*)
+          }:_*
+        )
+
+      final def apply(state: FullInfo): Json = Json.obj(
+        ("invalidModifierApproxSize", state.invalidModifierApproxSize.asJson),
+        ("requested", nestedMapAsJson(state.requested)),
+        ("received", nestedMapAsJson(state.received))
+      )
+    }
+  }
+
+  def empty(settings: ErgoSettings): DeliveryTracker = {
     new DeliveryTracker(
-      system,
-      deliveryTimeout,
-      maxDeliveryChecks,
+      settings.scorexSettings.network.maxDeliveryChecks,
       settings.cacheSettings.network,
-      settings.scorexSettings.network.desiredInvObjects,
-      nvsRef
+      settings.scorexSettings.network.desiredInvObjects
     )
   }
 

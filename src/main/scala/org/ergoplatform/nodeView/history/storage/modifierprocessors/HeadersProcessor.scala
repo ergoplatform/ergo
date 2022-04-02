@@ -267,18 +267,23 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
       settings.chainSettings.initialDifficultyVersion2
     } else {
-      //todo: it is slow to read thousands headers from database for each header
-      //todo; consider caching here
-      //todo: https://github.com/ergoplatform/ergo/issues/872
       val parentHeight = parent.height
-      val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
-        .ensuring(_.last == parentHeight)
-      if (heights.lengthCompare(1) == 0) {
-        difficultyCalculator.calculate(Seq(parent))
+
+      if(parentHeight % settings.chainSettings.epochLength == 0) {
+        //todo: it is slow to read thousands headers from database for each header
+        //todo; consider caching here
+        //todo: https://github.com/ergoplatform/ergo/issues/872
+        val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
+          .ensuring(_.last == parentHeight)
+        if (heights.lengthCompare(1) == 0) {
+          difficultyCalculator.calculate(Array(parent))
+        } else {
+          val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+          val headers = chain.headers.filter(p => heights.contains(p.height))
+          difficultyCalculator.calculate(headers)
+        }
       } else {
-        val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
-        val headers = chain.headers.filter(p => heights.contains(p.height))
-        difficultyCalculator.calculate(headers)
+        parent.requiredDifficulty
       }
     }
   }
@@ -326,19 +331,23 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validate(hdrCheckpointV2, checkpointV2Condition(header), "Wrong V2 checkpoint")
+        .validate(hdrCheckpoint, checkpointCondition(header), "Wrong checkpoint")
         .result
     }
 
     /**
-      * Helper method to check v2 checkpoint (first v2 block)
+      * Helper method to validate checkpoint given in config, if it is provided.
+      *
+      * Checks that block at checkpoint height has id provided.
       */
-    private def checkpointV2Condition(header: Header): Boolean = {
-      if (header.height == 417792 && settings.networkType.isMainNet) {
-        header.id == "0ba60a7db44877aade553beb05200f7d67b586945418d733e455840d283e0508"
-      } else {
-        true
-      }
+    private def checkpointCondition(header: Header): Boolean = {
+      settings.nodeSettings.checkpoint.map { checkpoint =>
+        if (checkpoint.height == header.height) {
+          header.id == checkpoint.blockId
+        } else {
+          true
+        }
+      }.getOrElse(true)
     }
 
   }

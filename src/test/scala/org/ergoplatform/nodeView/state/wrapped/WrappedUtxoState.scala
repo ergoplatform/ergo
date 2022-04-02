@@ -5,9 +5,11 @@ import java.io.File
 import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.settings.Algos.HF
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Digest32
@@ -34,24 +36,25 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
     case Failure(e) => Failure(e)
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[WrappedUtxoState] = super.applyModifier(mod) match {
-    case Success(us) =>
-      mod match {
-        case ct: TransactionsCarryingPersistentNodeViewModifier =>
-          // You can not get block with transactions not being of ErgoTransaction type so no type checks here.
+  override def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[WrappedUtxoState] =
+    super.applyModifier(mod)(generate) match {
+      case Success(us) =>
+        mod match {
+          case ct: TransactionsCarryingPersistentNodeViewModifier =>
+            // You can not get block with transactions not being of ErgoTransaction type so no type checks here.
 
-          val changes = ErgoState.stateChanges(ct.transactions)
-          val updHolder = versionedBoxHolder.applyChanges(
-            us.version,
-            changes.toRemove.map(_.boxId).map(ByteArrayWrapper.apply),
-            changes.toAppend.map(_.box))
-          Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants, parameters))
-        case _ =>
-          val updHolder = versionedBoxHolder.applyChanges(us.version, Seq(), Seq())
-          Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants, parameters))
-      }
-    case Failure(e) => Failure(e)
-  }
+            val changes = ErgoState.stateChanges(ct.transactions).get
+            val updHolder = versionedBoxHolder.applyChanges(
+              us.version,
+              changes.toRemove.map(_.key).map(ByteArrayWrapper.apply),
+              changes.toAppend.map(_.value).map(ErgoBoxSerializer.parseBytes))
+            Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants, parameters))
+          case _ =>
+            val updHolder = versionedBoxHolder.applyChanges(us.version, Seq(), Seq())
+            Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants, parameters))
+        }
+      case Failure(e) => Failure(e)
+    }
 }
 
 object WrappedUtxoState {
@@ -61,7 +64,7 @@ object WrappedUtxoState {
             nodeViewHolderRef: Option[ActorRef],
             parameters: Parameters,
             settings: ErgoSettings): WrappedUtxoState = {
-    val constants = StateConstants(nodeViewHolderRef, settings)
+    val constants = StateConstants(settings)
     val emissionBox = ErgoState.genesisBoxes(constants.settings.chainSettings).headOption
     val us = UtxoState.fromBoxHolder(boxHolder, emissionBox, dir, constants, parameters)
     WrappedUtxoState(us, boxHolder, constants, parameters)

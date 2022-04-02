@@ -46,11 +46,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     persistentProver.digest
   }
 
-  private def onAdProofGenerated(proof: ADProofs): Unit = {
-    if (constants.nodeViewHolderRef.isEmpty) log.warn("Got proof while nodeViewHolderRef is empty")
-    constants.nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
-  }
-
   import UtxoState.metadata
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
@@ -82,21 +77,22 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
-      persistentProver.synchronized {
-        val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-        val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
-        ModifierValidator(stateContext.validationSettings)
-          .validateNoFailure(fbOperationFailed, resultTry)
-          .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
-          .result
-          .toTry
-      }
+      val resultTry =
+        ErgoState.stateChanges(transactions).map { stateChanges =>
+          val mods = stateChanges.operations
+          Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+        }
+      ModifierValidator(stateContext.validationSettings)
+        .validateNoFailure(fbOperationFailed, resultTry)
+        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
+        .result
+        .toTry
     } else {
       txProcessing.toTry.map(_ => ())
     }
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
+  override def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       persistentProver.synchronized {
         val height = fb.header.height
@@ -106,20 +102,67 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
+          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+
+          txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
-            val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
-            val proofHash = ADProofs.proofDigest(proofBytes)
-            if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+
+            var proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
 
             if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
-              throw new Error("Storage kept roothash is not equal to the declared one")
-            } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
-              throw new Error("Calculated proofHash is not equal to the declared one")
-            } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
-              throw new Error("Calculated stateRoot is not equal to the declared one")
+              throw new Exception("Storage kept roothash is not equal to the declared one")
             }
+
+            if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
+              throw new Exception("Calculated stateRoot is not equal to the declared one")
+            }
+
+            var proofHash = ADProofs.proofDigest(proofBytes)
+
+            if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+
+              log.error("Calculated proofHash is not equal to the declared one, doing another attempt")
+
+              /**
+                * Proof generated was different from one announced.
+                *
+                * In most cases, announced proof is okay, and as proof is already checked, problem in some
+                * extra bytes added to the proof.
+                *
+                * Could be related to https://github.com/ergoplatform/ergo/issues/1614
+                *
+                * So the problem could appear on mining nodes only, and caused by
+                * proofsForTransactions() wasting the tree unexpectedly.
+                *
+                * We are trying to generate proof again now.
+                */
+
+              persistentProver.rollback(inRoot)
+                .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
+
+              ErgoState.stateChanges(fb.blockTransactions.txs) match {
+                case Success(stateChanges) =>
+                 val mods = stateChanges.operations
+                  mods.foreach(persistentProver.performOneOperation)
+
+                  // meta is the same as it is block-specific
+                  proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
+                  proofHash = ADProofs.proofDigest(proofBytes)
+
+                  if(!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+                    throw new Exception("Regenerated proofHash is not equal to the declared one")
+                  }
+                case Failure(e) =>
+                  throw new Exception("Can't generate state changes on proof regeneration ", e)
+              }
+            }
+
+            if (fb.adProofs.isEmpty) {
+              val adProofs = ADProofs(fb.header.id, proofBytes)
+              generate(LocallyGeneratedModifier(adProofs))
+            }
+
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
             new UtxoState(persistentProver, idToVersion(fb.id), store, constants, parameters)
@@ -161,6 +204,7 @@ object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
+  // block-specific metadata to write into database (in addition to AVL+ tree)
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,
                        currentEmissionBoxOpt: Option[ErgoBox],
@@ -172,11 +216,11 @@ object UtxoState {
     val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
-    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
+    Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
   def create(dir: File, constants: StateConstants, parameters: Parameters): UtxoState = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
@@ -202,7 +246,7 @@ object UtxoState {
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
 
     val defaultStateContext = ErgoStateContext.empty(constants, parameters)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)

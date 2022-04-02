@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
@@ -156,6 +156,84 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         tx2.outputs.size shouldBe 2
         tx2.outputs.head.value shouldBe confirmedBalance - MinBoxValue
         toAssetMap(tx2.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToSpend2)
+        tx2.outputs(1).value shouldBe MinBoxValue
+        toAssetMap(tx2.outputs(1).additionalTokens.toArray) shouldBe toAssetMap(assetToReturn)
+      }
+    }
+  }
+
+  property("Generate transaction with BurnTokensRequest") {
+    withFixture { implicit w =>
+      val pubKey = getPublicKeys.head.pubkey
+      val genesisBlock = makeGenesisBlock(pubKey, randomNewAsset)
+      val initialBoxes = boxesAvailable(genesisBlock, pubKey)
+
+      val boxesToUseEncoded = initialBoxes.map { box =>
+        Base16.encode(ErgoBoxSerializer.toBytes(box))
+      }
+
+      applyBlock(genesisBlock) shouldBe 'success
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
+      eventually {
+        val confirmedBalance = getConfirmedBalances.walletBalance
+
+        //pay out all the wallet balance:
+        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+        assetToSpend should not be empty
+        val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance, assetToSpend, Map.empty)
+
+        val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
+        tx1.outputs.size shouldBe 1
+        tx1.outputs.head.value shouldBe confirmedBalance
+        toAssetMap(tx1.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToSpend)
+
+        //change == 1:
+        val assetToSpend2 = assetToSpend.map { case (tokenId, tokenValue) => (tokenId, tokenValue - 1) }
+        val assetToReturn = assetToSpend.map { case (tokenId, _) => (tokenId, 1L) }
+        val req2 = Seq(BurnTokensRequest(assetToSpend2))
+
+        val tx2 = await(wallet.generateTransaction(req2)).get
+        tx2.outputs.size shouldBe 1
+        tx2.outputs.head.value shouldBe confirmedBalance
+        toAssetMap(tx2.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToReturn)
+      }
+    }
+  }
+
+  property("Generate transaction with PaymentRequest (no tokens) and BurnTokensRequest") {
+    withFixture { implicit w =>
+      val pubKey = getPublicKeys.head.pubkey
+      val genesisBlock = makeGenesisBlock(pubKey, randomNewAsset)
+      val initialBoxes = boxesAvailable(genesisBlock, pubKey)
+
+      val boxesToUseEncoded = initialBoxes.map { box =>
+        Base16.encode(ErgoBoxSerializer.toBytes(box))
+      }
+
+      applyBlock(genesisBlock) shouldBe 'success
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
+      eventually {
+        val confirmedBalance = getConfirmedBalances.walletBalance
+
+        //pay out all the wallet balance:
+        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+        assetToSpend should not be empty
+        val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance, assetToSpend, Map.empty)
+
+        val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
+        tx1.outputs.size shouldBe 1
+        tx1.outputs.head.value shouldBe confirmedBalance
+        toAssetMap(tx1.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToSpend)
+
+        //change == 1:
+        val assetToSpend2 = assetToSpend.map { case (tokenId, tokenValue) => (tokenId, tokenValue - 1) }
+        val assetToReturn = assetToSpend.map { case (tokenId, _) => (tokenId, 1L) }
+        val req2 = Seq(BurnTokensRequest(assetToSpend2), PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance - MinBoxValue, Seq.empty, Map.empty))
+
+        val tx2 = await(wallet.generateTransaction(req2)).get
+        tx2.outputs.size shouldBe 2
+        tx2.outputs.head.value shouldBe confirmedBalance - MinBoxValue
+        toAssetMap(tx2.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(Seq.empty)
         tx2.outputs(1).value shouldBe MinBoxValue
         toAssetMap(tx2.outputs(1).additionalTokens.toArray) shouldBe toAssetMap(assetToReturn)
       }

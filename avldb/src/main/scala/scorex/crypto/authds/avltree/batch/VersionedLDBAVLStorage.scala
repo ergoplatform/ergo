@@ -73,7 +73,7 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
         case _: ProverLeaf[D] => Seq(pair)
       }
     } else {
-      Seq()
+      Seq.empty
     }
   }
 

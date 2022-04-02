@@ -79,8 +79,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val peerSpec: PeerSpec = defaultPeerSpec.copy(protocolVersion = protocolVersion)
 
   val connectedPeers: Seq[Handshake] = Seq(
-    Handshake(peerSpec.copy(nodeName = "first"), ts1),
-    Handshake(peerSpec.copy(nodeName = "second"), ts2)
+    Handshake(peerSpec.copy(nodeName = "first"), System.currentTimeMillis() - 100),
+    Handshake(peerSpec.copy(nodeName = "second"), System.currentTimeMillis() + 100)
   )
 
   val blacklistedPeers: Seq[String] = Seq("4.4.4.4:1111", "8.8.8.8:2222")
@@ -338,8 +338,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     val minimalSuffix = 2
     val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
+    val txSizeLimit      = initSettings.nodeSettings.maxTransactionSize
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, blockCandidateGenerationInterval = 45.seconds, useExternalMiner = false,
+      PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, blockCandidateGenerationInterval = 45.seconds, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
       offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null

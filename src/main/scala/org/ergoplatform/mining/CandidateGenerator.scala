@@ -524,8 +524,10 @@ object CandidateGenerator extends ScorexLogging {
       // differently due to bugs in AOT costing
       val safeGap = if(state.stateContext.currentParameters.maxBlockCost < 1000000) {
         0
-      } else {
+      } else if(state.stateContext.currentParameters.maxBlockCost < 5000000) {
         150000
+      } else {
+        1000000
       }
 
       val (txs, toEliminate) = collectTxs(
@@ -660,10 +662,8 @@ object CandidateGenerator extends ScorexLogging {
 
     val inputs = txs.flatMap(_.inputs)
     val feeBoxes: Seq[ErgoBox] = ErgoState
-      .boxChanges(txs)
-      ._2
-      .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes))
-      .filter(b => !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
+      .newBoxes(txs)
+      .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
     val nextHeight = currentHeight + 1
     val minerProp =
       ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
@@ -808,9 +808,12 @@ object CandidateGenerator extends ScorexLogging {
 
     val res = loop(index = 0, mutable.WrappedArray.empty, None, mutable.WrappedArray.empty)
     log.info(
-      s"Collected ${res._1.length} transactions For block #$currentHeight, " +
+      s"Collected ${res._1.length} transactions for block #$currentHeight, " +
       s"${res._2.length} transactions turned out to be invalid"
     )
+    log.whenDebugEnabled {
+      log.debug(s"Invalid trandaction ids for block #$currentHeight : ${res._2}")
+    }
     res
   }
 

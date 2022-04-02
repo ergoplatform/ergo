@@ -154,6 +154,7 @@ assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
   case x if x.endsWith("module-info.class") => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
+  case PathList("org", "bouncycastle", xs @ _*) => MergeStrategy.first
   case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
   case PathList("org", "bouncycastle", xs @ _*) => MergeStrategy.first
   case PathList("javax", "activation", xs @ _*) => MergeStrategy.last

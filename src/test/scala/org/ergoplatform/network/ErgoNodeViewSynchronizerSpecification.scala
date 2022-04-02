@@ -263,15 +263,13 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
 
       // we check that in case of neighbour with older history (it has more blocks),
-      // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will consist of 4 headers
+      // invs (extension for the forked peer) will be sent to the peer
       node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
-            val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
-            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
+            msg.spec.messageCode == InvSpec.MessageCode
           case _ => false
         }
       }

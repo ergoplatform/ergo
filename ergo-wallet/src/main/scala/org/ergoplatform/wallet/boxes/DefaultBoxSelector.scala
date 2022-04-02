@@ -25,6 +25,17 @@ object DefaultBoxSelector extends BoxSelector {
 
   final case class NotEnoughCoinsForChangeBoxesError(message: String) extends BoxSelectionError
 
+  // helper function which returns count of assets in `initialMap` not fully spent in `subtractor`
+  private def diffCount(initialMap: mutable.Map[ModifierId, Long], subtractor: TokensMap): Int = {
+    initialMap.foldLeft(0){case (cnt, (tokenId, tokenAmt)) =>
+      if (tokenAmt - subtractor.getOrElse(tokenId, 0L) > 0) {
+        cnt + 1
+      } else {
+        cnt
+      }
+    }
+  }
+
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                                           externalFilter: T => Boolean,
                                           targetBalance: Long,
@@ -40,10 +51,30 @@ object DefaultBoxSelector extends BoxSelector {
       res += unspentBox
     }
 
-    def balanceMet = currentBalance >= targetBalance
+    /**
+      * Helper functions which checks whether enough ERGs collected
+      */
+    def balanceMet: Boolean = {
+      val diff = currentBalance - targetBalance
 
-    def assetsMet = targetAssets.forall {
-      case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
+      // We estimate how many ERG needed for assets in change boxes
+      val assetsDiff = diffCount(currentAssets, targetAssets)
+      val diffThreshold = if (assetsDiff <= 0) {
+        0
+      } else {
+        MinBoxValue * (assetsDiff / MaxAssetsPerBox + 1)
+      }
+
+      diff >= diffThreshold
+    }
+
+    /**
+      * Helper functions which checks whether enough assets collected
+      */
+    def assetsMet: Boolean = {
+      targetAssets.forall {
+        case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
+      }
     }
 
     @tailrec

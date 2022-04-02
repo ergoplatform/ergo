@@ -38,7 +38,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getMemPool.map { p =>
-    p.getAll.slice(offset, offset + limit).map(_.asJson).asJson
+    p.getAllPrioritized.slice(offset, offset + limit).map(_.asJson).asJson
   }
 
   private def validateTransactionAndProcess(tx: ErgoTransaction)(processFn: ErgoTransaction => Any): Route = {

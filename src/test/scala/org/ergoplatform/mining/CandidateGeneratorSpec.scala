@@ -23,6 +23,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGe
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 
 class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
@@ -136,7 +137,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
       )
 
     expectNoMessage(1.second)
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(mutable.WrappedArray.empty, reply = true), testProbe.ref)
 
     val block = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
@@ -147,7 +148,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
 
     // now block should be cached
     (0 to 20).foreach { _ =>
-      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+      candidateGenerator.tell(GenerateCandidate(mutable.WrappedArray.empty, reply = true), testProbe.ref)
       testProbe.expectMsgClass(5.millis, classOf[StatusReply[_]])
     }
 
@@ -200,7 +201,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
 
     // generate block to use reward as our tx input
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(mutable.WrappedArray.empty, reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = settingsWithShortRegeneration.chainSettings.powScheme
@@ -242,13 +243,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     )
 
     // candidate should be regenerated immediately after a mempool change
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(mutable.WrappedArray.empty, reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         // this triggers mempool change that triggers candidate regeneration
         viewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx))
         expectNoMessage(candidateGenDelay)
-        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+        candidateGenerator.tell(GenerateCandidate(mutable.WrappedArray.empty, reply = true), testProbe.ref)
         testProbe.expectMsgPF(candidateGenDelay) {
           case StatusReply.Success(regeneratedCandidate: Candidate) =>
             // regeneratedCandidate now contains new transaction
@@ -283,7 +284,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val startBlock: Option[Header] = history.bestHeaderOpt
 
     // generate block to use reward as our tx input
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(mutable.WrappedArray.empty, reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
@@ -329,7 +330,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
 
     testProbe.expectNoMessage(200.millis)
     // mine a block with that transaction
-    candidateGenerator.tell(GenerateCandidate(Seq(tx), reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(mutable.WrappedArray.make(Array(tx)), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme

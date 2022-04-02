@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import java.util.concurrent.Executors
-
 import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform._
 import org.ergoplatform.mining._
@@ -25,6 +24,7 @@ import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.ProverResult
 import sigmastate.helpers.TestingHelpers._
 
+import scala.collection.mutable
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
@@ -50,7 +50,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
       val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
       us.validateWithCost(tx, None, txCostLimit, None).get should be <= 100000L
-      val block1 = validFullBlock(Some(lastBlock), us, Seq(ErgoTransaction(tx)))
+      val block1 = validFullBlock(Some(lastBlock), us, mutable.WrappedArray.make(Array(ErgoTransaction(tx))))
       us = us.applyModifier(block1)(_ => ()).get
       foundersBox = tx.outputs.head
       lastBlock = block1

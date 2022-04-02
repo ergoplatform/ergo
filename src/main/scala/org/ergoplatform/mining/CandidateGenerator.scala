@@ -37,6 +37,7 @@ import sigmastate.interpreter.ProverResult
 import special.collection.Coll
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
@@ -101,7 +102,7 @@ class CandidateGenerator(
           )
         )
       )
-      self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+      self ! GenerateCandidate(txsToInclude = mutable.WrappedArray.empty, reply = false)
       context.system.eventStream
         .subscribe(self, classOf[SemanticallySuccessfulModifier])
       context.system.eventStream.subscribe(self, classOf[NodeViewChange])
@@ -126,7 +127,7 @@ class CandidateGenerator(
             candidateGenInterval
           )) {
         context.become(initialized(state.copy(cachedCandidate = None, mpr = mp)))
-        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+        self ! GenerateCandidate(txsToInclude = mutable.WrappedArray.empty, reply = false)
       } else {
         context.become(initialized(state.copy(mpr = mp)))
       }
@@ -146,7 +147,7 @@ class CandidateGenerator(
           context.become(initialized(state.copy(cachedCandidate = None, solvedBlock = None)))
         else
           context.become(initialized(state.copy(cachedCandidate = None)))
-        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+        self ! GenerateCandidate(txsToInclude = mutable.WrappedArray.empty, reply = false)
       } else {
         context.become(initialized(state))
       }
@@ -252,11 +253,11 @@ object CandidateGenerator extends ScorexLogging {
   case class Candidate(
     candidateBlock: CandidateBlock,
     externalVersion: WorkMessage,
-    txsToInclude: Seq[ErgoTransaction]
+    txsToInclude: IndexedSeq[ErgoTransaction]
   )
 
   case class GenerateCandidate(
-    txsToInclude: Seq[ErgoTransaction],
+    txsToInclude: IndexedSeq[ErgoTransaction],
     reply: Boolean
   )
 
@@ -293,10 +294,10 @@ object CandidateGenerator extends ScorexLogging {
   /** checks that current candidate block is cached with given `txs` */
   def cachedFor(
     candidateOpt: Option[Candidate],
-    txs: Seq[ErgoTransaction]
+    txs: IndexedSeq[ErgoTransaction]
   ): Boolean = {
     candidateOpt.isDefined && candidateOpt.exists { c =>
-      txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(
+      txs.isEmpty || (txs.length == c.txsToInclude.length && txs.forall(
         c.txsToInclude.contains
       ))
     }
@@ -372,7 +373,7 @@ object CandidateGenerator extends ScorexLogging {
     m: ErgoMemPoolReader,
     timeProvider: NetworkTimeProvider,
     pk: ProveDlog,
-    txsToInclude: Seq[ErgoTransaction],
+    txsToInclude: IndexedSeq[ErgoTransaction],
     ergoSettings: ErgoSettings
   ): Try[Option[(Candidate, EliminateTransactions)]] = {
     //mandatory transactions to include into next block taken from the previous candidate
@@ -436,9 +437,9 @@ object CandidateGenerator extends ScorexLogging {
     proposedUpdate: ErgoValidationSettingsUpdate,
     state: UtxoStateReader,
     timeProvider: NetworkTimeProvider,
-    poolTxs: Seq[ErgoTransaction],
+    poolTxs: IndexedSeq[ErgoTransaction],
     emissionTxOpt: Option[ErgoTransaction],
-    prioritizedTransactions: Seq[ErgoTransaction],
+    prioritizedTransactions: IndexedSeq[ErgoTransaction],
     ergoSettings: ErgoSettings
   ): Try[Option[(Candidate, EliminateTransactions)]] =
     Try {
@@ -516,7 +517,7 @@ object CandidateGenerator extends ScorexLogging {
         version
       )
 
-      val emissionTxs = emissionTxOpt.toSeq
+      val emissionTxs = emissionTxOpt.fold(mutable.WrappedArray.empty)(tx => mutable.WrappedArray.make(Array(tx)))
 
       // todo: remove in 5.0
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
@@ -581,7 +582,7 @@ object CandidateGenerator extends ScorexLogging {
                   "Failed to produce proofs for transactions, but emission box is found: ",
                   t
                 )
-                val fallbackTxs = Seq(emissionTx)
+                val fallbackTxs: mutable.WrappedArray[ErgoTransaction] = Array(emissionTx)
                 state.proofsForTransactions(fallbackTxs).map {
                   case (adProof, adDigest) =>
                     val candidate = CandidateBlock(
@@ -629,7 +630,7 @@ object CandidateGenerator extends ScorexLogging {
     collectRewards(
       state.emissionBoxOpt,
       state.stateContext.currentHeight,
-      Seq.empty,
+      mutable.WrappedArray.empty,
       minerPk,
       emission,
       Colls.emptyColl
@@ -638,7 +639,7 @@ object CandidateGenerator extends ScorexLogging {
 
   def collectFees(
     currentHeight: Int,
-    txs: Seq[ErgoTransaction],
+    txs: IndexedSeq[ErgoTransaction],
     minerPk: ProveDlog,
     emission: EmissionRules
   ): Option[ErgoTransaction] = {
@@ -652,11 +653,11 @@ object CandidateGenerator extends ScorexLogging {
   def collectRewards(
     emissionBoxOpt: Option[ErgoBox],
     currentHeight: Int,
-    txs: Seq[ErgoTransaction],
+    txs: IndexedSeq[ErgoTransaction],
     minerPk: ProveDlog,
     emission: EmissionRules,
     assets: Coll[(TokenId, Long)] = Colls.emptyColl
-  ): Seq[ErgoTransaction] = {
+  ): IndexedSeq[ErgoTransaction] = {
     val propositionBytes = emission.settings.feePropositionBytes
 
     val inputs = txs.flatMap(_.inputs)
@@ -693,7 +694,7 @@ object CandidateGenerator extends ScorexLogging {
     } else {
       None
     }
-    Seq(emissionTxOpt, feeTxOpt).flatten
+    mutable.WrappedArray.make(Array(emissionTxOpt, feeTxOpt).flatten)
   }
 
   /**
@@ -722,8 +723,8 @@ object CandidateGenerator extends ScorexLogging {
     maxBlockSize: Long,
     us: UtxoStateReader,
     upcomingContext: ErgoStateContext,
-    transactions: Seq[ErgoTransaction]
-  ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+    transactions: IndexedSeq[ErgoTransaction]
+  ): (IndexedSeq[ErgoTransaction], IndexedSeq[ModifierId]) = {
 
     val currentHeight = us.stateContext.currentHeight
 
@@ -735,77 +736,77 @@ object CandidateGenerator extends ScorexLogging {
 
     @tailrec
     def loop(
-      mempoolTxs: Iterable[ErgoTransaction],
-      acc: Seq[CostedTransaction],
+      index: Int,
+      acc: mutable.WrappedArray[CostedTransaction],
       lastFeeTx: Option[CostedTransaction],
-      invalidTxs: Seq[ModifierId]
-    ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+      invalidTxs: mutable.WrappedArray[ModifierId]
+    ): (IndexedSeq[ErgoTransaction], IndexedSeq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
-      def current: Seq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
+      def current: IndexedSeq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
 
       val stateWithTxs = us.withTransactions(current)
 
-      mempoolTxs.headOption match {
-        case Some(tx) =>
-          if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
-            //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
-            //do these checks before validating the scripts to save time
-            log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
-            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
-          } else {
-            // check validity and calculate transaction cost
-            stateWithTxs.validateWithCost(
-              tx,
-              Some(upcomingContext),
-              maxBlockCost,
-              Some(verifier)
-            ) match {
-              case Success(costConsumed) =>
-                val newTxs   = acc :+ (tx -> costConsumed)
-                val newBoxes = newTxs.flatMap(_._1.outputs)
+      if (index < transactions.length) {
+        val tx = transactions(index)
+        if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
+          //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
+          //do these checks before validating the scripts to save time
+          log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
+          loop(index+1, acc, lastFeeTx, invalidTxs :+ tx.id)
+        } else {
+          // check validity and calculate transaction cost
+          stateWithTxs.validateWithCost(
+            tx,
+            Some(upcomingContext),
+            maxBlockCost,
+            Some(verifier)
+          ) match {
+            case Success(costConsumed) =>
+              val newTxs   = acc :+ (tx -> costConsumed)
+              val newBoxes = newTxs.flatMap(_._1.outputs)
 
-                val emissionRules =
-                  stateWithTxs.constants.settings.chainSettings.emissionRules
-                collectFees(currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
-                  case Some(feeTx) =>
-                    val boxesToSpend = feeTx.inputs.flatMap(i =>
-                      newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
-                    )
-                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
-                      case Success(cost) =>
-                        val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
-                        if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
-                        } else {
-                          current -> invalidTxs
-                        }
-                      case Failure(e) =>
-                        log.warn(
-                          s"Fee collecting tx is invalid, not including it, " +
-                          s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
-                        )
+              val emissionRules =
+                stateWithTxs.constants.settings.chainSettings.emissionRules
+              collectFees(currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
+                case Some(feeTx) =>
+                  val boxesToSpend = feeTx.inputs.flatMap(i =>
+                    newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
+                  )
+                  feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
+                    case Success(cost) =>
+                      val blockTxs = (feeTx -> cost) +: newTxs
+                      if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
+                        loop(index+1, newTxs, Some(feeTx -> cost), invalidTxs)
+                      } else {
                         current -> invalidTxs
-                    }
-                  case None =>
-                    log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
-                    val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
-                    if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                      loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
-                    } else {
+                      }
+                    case Failure(e) =>
+                      log.warn(
+                        s"Fee collecting tx is invalid, not including it, " +
+                        s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
+                      )
                       current -> invalidTxs
-                    }
-                }
-              case Failure(e) =>
-                log.debug(s"Not included transaction ${tx.id} due to ${e.getMessage}")
-                loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
-            }
+                  }
+                case None =>
+                  log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
+                  val blockTxs = newTxs ++ lastFeeTx
+                  if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
+                    loop(index+1, blockTxs, lastFeeTx, invalidTxs)
+                  } else {
+                    current -> invalidTxs
+                  }
+              }
+            case Failure(e) =>
+              log.debug(s"Not included transaction ${tx.id} due to ${e.getMessage}")
+              loop(index+1, acc, lastFeeTx, invalidTxs :+ tx.id)
           }
-        case _ => // mempool is empty
-          current -> invalidTxs
+        }
+      } else {
+        current -> invalidTxs
       }
     }
 
-    val res = loop(transactions, Seq.empty, None, Seq.empty)
+    val res = loop(index = 0, mutable.WrappedArray.empty, None, mutable.WrappedArray.empty)
     log.info(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
       s"${res._2.length} transactions turned out to be invalid"

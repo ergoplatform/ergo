@@ -39,7 +39,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = pool.get(modifierId)
 
-  override def take(limit: Int): Iterable[ErgoTransaction] = pool.orderedTransactions.values.take(limit)
+  override def take(limit: Int): IndexedSeq[ErgoTransaction] =
+    mutable.WrappedArray.make(pool.orderedTransactions.values.take(limit).toArray)
 
   def random(limit: Int): Iterable[ErgoTransaction] = {
     val result = mutable.WrappedArray.newBuilder[ErgoTransaction]
@@ -61,14 +62,13 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
     result.result()
   }
 
-  override def getAll: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
-
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(pool.get)
 
   /**
     * Returns all transactions resided in pool sorted by weight in descending order
     */
-  override def getAllPrioritized: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
+  override def getAllPrioritized: IndexedSeq[ErgoTransaction] =
+    mutable.WrappedArray.make(pool.orderedTransactions.values.toArray)
 
   override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
@@ -144,7 +144,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
           state match {
             case utxo: UtxoState =>
               // Allow proceeded transaction to spend outputs of pooled transactions.
-              val utxoWithPool = utxo.withTransactions(getAll)
+              val utxoWithPool = utxo.withTransactions(getAllPrioritized)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
                 utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), nodeSettings.maxTransactionCost, None).fold(
                   ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),

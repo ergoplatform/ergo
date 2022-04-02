@@ -23,6 +23,7 @@ import scorex.util.ModifierId
 import sigmastate.{CAND, CTHRESHOLD}
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 
 class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually {
@@ -61,7 +62,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
           val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
           tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
-          val block = makeNextBlock(getUtxoState, Seq(tx))
+          val txs: mutable.WrappedArray[ErgoTransaction] = Array(tx)
+          val block = makeNextBlock(getUtxoState, txs)
           applyBlock(block) shouldBe 'success //scan by wallet happens during apply
           tx
         }
@@ -272,8 +274,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           )
           val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
           tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
-
-          val block = makeNextBlock(getUtxoState, Seq(tx))
+          val txs: mutable.WrappedArray[ErgoTransaction] = Array(tx)
+          val block = makeNextBlock(getUtxoState, txs)
           applyBlock(block) shouldBe 'success //scan by wallet happens during apply
           (tx, block, assetsToSpend)
         }
@@ -455,7 +457,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           val assets2Seq = Seq(decodedTokenId(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
           val balanceToReturn = 1000 * parameters.minValuePerByte
           val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assets2Seq)
-          val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
+          val spendingTxs: mutable.WrappedArray[ErgoTransaction] = Array(spendingTx)
+          val spendingBlock = makeNextBlock(getUtxoState, spendingTxs)
           applyBlock(spendingBlock) shouldBe 'success
           (asset1Token, asset1ToReturn, asset2Sum, spendingBlock)
         }
@@ -492,8 +495,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           confirmedBalance shouldBe balanceToSpend
 
           val spendingTx = makeSpendingTx(boxesToSpend, address, 0, assetsWithRandom(boxesToSpend))
-
-          val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
+          val spendingTxs: mutable.WrappedArray[ErgoTransaction] = Array(spendingTx)
+          val spendingBlock = makeNextBlock(getUtxoState, spendingTxs)
           applyBlock(spendingBlock) shouldBe 'success
           (spendingBlock, boxesToSpend, confirmedBalance, balanceToSpend)
         }
@@ -531,7 +534,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsWithRandom(boxesToSpend))
           val assets = assetAmount(boxesAvailable(spendingTx, address.pubkey))
           assets should not be empty
-          val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
+          val spendingTxs: mutable.WrappedArray[ErgoTransaction] = Array(spendingTx)
+          val spendingBlock = makeNextBlock(getUtxoState, spendingTxs)
           applyBlock(spendingBlock) shouldBe 'success
           (confirmedBalance, balanceToSpend, balanceToReturn, assets, spendingBlock)
         }
@@ -566,8 +570,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
 
           val initialBalance = getBalancesWithUnconfirmed.walletBalance
           initialBalance shouldBe sumBalance
-
-          val block = makeNextBlock(getUtxoState, Seq(tx))
+          val txs: mutable.WrappedArray[ErgoTransaction] = Array(tx)
+          val block = makeNextBlock(getUtxoState, txs)
           applyBlock(block) shouldBe 'success
           (initialBalance, sumBalance, sumAssets)
         }
@@ -599,7 +603,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
       val balanceToSpend = randomLong(initialBalance)
       val onchainSpendingTx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, address.pubkey)
       val boxesToSpend = boxesAvailable(onchainSpendingTx, address.pubkey)
-      val block = makeNextBlock(getUtxoState, Seq(onchainSpendingTx))
+      val onchainSpendingTxs: mutable.WrappedArray[ErgoTransaction] = Array(onchainSpendingTx)
+      val block = makeNextBlock(getUtxoState, onchainSpendingTxs)
       applyBlock(block) shouldBe 'success
       wallet.scanPersistent(block)
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
@@ -664,8 +669,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           log.info(s"Initial assets: $initialAssets")
           (initialBalance, creationTx, initialAssets, balanceToSpend)
         }
-
-      val block = makeNextBlock(getUtxoState, Seq(creationTx))
+      val creationTxs: mutable.WrappedArray[ErgoTransaction] = Array(creationTx)
+      val block = makeNextBlock(getUtxoState, creationTxs)
       wallet.scanPersistent(block)
       eventually {
         val historyHeight = getHistory.headersHeight
@@ -713,7 +718,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           val initialSnapshot = getConfirmedBalances
           log.info(s"Initial balance: $initialSnapshot")
           val spendingTx = makeSpendingTx(boxesToSpend, address)
-          val block = makeNextBlock(getUtxoState, Seq(spendingTx))
+          val spendingTxs: mutable.WrappedArray[ErgoTransaction] = Array(spendingTx)
+          val block = makeNextBlock(getUtxoState, spendingTxs)
           initialSnapshot.walletBalance shouldBe sumBalance
           initialSnapshot.walletAssetBalances shouldBe sumAssets
           (block, initialSnapshot)
@@ -774,7 +780,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           val assetToReturn = sumAsset1.map { case (tokenId, tokenValue) => (tokenId, randomLong(tokenValue)) }
           val assetsForSpending = randomNewAsset ++ assetToReturn
           val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsForSpending)
-          val block = makeNextBlock(getUtxoState, Seq(spendingTx))
+          val spendingTxs: mutable.WrappedArray[ErgoTransaction] = Array(spendingTx)
+          val block = makeNextBlock(getUtxoState, spendingTxs)
           log.info(s"Initial balance: $initialSnapshot")
           log.info(s"Balance to spend: $sumBalance")
           log.info(s"Balance to return $balanceToReturn")
@@ -839,7 +846,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
       val assetToReturn = sumAsset1.map { case (tokenId, tokenValue) => (tokenId, randomLong(tokenValue)) }
       val assetsForSpending = randomNewAsset ++ assetToReturn
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsForSpending)
-      val block = makeNextBlock(getUtxoState, Seq(creationTx, spendingTx))
+      val txs: mutable.WrappedArray[ErgoTransaction] = Array(creationTx, spendingTx)
+      val block = makeNextBlock(getUtxoState, txs)
       wallet.scanPersistent(block)
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)

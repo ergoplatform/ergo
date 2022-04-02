@@ -25,6 +25,8 @@ import scala.util.Random
 import sigmastate.lang.Terms.ValueOps
 import sigmastate.serialization.ErgoTreeSerializer
 
+import scala.collection.mutable
+
 class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers {
   implicit lazy val context: IRContext = new RuntimeIRContext
 
@@ -77,7 +79,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, nodeViewHolderRef, settingsToTest)
 
     // include first transaction in the block
-    val block = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))
+    val block = validFullBlock(Some(genesis), wusAfterGenesis, mutable.WrappedArray.make(Array(validTx)))
 
     applyBlock(block) shouldBe 'success
 
@@ -112,11 +114,10 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
       override def weightedTransactionIds(limit: Int): Seq[OrderedTxPool.WeightedTxId] = ???
 
-      override def getAll: Seq[ErgoTransaction] = ???
+      override def take(limit: Int): IndexedSeq[ErgoTransaction] =
+        mutable.WrappedArray.make(txs.take(limit).toArray)
 
-      override def getAllPrioritized: Seq[ErgoTransaction] = txs
-
-      override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
+      override def getAllPrioritized: IndexedSeq[ErgoTransaction] = mutable.WrappedArray.make(txs.toArray)
 
       override def random(limit: Int): Iterable[ErgoTransaction] = take(limit)
 

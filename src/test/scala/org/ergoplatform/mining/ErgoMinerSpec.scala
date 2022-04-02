@@ -30,6 +30,7 @@ import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.utxo.CostTable
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -43,7 +44,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
 
-  private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: Seq[ErgoTransaction]): WorkMessage =
+  private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: IndexedSeq[ErgoTransaction]): WorkMessage =
     await(minerRef.askWithStatus(GenerateCandidate(mandatoryTransactions, reply = true)).mapTo[Candidate].map(_.externalVersion))
 
   private val defaultSettings: ErgoSettings = {
@@ -261,7 +262,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     testProbe.expectNoMessage(200.millis)
-    minerRef.tell(GenerateCandidate(Seq(tx2), reply = true), testProbe.ref)
+    minerRef.tell(GenerateCandidate(mutable.WrappedArray.make(Array(tx2)), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
@@ -311,7 +312,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     passiveMiner ! StartMining
 
     implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 200.millis) // it takes a while before PK is set
-    eventually(await(passiveMiner.askWithStatus(GenerateCandidate(Seq.empty, reply = true)).mapTo[Candidate]))
+    eventually(await(passiveMiner.askWithStatus(GenerateCandidate(mutable.WrappedArray.empty, reply = true)).mapTo[Candidate]))
     system.terminate()
   }
 
@@ -354,19 +355,19 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val mandatoryTx2 = ErgoTransaction(mandatoryTxLike2)
     mandatoryTx1.bytes.sameElements(mandatoryTx2.bytes) shouldBe false
 
-    val ecb = getWorkMessage(minerRef, Seq.empty)
+    val ecb = getWorkMessage(minerRef, mutable.WrappedArray.empty)
     ecb.proofsForMandatoryTransactions.isDefined shouldBe false
 
-    val ecb1 = getWorkMessage(minerRef, Seq(mandatoryTx1))
+    val ecb1 = getWorkMessage(minerRef, mutable.WrappedArray.make(Array(mandatoryTx1)))
     ecb1.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
     ecb1.proofsForMandatoryTransactions.get.check() shouldBe true
 
-    val ecb2 = getWorkMessage(minerRef, Seq(mandatoryTx2))
+    val ecb2 = getWorkMessage(minerRef, mutable.WrappedArray.make(Array((mandatoryTx2))))
     ecb2.msg.sameElements(ecb1.msg) shouldBe false
     ecb2.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
     ecb2.proofsForMandatoryTransactions.get.check() shouldBe true
 
-    val ecb3 = getWorkMessage(minerRef, Seq.empty)
+    val ecb3 = getWorkMessage(minerRef, mutable.WrappedArray.empty)
     ecb3.msg.sameElements(ecb2.msg) shouldBe true
     ecb3.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
     ecb3.proofsForMandatoryTransactions.get.check() shouldBe true
@@ -417,13 +418,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    val wm1 = getWorkMessage(minerRef, Seq.empty)
+    val wm1 = getWorkMessage(minerRef, mutable.WrappedArray.empty)
     (wm1.h.get >= forkHeight) shouldBe true
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     implicit val patienceConfig: PatienceConfig = PatienceConfig(1.seconds, 50.millis)
     eventually {
-      val wm2 = getWorkMessage(minerRef, Seq.empty)
+      val wm2 = getWorkMessage(minerRef, mutable.WrappedArray.empty)
       (wm2.h.get >= forkHeight) shouldBe true
       wm1.msg.sameElements(wm2.msg) shouldBe false
 

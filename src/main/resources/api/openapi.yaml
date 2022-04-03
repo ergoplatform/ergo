@@ -13,7 +13,7 @@ info:
     url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
 
 servers:
-  - url: http://127.0.0.1:9053
+  - url: /
     description: Local full node
   - url: http://213.239.193.208:9053
     description: Known public node

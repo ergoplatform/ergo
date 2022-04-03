@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.25"
+  version: "4.0.26"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -13,7 +13,7 @@ info:
     url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
 
 servers:
-  - url: http://127.0.0.1:9053
+  - url: /
     description: Local full node
   - url: http://213.239.193.208:9053
     description: Known public node
@@ -1778,7 +1778,7 @@ components:
           example: '127.0.0.1:5673'
         version:
           type: string
-          example: '4.0.25'
+          example: '4.0.26'
         checks:
           type: integer
           description: How many times we checked for modifier delivery status
@@ -1799,7 +1799,7 @@ components:
           example: '127.0.0.1:5673'
         version:
           type: string
-          example: '4.0.25'
+          example: '4.0.26'
         lastMessage:
           $ref: '#/components/schemas/Timestamp'
 

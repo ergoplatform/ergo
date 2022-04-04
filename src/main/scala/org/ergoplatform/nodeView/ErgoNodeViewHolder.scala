@@ -390,73 +390,75 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * @param pmod Remote or local persistent modifier
     */
   protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit = {
-    if (pmod.modifierTypeId == ADProofs.modifierTypeId && local) {
-      val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
-      history().justPutToHistory(pmod.serializedId, bytes)
-      return
-    }
+    if (!history().contains(pmod.id)) { // todo: .contains reads modifier pmod fully here if in db
 
-    if (!history().contains(pmod.id)) {
-      context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
+      // if ADProofs block section generated locally, just dump it into
+      if (pmod.modifierTypeId == ADProofs.modifierTypeId && local) {
+        val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
+        history().dumpToDb(pmod.serializedId, bytes)
+      } else {
 
-      log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")
+        context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 
-      history().append(pmod) match {
-        case Success((historyBeforeStUpdate, progressInfo)) =>
-          log.debug(s"Going to apply modifications to the state: $progressInfo")
-          context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
+        log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")
 
-          if (progressInfo.toApply.nonEmpty) {
-            val (newHistory, newStateTry, blocksApplied) =
-              updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq.empty)
+        history().append(pmod) match {
+          case Success((historyBeforeStUpdate, progressInfo)) =>
+            log.debug(s"Going to apply modifications to the state: $progressInfo")
+            context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
 
-            newStateTry match {
-              case Success(newMinState) =>
-                val newMemPool = updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool(), newMinState)
+            if (progressInfo.toApply.nonEmpty) {
+              val (newHistory, newStateTry, blocksApplied) =
+                updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq.empty)
 
-                @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-                val v = vault()
-                val newVault = if (progressInfo.chainSwitchingNeeded) {
-                  v.rollback(idToVersion(progressInfo.branchPoint.get)) match {
-                    case Success(nv) => nv
-                    case Failure(e) => log.warn("Wallet rollback failed: ", e); v
+              newStateTry match {
+                case Success(newMinState) =>
+                  val newMemPool = updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool(), newMinState)
+
+                  @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+                  val v = vault()
+                  val newVault = if (progressInfo.chainSwitchingNeeded) {
+                    v.rollback(idToVersion(progressInfo.branchPoint.get)) match {
+                      case Success(nv) => nv
+                      case Failure(e) => log.warn("Wallet rollback failed: ", e); v
+                    }
+                  } else {
+                    v
                   }
-                } else {
-                  v
-                }
 
-                // we assume that wallet scan may be started if fullblocks-chain is no more
-                // than 20 blocks behind headers-chain
-                val almostSyncedGap = 20
+                  // we assume that wallet scan may be started if fullblocks-chain is no more
+                  // than 20 blocks behind headers-chain
+                  val almostSyncedGap = 20
 
-                val headersHeight = newHistory.headersHeight
-                val fullBlockHeight = newHistory.fullBlockHeight
-                if((headersHeight - fullBlockHeight) < almostSyncedGap) {
-                  blocksApplied.foreach(newVault.scanPersistent)
-                }
+                  val headersHeight = newHistory.headersHeight
+                  val fullBlockHeight = newHistory.fullBlockHeight
+                  if ((headersHeight - fullBlockHeight) < almostSyncedGap) {
+                    blocksApplied.foreach(newVault.scanPersistent)
+                  }
 
-                log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
-                updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
-                chainProgress =
-                  Some(ChainProgress(pmod, headersHeight, fullBlockHeight, timeProvider.time()))
-              case Failure(e) =>
-                log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
-                updateNodeView(updatedHistory = Some(newHistory))
-                context.system.eventStream.publish(SemanticallyFailedModification(pmod, e))
+                  log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
+                  updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
+                  chainProgress =
+                    Some(ChainProgress(pmod, headersHeight, fullBlockHeight, timeProvider.time()))
+                case Failure(e) =>
+                  log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
+                  updateNodeView(updatedHistory = Some(newHistory))
+                  context.system.eventStream.publish(SemanticallyFailedModification(pmod, e))
+              }
+            } else {
+              requestDownloads(progressInfo)
+              updateNodeView(updatedHistory = Some(historyBeforeStUpdate))
             }
-          } else {
-            requestDownloads(progressInfo)
-            updateNodeView(updatedHistory = Some(historyBeforeStUpdate))
-          }
-        case Failure(CriticalSystemException(error)) =>
-          log.error(error)
-          ErgoApp.shutdownSystem()(context.system)
-        case Failure(e: RecoverableModifierError) =>
-          log.warn(s"Can`t yet apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
-          context.system.eventStream.publish(RecoverableFailedModification(pmod, e))
-        case Failure(e) =>
-          log.warn(s"Can`t apply invalid persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
-          context.system.eventStream.publish(SyntacticallyFailedModification(pmod, e))
+          case Failure(CriticalSystemException(error)) =>
+            log.error(error)
+            ErgoApp.shutdownSystem()(context.system)
+          case Failure(e: RecoverableModifierError) =>
+            log.warn(s"Can`t yet apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
+            context.system.eventStream.publish(RecoverableFailedModification(pmod, e))
+          case Failure(e) =>
+            log.warn(s"Can`t apply invalid persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
+            context.system.eventStream.publish(SyntacticallyFailedModification(pmod, e))
+        }
       }
     } else {
       log.warn(s"Trying to apply modifier ${pmod.encodedId} that's already in history")

@@ -46,7 +46,16 @@ trait ErgoHistory
 
   def closeStorage(): Unit = historyStorage.close()
 
-  def justPutToHistory(mId: Array[Byte], bytes: Array[Byte]): Try[Unit] = {
+  /**
+    * Dump modifier identifier and bytes to database.
+    *
+    * Used to dump ADProofs generated locally.
+    *
+    * @param mId - modifier identifier
+    * @param bytes - modifier bytes
+    * @return Success if modifier inserted into database successfully, Failure otherwise
+    */
+  def dumpToDb(mId: Array[Byte], bytes: Array[Byte]): Try[Unit] = {
     historyStorage.insert(mId, bytes)
   }
 

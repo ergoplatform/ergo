@@ -10,7 +10,7 @@ import scorex.core.ModifierTypeId
 import scorex.core.consensus.ContainsModifiers
 import scorex.core.network.DeliveryTracker._
 import scorex.core.network.ModifiersStatus._
-import scorex.core.utils.ScorexEncoding
+import scorex.core.utils._
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.collection.mutable
@@ -375,26 +375,4 @@ object DeliveryTracker {
     )
   }
 
-  implicit class MapPimp[K, V](underlying: mutable.Map[K, V]) {
-    /**
-      * One liner for updating a Map with the possibility to handle case of missing Key
-      * @param k map key
-      * @param f function that is passed Option depending on Key being present or missing, returning new Value
-      * @return Option depending on map being updated or not
-      */
-    def adjust(k: K)(f: Option[V] => V): Option[V] = underlying.put(k, f(underlying.get(k)))
-
-    /**
-      * One liner for updating a Map with the possibility to handle case of missing Key
-      * @param k map key
-      * @param f function that is passed Option depending on Key being present or missing,
-      *          returning Option signaling whether to update or not
-      * @return new Map with value updated under given key
-      */
-    def flatAdjust(k: K)(f: Option[V] => Option[V]): Option[V] =
-      f(underlying.get(k)) match {
-        case None    => None
-        case Some(v) => underlying.put(k, v)
-      }
-  }
 }

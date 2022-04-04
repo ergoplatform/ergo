@@ -484,8 +484,10 @@ object CandidateGenerator extends ScorexLogging {
       // differently due to bugs in AOT costing
       val safeGap = if(state.stateContext.currentParameters.maxBlockCost < 1000000) {
         0
-      } else {
+      } else if(state.stateContext.currentParameters.maxBlockCost < 5000000) {
         150000
+      } else {
+        1000000
       }
 
       val (txs, toEliminate) = collectTxs(

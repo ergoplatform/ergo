@@ -92,7 +92,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
+  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height])
+                            (generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
 
       // avoid storing versioned information in the

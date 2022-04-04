@@ -30,7 +30,7 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
   private val fixedSizeValueMode = nodeParameters.valueSize.isDefined
 
   override def rollback(version: ADDigest): Try[(ProverNodes[D], Int)] = Try {
-    if(!this.version.contains(version)) {
+    if (!this.version.contains(version)) {
       store.rollbackTo(version)
     }
 

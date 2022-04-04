@@ -3,6 +3,7 @@ package org.ergoplatform.utils
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -65,6 +66,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
         nodeViewHolderRef ! LocallyGeneratedModifier(section)
         section match {
           case Extension(_, Seq(), _) => Success(()) // doesn't send back any outcome
+          case ADProofs(_, _, _) => Success(()) // doesn't send back any outcome
           case _ => expectModificationOutcome(section) // normal flow
         }
       }

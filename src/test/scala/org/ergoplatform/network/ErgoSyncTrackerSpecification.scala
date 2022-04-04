@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.ActorSystem
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.consensus.History.Older
+import scorex.core.consensus.History.{Older, Younger}
 import scorex.core.network.{ConnectedPeer, ConnectionId, Incoming}
 import scorex.core.network.peer.PeerInfo
 
@@ -14,13 +14,16 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     val connectedPeer = ConnectedPeer(cid, handlerRef = null, lastMessage = 5L, Some(peerInfo))
     val syncTracker = ErgoSyncTracker(ActorSystem(), settings.scorexSettings.network, timeProvider)
 
-    val status = Older
     val height = 1000
     // add peer to sync
-    syncTracker.updateStatus(connectedPeer, status, Some(height))
-    syncTracker.statuses(connectedPeer) shouldBe ErgoPeerStatus(connectedPeer, status, height, None, None)
-    syncTracker.getStatus(connectedPeer) shouldBe Some(status)
-    syncTracker.peersByStatus.apply(status).head shouldBe connectedPeer
+    syncTracker.updateStatus(connectedPeer, Younger, Some(height))
+    syncTracker.statuses(connectedPeer) shouldBe ErgoPeerStatus(connectedPeer, Younger, height, None, None)
+    // updating status should change status and height of existing peer
+    syncTracker.updateStatus(connectedPeer, Older, Some(height+1))
+    syncTracker.getStatus(connectedPeer) shouldBe Some(Older)
+    syncTracker.fullInfo().head.height shouldBe height+1
+
+    syncTracker.peersByStatus.apply(Older).head shouldBe connectedPeer
     // peer should not be synced yet
     syncTracker.notSyncedOrOutdated(connectedPeer) shouldBe true
     syncTracker.outdatedPeers shouldBe Vector.empty

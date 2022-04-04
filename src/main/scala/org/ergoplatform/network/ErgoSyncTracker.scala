@@ -14,7 +14,7 @@ import scorex.util.ScorexLogging
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-
+import scorex.core.utils.MapPimp
 
 final case class ErgoSyncTracker(system: ActorSystem,
                                  networkSettings: NetworkSettings,
@@ -51,7 +51,13 @@ final case class ErgoSyncTracker(system: ActorSystem,
 
   def updateStatus(peer: ConnectedPeer, status: HistoryComparisonResult, height: Option[Height]): Unit = {
     val seniorsBefore = numOfSeniors()
-    statuses += peer -> ErgoPeerStatus(peer, status, height.getOrElse(ErgoHistory.EmptyHistoryHeight), None, None)
+    statuses.adjust(peer){
+      case None =>
+        ErgoPeerStatus(peer, status, height.getOrElse(ErgoHistory.EmptyHistoryHeight), None, None)
+      case Some(existingPeer) =>
+        existingPeer.copy(status = status, height = height.getOrElse(existingPeer.height))
+    }
+
     val seniorsAfter = numOfSeniors()
 
     // todo: we should also send NoBetterNeighbour signal when all the peers around are not seniors initially

@@ -58,7 +58,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
       objectsStore.get(idToBytes(id)).flatMap { bytes =>
         HistoryModifierSerializer.parseBytesTry(bytes) match {
           case Success(pm) =>
-            log.info(s"Cache miss for existing modifier $id")
+            log.trace(s"Cache miss for existing modifier $id")
             cacheModifier(pm)
             Some(pm)
           case Failure(_) =>

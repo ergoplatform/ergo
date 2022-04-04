@@ -49,7 +49,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
       val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
-      us.validateWithCost(tx, None, txCostLimit, None).get should be <= 100000L
+      us.validateWithCost(tx, None, txCostLimit, None).get should be <= 100000
       val block1 = validFullBlock(Some(lastBlock), us, Seq(ErgoTransaction(tx)))
       us = us.applyModifier(block1)(_ => ()).get
       foundersBox = tx.outputs.head
@@ -275,8 +275,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
       val txs1 = IndexedSeq(headTx, nextTx)
       val txs2 = IndexedSeq(txWithDataInputs, nextTx)
-      val sc1 = ErgoState.stateChanges(txs1)
-      val sc2 = ErgoState.stateChanges(IndexedSeq(txWithDataInputs, nextTx))
+      val sc1 = ErgoState.stateChanges(txs1).get
+      val sc2 = ErgoState.stateChanges(IndexedSeq(txWithDataInputs, nextTx)).get
       // check that the only difference between txs1 and txs2 are dataInputs and Lookup tree operations
       txs1.flatMap(_.inputs) shouldBe txs2.flatMap(_.inputs)
       txs1.flatMap(_.outputCandidates) shouldBe txs2.flatMap(_.outputCandidates)

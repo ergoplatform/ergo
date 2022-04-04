@@ -10,7 +10,7 @@ import scorex.core.ModifierTypeId
 import scorex.core.consensus.ContainsModifiers
 import scorex.core.network.DeliveryTracker._
 import scorex.core.network.ModifiersStatus._
-import scorex.core.utils.ScorexEncoding
+import scorex.core.utils._
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.collection.mutable
@@ -54,8 +54,10 @@ class DeliveryTracker(maxDeliveryChecks: Int,
 
   private val desiredSizeOfExpectingHeaderQueue: Int = desiredSizeOfExpectingModifierQueue * 5
 
-  /** Bloom Filter with invalid modifier ids */
-  private var invalidModifierBF = {
+  /** Bloom Filter based cache with invalid modifier ids */
+  private var invalidModifierCache = emptyExpiringApproximateCache
+
+  private def emptyExpiringApproximateCache = {
     val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
     val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
     val frontCacheSize = cacheSettings.invalidModifiersCacheSize
@@ -63,7 +65,14 @@ class DeliveryTracker(maxDeliveryChecks: Int,
     ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration)
   }
 
-  def fullInfo: FullInfo = DeliveryTracker.FullInfo(invalidModifierBF.approximateElementCount, requested.toSeq, received.toSeq)
+  def fullInfo: FullInfo = DeliveryTracker.FullInfo(invalidModifierCache.approximateElementCount, requested.toSeq, received.toSeq)
+
+  def reset(): Unit = {
+    log.info(s"Resetting state of DeliveryTracker...")
+    requested.clear()
+    received.clear()
+    invalidModifierCache = emptyExpiringApproximateCache
+  }
 
   /**
     * @return how many header modifiers to download
@@ -93,7 +102,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
   def status(modifierId: ModifierId, modifierTypeId: ModifierTypeId, modifierKeepers: Seq[ContainsModifiers[_]]): ModifiersStatus =
     if (received.get(modifierTypeId).exists(_.contains(modifierId))) Received
     else if (requested.get(modifierTypeId).exists(_.contains(modifierId))) Requested
-    else if (invalidModifierBF.mightContain(modifierId)) Invalid
+    else if (invalidModifierCache.mightContain(modifierId)) Invalid
     else if (modifierKeepers.exists(_.contains(modifierId))) Held
     else Unknown
 
@@ -183,7 +192,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
           case _ =>
             None
         }
-        invalidModifierBF = invalidModifierBF.put(id)
+        invalidModifierCache = invalidModifierCache.put(id)
         senderOpt
       }
   }
@@ -295,7 +304,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
     }
 
   override def toString: String = {
-    val invalidModCount = s"invalid modifiers count : ${invalidModifierBF.approximateElementCount}"
+    val invalidModCount = s"invalid modifiers count : ${invalidModifierCache.approximateElementCount}"
     val requestedStr =
       requested.map { case (mType, infoByMid) =>
         val peersCheckTimes =
@@ -366,26 +375,4 @@ object DeliveryTracker {
     )
   }
 
-  implicit class MapPimp[K, V](underlying: mutable.Map[K, V]) {
-    /**
-      * One liner for updating a Map with the possibility to handle case of missing Key
-      * @param k map key
-      * @param f function that is passed Option depending on Key being present or missing, returning new Value
-      * @return Option depending on map being updated or not
-      */
-    def adjust(k: K)(f: Option[V] => V): Option[V] = underlying.put(k, f(underlying.get(k)))
-
-    /**
-      * One liner for updating a Map with the possibility to handle case of missing Key
-      * @param k map key
-      * @param f function that is passed Option depending on Key being present or missing,
-      *          returning Option signaling whether to update or not
-      * @return new Map with value updated under given key
-      */
-    def flatAdjust(k: K)(f: Option[V] => Option[V]): Option[V] =
-      f(underlying.get(k)) match {
-        case None    => None
-        case Some(v) => underlying.put(k, v)
-      }
-  }
 }

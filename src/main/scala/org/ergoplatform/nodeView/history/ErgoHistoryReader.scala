@@ -316,7 +316,7 @@ trait ErgoHistoryReader
     *
     * @return
     */
-  def syncInfoV1: ErgoSyncInfo = {
+  def syncInfoV1: ErgoSyncInfoV1 = {
     /**
       * Return last count headers from best headers chain if exist or chain up to genesis otherwise
       */

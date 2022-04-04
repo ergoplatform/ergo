@@ -14,7 +14,8 @@ import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
 import scorex.core.VersionTag
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.avltree.batch.Remove
+import scorex.crypto.authds.ADDigest
 import scorex.db.ByteArrayWrapper
 import scorex.testkit.TestkitHelpers
 
@@ -120,12 +121,12 @@ trait ValidBlocksGenerators
     loop(emptyStateContext.currentParameters.maxBlockCost, stateBoxesIn, mutable.WrappedArray.empty, mutable.WrappedArray.empty, rnd)
   }
 
-  protected def getTxCost(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxesToUse: Seq[ErgoBox]): Long = {
+  protected def getTxCost(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxesToUse: Seq[ErgoBox]): Int = {
     tx.statefulValidity(
       tx.inputs.flatMap(i => boxesToSpend.find(_.id == i.boxId)),
       tx.dataInputs.flatMap(i => dataBoxesToUse.find(_.id == i.boxId)),
       emptyStateContext,
-      -20000000)(emptyVerifier).getOrElse(0L)
+      -2000000)(emptyVerifier).getOrElse(0)
   }
 
   /**
@@ -242,7 +243,7 @@ trait ValidBlocksGenerators
   private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {
     transactions.foreach(_.statelessValidity() shouldBe 'success)
     transactions.nonEmpty shouldBe true
-    ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
+    ErgoState.boxChanges(transactions).get._1.foreach { case Remove(boxId) =>
       assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
     }
   }

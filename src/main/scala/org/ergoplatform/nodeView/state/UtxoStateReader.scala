@@ -39,30 +39,27 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     */
   def validateWithCost(tx: ErgoTransaction,
                        stateContextOpt: Option[ErgoStateContext],
-                       costLimit: Long,
-                       interpreterOpt: Option[ErgoInterpreter]): Try[Long] = {
+                       costLimit: Int,
+                       interpreterOpt: Option[ErgoInterpreter]): Try[Int] = {
     val context = stateContextOpt.getOrElse(stateContext)
-
-    val verifier = interpreterOpt.getOrElse(ErgoInterpreter(context.currentParameters))
-
-    val maxBlockCost = context.currentParameters.maxBlockCost
-    val startCost = maxBlockCost - costLimit
+    val parameters = context.currentParameters.withBlockCost(costLimit)
+    val verifier = interpreterOpt.getOrElse(ErgoInterpreter(parameters))
 
     tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
       tx.statefulValidity(
-          boxesToSpend,
-          tx.dataInputs.flatMap(i => boxById(i.boxId)),
-          context,
-          startCost)(verifier).map(_ - startCost) match {
-            case Success(txCost) if txCost > costLimit =>
-              Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
-            case Success(txCost) =>
-              Success(txCost)
-            case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
-              Failure(TooHighCostError(s"Transaction $tx has too high cost"))
-            case f: Failure[_] => f
-        }
+        boxesToSpend,
+        tx.dataInputs.flatMap(i => boxById(i.boxId)),
+        context,
+        accumulatedCost = 0L)(verifier) match {
+        case Success(txCost) if txCost > costLimit =>
+          Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
+        case Success(txCost) =>
+          Success(txCost)
+        case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
+          Failure(TooHighCostError(s"Transaction $tx has too high cost"))
+        case f: Failure[_] => f
+      }
     }
   }
 
@@ -73,7 +70,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     *
     * Used in mempool.
     */
-  override def validateWithCost(tx: ErgoTransaction, maxTxCost: Long): Try[Long] = {
+  override def validateWithCost(tx: ErgoTransaction, maxTxCost: Int): Try[Int] = {
     validateWithCost(tx, None, maxTxCost, None)
   }
 
@@ -135,7 +132,9 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
       Failure(new Error(s"Incorrect storage: ${storage.version.map(Algos.encode)} != ${Algos.encode(rootHash)}. " +
         "Possible reason - state update is in process."))
     } else {
-      persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations)
+      ErgoState.stateChanges(txs).flatMap { stateChanges =>
+        persistentProver.avlProver.generateProofForOperations(stateChanges.operations)
+      }
     }
   }
 

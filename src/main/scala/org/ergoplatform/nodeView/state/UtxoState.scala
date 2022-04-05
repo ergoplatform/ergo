@@ -96,11 +96,16 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                             (generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
 
-      // avoid storing versioned information in the
-      if(fb.height >= estimatedTip.getOrElse(Int.MaxValue) - constants.keepVersions){
-        if(store.getKeepVersions < constants.keepVersions) store.setKeepVersions(constants.keepVersions)
+      // avoid storing versioned information in the database when block being processed is behind
+      // blockchain tip by `keepVersions` blocks at least
+      if (fb.height >= estimatedTip.getOrElse(Int.MaxValue) - constants.keepVersions) {
+        if (store.getKeepVersions < constants.keepVersions) {
+          store.setKeepVersions(constants.keepVersions)
+        }
       } else {
-        if(store.getKeepVersions > 0) store.setKeepVersions(0)
+        if (store.getKeepVersions > 0) {
+          store.setKeepVersions(0)
+        }
       }
 
       persistentProver.synchronized {

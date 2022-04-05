@@ -216,13 +216,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  private def estimatedTip(): Option[Height] = Try { //error may happen if history not initialized
-    if(history().isHeadersChainSynced) {
-      Some(history().headersHeight)
-    } else {
-      None
-    }
-  }.getOrElse(None)
+  /**
+    * Get estimated height of headers-chain, if it is synced
+    * @return height of last header known, if headers-chain is synced, or None if not synced
+    */
+  private def estimatedTip(): Option[Height] = {
+    Try { //error may happen if history not initialized
+      if(history().isHeadersChainSynced) {
+        Some(history().headersHeight)
+      } else {
+        None
+      }
+    }.getOrElse(None)
+  }
 
   private def applyState(history: ErgoHistory,
                          stateToApply: State,

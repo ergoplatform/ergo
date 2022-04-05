@@ -206,7 +206,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     val versionSize = versionID.length
     val keySize = key.length
     val packed = new Array[Byte](2 + versionSize + keySize + valueSize)
-    assert(keySize <= 0xFF)
+    require(keySize <= 0xFF)
     packed(0) = versionSize.asInstanceOf[Byte]
     packed(1) = keySize.asInstanceOf[Byte]
     Array.copy(versionID, 0, packed, 2, versionSize)
@@ -249,7 +249,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
         }
       })
       for ((key, v) <- toUpdate) {
-        assert(key.length != 0) // empty keys are not allowed
+        require(key.length != 0) // empty keys are not allowed
         if (keepVersions > 0) {
           val old = db.get(key)
           undoBatch.put(newLSN(), serializeUndo(versionID, key, old))
@@ -386,15 +386,15 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
             undoBatch.close()
           }
           val nVersions = versions.size
-          assert((versionIndex + 1 == nVersions && nUndoRecords == 0) || (versionIndex + 1 < nVersions && lsn - versionLsn(versionIndex + 1) + 1 == nUndoRecords))
+          require((versionIndex + 1 == nVersions && nUndoRecords == 0) || (versionIndex + 1 < nVersions && lsn - versionLsn(versionIndex + 1) + 1 == nUndoRecords))
           versions.remove(versionIndex + 1, nVersions - versionIndex - 1)
           versionLsn.remove(versionIndex + 1, nVersions - versionIndex - 1)
           lsn -= nUndoRecords // reuse deleted LSN to avoid holes in LSNs
-          assert(lastLsn == 0 || lsn == lastLsn)
-          assert(versions.last.sameElements(versionID))
+          require(lastLsn == 0 || lsn == lastLsn)
+          require(versions.last.sameElements(versionID))
           lastVersion = Some(versionID)
         } else {
-          assert(lastVersion.get.sameElements(versionID))
+          require(lastVersion.get.sameElements(versionID))
         }
       } else {
         throw new NoSuchElementException("versionID not found, can not rollback")

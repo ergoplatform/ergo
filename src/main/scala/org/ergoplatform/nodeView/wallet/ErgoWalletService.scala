@@ -179,8 +179,9 @@ trait ErgoWalletService {
     *
     * @param state current wallet state
     * @param block - block to scan
+    * @param dustLimit - Boxes with value smaller than dustLimit are disregarded in wallet scan logic
     */
-  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState]
+  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState]
 
   /**
     * Sign a transaction
@@ -521,8 +522,8 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
         Failure(new Exception("Unable to derive key, wallet is not initialized"))
     }
 
-  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState] =
-      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter)
+  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =
+      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter, dustLimit)
         .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
 
   def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {

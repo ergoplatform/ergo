@@ -189,11 +189,7 @@ object WalletScanLogic extends ScorexLogging {
     val miningScriptsBytes: Seq[Array[Byte]] = walletVars.miningScriptsBytes
     val externalScans: Seq[Scan] = walletVars.externalScans
 
-    tx.outputs.flatMap {
-      case bx if dustLimit.exists(bx.value <= _) =>
-        // filter out boxes with value that is considered dust
-        None
-      case bx  =>
+    tx.outputs.flatMap { bx  =>
 
       // First, we check apps triggered by the tx output
       val appsTriggered =
@@ -249,9 +245,14 @@ object WalletScanLogic extends ScorexLogging {
       }
 
       if (statuses.nonEmpty) {
-        val tb = TrackedBox(tx.id, bx.index, inclusionHeight, None, None, bx, statuses)
-        log.debug("New tracked box: " + tb.boxId, " scans: " + tb.scans)
-        Some(tb)
+        if (dustLimit.exists(bx.value <= _)){
+          // filter out boxes with value that is considered dust
+          None
+        } else {
+          val tb = TrackedBox(tx.id, bx.index, inclusionHeight, None, None, bx, statuses)
+          log.debug("New tracked box: " + tb.boxId, " scans: " + tb.scans)
+          Some(tb)
+        }
       } else {
         None
       }

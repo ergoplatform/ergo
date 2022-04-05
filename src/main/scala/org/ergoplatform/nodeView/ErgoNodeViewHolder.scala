@@ -388,6 +388,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * Remote and local persistent modifiers need to be appended to history, applied to state
     * which also needs to be propagated to mempool and wallet
     * @param pmod Remote or local persistent modifier
+    * @param local whether the modifier was generated locally or not
     */
   protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit = {
     if (!history().contains(pmod.id)) { // todo: .contains reads modifier pmod fully here if in db

@@ -461,7 +461,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
       boxCandidate.additionalRegisters)
   }
 
-  private def checkTx(from: IndexedSeq[ErgoBox], wrongTx: ErgoTransaction): Try[Long] = {
+  private def checkTx(from: IndexedSeq[ErgoBox], wrongTx: ErgoTransaction): Try[Int] = {
     wrongTx.statelessValidity().flatMap(_ => wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext))
   }
 

@@ -114,7 +114,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
   property("should only collect valid transactions") {
     def checkCollectTxs(
-      maxCost: Long,
+      maxCost: Int,
       maxSize: Int,
       withTokens: Boolean = false
     ): Unit = {
@@ -164,7 +164,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
         ._1
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
-      val costs: Seq[Long] = fromBigMempool.map { tx =>
+      val costs: Seq[Int] = fromBigMempool.map { tx =>
         us.validateWithCost(tx, Some(upcomingContext), Int.MaxValue, Some(verifier)).getOrElse {
           val boxesToSpend =
             tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
@@ -182,7 +182,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     checkCollectTxs(parameters.maxBlockCost, Int.MaxValue)
 
     // transactions reach block size limit
-    checkCollectTxs(Long.MaxValue, 4096)
+    checkCollectTxs(Int.MaxValue, 4096)
 
     // miner collects correct transactions from mempool even if they have tokens
     checkCollectTxs(Int.MaxValue, Int.MaxValue, withTokens = true)

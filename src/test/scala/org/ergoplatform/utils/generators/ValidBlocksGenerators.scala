@@ -121,12 +121,12 @@ trait ValidBlocksGenerators
     loop(emptyStateContext.currentParameters.maxBlockCost, stateBoxesIn, mutable.WrappedArray.empty, mutable.WrappedArray.empty, rnd)
   }
 
-  protected def getTxCost(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxesToUse: Seq[ErgoBox]): Long = {
+  protected def getTxCost(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxesToUse: Seq[ErgoBox]): Int = {
     tx.statefulValidity(
       tx.inputs.flatMap(i => boxesToSpend.find(_.id == i.boxId)),
       tx.dataInputs.flatMap(i => dataBoxesToUse.find(_.id == i.boxId)),
       emptyStateContext,
-      -20000000)(emptyVerifier).getOrElse(0L)
+      -2000000)(emptyVerifier).getOrElse(0)
   }
 
   /**

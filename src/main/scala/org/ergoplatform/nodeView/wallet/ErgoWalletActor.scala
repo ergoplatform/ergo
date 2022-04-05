@@ -196,7 +196,15 @@ class ErgoWalletActor(settings: ErgoSettings,
       state.storage.updateStateContext(s.stateContext) match {
         case Success(_) =>
           val cp = s.stateContext.currentParameters
-          val newState = ergoWalletService.updateUtxoState(state.copy(stateReaderOpt = Some(s), parameters = cp))
+
+          val newWalletVars = state.walletVars.withParameters(cp) match {
+            case Success(res) => res
+            case Failure(t) =>
+              log.warn("Can not update wallet vars: ", t)
+              state.walletVars
+          }
+          val updState = state.copy(stateReaderOpt = Some(s), parameters = cp, walletVars = newWalletVars)
+          val newState = ergoWalletService.updateUtxoState(updState)
           context.become(loadedWallet(newState))
         case Failure(t) =>
           val errorMsg = s"Updating wallet state context failed : ${t.getMessage}"

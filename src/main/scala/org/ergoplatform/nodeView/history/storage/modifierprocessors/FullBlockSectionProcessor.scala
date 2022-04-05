@@ -97,17 +97,18 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .validate(alreadyApplied, !historyStorage.contains(m.id), s"${m.encodedId}")
         .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), s"header=${header.encodedId}, id=${m.encodedId}")
         .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), s"header=${header.encodedId}, id=${m.encodedId}")
-        .validate(bsHeadersChainSynced, isHeadersChainSynced)
-        .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height),
-          s"header=${header.encodedId}, id=${m.encodedId}")
+        // .validate(bsHeadersChainSynced, isHeadersChainSynced)
+       // .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height),
+       //   s"header=${header.encodedId}, id=${m.encodedId}")
         .result
     }
 
+    /*
     private def isHistoryADProof(m: BlockSection, header: Header): Boolean = m match {
       // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
       case _: ADProofs if contains(header.transactionsId) => true
       case _ => false
-    }
+    }*/
 
   }
 

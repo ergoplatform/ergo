@@ -33,7 +33,8 @@ class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSett
   /** Check if headers chain is synchronized with the network and modifier is not too old
     */
   def shouldDownloadBlockAtHeight(height: Int): Boolean = {
-    isHeadersChainSynced && height >= minimalFullBlockHeight
+    (nodeConfig.blocksToKeep == -1 && nodeConfig.verifyTransactions == true) ||
+      (isHeadersChainSynced && height >= minimalFullBlockHeight)
   }
 
   /** Update minimal full block height and header chain synced flag

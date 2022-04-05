@@ -201,7 +201,8 @@ class ErgoWalletActor(settings: ErgoSettings,
     /** SCAN COMMANDS */
     //scan mempool transaction
     case ScanOffChain(tx) =>
-      val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars)
+      val dustLimit = settings.walletSettings.dustLimit
+      val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
       val inputs = WalletScanLogic.extractInputBoxes(tx)
       val newState = state.copy(offChainRegistry =
         state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
@@ -215,7 +216,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           historyReader.bestFullBlockAt(blockHeight) match {
             case Some(block) =>
               log.info(s"Wallet is going to scan a block ${block.id} in the past at height ${block.height}")
-              ergoWalletService.scanBlockUpdate(state, block) match {
+              ergoWalletService.scanBlockUpdate(state, block, settings.walletSettings.dustLimit) match {
                 case Failure(ex) =>
                   val errorMsg = s"Scanning block ${block.id} at height $blockHeight failed : ${ex.getMessage}"
                   log.error(errorMsg, ex)
@@ -239,7 +240,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         if (nextBlockHeight == newBlock.height) {
           log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
           val newState =
-            ergoWalletService.scanBlockUpdate(state, newBlock) match {
+            ergoWalletService.scanBlockUpdate(state, newBlock, settings.walletSettings.dustLimit) match {
               case Failure(ex) =>
                 val errorMsg = s"Scanning new block ${newBlock.id} on chain at height ${newBlock.height} failed : ${ex.getMessage}"
                 log.error(errorMsg, ex)

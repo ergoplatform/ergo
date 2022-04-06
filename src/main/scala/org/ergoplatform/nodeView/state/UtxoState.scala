@@ -98,7 +98,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
       // avoid storing versioned information in the database when block being processed is behind
       // blockchain tip by `keepVersions` blocks at least
-      if (fb.height >= estimatedTip.getOrElse(Int.MaxValue) - constants.keepVersions) {
+      // we store `keepVersions` diffs in the database if chain tip is not known yet
+      if (fb.height >= estimatedTip.getOrElse(0) - constants.keepVersions) {
         if (store.getKeepVersions < constants.keepVersions) {
           store.setKeepVersions(constants.keepVersions)
         }

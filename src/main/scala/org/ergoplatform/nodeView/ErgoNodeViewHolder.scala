@@ -280,14 +280,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       mods.headOption match {
         case Some(h) if h.isInstanceOf[Header] => // modifiers are always of the same type
           val sorted = mods.sortBy(_.asInstanceOf[Header].height)
+          val headersHeight = history().headersHeight
+          val sortedAndHigher = sorted.dropWhile(_.asInstanceOf[Header].height < headersHeight + 1)
 
-          if (sorted.head.asInstanceOf[Header].height == history().headersHeight + 1) {
+          if (sortedAndHigher.nonEmpty) {
             // we apply sorted headers while headers sequence is not broken
-            var expectedHeight = history().headersHeight + 1
+            var expectedHeight = headersHeight + 1
             var linkBroken = false
 
-            cfor(0)(_ < sorted.length, _ + 1) { idx =>
-              val header = sorted(idx).asInstanceOf[Header]
+            cfor(0)(_ < sortedAndHigher.length, _ + 1) { idx =>
+              val header = sortedAndHigher(idx).asInstanceOf[Header]
               if (!linkBroken && header.height == expectedHeight) {
                 pmodModify(header, local = false)
                 expectedHeight += 1
@@ -299,8 +301,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 modifiersCache.put(header.id, header)
               }
             }
-          } else {
-            mods.foreach(h => modifiersCache.put(h.id, h))
           }
 
           applyFromCacheLoop()

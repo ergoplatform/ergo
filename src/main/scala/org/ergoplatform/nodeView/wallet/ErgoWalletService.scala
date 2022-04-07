@@ -24,6 +24,7 @@ import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.SigmaBoolean
 
+import java.io.FileNotFoundException
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -246,7 +247,12 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         log.info("Trying to read wallet in secure mode ..")
         JsonSecretStorage.readFile(secretStorageSettings).fold(
           e => {
-            log.warn(s"Failed to read wallet. Manual initialization is required. Details: ", e)
+            e match {
+              case e: FileNotFoundException =>
+                log.info(s"Wallet secret storage not found. Details: {}", e.getMessage)
+              case _ =>
+                log.warn(s"Failed to read wallet. Manual initialization is required. Details: ", e)
+            }
             state
           },
           secretStorage => {

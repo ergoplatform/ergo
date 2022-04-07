@@ -79,7 +79,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
 
     //sending header
-    nodeViewHolderRef ! LocallyGeneratedModifier(block.header)
+    nodeViewHolderRef ! ModifiersFromRemote(List(block.header))
     expectNoMsg()
 
     getHistoryHeight shouldBe 0

@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.wallet.utils.FileUtils
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, Parameters}
 import scorex.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
@@ -384,17 +384,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   //todo: update state in async way?
   /**
     * Remote and local persistent modifiers need to be appended to history, applied to state
-    * which also needs to be propagated to mempool and wallet
+    * which also needs to be git propagated to mempool and wallet
     * @param pmod Remote or local persistent modifier
     * @param local whether the modifier was generated locally or not
     */
   protected def pmodModify(pmod: ErgoPersistentModifier, local: Boolean): Unit = {
     if (!history().contains(pmod.id)) { // todo: .contains reads modifier pmod fully here if in db
 
-      // if ADProofs block section generated locally, just dump it into
-      if (pmod.modifierTypeId == ADProofs.modifierTypeId && local) {
+      // if ADProofs block section generated locally, just dump it into the database
+      if (pmod.modifierTypeId == ADProofs.modifierTypeId && local && settings.networkType == NetworkType.MainNet) {
         val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
         history().dumpToDb(pmod.serializedId, bytes)
+        context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
+        context.system.eventStream.publish(SemanticallySuccessfulModifier(pmod))
       } else {
 
         context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))

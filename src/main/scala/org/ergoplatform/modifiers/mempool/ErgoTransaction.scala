@@ -216,7 +216,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           initCost = 0)
 
         val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-        val (isCostValid, scriptCost: Long) =
+        val (isCostValid, scriptCost) =
           costTry match {
             case Failure(t) =>
               log.warn(s"Tx $id verification failed: ${t.getMessage} : " , t)
@@ -226,8 +226,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                 s"proof: $proof" +
                 s"messageToSign: $messageToSign")
               (false, maxCost + 1)
-            case Success(result) =>
-              result
+            case Success((result, cost)) =>
+              (result, cost.toInt)
           }
 
         val currCost = addExact(currentTxCost, scriptCost)

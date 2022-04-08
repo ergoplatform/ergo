@@ -139,7 +139,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     )
 
     // Cost limit per block
-    val maxCost = stateContext.currentParameters.maxBlockCost
+    val maxCost = stateContext.currentParameters.maxBlockCost.toLong
 
     // We sum up previously accumulated cost and transaction initialization cost
     val startCost = addExact(initialCost, accumulatedCost)
@@ -226,8 +226,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                 s"proof: $proof" +
                 s"messageToSign: $messageToSign")
               (false, maxCost + 1)
-            case Success((result, cost)) =>
-              (result, cost.toInt)
+            case Success(result) =>
+              result
           }
 
         val currCost = addExact(currentTxCost, scriptCost)

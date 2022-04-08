@@ -78,11 +78,18 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
 
-    //sending header
+    //sending child header without parent header
     nodeViewHolderRef ! ModifiersFromRemote(List(block.header))
     expectNoMsg()
 
-    getHistoryHeight shouldBe 0
+    // sende correct header sequence
+    nodeViewHolderRef ! ModifiersFromRemote(List(parentBlock.header))
+    expectMsgType[SyntacticallySuccessfulModifier]
+
+    nodeViewHolderRef ! ModifiersFromRemote(List(block.header))
+    expectMsgType[SyntacticallySuccessfulModifier]
+
+    getHistoryHeight shouldBe 2
   }
 
   private val t4 = TestCase("apply valid block as genesis") { fixture =>

@@ -100,10 +100,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
       None
     }
 
-  private val statsCollectorRef: ActorRef =
-    ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider, parameters)
-
   private val syncTracker = ErgoSyncTracker(actorSystem, scorexSettings.network, timeProvider)
+  private val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider, parameters)
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 
   // touch it to run preStart method of the actor which is in turn running schedulers

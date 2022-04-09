@@ -60,6 +60,8 @@ final case class ErgoSyncTracker(system: ActorSystem,
     if (seniorsBefore == 0 && seniorsAfter > 0) {
       system.eventStream.publish(BetterNeighbourAppeared)
     }
+
+    heights += (peer -> height.getOrElse(ErgoHistory.EmptyHistoryHeight))
   }
 
   /**
@@ -101,6 +103,8 @@ final case class ErgoSyncTracker(system: ActorSystem,
     statuses.groupBy(_._2.status).mapValues(_.keys).view.force
 
   protected def numOfSeniors(): Int = statuses.count(_._2.status == Older)
+
+  def maxHeight(): Option[Int] = if(heights.nonEmpty) Some(heights.maxBy(_._2)._2) else None
 
   /**
     * Return the peers to which this node should send a sync signal, including:

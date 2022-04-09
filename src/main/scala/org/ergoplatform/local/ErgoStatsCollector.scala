@@ -15,6 +15,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoSyncTracker
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
@@ -28,6 +29,7 @@ import scala.concurrent.duration._
   */
 class ErgoStatsCollector(readersHolder: ActorRef,
                          networkController: ActorRef,
+                         syncTracker: ErgoSyncTracker,
                          settings: ErgoSettings,
                          timeProvider: NetworkTimeProvider,
                          parameters: Parameters)
@@ -57,6 +59,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     settings.nodeSettings.stateType,
     None,
     settings.nodeSettings.mining,
+    None,
     None,
     None,
     None,
@@ -122,12 +125,18 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
   private def onConnectedPeers: Receive = {
     case peers: Seq[ConnectedPeer@unchecked] if peers.headOption.forall(_.isInstanceOf[ConnectedPeer]) =>
-      nodeInfo = nodeInfo.copy(peersCount = peers.length)
+      nodeInfo = nodeInfo.copy(
+        peersCount = peers.length,
+        maxPeerHeight = syncTracker.maxHeight()
+      )
   }
 
   private def onPeersStatus: Receive = {
     case p2pStatus: PeersStatus =>
-      nodeInfo = nodeInfo.copy(lastIncomingMessageTime = p2pStatus.lastIncomingMessage)
+      nodeInfo = nodeInfo.copy(
+        lastIncomingMessageTime = p2pStatus.lastIncomingMessage,
+        maxPeerHeight = syncTracker.maxHeight()
+      )
   }
 
   def onSemanticallySuccessfulModification: Receive = {
@@ -155,6 +164,7 @@ object ErgoStatsCollector {
                       headersScore: Option[BigInt],
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       fullBlocksScore: Option[BigInt],
+                      maxPeerHeight : Option[Int],
                       launchTime: Long,
                       lastIncomingMessageTime: Long,
                       genesisBlockIdOpt: Option[String],
@@ -170,6 +180,7 @@ object ErgoStatsCollector {
         "network" -> ni.network.asJson,
         "headersHeight" -> ni.bestHeaderOpt.map(_.height).asJson,
         "fullHeight" -> ni.bestFullBlockOpt.map(_.header.height).asJson,
+        "maxPeerHeight" -> ni.maxPeerHeight.asJson,
         "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,
         "bestFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.encodedId).asJson,
         "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Algos.encode).asJson,
@@ -195,16 +206,18 @@ object ErgoStatsCollectorRef {
 
   def props(readersHolder: ActorRef,
             networkController: ActorRef,
+            syncTracker : ErgoSyncTracker,
             settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
             parameters: Parameters): Props =
-    Props(new ErgoStatsCollector(readersHolder, networkController, settings, timeProvider, parameters))
+    Props(new ErgoStatsCollector(readersHolder, networkController, syncTracker, settings, timeProvider, parameters))
 
   def apply(readersHolder: ActorRef,
             networkController: ActorRef,
+            syncTracker : ErgoSyncTracker,
             settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
             parameters: Parameters)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(readersHolder, networkController, settings, timeProvider, parameters))
+    system.actorOf(props(readersHolder, networkController, syncTracker, settings, timeProvider, parameters))
 
 }

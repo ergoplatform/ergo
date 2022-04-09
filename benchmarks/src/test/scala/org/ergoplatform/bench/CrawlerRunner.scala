@@ -49,8 +49,10 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
+  private val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
+
   val statsCollectorRef: ActorRef =
-    ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, ergoSettings, timeProvider, LaunchParameters)
+    ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider, LaunchParameters)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     ErgoUtilsApiRoute(ergoSettings),
@@ -59,8 +61,6 @@ class CrawlerRunner(args: Array[String]) extends Application {
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
-
-  private val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
 
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 

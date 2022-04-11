@@ -35,8 +35,7 @@ import scala.util.{Failure, Success, Try}
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: LDBVersionedStore,
-                override val constants: StateConstants,
-                override val parameters: Parameters)
+                override val constants: StateConstants)
   extends ErgoState[UtxoState]
     with TransactionValidation
     with UtxoStateReader
@@ -55,7 +54,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
-          new UtxoState(p, version, store, constants, parameters)
+          new UtxoState(p, version, store, constants)
         }
         store.clean(constants.keepVersions)
         rollbackResult
@@ -165,7 +164,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
-            new UtxoState(persistentProver, idToVersion(fb.id), store, constants, parameters)
+            new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
         }
         stateTry.recoverWith[UtxoState] { case e =>
@@ -183,7 +182,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       //todo: update state context with headers (when snapshot downloading is done), so
       //todo: application of the first full block after the snapshot should have correct state context
       //todo: (in particular, "lastHeaders" field of it)
-      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants, parameters))
+      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
 
     case a: Any =>
       log.error(s"Unhandled unknown modifier: $a")
@@ -229,9 +228,7 @@ object UtxoState {
       val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
-    val context = ErgoStateReader.storageStateContext(store, constants)
-    val parameters = context.currentParameters
-    new UtxoState(persistentProver, version, store, constants, parameters)
+    new UtxoState(persistentProver, version, store, constants)
   }
 
   /**
@@ -260,7 +257,7 @@ object UtxoState {
       paranoidChecks = true
     ).get
 
-    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants, parameters)
+    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }
 
 }

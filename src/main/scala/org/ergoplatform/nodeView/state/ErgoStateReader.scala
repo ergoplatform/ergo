@@ -11,7 +11,7 @@ import scorex.util.ScorexLogging
 trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
 
   def rootHash: ADDigest
-  def parameters: Parameters
+
   val store: LDBVersionedStore
   val constants: StateConstants
 
@@ -20,6 +20,8 @@ trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
   protected lazy val votingSettings: VotingSettings = chainSettings.voting
 
   def stateContext: ErgoStateContext = ErgoStateReader.storageStateContext(store, constants)
+
+  def parameters: Parameters = stateContext.currentParameters
 
   def genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(chainSettings)
 

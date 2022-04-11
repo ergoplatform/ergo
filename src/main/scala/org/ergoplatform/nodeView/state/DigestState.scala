@@ -26,7 +26,6 @@ import scala.util.{Failure, Success, Try}
 class DigestState protected(override val version: VersionTag,
                             override val rootHash: ADDigest,
                             override val store: LDBVersionedStore,
-                            override val parameters: Parameters,
                             ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
     with ScorexLogging
@@ -95,7 +94,7 @@ class DigestState protected(override val version: VersionTag,
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(versionBytes).get
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
-      new DigestState(version, rootHash, store, parameters, ergoSettings)
+      new DigestState(version, rootHash, store, ergoSettings)
     }
   }
 
@@ -147,7 +146,7 @@ class DigestState protected(override val version: VersionTag,
     val toUpdate = DigestState.metadata(newVersion, newRootHash, newStateContext)
 
     store.update(scorex.core.versionToBytes(newVersion), Seq.empty, toUpdate).map { _ =>
-      new DigestState(newVersion, newRootHash, store, parameters, ergoSettings)
+      new DigestState(newVersion, newRootHash, store, ergoSettings)
     }
   }
 
@@ -168,7 +167,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(scorex.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
-      new DigestState(version, rootHash, store, parameters, constants.settings)
+      new DigestState(version, rootHash, store, constants.settings)
     }
   }
 
@@ -179,14 +178,13 @@ object DigestState extends ScorexLogging with ScorexEncoding {
     val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     Try {
       val context = ErgoStateReader.storageStateContext(store, constants)
-      val parameters = context.currentParameters
       (versionOpt, rootHashOpt) match {
         case (Some(version), Some(rootHash)) =>
           val state = if (store.lastVersionID.map(w => bytesToVersion(w)).contains(version)) {
-            new DigestState(version, rootHash, store, parameters, constants.settings)
+            new DigestState(version, rootHash, store, constants.settings)
           } else {
             val inVersion = store.lastVersionID.map(w => bytesToVersion(w)).getOrElse(version)
-            new DigestState(inVersion, rootHash, store, parameters, constants.settings)
+            new DigestState(inVersion, rootHash, store, constants.settings)
               .update(version, rootHash, context).get //sync store
           }
           state.ensuring(bytesToVersion(store.lastVersionID.get) == version)
@@ -195,7 +193,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
         case _ =>
           val version = store.lastVersionID.get
           val rootHash = store.get(version).get
-          new DigestState(bytesToVersion(version), ADDigest @@ rootHash, store, parameters, constants.settings)
+          new DigestState(bytesToVersion(version), ADDigest @@ rootHash, store, constants.settings)
       }
     } match {
       case Success(state) => state

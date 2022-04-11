@@ -71,7 +71,7 @@ class Parameters(val height: Height,
   lazy val blockVersion: Byte = parametersTable(BlockVersion).toByte
 
   def withEip27Supported(eip27SupportedValue: Boolean): Parameters = {
-    new Parameters(this.height, this.parametersTable, this.proposedUpdate, eip27SupportedValue)
+    new Parameters(this.height, this.parametersTable, this.proposedUpdate, eip27Supported = eip27SupportedValue)
   }
 
   def update(height: Height,

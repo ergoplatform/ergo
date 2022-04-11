@@ -219,7 +219,7 @@ object UtxoState {
     Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
-  def create(dir: File, constants: StateConstants, parameters: Parameters): UtxoState = {
+  def create(dir: File, constants: StateConstants): UtxoState = {
     val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
@@ -229,6 +229,8 @@ object UtxoState {
       val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
+    val context = ErgoStateReader.storageStateContext(store, constants)
+    val parameters = context.currentParameters
     new UtxoState(persistentProver, version, store, constants, parameters)
   }
 

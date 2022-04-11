@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
-import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
@@ -29,8 +29,7 @@ import scala.concurrent.duration._
 class ErgoStatsCollector(readersHolder: ActorRef,
                          networkController: ActorRef,
                          settings: ErgoSettings,
-                         timeProvider: NetworkTimeProvider,
-                         parameters: Parameters)
+                         timeProvider: NetworkTimeProvider)
   extends Actor with ScorexLogging {
 
   override def preStart(): Unit = {
@@ -64,7 +63,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     launchTime = networkTime(),
     lastIncomingMessageTime = networkTime(),
     None,
-    parameters)
+    LaunchParameters)
 
   override def receive: Receive =
     onConnectedPeers orElse
@@ -196,15 +195,13 @@ object ErgoStatsCollectorRef {
   def props(readersHolder: ActorRef,
             networkController: ActorRef,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
-            parameters: Parameters): Props =
-    Props(new ErgoStatsCollector(readersHolder, networkController, settings, timeProvider, parameters))
+            timeProvider: NetworkTimeProvider): Props =
+    Props(new ErgoStatsCollector(readersHolder, networkController, settings, timeProvider))
 
   def apply(readersHolder: ActorRef,
             networkController: ActorRef,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
-            parameters: Parameters)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(readersHolder, networkController, settings, timeProvider, parameters))
+            timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(readersHolder, networkController, settings, timeProvider))
 
 }

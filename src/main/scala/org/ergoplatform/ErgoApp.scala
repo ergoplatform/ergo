@@ -12,7 +12,7 @@ import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, LaunchParameters, NetworkType}
+import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
@@ -86,9 +86,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val networkControllerRef: ActorRef = NetworkControllerRef(
     "networkController", scorexSettings.network, peerManagerRef, scorexContext)
 
-  private val parameters = LaunchParameters
-
-  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, parameters)
+  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
@@ -101,7 +99,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     }
 
   private val statsCollectorRef: ActorRef =
-    ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider, parameters)
+    ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
 
   private val syncTracker = ErgoSyncTracker(actorSystem, scorexSettings.network, timeProvider)
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)

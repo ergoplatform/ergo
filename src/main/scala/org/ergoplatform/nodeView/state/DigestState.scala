@@ -175,11 +175,11 @@ object DigestState extends ScorexLogging with ScorexEncoding {
   def create(versionOpt: Option[VersionTag],
              rootHashOpt: Option[ADDigest],
              dir: File,
-             constants: StateConstants,
-             parameters: Parameters): DigestState = {
+             constants: StateConstants): DigestState = {
     val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     Try {
-      val context = ErgoStateReader.storageStateContext(store, constants, parameters)
+      val context = ErgoStateReader.storageStateContext(store, constants)
+      val parameters = context.currentParameters
       (versionOpt, rootHashOpt) match {
         case (Some(version), Some(rootHash)) =>
           val state = if (store.lastVersionID.map(w => bytesToVersion(w)).contains(version)) {
@@ -191,7 +191,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
           }
           state.ensuring(bytesToVersion(store.lastVersionID.get) == version)
         case (None, None) if store.lastVersionID.isEmpty =>
-          ErgoState.generateGenesisDigestState(dir, constants.settings, parameters)
+          ErgoState.generateGenesisDigestState(dir, constants.settings)
         case _ =>
           val version = store.lastVersionID.get
           val rootHash = store.get(version).get
@@ -202,7 +202,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
       case Failure(e) =>
         store.close()
         log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
-        ErgoState.generateGenesisDigestState(dir, constants.settings, parameters)
+        ErgoState.generateGenesisDigestState(dir, constants.settings)
     }
   }
 

@@ -137,11 +137,12 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   def updateEip27Supported(parameters: Parameters,
                            epochVotes: Seq[(Byte, Int)],
                            votingSettings: VotingSettings): Boolean = {
+    val eip27Vote = 8.toByte
     if (parameters.eip27Supported) {
       true
     } else {
       val threshold = votingSettings.votingLength / 10 * 9 // about 90% for large enough epochs
-      if (epochVotes.find(_._1 == 8.toByte).map(_._2).getOrElse(0) >= threshold) {
+      if (epochVotes.find(_._1 == eip27Vote).map(_._2).getOrElse(0) >= threshold) {
         true
       } else {
         false

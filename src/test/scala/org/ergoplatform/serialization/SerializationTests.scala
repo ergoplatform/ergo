@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigestSerializer
 import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
-import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer, ErgoValidationSettingsUpdateSerializer}
+import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer, ErgoValidationSettingsUpdateSerializer, ParametersSerializer}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
@@ -45,6 +45,17 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
       recovered shouldBe b
       recovered.size shouldBe serializer.toBytes(b).length
     }
+  }
+
+  property("Parameters serialization w. and w/out EIP-27 flag") {
+    val serializer = ParametersSerializer
+    val esc = ergoStateContextGen.sample.get
+    val p = esc.currentParameters.withEip27Supported(true)
+    val recovered = serializer.parseBytes(serializer.toBytes(p))
+    recovered.eip27Supported shouldBe true
+
+    val pf = p.withEip27Supported(false)
+    serializer.parseBytes(serializer.toBytes(pf)).eip27Supported shouldBe false
   }
 
   property("ErgoStateContext serialization") {

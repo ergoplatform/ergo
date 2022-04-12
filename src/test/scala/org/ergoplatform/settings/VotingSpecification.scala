@@ -327,9 +327,33 @@ class VotingSpecification extends ErgoPropertyTest {
   }
 
   property("eip-27 support") {
+    val p: Parameters = Parameters(2, Map(OutputCostIncrease -> 100, BlockVersion -> 0), proposedUpdate)
+    p.eip27Supported shouldBe false
+    val vr: VotingData = VotingData.empty
+    val votes = Array(ErgoStateContext.eip27Vote, NoParameter, NoParameter)
 
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
+    val h = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
+    val esc2 = process(esc, p, h).get
+    esc2.currentParameters.eip27Supported shouldBe false
+    esc2.votingData.epochVotes.toMap.apply(ErgoStateContext.eip27Vote) shouldBe 1
+
+    // no quorum gathered - no EIP-27 support
+    val he = h.copy(votes = Array.fill(3)(NoParameter), height = 3)
+    val esc30 = process(esc2, p, he).get
+    val esc40 = process(esc30, p, he.copy(height = 4)).get
+    esc30.currentParameters.eip27Supported shouldBe false
+    esc40.currentParameters.eip27Supported shouldBe false
+
+    // EIP-27 support shown
+    val esc31 = process(esc2, p, h.copy(height = 3)).get
+    esc31.votingData.epochVotes.toMap.apply(ErgoStateContext.eip27Vote) shouldBe 2
+    esc31.currentParameters.eip27Supported shouldBe false
+
+    val p2: Parameters = Parameters(2, Map(OutputCostIncrease -> 101, BlockVersion -> 0), proposedUpdate)
+    val esc41 = process(esc31, p2, he.copy(height = 4)).get
+    esc41.currentParameters.eip27Supported shouldBe true
   }
-
 
   private def checkValidationSettings(vs: ErgoValidationSettings, updated: ErgoValidationSettingsUpdate): Unit = {
     vs.rules.foreach { r =>
@@ -345,7 +369,7 @@ class VotingSpecification extends ErgoPropertyTest {
                       header: Header): Try[ErgoStateContext] = {
     val upcoming = esc.upcoming(header.minerPk, header.timestamp, header.nBits, header.votes, expectedParameters.proposedUpdate, header.version)
     val calculatedParams = upcoming.currentParameters
-    expectedParameters.parametersTable.foreach{case (paramId, paramValue) =>
+    expectedParameters.parametersTable.foreach { case (paramId, paramValue) =>
       calculatedParams.parametersTable(paramId) shouldBe paramValue
     }
     val extension = (upcoming.currentParameters.toExtensionCandidate ++ upcoming.validationSettings.toExtensionCandidate).toExtension(headerId)

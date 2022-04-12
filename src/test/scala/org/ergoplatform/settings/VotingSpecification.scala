@@ -326,6 +326,11 @@ class VotingSpecification extends ErgoPropertyTest {
     esc2.currentParameters.blockVersion shouldBe 2
   }
 
+  property("eip-27 support") {
+
+  }
+
+
   private def checkValidationSettings(vs: ErgoValidationSettings, updated: ErgoValidationSettingsUpdate): Unit = {
     vs.rules.foreach { r =>
       vs.isActive(r._1) shouldBe !updated.rulesToDisable.contains(r._1)

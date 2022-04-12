@@ -216,8 +216,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
             val proposedVotes = votes.map(_ -> 1)
             val newVoting = VotingData(proposedVotes)
             val eip27Supported = updateEip27Supported(params, votingData.epochVotes, ergoSettings.chainSettings.voting)
-            val ps = params.withEip27Supported(eip27Supported)
-            new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, ps, extractedValidationSettings, newVoting)(ergoSettings)
+            val ps27 = params.withEip27Supported(eip27Supported)
+            new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, ps27, extractedValidationSettings, newVoting)(ergoSettings)
           }
         case _ =>
           val newVotes = votes

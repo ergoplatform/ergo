@@ -115,8 +115,10 @@ class ErgoApp(args: Args) extends ScorexLogging {
     deliveryTracker
   )
 
-  // Launching PeerSynchronizer actor which is then registering itself at network controller
-  PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network, featureSerializers)
+  if (ergoSettings.scorexSettings.network.peerDiscovery) {
+    // Launching PeerSynchronizer actor which is then registering itself at network controller
+    PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network, featureSerializers)
+  }
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),

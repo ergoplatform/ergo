@@ -2,15 +2,15 @@ package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
-import io.circe.{Json, Decoder}
-import org.ergoplatform.http.api.{WalletApiRoute, ApiCodecs}
+import io.circe.{Decoder, Json}
+import org.ergoplatform.http.api.{ApiCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
-import org.ergoplatform.nodeView.wallet.{ErgoAddressJsonEncoder, AugWalletTransaction}
-import org.ergoplatform.settings.{Constants, Args, ErgoSettings}
+import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
+import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoAddress, Pay2SAddress}
@@ -218,6 +218,31 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
       response.size shouldBe walletTxs.size
       responseAs[Seq[AugWalletTransaction]] shouldEqual walletTxs
+    }
+  }
+
+  it should "return wallet transactions by scanId" in {
+    Get(prefix + "/transactionsByScanId/1") ~> route ~> check {
+      import AugWalletTransaction._
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[AugWalletTransaction]]
+      val walletTxs = response.filter { awtx =>
+        awtx.wtx.scanIds.contains(1.shortValue())
+      }
+      walletTxs.size shouldBe response.size
+    }
+  }
+
+  it should "return wallet transactions by scanId including unconfirmed txs" in {
+    Get(prefix + "/transactionsByScanId/1?includeUnconfirmed=true") ~> route ~> check {
+      import AugWalletTransaction._
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[AugWalletTransaction]]
+      val walletTxs = response.filter { awtx =>
+        awtx.wtx.scanIds.contains(1.shortValue())
+      }
+      walletTxs.size shouldBe response.size
+      walletTxs.forall(_.numConfirmations == 0) shouldBe true
     }
   }
 

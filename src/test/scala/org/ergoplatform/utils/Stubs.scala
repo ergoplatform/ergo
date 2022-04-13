@@ -181,6 +181,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
 
+      case GetScanTransactions(scanId, includeUnconfirmed) =>
+        if (includeUnconfirmed) {
+          sender() ! ScanRelatedTxsResponse(walletTxsForScan(scanId, includeUnconfirmed = true))
+        } else {
+          sender() ! ScanRelatedTxsResponse(walletTxsForScan(scanId))
+        }
+
       case GetTransactions =>
         sender() ! walletTxs
 
@@ -282,6 +289,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     )
     val walletTxs: Seq[AugWalletTransaction] =
       Gen.listOf(augWalletTransactionGen).sample.get
+
+    def walletTxsForScan(scanId: ScanId, includeUnconfirmed: Boolean = false): Seq[AugWalletTransaction] =
+      Gen.listOf(augWalletTransactionForScanGen(scanId, includeUnconfirmed)).sample.get
 
     def props(): Props = Props(new WalletActorStub)
 

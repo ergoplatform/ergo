@@ -19,8 +19,7 @@ import Extension.SystemParametersPrefix
   */
 class Parameters(val height: Height,
                  val parametersTable: Map[Byte, Int],
-                 val proposedUpdate: ErgoValidationSettingsUpdate,
-                 val eip27Supported: Boolean)
+                 val proposedUpdate: ErgoValidationSettingsUpdate)
   extends ErgoLikeParameters {
 
   import Parameters._
@@ -70,10 +69,6 @@ class Parameters(val height: Height,
 
   lazy val blockVersion: Byte = parametersTable(BlockVersion).toByte
 
-  def withEip27Supported(eip27SupportedValue: Boolean): Parameters = {
-    new Parameters(this.height, this.parametersTable, this.proposedUpdate, eip27Supported = eip27SupportedValue)
-  }
-
   def update(height: Height,
              forkVote: Boolean,
              epochVotes: Seq[(Byte, Int)],
@@ -81,7 +76,7 @@ class Parameters(val height: Height,
              votingSettings: VotingSettings): (Parameters, ErgoValidationSettingsUpdate) = {
     val (table1, activatedUpdate) = updateFork(height, parametersTable, forkVote, epochVotes, proposedUpdate, votingSettings)
     val table2 = updateParams(table1, epochVotes, votingSettings)
-    (Parameters(height, table2, proposedUpdate, eip27Supported), activatedUpdate)
+    (Parameters(height, table2, proposedUpdate), activatedUpdate)
   }
 
   def updateFork(height: Height,
@@ -338,9 +333,8 @@ object Parameters {
 
   def apply(h: Height,
             paramsTable: Map[Byte, Int],
-            update: ErgoValidationSettingsUpdate,
-            eip27Supported: Boolean = false): Parameters = {
-    new Parameters(h, paramsTable, update, eip27Supported)
+            update: ErgoValidationSettingsUpdate): Parameters = {
+    new Parameters(h, paramsTable, update)
   }
 
   def parseExtension(h: Height, extension: Extension): Try[Parameters] = Try {
@@ -360,7 +354,7 @@ object Parameters {
       .getOrElse(ErgoValidationSettingsUpdate.empty)
 
     require(paramsTable.nonEmpty, s"Parameters table is empty in extension: $extension")
-    Parameters(h, paramsTable, proposedUpdate, eip27Supported = false)
+    Parameters(h, paramsTable, proposedUpdate)
   }
 
   /**
@@ -393,16 +387,8 @@ object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs 
   override def serialize(params: Parameters, w: Writer): Unit = {
     require(params.parametersTable.nonEmpty, s"$params is empty")
     w.putUInt(params.height)
-
     val paramsSize = params.parametersTable.size
-
-    val paramsSizeAndEip27 = if(params.eip27Supported) {
-      Int.MaxValue - paramsSize
-    } else {
-      paramsSize
-    }
-
-    w.putUInt(paramsSizeAndEip27)
+    w.putUInt(paramsSize)
     params.parametersTable.foreach { case (k, v) =>
       w.put(k)
       w.putInt(v)
@@ -412,17 +398,12 @@ object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs 
 
   override def parse(r: Reader): Parameters = {
     val height = r.getUInt().toIntExact
-    val paramsSizeAndEip27 = r.getUInt().toIntExact
-    val (tableLength, eip27Supported) = if(paramsSizeAndEip27 > Int.MaxValue / 2){
-      (Int.MaxValue - paramsSizeAndEip27, true)
-    } else {
-      (paramsSizeAndEip27, false)
-    }
+    val tableLength = r.getUInt().toIntExact
     val table = (0 until tableLength).map { _ =>
       r.getByte() -> r.getInt()
     }
     val proposedUpdate = ErgoValidationSettingsUpdateSerializer.parse(r)
-    Parameters(height, table.toMap, proposedUpdate, eip27Supported)
+    Parameters(height, table.toMap, proposedUpdate)
   }
 
   implicit val jsonEncoder: Encoder[Parameters] = { p: Parameters =>

@@ -20,8 +20,7 @@ object TransactionExecutionBenchmark extends HistoryTestHelpers with NVBenchmark
   override val parameters =
     new Parameters(height = 0,
       parametersTable = Parameters.DefaultParameters + (MaxBlockCostIncrease -> Int.MaxValue),
-      proposedUpdate = ErgoValidationSettingsUpdate.empty,
-      eip27Supported = false
+      proposedUpdate = ErgoValidationSettingsUpdate.empty
     )
 
   def main(args: Array[String]): Unit = {

@@ -626,7 +626,7 @@ object CandidateGenerator extends ScorexLogging {
 
     val reemissionSettings = chainSettings.reemission
     val reemissionRules = reemissionSettings.reemissionRules
-    val eip27Supported = stateContext.currentParameters.eip27Supported
+    val eip27Supported = stateContext.eip27Supported
     val eip27ActivationHeight = if (eip27Supported) {
       reemissionSettings.activationHeight
     } else {

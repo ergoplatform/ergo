@@ -210,6 +210,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   /**
     * Helper method to validate reemission rules according to EIP-27
     */
+    // todo: checks should be done only in UTXO mode and if EIP-27 got support before activation
   def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
                                outputCandidates: Seq[ErgoBoxCandidate],
                                stateContext: ErgoStateContext): Try[Unit] = {
@@ -228,7 +229,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       lazy val emissionRules = chainSettings.emissionRules
 
       lazy val height = stateContext.currentHeight
-      lazy val eip27Supported = stateContext.currentParameters.eip27Supported
+      lazy val eip27Supported = stateContext.eip27Supported
       lazy val activationHeight = if(eip27Supported) {
         reemissionSettings.activationHeight
       } else {

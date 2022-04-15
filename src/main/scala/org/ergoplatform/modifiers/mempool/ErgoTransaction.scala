@@ -210,12 +210,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   /**
     * Helper method to validate reemission rules according to EIP-27
     */
-    // todo: checks should be done only in UTXO mode and if EIP-27 got support before activation
   def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
                                outputCandidates: Seq[ErgoBoxCandidate],
                                stateContext: ErgoStateContext): Try[Unit] = {
-    val res = Try {
-
+    Try {
       lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
       lazy val reemissionRules = reemissionSettings.reemissionRules
 
@@ -230,78 +228,80 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
       lazy val height = stateContext.currentHeight
       lazy val eip27Supported = stateContext.eip27Supported
-      lazy val activationHeight = if(eip27Supported) {
+      lazy val activationHeight = if (eip27Supported) {
         reemissionSettings.activationHeight
       } else {
         Int.MaxValue
       }
 
-      // reemission logic below
-      var reemissionSpending = false
-      boxesToSpend.foreach { box =>
-        // checking EIP-27 rules for emission box
-        if (box.value > 100000 * EmissionRules.CoinsInOneErgo) { // for efficiency, skip boxes with less than 100,000 ERG
-          // on activation height, emissionNft is not in emission box yet, but in injection box
-          if (box.tokens.contains(emissionNftId) ||
-            (height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId))) {
+      if (stateContext.currentHeight >= activationHeight) {
+        // reemission check logic below
+        var reemissionSpending = false
+        boxesToSpend.foreach { box =>
+          // checking EIP-27 rules for emission box
+          if (box.value > 100000 * EmissionRules.CoinsInOneErgo) { // for efficiency, skip boxes with less than 100,000 ERG
+            // on activation height, emissionNft is not in emission box yet, but in injection box
+            if (box.tokens.contains(emissionNftId) ||
+              (height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId))) {
 
-            // if emission contract NFT is in the input, remission tokens should be there also
-            val reemissionTokensIn = if(height == activationHeight) {
-              boxesToSpend(1).tokens.getOrElse(reemissionTokenId, 0L)
+              // if emission contract NFT is in the input, remission tokens should be there also
+              val reemissionTokensIn = if (height == activationHeight) {
+                boxesToSpend(1).tokens.getOrElse(reemissionTokenId, 0L)
+              } else {
+                box.tokens.getOrElse(reemissionTokenId, 0L)
+              }
+              require(reemissionTokensIn > 0)
+
+              // output positions guaranteed by emission contract
+              val emissionOut = outputCandidates(0)
+              val rewardsOut = outputCandidates(1)
+
+              // check positions of emission NFT and reemission token
+              val firstEmissionBoxTokenId = emissionOut.additionalTokens.apply(0)._1
+              val secondEmissionBoxTokenId = emissionOut.additionalTokens.apply(1)._1
+              require(firstEmissionBoxTokenId.sameElements(emissionNftIdBytes))
+              require(secondEmissionBoxTokenId.sameElements(reemissionTokenIdBytes))
+
+              //we're checking how emission box is paying reemission tokens below
+              val emissionTokensOut = emissionOut.tokens.getOrElse(reemissionTokenId, 0L)
+              val rewardsTokensOut = rewardsOut.tokens.getOrElse(reemissionTokenId, 0L)
+              require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission token not preserved")
+
+              val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
+              require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
             } else {
-              box.tokens.getOrElse(reemissionTokenId, 0L)
+              //this path can be removed after EIP-27 activation
+              if (height >= activationHeight && box.ergoTree == chainSettings.monetary.emissionBoxProposition) {
+                //we require emission contract NFT and reemission token to be presented in emission output
+                val emissionOutTokens = outputCandidates(0).tokens
+                require(emissionOutTokens.contains(emissionNftId))
+                require(emissionOutTokens.contains(reemissionTokenId))
+              }
             }
-            require(reemissionTokensIn > 0)
-
-            // output positions guaranteed by emission contract
-            val emissionOut = outputCandidates(0)
-            val rewardsOut = outputCandidates(1)
-
-            // check positions of emission NFT and reemission token
-            val firstEmissionBoxTokenId = emissionOut.additionalTokens.apply(0)._1
-            val secondEmissionBoxTokenId = emissionOut.additionalTokens.apply(1)._1
-            require(firstEmissionBoxTokenId.sameElements(emissionNftIdBytes))
-            require(secondEmissionBoxTokenId.sameElements(reemissionTokenIdBytes))
-
-            //we're checking how emission box is paying reemission tokens below
-            val emissionTokensOut = emissionOut.tokens.getOrElse(reemissionTokenId, 0L)
-            val rewardsTokensOut = rewardsOut.tokens.getOrElse(reemissionTokenId, 0L)
-            require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission token not preserved")
-
-            val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
-            require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
-          } else {
-            //this path can be removed after EIP-27 activation
-            if (height >= activationHeight && box.ergoTree == chainSettings.monetary.emissionBoxProposition) {
-              //we require emission contract NFT and reemission token to be presented in emission output
-              val emissionOutTokens = outputCandidates(0).tokens
-              require(emissionOutTokens.contains(emissionNftId))
-              require(emissionOutTokens.contains(reemissionTokenId))
-            }
+          } else if (box.tokens.contains(reemissionTokenId) && height > activationHeight) {
+            // reemission tokens spent after EIP-27 activation
+            reemissionSpending = true
           }
-        } else if (box.tokens.contains(reemissionTokenId) && height > activationHeight) {
-          // reemission tokens spent after EIP-27 activation
-          reemissionSpending = true
         }
-      }
 
-      // if box with reemission tokens spent
-      if (reemissionSpending) {
-        val payToReemissionContract = reemissionRules.payToReemission()
-        val toBurn = boxesToSpend.map { box =>
-          box.tokens.getOrElse(reemissionTokenId, 0L)
-        }.sum
-        log.debug(s"Reemission tokens to burn: $toBurn")
-        val reemissionOutputs = outputCandidates.filter { out =>
-          require(!out.tokens.contains(reemissionTokenId), "outputs contain reemission token")
-          out.ergoTree == payToReemissionContract
+        // if box with reemission tokens spent
+        if (reemissionSpending) {
+          val payToReemissionContract = reemissionRules.payToReemission()
+          val toBurn = boxesToSpend.map { box =>
+            box.tokens.getOrElse(reemissionTokenId, 0L)
+          }.sum
+          log.debug(s"Reemission tokens to burn: $toBurn")
+          val reemissionOutputs = outputCandidates.filter { out =>
+            require(!out.tokens.contains(reemissionTokenId), "outputs contain reemission token")
+            out.ergoTree == payToReemissionContract
+          }
+          val sentToReemission = reemissionOutputs.map(_.value).sum
+          require(sentToReemission == toBurn, "Burning condition violated")
         }
-        val sentToReemission = reemissionOutputs.map(_.value).sum
-        require(sentToReemission == toBurn, "Burning condition violated")
+      } else {
+        Success(())
       }
     }
-    println("res: " + res)
-    res
   }
 
   /**

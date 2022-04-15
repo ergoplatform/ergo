@@ -17,6 +17,7 @@ import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
+import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
@@ -300,20 +301,6 @@ object ErgoHistory extends ScorexLogging {
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
         }
-    }
-
-    nodeSettings.checkpoint.foreach { cs =>
-      if (cs.checkOnStart) {
-        history.bestHeaderAtHeight(cs.height).foreach { bh =>
-          if (bh.id != cs.blockId) {
-            history.bestHeaderOpt.foreach { bh2 =>
-              bh2.height.to(bh.height, -1).foreach { h =>
-                history.bestHeaderIdAtHeight(h).foreach(id => history.forgetHeader(id))
-              }
-            }
-          }
-        }
-      }
     }
 
     repairIfNeeded(history)

@@ -8,6 +8,8 @@ sealed trait StateType {
 
   def stateTypeName: String
   def requireProofs: Boolean
+  def holdsUtxoSet: Boolean = !requireProofs
+
   override def toString: String = stateTypeName
 }
 

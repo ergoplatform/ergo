@@ -17,7 +17,6 @@ import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
-import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}

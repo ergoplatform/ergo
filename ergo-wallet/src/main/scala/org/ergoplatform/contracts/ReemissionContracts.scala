@@ -10,7 +10,14 @@ import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScript
 
 trait ReemissionContracts {
 
+  /**
+    * @return - ID of NFT token associated with re-emission contract
+    */
   def reemissionNftIdBytes: Array[Byte]
+
+  /**
+    * @return - height when reemission starts
+    */
   def reemissionStartHeight: Int
 
   /**
@@ -32,6 +39,8 @@ trait ReemissionContracts {
     * Reemission box contract
     */
   def reemissionBoxProp(ms: MonetarySettings): ErgoTree = {
+    val reemissionRewardPerBlock = 2 * 1000000000L // 2 ERG
+
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
 
@@ -63,9 +72,8 @@ trait ReemissionContracts {
     // reemission contract must be preserved
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(reemissionOut))
 
-    // miner's reward
-    val coinsToIssue = 3 * 1000000000L // 3 ERG
-    val correctCoinsIssued = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
+    // miner's reward condition
+    val correctCoinsIssued = EQ(reemissionRewardPerBlock, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
 
     // when reemission contract box got merged with other boxes
     val sponsored = {

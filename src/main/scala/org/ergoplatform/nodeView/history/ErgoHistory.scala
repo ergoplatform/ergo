@@ -302,20 +302,6 @@ object ErgoHistory extends ScorexLogging {
         }
     }
 
-    nodeSettings.checkpoint.foreach { cs =>
-      if (cs.checkOnStart) {
-        history.bestHeaderAtHeight(cs.height).foreach { bh =>
-          if (bh.id != cs.blockId) {
-            history.bestHeaderOpt.foreach { bh2 =>
-              bh2.height.to(bh.height, -1).foreach { h =>
-                history.bestHeaderIdAtHeight(h).foreach(id => history.forgetHeader(id))
-              }
-            }
-          }
-        }
-      }
-    }
-
     repairIfNeeded(history)
 
     log.info("History database read")

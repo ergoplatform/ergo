@@ -8,14 +8,13 @@ import scorex.util.ModifierId
 
 import scala.concurrent.duration.FiniteDuration
 
-case class CheckpointSettings(height: Height, blockId: ModifierId, checkOnStart: Boolean)
+case class CheckpointSettings(height: Height, blockId: ModifierId)
 
 trait CheckpointingSettingsReader extends ModifierIdReader {
   implicit val checkpointSettingsReader: ValueReader[CheckpointSettings] = { (cfg, path) =>
     CheckpointSettings(
       cfg.as[Int](s"$path.height"),
-      ModifierId @@ cfg.as[String](s"$path.blockId"),
-      cfg.getOrElse[Boolean](s"$path.checkOnStart", default = false)
+      ModifierId @@ cfg.as[String](s"$path.blockId")
     )
   }
 }

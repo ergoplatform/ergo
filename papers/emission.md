@@ -45,18 +45,18 @@ where the re-emission contract is working like emission one, but does not have e
 Updated Emission Details
 ------------------------
 
-With the updated emission schedule from above, re-emission would be enough for 
-
+With the updated emission schedule from above, re-emission (with 3 ERG re-emission reward per block) would be enough for 
+4,566,336 blocks (approx. 17.38 years).
 
 General Design
 --------------
 
-Emission in Ergo is done via a contract, which is existing since before genesis block. Changing emission then in
-an elegant way is tricky. 
+Emission in Ergo is done via a contract, which is existing since before genesis block (pre-genesis state). Changing 
+emission then in an elegant way is tricky. 
 
 This EIP is proposing to use existing contract in combination with checks done in the core protocol which are mandatory 
-only for mining nodes. Non-updated nodes will successfully validate blocks which are valid for the new nodes (both 
-checking and not checking new rules) after activation of the new rules. Thus this change is soft-fork. 
+only for mining nodes. Non-updated nodes will successfully validate all transactions which are valid for the new nodes (both 
+checking and not checking new rules), after activation of the new rules. Thus this change is soft-fork. 
 
 This EIP offers following procedure for that:
 
@@ -162,7 +162,18 @@ Contracts
 Voting for the Soft-Fork
 ------------------------
 
-TODO: 
+To vote for the soft-fork on the mainnet (similar testnet voting already done), a solo miner or a pool needs to add 
+following setting to the config 
+```
+ergo {
+  voting {
+    8 = 1000
+  }
+}
+```
+
+When a voting epoch with *90+%* support (blocks with a vote for increasing parameter #8, which holds transaction 
+output cost) will take place before activation height, EIP-27 locks in and will be activated on activation height.
 
 Activation Details
 ------------------

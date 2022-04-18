@@ -81,7 +81,7 @@ object ReemissionRules {
 
     var lowSet = false
 
-    val total = (777000 to rs.reemissionStartHeight).map { h =>
+    val total = (777216 to rs.reemissionStartHeight).map { h =>
       val e = emissionRules.emissionAtHeight(h) / EmissionRules.CoinsInOneErgo
       val r = reemissionRules.reemissionForHeight(h, emissionRules) / EmissionRules.CoinsInOneErgo
 

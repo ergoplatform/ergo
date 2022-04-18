@@ -81,7 +81,7 @@ object ReemissionRules {
 
     var lowSet = false
 
-    val total = (rs.activationHeight to rs.reemissionStartHeight).map { h =>
+    val total = (777000 to rs.reemissionStartHeight).map { h =>
       val e = emissionRules.emissionAtHeight(h) / EmissionRules.CoinsInOneErgo
       val r = reemissionRules.reemissionForHeight(h, emissionRules) / EmissionRules.CoinsInOneErgo
 
@@ -96,7 +96,7 @@ object ReemissionRules {
       r
     }.sum
 
-    val totalBlocks = total / 2 // 3 erg per block
+    val totalBlocks = total / 3 // 3 erg per block
     println("Total reemission: " + total + " ERG")
     println("Total reemission is enough for: " + totalBlocks + " blocks (" + totalBlocks / 720.0 / 365.0 + " years")
   }

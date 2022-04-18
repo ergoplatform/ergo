@@ -4,7 +4,7 @@ Emission  Retargeting Soft-Fork Proposal
 * Author: kushti
 * Status: Proposed
 * Created: 17-Dec-2021
-* Last edited: 20-Dec-2020
+* Last edited: 18-Apr-2022
 * License: CC0
 * Forking: Soft Fork
 
@@ -12,13 +12,13 @@ Emission  Retargeting Soft-Fork Proposal
 Motivation 
 ----------
 
-Long-term security of the Ergo protocol, including crypto-economic security, is always of highest priority. 
- One of the hottest topic in this field is (in)stability of cryptocurrency protocols without stable block 
- rewards coming from emission (see e.g. [1] for details). 
+Long-term security of the Ergo protocol, including its crypto-economic security, is always of highest priority for the community 
+and core developers. One of the hottest research topic in this field is possible (in)stability of cryptocurrency protocols without stable 
+block rewards coming from emission (see e.g. [1] for details). 
  
-It was planned during the launch of the Ergo network that after end of emission miners will be rewarded with 
-transaction fees and also with storage rent. However, it is hard to estimate yet how successfully will storage rent replace
-emission. 
+It was planned during the launch of the Ergo network that after the end of emission miners will be rewarded with 
+transaction fees and also with storage rent (unique for Ergo source of mining income). However, it is hard to estimate yet how successfully 
+will storage rent replace emission. 
 
 Thus it was proposed on the ErgoForum informally (in [2] and [3]) to prolong emission (with preserving total supply) 
 via a soft-fork([4]). This EIP is concluding previous discussions and provides details on emission soft-fork 
@@ -27,15 +27,15 @@ design and implementation.
 Updated Emission Schedule
 -------------------------
 
-Starting from block #XXX,XXX (first block of 684th epoch), new emission rules applied on top of rules described in the 
+Starting from block #777,216 (first block of 759th voting epoch), new emission rules applied on top of rules described in the 
 Ergo Whitepaper.
 
-Before end of the current emission (before block 2,080,800):
+Before the end of the current emission (block #2,080,800):
 
 * if block reward is not less than 15 ERG, send 12 ERG from it to the reemission contract
 * otherwise, block reward R is less than 15 ERG, send R - 3 ERG from it to the reemission contract
 
-After end of the current emission (from block 2,080,800):
+After end of the current emission (starting from block 2,080,800):
 
 * pay 3 ERG each block from the re-emission contract,
 
@@ -45,6 +45,7 @@ where the re-emission contract is working like emission one, but does not have e
 Updated Emission Details
 ------------------------
 
+With the updated emission schedule from above, re-emission would be enough for 
 
 
 General Design

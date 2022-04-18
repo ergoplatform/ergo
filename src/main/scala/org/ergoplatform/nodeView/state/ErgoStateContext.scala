@@ -136,9 +136,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
-  private def updateEip27Supported(epochVotes: Seq[(Byte, Int)],
-                           votingSettings: VotingSettings): Boolean = {
-    if (eip27Supported) {
+  private def updateEip27Supported(epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Boolean = {
+    if (this.eip27Supported) {
       true
     } else {
       // about 90% for large enough epochs, 918 for the mainnet.
@@ -319,6 +318,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
 object ErgoStateContext {
 
+  /**
+    * Parameter to vote for to support EIP-27 soft-fork.
+    * Also used for output cost.
+    */
   val eip27Vote: Byte = 8
 
   def empty(constants: StateConstants, parameters: Parameters): ErgoStateContext = {
@@ -379,9 +382,12 @@ case class ErgoStateContextSerializer(ergoSettings: ErgoSettings) extends Scorex
     VotingDataSerializer.serialize(esc.votingData, w)
     ParametersSerializer.serialize(esc.currentParameters, w)
     ErgoValidationSettingsSerializer.serialize(esc.validationSettings, w)
+
+    // serialization hack to encode EIP-27 support (lock-in) flag along with extension availability in a single byte
+    // to have the same serialization format for nodes before EIP-27 implementation and after
     val eip27AndExtensionSize = {
       val lastExtensionSize = esc.lastExtensionOpt.size // 0 or 1
-      val eip27Support = if(esc.eip27Supported) {
+      val eip27Support = if (esc.eip27Supported) {
         Eip27SupportValue
       } else {
         0

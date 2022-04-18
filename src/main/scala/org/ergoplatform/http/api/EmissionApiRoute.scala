@@ -28,10 +28,16 @@ case class EmissionApiRoute(ergoSettings: ErgoSettings)
     emissionAt ~ scripts
   }
 
+  /**
+    * API method to display emission data for given height
+    */
   val emissionAt: Route = (pathPrefix("at" / LongNumber) & get) { height =>
     ApiResponse(emissionInfoAtHeight(height, emissionRules, reemissionSettings))
   }
 
+  /**
+    * API method which displays emission and re-emission related scripts as P2S addresses
+    */
   val scripts: Route = pathPrefix("scripts") {
     val ms = ergoSettings.chainSettings.monetary
 

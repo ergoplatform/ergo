@@ -21,6 +21,9 @@ trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
 
   def stateContext: ErgoStateContext = ErgoStateReader.storageStateContext(store, constants)
 
+  /**
+    * @return current network parameters used in transaction and block validation (block cost and size limits etc)
+    */
   def parameters: Parameters = stateContext.currentParameters
 
   def genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(chainSettings)

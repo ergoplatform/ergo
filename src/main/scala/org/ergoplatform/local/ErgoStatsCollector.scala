@@ -195,13 +195,15 @@ object ErgoStatsCollectorRef {
   def props(readersHolder: ActorRef,
             networkController: ActorRef,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider): Props =
+            timeProvider: NetworkTimeProvider): Props = {
     Props(new ErgoStatsCollector(readersHolder, networkController, settings, timeProvider))
+  }
 
   def apply(readersHolder: ActorRef,
             networkController: ActorRef,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
+            timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef = {
     system.actorOf(props(readersHolder, networkController, settings, timeProvider))
+  }
 
 }

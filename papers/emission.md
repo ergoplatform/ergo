@@ -39,7 +39,7 @@ After end of the current emission (starting from block 2,080,800):
 
 * pay 3 ERG each block from the re-emission contract,
 
-where the re-emission contract is working like emission one, but does not have emission curve encoded, only flat payment.
+where the re-emission contract is working like emission one, but does not have emission curve encoded, only flat payout.
 
 
 Updated Emission Details
@@ -61,28 +61,30 @@ checking and not checking new rules), after activation of the new rules. Thus th
 This EIP offers following procedure for that:
 
 * inject two new tokens into emission contract. First token is a singleton one issued to mark emission box (could be used
-for tracking emission box efficiently) . Second token is reemission token, it will go to mining reward boxes, and 
+for tracking emission box efficiently also). Second token is reemission token, it will go to mining reward boxes, and 
 amount of reemission tokens in a mining rewards box shows how many ERG a miner should send to the re-emission contract 
-when spending the box. Any miner can do the injection. The injection will happen on activation height.
+when spending the box. Any miner can do the injection. The injection happens on activation height.
 
-* a new kind of contract, the re-emission Contract is paying 3 ERG each block after end of emission
+* a new kind of contract, the re-emission contract is paying 3 ERG each block after end of emission
 
-* a new kind of contract, pay-to-reemission contract. Miners enforced to pay to this proxy contract. The contract is 
-similar to existing fee contract, but with no time-lock. 
+* a new kind of contract, pay-to-reemission contract, which is a proxy contract before the re-emission contract. 
+Miners enforced to pay to this proxy contract. The contract is similar to existing fee contract, but with no time-lock. 
 
 * new consensus-level checks are verifying that a proper amount of re-emission token is going from the emission box to 
-a miner rewards box, and also that during spending a box which is not emission box but contains re-emission tokens, 
-the tokens are being burnt and the same amount of nanoERG is locked by the reemission contract. 
-The checks can be switched off via a soft-fork.
-
- 
+a miner rewards box, and also that during spending a box which is not emission box but contains re-emission tokens 
+(miner rewards box), the tokens are being burnt and the same amount of nanoERG is locked by the reemission contract. 
+The checks can be switched off via a soft-fork (via voting on disabling rule #123).
 
 Contracts
 -------------------
 
-**Reemission contract**:
+**Re-emission contract**: this contract pays 3 ERG per block starting from block #2,080,800 . Also this contracts allows 
+for merging with other boxes, merging transaction must have only two otuputs, first output is for re-emission contract,
+second one is to pay mining fee supposedly (its value can be 0.01 ERG at most)
 
 ```scala
+    val reemissionRewardPerBlock = monetarySettings.oneEpochReduction // 3 ERG
+
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
 
@@ -121,8 +123,7 @@ Contracts
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(reemissionOut))
     
     // miner's reward
-    val coinsToIssue = monetarySettings.oneEpochReduction // 3 ERG
-    val correctCoinsIssued = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
+    val correctCoinsIssued = EQ(reemissionRewardPerBlock, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
     
     // when reemission contract box got merged with other boxes
     val sponsored = AND(
@@ -147,7 +148,7 @@ Contracts
     )
 ```
 
-**Pay-to-Reemission contract**:
+**Pay-to-Reemission contract**: ensures that a box protected with the contract can be spent to re-emission contract only.
 
 ```scala
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
@@ -190,7 +191,8 @@ The injection box is protected by the script
 }
 ```
 
-so spendable by anyone who can spend 30M ERG at least provided in the first input. 
+so spendable by anyone who can spend 30M ERG at least provided in the first input (presumable, only emission box can 
+have so many ERGs). 
 
 API Methods Changed
 -------------------
@@ -209,7 +211,9 @@ Re-emission token id: **004b1528123ef62ce2bbb7036ad2dd553e6a64252f86746a706729fa
 
 Reemission contract NFT id: **001b81ceed43f4328754e368fc6a34c367ab8e00d1272be33c565bf247ad5748**
 
-Activation height: ****
+Activation height: **188001**
+
+Re-emission start height: **186400**
 
 
 Mainnet Data
@@ -221,6 +225,7 @@ Re-emission token id: *not set yet*
 
 Reemission contract NFT id: *not set yet*
 
+Activation height: *not set yet*
 
 References
 ----------

@@ -55,6 +55,7 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
   * @param genesisStateDigest - genesis state digest (before the very first block)
   * @param currentParameters  - parameters at the beginning of the current voting epoch
   * @param votingData         - votes for parameters change within the current voting epoch
+  * @param eip27Supported     - whether a voting epoch before indicated support for EIP-27
   */
 class ErgoStateContext(val lastHeaders: Seq[Header],
                        val lastExtensionOpt: Option[Extension],
@@ -136,12 +137,16 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
+  /**
+    * Helper method to decide whether enough support (at least 90% mining hashpower support) for EIP-27 was expressed
+    * before. Called at the beginning of each voting epoch.
+    */
   private def updateEip27Supported(epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Boolean = {
     if (this.eip27Supported) {
       true
     } else {
       // about 90% for large enough epochs, 918 for the mainnet.
-      // Math.max to have at least 2 votes needed per epoch for tests, where voting epoch length is equal to 2
+      // Math.max() is to have at least 2 votes needed per epoch for tests, where voting epoch length is equal to 2
       val threshold = Math.max(votingSettings.votingLength / 10 * 9, 2)
       if (epochVotes.find(_._1 == ErgoStateContext.eip27Vote).map(_._2).getOrElse(0) >= threshold) {
         true
@@ -367,7 +372,7 @@ object ErgoStateContext {
 
 case class ErgoStateContextSerializer(ergoSettings: ErgoSettings) extends ScorexSerializer[ErgoStateContext] {
 
-  private val Eip27SupportValue = 100
+  private val Eip27SupportValue = 100 // see comment in serialize()
 
   override def serialize(esc: ErgoStateContext, w: Writer): Unit = {
     /* NOHF PROOF:

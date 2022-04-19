@@ -12,7 +12,6 @@ import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilde
 
 import scala.util.Try
 
-
 class ReemissionRules(reemissionSettings: ReemissionSettings) extends ReemissionContracts {
 
   override val reemissionNftIdBytes: Array[Byte] = reemissionSettings.reemissionNftIdBytes

@@ -243,18 +243,6 @@ object UtxoState {
       val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
-
-    // todo: remove after EIP-27 activation, maybe even after successful EIP-27 testnet progress
-    // set EIP27 flag for the testnet, to avoid need to rescan blockchain if it was scanned with previous EIP-27 release
-    if(!constants.settings.networkType.isMainNet) {
-      val ctx = ErgoStateReader.storageStateContext(store, constants)
-      val h = ctx.currentHeight
-      if (h >= 185000) {
-        val updCtx = new ErgoStateContext(ctx.lastHeaders, ctx.lastExtensionOpt, ctx.genesisStateDigest,
-          ctx.currentParameters, ctx.validationSettings, ctx.votingData,true)(constants.settings)
-        store.db.put(ErgoStateReader.ContextKey, updCtx.bytes)
-      }
-    }
     new UtxoState(persistentProver, version, store, constants)
   }
 

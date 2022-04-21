@@ -131,14 +131,19 @@ class ErgoWalletActor(settings: ErgoSettings,
       } else {
         state.offChainRegistry.digest
       }
-      val reemissionAmt = walletDigest.walletAssetBalances
-        .find(_._1 == settings.chainSettings.reemission.reemissionTokenId)
-        .map(_._2)
-        .getOrElse(0L)
-      val res = if (reemissionAmt == 0) {
-        walletDigest
+      val res = if (settings.walletSettings.checkEIP27) {
+        // If re-emission token in the wallet, subtract it from ERG balance
+        val reemissionAmt = walletDigest.walletAssetBalances
+          .find(_._1 == settings.chainSettings.reemission.reemissionTokenId)
+          .map(_._2)
+          .getOrElse(0L)
+        if (reemissionAmt == 0) {
+          walletDigest
+        } else {
+          walletDigest.copy(walletBalance = walletDigest.walletBalance - reemissionAmt)
+        }
       } else {
-        walletDigest.copy(walletBalance = walletDigest.walletBalance - reemissionAmt)
+        walletDigest
       }
       sender() ! res
 

@@ -1,11 +1,9 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
+import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.reemission.ReemissionRules
-import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -48,6 +46,3 @@ case class ChainSettings(protocolVersion: Byte,
     .fold(_ => throw new Error(s"Failed to parse initialDifficultyVersion2 = $initialDifficultyHex"), BigInt(_))
 
 }
-
-
-

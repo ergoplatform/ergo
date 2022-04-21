@@ -217,8 +217,6 @@ trait ErgoWalletSupport extends ScorexLogging {
       require(changeAddressOpt.isDefined, "Does not have change address to send change to")
     }
 
-    val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
-
     val dataInputs = dataInputBoxes.map(dataInputBox => DataInput(dataInputBox.id))
     val changeBoxCandidates = selectionResult.changeBoxes.map { changeBoxAssets =>
       changeBoxAssets match {
@@ -226,7 +224,10 @@ trait ErgoWalletSupport extends ScorexLogging {
           candidate
         case changeBox: ErgoBoxAssets =>
           // todo: is this extra check needed ?
+
+          val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
           val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+
           new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
       }
     }

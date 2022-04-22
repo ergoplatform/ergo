@@ -8,6 +8,9 @@ import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SByte, SCollection, SLong, ST
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes, OptionGet, SelectField, SizeOf}
 
+/**
+  * Container for re-emission related contracts. Contains re-emission contract and pay-to-reemission contract.
+  */
 trait ReemissionContracts {
 
   /**
@@ -24,7 +27,7 @@ trait ReemissionContracts {
     * Contract for boxes miners paying to remission contract according to EIP-27.
     * Anyone can merge multiple boxes locked by this contract with reemission box
     */
-  def payToReemission(): ErgoTree = {
+  val payToReemission: ErgoTree = {
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
 

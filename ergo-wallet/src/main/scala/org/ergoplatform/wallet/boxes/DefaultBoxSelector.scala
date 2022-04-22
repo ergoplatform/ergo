@@ -10,12 +10,12 @@ import scala.collection.mutable
 import org.ergoplatform.wallet.Utils._
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 
-case class ReemissionData(reemissionNftId: ModifierId, reemissionTokenId: ModifierId)
-
 /**
   * Default implementation of the box selector. It simply picks boxes till sum of their monetary values
   * meets target Ergo balance, then it checks which assets are not fulfilled and adds boxes till target
   * asset values are met.
+  *
+  * @param reemissionDataOpt - reemission parameters, if wallet is checking re-emission rules
   */
 class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData]) extends BoxSelector {
 
@@ -44,7 +44,7 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
     val currentAssets = mutable.Map[ModifierId, Long]()
 
     def pickUp(unspentBox: T) = {
-      currentBalance = currentBalance + valueOf(unspentBox)(reemissionDataOpt)
+      currentBalance = currentBalance + valueOf(unspentBox, reemissionDataOpt)
       AssetUtils.mergeAssetsMut(currentAssets, unspentBox.tokens)
       res += unspentBox
     }
@@ -119,6 +119,17 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
     }
   }
 
+  /**
+    * Helper method to construct change outputs
+    *
+    * @param foundBalance - ERG balance of boxes collected
+    *                       (spendable only, so after possibly deducting re-emission tokens)
+    * @param targetBalance - ERG amount to be transferred to recipients
+    * @param foundBoxAssets - assets balances of boxes
+    * @param targetBoxAssets - assets amounts to be transferred to recipients
+    * @param reemissionAmt - amount of re-emission tokens in collected boxes
+    * @return
+    */
   def formChangeBoxes(foundBalance: Long,
                       targetBalance: Long,
                       foundBoxAssets: mutable.Map[ModifierId, Long],
@@ -155,14 +166,21 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
       }
 
       if (reemissionAmt > 0) {
-        val reemissionData = reemissionDataOpt.get
-        val rc: ReemissionContracts = new ReemissionContracts {
-          override val reemissionNftIdBytes: Array[Byte] = idToBytes(reemissionData.reemissionNftId)
-          override val reemissionStartHeight: Int = 0
+        reemissionDataOpt match {
+          case Some(reemissionData) =>
+            // we construct this instance to get pay-to-reemission contract from it
+            // we set re-emission contract NFT id, re-emission start height is not used so we set it to 0
+            val rc: ReemissionContracts = new ReemissionContracts {
+              override val reemissionNftIdBytes: Array[Byte] = idToBytes(reemissionData.reemissionNftId)
+              override val reemissionStartHeight: Int = 0
+            }
+            val p2r = rc.payToReemission
+            val payToReemissionBox = new ErgoBoxCandidate(reemissionAmt, p2r, creationHeight = 0)
+            Right(payToReemissionBox +: changeBoxes)
+          case None =>
+            log.error("reemissionData when reemissionAmt > 0, should not happen at all")
+            Right(changeBoxes)
         }
-        val p2r = rc.payToReemission()
-        val payToReemissionBox = new ErgoBoxCandidate(reemissionAmt, p2r, creationHeight = 0)
-        Right(payToReemissionBox +: changeBoxes)
       } else {
         Right(changeBoxes)
       }

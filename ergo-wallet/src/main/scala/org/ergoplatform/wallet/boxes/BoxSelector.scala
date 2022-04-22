@@ -75,7 +75,7 @@ object BoxSelector {
     *
     * @param box - box which may be spent
     * @param reemissionDataOpt - re-emission data, if box selector is checking re-emission rules
-    * @return If no re-emission tokens are there, returns ERG value of the box, otherwise,
+    * @return if no re-emission tokens are there, returns ERG value of the box, otherwise,
     *         subtract amount of re-emission tokens in the box from its ERG value.
     */
   def valueOf[T <: ErgoBoxAssets](box: T, reemissionDataOpt: Option[ReemissionData]): Long = {

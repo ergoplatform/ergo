@@ -39,7 +39,7 @@ trait ReemissionContracts {
   }.toSigmaProp.treeWithSegregation
 
   /**
-    * Reemission box contract
+    * Re-emission contract
     */
   def reemissionBoxProp(ms: MonetarySettings): ErgoTree = {
     val reemissionRewardPerBlock = 3 * 1000000000L // 3 ERG

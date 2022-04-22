@@ -202,6 +202,22 @@ API Methods Changed
 * /wallet/balances
 * /wallet/balances/withUnconfirmed
 
+Wallet Support
+--------------
+
+To have wallet accounting re-emission tokens, e.g. doing payments correctly in the presence of re-emission tokens,
+the following flag must be set:
+
+```
+ergo {
+  wallet {
+    checkEIP27 = true
+  }
+}
+```
+
+This flag if off by default for the sake of performance.
+
 Testnet Data
 ------------ 
 

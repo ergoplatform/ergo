@@ -166,14 +166,12 @@ trait ErgoWalletService {
   /**
     * @param state current wallet state
     * @param scanId to get transactions for
-    * @param registry wallet registry
     * @param fullHeight of the chain (last blocked applied to the state, not the wallet)
     * @param includeUnconfirmed whether to include transactions from mempool that match given scanId
     * @return Wallet transactions for `scanId`
     */
   def getScanTransactions(state: ErgoWalletState,
                           scanId: ScanId,
-                          registry: WalletRegistry,
                           fullHeight: Int,
                           includeUnconfirmed: Boolean): Seq[AugWalletTransaction]
 
@@ -588,11 +586,10 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
 
   def getScanTransactions(state: ErgoWalletState,
                           scanId: ScanId,
-                          registry: WalletRegistry,
                           fullHeight: Int,
                           includeUnconfirmed: Boolean = false): Seq[AugWalletTransaction] = {
     val walletTxs =
-      registry.allWalletTxs().filter(wtx => wtx.scanIds.contains(scanId))
+      state.registry.allWalletTxs().filter(wtx => wtx.scanIds.contains(scanId))
         .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
 
     val unconfirmedTxs =

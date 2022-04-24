@@ -406,7 +406,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! ReqBoxesResponse(ergoWalletService.collectBoxes(state, boxSelector, targetBalance, targetAssets))
 
     case GetScanTransactions(scanId: ScanId, includeUnconfirmed) =>
-      val scanTxs = ergoWalletService.getScanTransactions(state, scanId, state.registry, state.fullHeight, includeUnconfirmed)
+      val scanTxs = ergoWalletService.getScanTransactions(state, scanId, state.fullHeight, includeUnconfirmed)
       sender() ! ScanRelatedTxsResponse(scanTxs)
 
     case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed)  =>

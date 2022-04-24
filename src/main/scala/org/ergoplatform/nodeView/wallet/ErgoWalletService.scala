@@ -157,6 +157,7 @@ trait ErgoWalletService {
   def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)]
 
   /**
+    * Get unconfirmed transactions from mempool that are associated with given scan id
     * @param state current wallet state
     * @param scanId to get transactions for
     * @return Unconfirmed transactions for `scanId`
@@ -164,6 +165,7 @@ trait ErgoWalletService {
   def getUnconfirmedTransactions(state: ErgoWalletState, scanId: ScanId): Seq[AugWalletTransaction]
 
   /**
+    * Get transactions aassociated with given scan id
     * @param state current wallet state
     * @param scanId to get transactions for
     * @param fullHeight of the chain (last blocked applied to the state, not the wallet)

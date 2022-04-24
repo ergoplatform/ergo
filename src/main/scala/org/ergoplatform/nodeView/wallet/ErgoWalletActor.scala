@@ -438,7 +438,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       .map(tx => AugWalletTransaction(tx, state.fullHeight - tx.inclusionHeight))
     val ts = System.currentTimeMillis()
     val txsToSend =
-      if (includeUnconfirmed && heightFrom <= state.fullHeight && heightTo >= state.fullHeight) {
+      if (includeUnconfirmed) {
+        // we disregard heightFrom and heightTo when including unconfirmed txs as they have no height yet
         txs ++ scanIds.flatMap( scanId => ergoWalletService.getUnconfirmedTransactions(state, scanId) )
       } else {
         txs

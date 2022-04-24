@@ -4,6 +4,7 @@ import java.io.File
 
 import cats.Traverse
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -57,7 +58,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val rollbackResult = p.rollback(rootHash).map { _ =>
           new UtxoState(p, version, store, constants, parameters)
         }
-        store.clean(constants.keepVersions)
         rollbackResult
       case None =>
         Failure(new Error(s"Unable to get root hash at version ${Algos.encoder.encode(version)}"))
@@ -92,8 +92,23 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
+  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height])
+                            (generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
+
+      // avoid storing versioned information in the database when block being processed is behind
+      // blockchain tip by `keepVersions` blocks at least
+      // we store `keepVersions` diffs in the database if chain tip is not known yet
+      if (fb.height >= estimatedTip.getOrElse(0) - constants.keepVersions) {
+        if (store.getKeepVersions < constants.keepVersions) {
+          store.setKeepVersions(constants.keepVersions)
+        }
+      } else {
+        if (store.getKeepVersions > 0) {
+          store.setKeepVersions(0)
+        }
+      }
+
       persistentProver.synchronized {
         val height = fb.header.height
 

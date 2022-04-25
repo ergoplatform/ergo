@@ -3694,6 +3694,13 @@ paths:
           type: integer
           format: int32
           minimum: 0
+      - in: query
+        name: includeUnconfirmed
+        required: false
+        description: Include transactions from mempool
+        schema:
+          type: boolean
+          default: false
     get:
       security:
         - ApiKeyAuth: [ api_key ]

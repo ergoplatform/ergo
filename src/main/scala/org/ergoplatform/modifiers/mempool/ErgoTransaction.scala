@@ -245,7 +245,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           var reemissionSpending = false
           boxesToSpend.foreach { box =>
             // checking EIP-27 rules for emission box
-            if (box.value > 100000 * EmissionRules.CoinsInOneErgo) { // for efficiency, skip boxes with less than 100,000 ERG
+            // for efficiency, skip boxes with less than 100K ERG
+            if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
               // on activation height, emissionNft is not in emission box yet, but in injection box
               if (box.tokens.contains(emissionNftId) ||
                 (height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId))) {
@@ -256,7 +257,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                 } else {
                   box.tokens.getOrElse(reemissionTokenId, 0L)
                 }
-                require(reemissionTokensIn > 0)
+                require(reemissionTokensIn > 0, "No re-emission tokens in the emission or injection box")
 
                 // output positions guaranteed by emission contract
                 val emissionOut = outputCandidates(0)
@@ -265,13 +266,19 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                 // check positions of emission NFT and reemission token
                 val firstEmissionBoxTokenId = emissionOut.additionalTokens.apply(0)._1
                 val secondEmissionBoxTokenId = emissionOut.additionalTokens.apply(1)._1
-                require(firstEmissionBoxTokenId.sameElements(emissionNftIdBytes))
-                require(secondEmissionBoxTokenId.sameElements(reemissionTokenIdBytes))
+                require(
+                  firstEmissionBoxTokenId.sameElements(emissionNftIdBytes),
+                  "No emission box NFT in the emission box"
+                )
+                require(
+                  secondEmissionBoxTokenId.sameElements(reemissionTokenIdBytes),
+                  "No re-emission token in the emission box"
+                )
 
                 //we're checking how emission box is paying reemission tokens below
                 val emissionTokensOut = emissionOut.tokens.getOrElse(reemissionTokenId, 0L)
                 val rewardsTokensOut = rewardsOut.tokens.getOrElse(reemissionTokenId, 0L)
-                require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission token not preserved")
+                require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission tokens not preserved")
 
                 val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
                 require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")

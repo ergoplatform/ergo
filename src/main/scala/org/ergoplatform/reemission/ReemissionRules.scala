@@ -12,13 +12,23 @@ import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilde
 
 import scala.util.Try
 
+/**
+  * Contains re-emission contracts (defined in `ReemissionContracts`) and helper functions
+  * for re-emission.
+  */
 class ReemissionRules(reemissionSettings: ReemissionSettings) extends ReemissionContracts {
 
   override val reemissionNftIdBytes: Array[Byte] = reemissionSettings.reemissionNftIdBytes
   override val reemissionStartHeight: Height = reemissionSettings.reemissionStartHeight
 
+  /**
+    * How many ERG taken from emission to re-emission initially
+    */
   val basicChargeAmount = 12 // in ERG
 
+  /**
+    * @return how many re-emission tokens can be unlocked at given height
+    */
   def reemissionForHeight(height: Height,
                           emissionRules: EmissionRules): Long = {
     val emission = emissionRules.emissionAtHeight(height)
@@ -36,6 +46,11 @@ class ReemissionRules(reemissionSettings: ReemissionSettings) extends Reemission
 
 object ReemissionRules {
 
+  /**
+    * @param mainnet - whether to create address for mainnet or testnet
+    * @return - P2S address for a box used to carry emission NFT and re-emission tokens
+    *           to inject them into the emission box on activation height
+    */
   def injectionBoxP2SAddress(mainnet: Boolean): Pay2SAddress = {
     val networkPrefix = if (mainnet) {
       ErgoAddressEncoder.MainnetNetworkPrefix

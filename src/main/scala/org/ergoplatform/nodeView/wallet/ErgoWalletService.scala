@@ -580,6 +580,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
         mempool.getAllPrioritized.filter { tx =>
           tx.outputs.exists(scan.trackingRule.filter)
         }.map { tx =>
+          // unconfirmed transaction has 0 confirmations
           AugWalletTransaction(WalletTransaction(tx, state.fullHeight, Seq(scanId)), 0)
         }
       }

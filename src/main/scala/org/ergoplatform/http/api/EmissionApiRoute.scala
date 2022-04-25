@@ -66,7 +66,7 @@ object EmissionApiRoute {
     EmissionInfo(minerReward, totalCoinsIssued, totalRemainCoins, reemissionAmt)
   }
 
-  // todo: add totalReemitted
+  // todo: add totalReemitted ?
   implicit val encoder: Encoder[EmissionInfo] = (ei: EmissionInfo) => Json.obj(
     "minerReward" -> Json.fromLong(ei.minerReward),
     "totalCoinsIssued" -> Json.fromLong(ei.totalCoinsIssued),

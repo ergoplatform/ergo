@@ -31,7 +31,7 @@ import scala.util.{Failure, Success, Try}
 
 trait ErgoWalletSupport extends ScorexLogging {
 
-  val ergoSettings: ErgoSettings
+  def ergoSettings: ErgoSettings
 
   private def addressEncoder = ergoSettings.chainSettings.addressEncoder
 
@@ -224,7 +224,6 @@ trait ErgoWalletSupport extends ScorexLogging {
           candidate
         case changeBox: ErgoBoxAssets =>
           // todo: is this extra check needed ?
-
           val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
           val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
 

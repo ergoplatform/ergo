@@ -26,6 +26,8 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
   // and also optimal number of inputs(a selector is collecting dust if transaction has less inputs than optimal).
   private val maxInputs = walletSettings.maxInputs
   private val optimalInputs = walletSettings.optimalInputs
+
+  // if checkEIP27 flag is on, we pass re-emission parameters to box selector
   private val reemissionDataOpt = if (walletSettings.checkEIP27) {
     val rs = settings.chainSettings.reemission
     Some(ReemissionData(rs.reemissionNftId, rs.reemissionTokenId))

@@ -1,4 +1,4 @@
-Emission  Retargeting Soft-Fork Proposal
+Emission Retargeting Soft-Fork Proposal
 ========================================
 
 * Author: kushti

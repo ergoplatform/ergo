@@ -4897,13 +4897,13 @@ paths:
 
   /emission/scripts:
     get:
-      summary: Get emission data for a given height
-      operationId: emissionAt
+      summary: Print emission-related scripts
+      operationId: emissionScripts
       tags:
         - emission
       responses:
         '200':
-          description: Emission data
+          description: Emission-related scripts
           content:
             application/json:
               schema:

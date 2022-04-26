@@ -14,6 +14,11 @@ import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScript
 trait ReemissionContracts {
 
   /**
+    * How much miner can take per block from re-emission contract
+    */
+  val reemissionRewardPerBlock: Long = 3 * 1000000000L // 3 ERG
+
+  /**
     * @return - ID of NFT token associated with re-emission contract
     */
   def reemissionNftIdBytes: Array[Byte]
@@ -27,7 +32,7 @@ trait ReemissionContracts {
     * Contract for boxes miners paying to remission contract according to EIP-27.
     * Anyone can merge multiple boxes locked by this contract with reemission box
     */
-  val payToReemission: ErgoTree = {
+  lazy val payToReemission: ErgoTree = {
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
 
@@ -42,7 +47,6 @@ trait ReemissionContracts {
     * Re-emission contract
     */
   def reemissionBoxProp(ms: MonetarySettings): ErgoTree = {
-    val reemissionRewardPerBlock = 3 * 1000000000L // 3 ERG
 
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))

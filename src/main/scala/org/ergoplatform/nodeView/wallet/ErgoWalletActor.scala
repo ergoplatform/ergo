@@ -258,15 +258,19 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case Rollback(version: VersionTag) =>
-      state.registry.rollback(version) match {
-        case Failure(t) =>
-          val errorMsg = s"Failed to rollback wallet registry to version $version due to: ${t.getMessage}"
-          log.error(errorMsg, t)
-          context.become(loadedWallet(state.copy(error = Some(errorMsg))))
-        case _: Success[Unit] =>
-          // Reset outputs Bloom filter to have it initialized again on next block scanned
-          // todo: for offchain registry, refresh is also needed, https://github.com/ergoplatform/ergo/issues/1180
-          context.become(loadedWallet(state.copy(outputsFilter = None)))
+      if (state.secretStorageOpt.isDefined) {
+        state.registry.rollback(version) match {
+          case Failure(t) =>
+            val errorMsg = s"Failed to rollback wallet registry to version $version due to: ${t.getMessage}"
+            log.error(errorMsg, t)
+            context.become(loadedWallet(state.copy(error = Some(errorMsg))))
+          case _: Success[Unit] =>
+            // Reset outputs Bloom filter to have it initialized again on next block scanned
+            // todo: for offchain registry, refresh is also needed, https://github.com/ergoplatform/ergo/issues/1180
+            context.become(loadedWallet(state.copy(outputsFilter = None)))
+        }
+      } else {
+        log.warn("Avoiding rollback as wallet is not initialized yet")
       }
 
       /** WALLET COMMANDS */

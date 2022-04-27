@@ -160,8 +160,12 @@ class ErgoWalletActor(settings: ErgoSettings,
       val boxes = ergoWalletService.getWalletBoxes(state, unspent, considerUnconfirmed)
       sender() ! boxes
 
-    case GetScanBoxes(scanId, unspent, considerUnconfirmed) =>
-      val boxes = ergoWalletService.getScanBoxes(state, scanId, unspent, considerUnconfirmed)
+    case GetScanUnspentBoxes(scanId, considerUnconfirmed) =>
+      val boxes = ergoWalletService.getScanUnspentBoxes(state, scanId, considerUnconfirmed)
+      sender() ! boxes
+
+    case GetScanSpentBoxes(scanId) =>
+      val boxes = ergoWalletService.getScanSpentBoxes(state, scanId)
       sender() ! boxes
 
     case GetTransactions =>
@@ -640,14 +644,19 @@ object ErgoWalletActor extends ScorexLogging {
   final case class ScanRelatedTxsResponse(result: Seq[AugWalletTransaction])
 
   /**
-    * Get boxes related to a scan
+    * Get unspent boxes related to a scan
     *
     * @param scanId              - scan identifier
-    * @param unspentOnly         - return only unspent boxes
-    * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
-    *                            boxes created in the pool for both values of unspentOnly).
+    * @param considerUnconfirmed - consider boxes from mempool
     */
-  final case class GetScanBoxes(scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean)
+  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean)
+
+  /**
+    * Get spent boxes related to a scan
+    *
+    * @param scanId - scan identifier
+    */
+  final case class GetScanSpentBoxes(scanId: ScanId)
 
   /**
     * Set or update address for change outputs. Initially the address is set to root key address

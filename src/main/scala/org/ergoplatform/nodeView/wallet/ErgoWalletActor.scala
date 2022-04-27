@@ -258,7 +258,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case Rollback(version: VersionTag) =>
-      if (state.secretStorageOpt.isDefined) {
+      if (state.secretStorageOpt.isDefined || settings.walletSettings.testMnemonic.isDefined) {
         state.registry.rollback(version) match {
           case Failure(t) =>
             val errorMsg = s"Failed to rollback wallet registry to version $version due to: ${t.getMessage}"

@@ -67,6 +67,31 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     getBestHeaderOpt shouldBe Some(block.header)
   }
 
+  private val t3a = TestCase("do not apply block headers in invalid order") { fixture =>
+    import fixture._
+    val (us, bh) = createUtxoState(parameters)
+    val parentBlock = validFullBlock(None, us, bh)
+    val block = validFullBlock(Some(parentBlock), us, bh)
+
+    getBestHeaderOpt shouldBe None
+    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
+
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier])
+
+    //sending child header without parent header
+    nodeViewHolderRef ! ModifiersFromRemote(List(block.header))
+    expectNoMsg()
+
+    // sende correct header sequence
+    nodeViewHolderRef ! ModifiersFromRemote(List(parentBlock.header))
+    expectMsgType[SyntacticallySuccessfulModifier]
+
+    nodeViewHolderRef ! ModifiersFromRemote(List(block.header))
+    expectMsgType[SyntacticallySuccessfulModifier]
+
+    getHistoryHeight shouldBe 2
+  }
+
   private val t4 = TestCase("apply valid block as genesis") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(parameters)
@@ -491,7 +516,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     }
   }
 
-  val cases: List[TestCase] = List(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9)
+  val cases: List[TestCase] = List(t0, t1, t2, t3, t3a, t4, t5, t6, t7, t8, t9)
 
   NodeViewTestConfig.allConfigs.foreach { c =>
     cases.foreach { t =>

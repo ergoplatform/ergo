@@ -95,10 +95,10 @@ trait ReemissionContracts {
     AND(
       correctNftId,
       sameScriptRule,
-      heightCorrect,
       OR(
         sponsored,
         AND(
+          heightCorrect,
           correctMinerOutput,
           afterEmission,
           heightIncreased,

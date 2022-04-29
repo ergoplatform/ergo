@@ -241,7 +241,9 @@ Emission contract NFT id: *20fa2bf23962cdf51b07722d6237c0c7b8a44f78856c0f7ec308d
  https://explorer.ergoplatform.com/en/transactions/a1cbc9e14999cc7620c9d952cb06f5f6a70a2c39bb7d3c8ff5311f825eca244c ,
  block 738,624)
  
-Re-emission token id: *not set yet*
+Re-emission token id: *d9a2cc8a09abfaed87afacfbb7daee79a6b26f10c6613fc13d3f3953e5521d1a*
+(issued in tx # ff340e380559a5a1ba870f27367a50a1829a4a573e1a738ec764456ec47620e3,
+ https://explorer.ergoplatform.com/en/transactions/ff340e380559a5a1ba870f27367a50a1829a4a573e1a738ec764456ec47620e3)
 
 Reemission contract NFT id: *d3feeffa87f2df63a7a15b4905e618ae3ce4c69a7975f171bd314d0b877927b8*
  

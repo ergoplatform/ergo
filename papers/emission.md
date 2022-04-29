@@ -135,10 +135,10 @@ second one is to pay mining fee supposedly (its value can be 0.01 ERG at most)
     AND(
         correctNftId,
         sameScriptRule,
-        heightCorrect,
         OR(
           sponsored,
           AND(
+            heightCorrect,
             correctMinerOutput,
             afterEmission,
             heightIncreased,
@@ -235,13 +235,20 @@ Re-emission start height: **186400**
 Mainnet Data
 ------------
 
-Emission contract NFT id: *not set yet*
+Emission contract NFT id: *20fa2bf23962cdf51b07722d6237c0c7b8a44f78856c0f7ec308dc1ef1a92a51*
 
+(issued in tx # a1cbc9e14999cc7620c9d952cb06f5f6a70a2c39bb7d3c8ff5311f825eca244c , 
+ https://explorer.ergoplatform.com/en/transactions/a1cbc9e14999cc7620c9d952cb06f5f6a70a2c39bb7d3c8ff5311f825eca244c ,
+ block 738,624)
+ 
 Re-emission token id: *not set yet*
 
-Reemission contract NFT id: *not set yet*
-
-Activation height: *not set yet*
+Reemission contract NFT id: *d3feeffa87f2df63a7a15b4905e618ae3ce4c69a7975f171bd314d0b877927b8*
+ 
+(issued in tx # f06762711a3f33d3a479962e730a742f640105c6c5bb4e0a3e5a9405de700b4c ,
+ https://explorer.ergoplatform.com/en/transactions/f06762711a3f33d3a479962e730a742f640105c6c5bb4e0a3e5a9405de700b4c ,
+ ) 
+Activation height: *777,217*
 
 References
 ----------

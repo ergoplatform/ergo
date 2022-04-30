@@ -27,7 +27,7 @@ design and implementation.
 Updated Emission Schedule
 -------------------------
 
-Starting from block #777,216 (first block of 759th voting epoch), new emission rules applied on top of rules described in the 
+Starting from block #777,217 (first block of 759th voting epoch), new emission rules applied on top of rules described in the 
 Ergo Whitepaper.
 
 Before the end of the current emission (block #2,080,800):
@@ -173,8 +173,8 @@ ergo {
 }
 ```
 
-When a voting epoch with *90+%* support (blocks with a vote for increasing parameter #8, which holds transaction 
-output cost) will take place before activation height, EIP-27 locks in and will be activated on activation height.
+When a voting epoch with 888 out of 1024 blocks support (blocks with a vote for increasing parameter #8, which holds transaction 
+output cost) will take place before activation height, EIP-27 locks in and will be activated at activation height.
 
 Activation Details
 ------------------

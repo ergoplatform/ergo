@@ -145,9 +145,15 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     if (this.eip27Supported) {
       true
     } else {
-      // about 90% for large enough epochs, 918 for the mainnet.
-      // Math.max() is to have at least 2 votes needed per epoch for tests, where voting epoch length is equal to 2
-      val threshold = Math.max(votingSettings.votingLength / 10 * 9, 2)
+      // about 90% for large enough epochs, 888 for the mainnet.
+      val threshold = if (votingSettings.votingLength == 1024) {
+        888
+      } else if (votingSettings.votingLength < 10) {
+        // used in tests only
+        votingSettings.votingLength
+      } else {
+        votingSettings.votingLength / 10 * 9
+      }
       if (epochVotes.find(_._1 == ErgoStateContext.eip27Vote).map(_._2).getOrElse(0) >= threshold) {
         true
       } else {

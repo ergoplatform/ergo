@@ -194,6 +194,8 @@ The injection box is protected by the script
 so spendable by anyone who can spend 30M ERG at least provided in the first input (presumable, only emission box can 
 have so many ERGs). 
 
+(Mainnet P2S address is *9puEV3pP1bNdFi17ScAWzHqGaZPAopM15fFz2FiotY1zdd1XBT9Kba*)
+
 API Methods Changed
 -------------------
 

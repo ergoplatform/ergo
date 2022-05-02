@@ -5,6 +5,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.app.Version
 import scorex.core.consensus.History.HistoryComparisonResult
 import scorex.core.network.ConnectedPeer
+import scorex.core.utils.TimeProvider.Time
 
 /**
   * Container for status of another peer
@@ -12,10 +13,14 @@ import scorex.core.network.ConnectedPeer
   * @param peer - peer information (public address, exposed info on operating mode etc)
   * @param status - peer's blockchain status (is it ahead or behind our, or on fork)
   * @param height - peer's height
+  * @param lastSyncSentTime - last time peer was asked to sync, None if never
+  * @param lastSyncGetTime - last time peer received sync, None if never
   */
 case class ErgoPeerStatus(peer: ConnectedPeer,
                           status: HistoryComparisonResult,
-                          height: Height) {
+                          height: Height,
+                          lastSyncSentTime: Option[Time],
+                          lastSyncGetTime: Option[Time]) {
   val mode: Option[ModeFeature] = ErgoPeerStatus.mode(peer)
 
   def version: Option[Version] = peer.peerInfo.map(_.peerSpec.protocolVersion)

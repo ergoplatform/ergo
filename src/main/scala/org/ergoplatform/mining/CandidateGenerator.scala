@@ -484,8 +484,10 @@ object CandidateGenerator extends ScorexLogging {
       // differently due to bugs in AOT costing
       val safeGap = if(state.stateContext.currentParameters.maxBlockCost < 1000000) {
         0
-      } else {
+      } else if(state.stateContext.currentParameters.maxBlockCost < 5000000) {
         150000
+      } else {
+        1000000
       }
 
       val (txs, toEliminate) = collectTxs(
@@ -577,7 +579,7 @@ object CandidateGenerator extends ScorexLogging {
   /**
     * Transaction and its cost.
     */
-  type CostedTransaction = (ErgoTransaction, Long)
+  type CostedTransaction = (ErgoTransaction, Int)
 
   //TODO move ErgoMiner to mining package and make `collectTxs` and `fixTxsConflicts` private[mining]
 
@@ -678,8 +680,8 @@ object CandidateGenerator extends ScorexLogging {
     */
   def collectTxs(
     minerPk: ProveDlog,
-    maxBlockCost: Long,
-    maxBlockSize: Long,
+    maxBlockCost: Int,
+    maxBlockSize: Int,
     us: UtxoStateReader,
     upcomingContext: ErgoStateContext,
     transactions: Seq[ErgoTransaction]

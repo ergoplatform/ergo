@@ -194,8 +194,6 @@ The injection box is protected by the script
 so spendable by anyone who can spend 30M ERG at least provided in the first input (presumable, only emission box can 
 have so many ERGs). 
 
-(Mainnet P2S address is *9puEV3pP1bNdFi17ScAWzHqGaZPAopM15fFz2FiotY1zdd1XBT9Kba*)
-
 API Methods Changed
 -------------------
 
@@ -256,6 +254,20 @@ Reemission contract NFT id: *d3feeffa87f2df63a7a15b4905e618ae3ce4c69a7975f171bd3
  block 738,628) 
  
 Activation height: *777,217*
+
+(
+ Injection box P2S address is *9puEV3pP1bNdFi17ScAWzHqGaZPAopM15fFz2FiotY1zdd1XBT9Kba* , 
+ created in tx # fca71b8b95f6ad14ce600a126c8842334d40d35f8754176c4cda2c95219f19f7 , 
+ https://explorer.ergoplatform.com/en/transactions/fca71b8b95f6ad14ce600a126c8842334d40d35f8754176c4cda2c95219f19f7 ,
+ output # 997369af025fa60dab11d11f94bd5492dbb8731ea3a31154a0388e329f7edf4a ,
+ 
+ use utxo/byIdBinary/997369af025fa60dab11d11f94bd5492dbb8731ea3a31154a0388e329f7edf4a request in node API to get 
+ injection box bytes :
+ ```{
+   "boxId": "997369af025fa60dab11d11f94bd5492dbb8731ea3a31154a0388e329f7edf4a",
+   "bytes": "80a8d6b9071003040005808098f4e9b5ca6a0402d1ed91c1b2a4730000730193c5a7c5b2a47302008f9e2d0220fa2bf23962cdf51b07722d6237c0c7b8a44f78856c0f7ec308dc1ef1a92a5101d9a2cc8a09abfaed87afacfbb7daee79a6b26f10c6613fc13d3f3953e5521d1a808088fccdbcc32300fca71b8b95f6ad14ce600a126c8842334d40d35f8754176c4cda2c95219f19f700"
+ }```
+)
 
 References
 ----------

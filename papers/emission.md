@@ -244,14 +244,17 @@ Emission contract NFT id: *20fa2bf23962cdf51b07722d6237c0c7b8a44f78856c0f7ec308d
  block 738,624)
  
 Re-emission token id: *d9a2cc8a09abfaed87afacfbb7daee79a6b26f10c6613fc13d3f3953e5521d1a*
+
 (issued in tx # ff340e380559a5a1ba870f27367a50a1829a4a573e1a738ec764456ec47620e3,
- https://explorer.ergoplatform.com/en/transactions/ff340e380559a5a1ba870f27367a50a1829a4a573e1a738ec764456ec47620e3)
+ https://explorer.ergoplatform.com/en/transactions/ff340e380559a5a1ba870f27367a50a1829a4a573e1a738ec764456ec47620e3 , 
+ block 738,694)
 
 Reemission contract NFT id: *d3feeffa87f2df63a7a15b4905e618ae3ce4c69a7975f171bd314d0b877927b8*
  
 (issued in tx # f06762711a3f33d3a479962e730a742f640105c6c5bb4e0a3e5a9405de700b4c ,
  https://explorer.ergoplatform.com/en/transactions/f06762711a3f33d3a479962e730a742f640105c6c5bb4e0a3e5a9405de700b4c ,
- ) 
+ block 738,628) 
+ 
 Activation height: *777,217*
 
 References

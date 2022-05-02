@@ -3438,15 +3438,54 @@ paths:
       operationId: walletRescan
       tags:
         - wallet
+      parameters:
+        - in: query
+          name: fromHeight
+          required: false
+          description: Height to rescan wallet from
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
       responses:
         '200':
-          description: Wallet storage recreated
+          description: Wallet rescanned
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Rescan wallet (all the available full blocks)
+      operationId: walletRescan
+      tags:
+        - wallet
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fromHeight
+              properties:
+                fromHeight:
+                  type: integer
+                  format: int32
+                  minimum: 0
+      responses:
+        '200':
+          description: Wallet rescanned
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
 
   /wallet/status:
     get:

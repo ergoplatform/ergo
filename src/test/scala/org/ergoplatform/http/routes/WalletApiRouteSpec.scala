@@ -1,16 +1,16 @@
 package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
+import akka.http.scaladsl.server.{Route, ValidationRejection}
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
-import io.circe.{Json, Decoder}
-import org.ergoplatform.http.api.{WalletApiRoute, ApiCodecs}
+import io.circe.{Decoder, Json}
+import org.ergoplatform.http.api.{ApiCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
-import org.ergoplatform.nodeView.wallet.{ErgoAddressJsonEncoder, AugWalletTransaction}
-import org.ergoplatform.settings.{Constants, Args, ErgoSettings}
+import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
+import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoAddress, Pay2SAddress}
@@ -147,12 +147,37 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "rescan wallet" in {
+  it should "rescan wallet get" in {
     Get(prefix + "/rescan") ~> route ~> check {
       status shouldBe StatusCodes.OK
     }
   }
 
+  it should "rescan wallet post" in {
+    Post(prefix + "/rescan") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "rescan wallet get with fromHeight" in {
+    Get(prefix + "/rescan?fromHeight=0") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+
+    Get(prefix + "/rescan?fromHeight=-1") ~> route ~> check {
+      rejection shouldEqual ValidationRejection("fromHeight field must be >= 0", None)
+    }
+  }
+
+  it should "rescan wallet post with fromHeight" in {
+    Post(prefix + "/rescan", Json.obj("fromHeight" -> 0.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+
+    Post(prefix + "/rescan", Json.obj("fromHeight" -> (-1).asJson)) ~> route ~> check {
+      rejection shouldEqual ValidationRejection("fromHeight field must be >= 0", None)
+    }
+  }
 
   it should "derive new key according to a provided path" in {
     Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "m/1/2".asJson)) ~> route ~> check {

@@ -2,7 +2,7 @@ package org.ergoplatform.http.api
 
 import org.ergoplatform.nodeView.wallet.{ErgoWalletReader, WalletBox}
 import akka.actor.ActorRef
-import akka.http.scaladsl.server.{Directive, Route}
+import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
 import io.circe.Encoder
 import scorex.core.api.http.ApiResponse
 
@@ -17,6 +17,8 @@ trait WalletApiOperations extends ErgoBaseApiRoute {
   val boxParams: Directive[(Int, Int)] =
     parameters("minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
 
+  val heightParam: Directive1[Int] =
+    parameter("fromHeight".as[Int] ? 0).filter(_ >= 0, ValidationRejection("fromHeight field must be >= 0"))
 
   /**
     * Filter function for wallet boxes used in box-related API calls.

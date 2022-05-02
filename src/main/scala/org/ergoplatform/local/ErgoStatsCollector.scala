@@ -63,7 +63,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     launchTime = networkTime(),
     lastIncomingMessageTime = networkTime(),
     None,
-    LaunchParameters)
+    LaunchParameters,
+    eip27Supported = false)
 
   override def receive: Receive =
     onConnectedPeers orElse
@@ -87,7 +88,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption,
         stateRoot = Some(Algos.encode(s.rootHash)),
         stateVersion = Some(s.version),
-        parameters = s.stateContext.currentParameters
+        parameters = s.stateContext.currentParameters,
+        eip27Supported = s.stateContext.eip27Supported
       )
   }
 
@@ -102,7 +104,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
-      nodeInfo = nodeInfo.copy(parameters = s.stateContext.currentParameters)
+      val sc = s.stateContext
+      nodeInfo = nodeInfo.copy(parameters = sc.currentParameters, eip27Supported = sc.eip27Supported)
   }
 
   private def onHistoryChanged: Receive = {
@@ -131,7 +134,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
   def onSemanticallySuccessfulModification: Receive = {
     case SemanticallySuccessfulModifier(fb: ErgoFullBlock) =>
-      nodeInfo = nodeInfo.copy(stateRoot = Some(Algos.encode(fb.header.stateRoot)),
+      nodeInfo = nodeInfo.copy(
+        stateRoot = Some(Algos.encode(fb.header.stateRoot)),
         stateVersion = Some(fb.encodedId))
   }
 
@@ -157,7 +161,8 @@ object ErgoStatsCollector {
                       launchTime: Long,
                       lastIncomingMessageTime: Long,
                       genesisBlockIdOpt: Option[String],
-                      parameters: Parameters)
+                      parameters: Parameters,
+                      eip27Supported: Boolean)
 
   object NodeInfo extends ApiCodecs {
     implicit val paramsEncoder: Encoder[Parameters] = org.ergoplatform.settings.ParametersSerializer.jsonEncoder
@@ -184,7 +189,8 @@ object ErgoStatsCollector {
         "launchTime" -> ni.launchTime.asJson,
         "lastSeenMessageTime" -> ni.lastIncomingMessageTime.asJson,
         "genesisBlockId" -> ni.genesisBlockIdOpt.asJson,
-        "parameters" -> ni.parameters.asJson
+        "parameters" -> ni.parameters.asJson,
+        "eip27Supported" -> ni.eip27Supported.asJson
       ).asJson
   }
 

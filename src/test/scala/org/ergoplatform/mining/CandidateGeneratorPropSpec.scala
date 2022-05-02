@@ -2,6 +2,8 @@ package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.settings.MonetarySettings
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
@@ -199,12 +201,15 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     var us     = createUtxoState(bh, parameters)
     val height = ErgoHistory.EmptyHistoryHeight
 
+    val ms = MonetarySettings(minerRewardDelay = delta)
+    val st = settings.copy(chainSettings = settings.chainSettings.copy(monetary = ms))
+    val sc = ErgoStateContext.empty(genesisStateDigest, st, parameters)
     val txBoxes = bh.boxes.grouped(inputsNum).map(_.values.toIndexedSeq).toSeq
 
     val blockTx =
       validTransactionFromBoxes(txBoxes.head, outputsProposition = feeProposition)
     val txs = CandidateGenerator
-      .collectFees(height, Seq(blockTx), defaultMinerPk, emptyStateContext)
+      .collectFees(height, Seq(blockTx), defaultMinerPk, sc)
       .toSeq
     val block = validFullBlock(None, us, blockTx +: txs)
 

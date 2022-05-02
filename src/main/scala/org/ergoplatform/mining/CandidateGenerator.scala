@@ -624,6 +624,7 @@ object CandidateGenerator extends ScorexLogging {
     val propositionBytes = chainSettings.monetary.feePropositionBytes
     val emission = chainSettings.emissionRules
 
+    // forming transaction collecting emission
     val reemissionSettings = chainSettings.reemission
     val reemissionRules = reemissionSettings.reemissionRules
     val eip27Supported = stateContext.eip27Supported
@@ -704,6 +705,7 @@ object CandidateGenerator extends ScorexLogging {
       emissionTx
     }
 
+    // forming transaction collecting tx fees
     val inputs = txs.flatMap(_.inputs)
     val feeBoxes: Seq[ErgoBox] = ErgoState
       .newBoxes(txs)
@@ -719,6 +721,7 @@ object CandidateGenerator extends ScorexLogging {
     } else {
       None
     }
+
     Seq(emissionTxOpt, feeTxOpt).flatten
   }
 

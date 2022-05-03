@@ -67,8 +67,8 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
       defaultMinerPk
     )
 
-    us.applyModifier(validFullBlock(None, us, incorrectTxs))(_ => ()) shouldBe 'failure
-    us.applyModifier(validFullBlock(None, us, txs))(_ => ()) shouldBe 'success
+    us.applyModifier(validFullBlock(None, us, incorrectTxs), None)(_ => ()) shouldBe 'failure
+    us.applyModifier(validFullBlock(None, us, txs), None)(_ => ()) shouldBe 'success
   }
 
   property("collect reward from transaction fees only") {
@@ -93,8 +93,8 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
       defaultMinerPk
     )
 
-    us.applyModifier(validFullBlock(None, us, blockTx +: incorrect))(_ => ()) shouldBe 'failure
-    us.applyModifier(validFullBlock(None, us, blockTx +: txs))(_ => ()) shouldBe 'success
+    us.applyModifier(validFullBlock(None, us, blockTx +: incorrect), None)(_ => ()) shouldBe 'failure
+    us.applyModifier(validFullBlock(None, us, blockTx +: txs), None)(_ => ()) shouldBe 'success
   }
 
   property("filter out double spend txs") {
@@ -116,7 +116,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
   property("should only collect valid transactions") {
     def checkCollectTxs(
-      maxCost: Long,
+      maxCost: Int,
       maxSize: Int,
       withTokens: Boolean = false
     ): Unit = {
@@ -166,7 +166,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
         ._1
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
-      val costs: Seq[Long] = fromBigMempool.map { tx =>
+      val costs: Seq[Int] = fromBigMempool.map { tx =>
         us.validateWithCost(tx, Some(upcomingContext), Int.MaxValue, Some(verifier)).getOrElse {
           val boxesToSpend =
             tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
@@ -184,7 +184,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     checkCollectTxs(parameters.maxBlockCost, Int.MaxValue)
 
     // transactions reach block size limit
-    checkCollectTxs(Long.MaxValue, 4096)
+    checkCollectTxs(Int.MaxValue, 4096)
 
     // miner collects correct transactions from mempool even if they have tokens
     checkCollectTxs(Int.MaxValue, Int.MaxValue, withTokens = true)
@@ -215,7 +215,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
       .toSeq
     val block = validFullBlock(None, us, blockTx +: txs)
 
-    us = us.applyModifier(block)(_ => ()).get
+    us = us.applyModifier(block, None)(_ => ()).get
 
     val blockTx2 =
       validTransactionFromBoxes(txBoxes(1), outputsProposition = feeProposition)
@@ -227,9 +227,9 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     val invalidBlock2 =
       validFullBlock(Some(block), us, IndexedSeq(earlySpendingTx, blockTx2))
 
-    us.applyModifier(invalidBlock2)(_ => ()) shouldBe 'failure
+    us.applyModifier(invalidBlock2, None)(_ => ()) shouldBe 'failure
 
-    us = us.applyModifier(block2)(_ => ()).get
+    us = us.applyModifier(block2, None)(_ => ()).get
 
     val earlySpendingTx2 =
       validTransactionFromBoxes(txs.head.outputs, stateCtxOpt = Some(us.stateContext))
@@ -238,7 +238,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
       validTransactionFromBoxes(txBoxes(2), outputsProposition = feeProposition)
     val block3 = validFullBlock(Some(block2), us, IndexedSeq(earlySpendingTx2, blockTx3))
 
-    us.applyModifier(block3)(_ => ()) shouldBe 'success
+    us.applyModifier(block3, None)(_ => ()) shouldBe 'success
   }
 
   property("collect reward from both emission box and fees") {

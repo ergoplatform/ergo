@@ -1,9 +1,8 @@
 package org.ergoplatform.wallet.secrets
 
-import java.io.{File, PrintWriter}
+import java.io.{File, FileNotFoundException, PrintWriter}
 import java.util
 import java.util.UUID
-
 import io.circe.parser._
 import io.circe.syntax._
 import org.ergoplatform.wallet.crypto
@@ -137,7 +136,7 @@ object JsonSecretStorage {
           Failure(new Exception(s"Cannot readSecretStorage: Secret file not found in dir '$dir'"))
       }
     } else {
-      Failure(new Exception(s"Cannot readSecretStorage: dir '$dir' doesn't exist"))
+      Failure(new FileNotFoundException(s"Cannot readSecretStorage: dir '$dir' doesn't exist"))
     }
   }
 

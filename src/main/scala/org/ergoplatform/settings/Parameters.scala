@@ -62,7 +62,7 @@ class Parameters(val height: Height,
   /**
     * Max total computation cost of a block.
     */
-  lazy val maxBlockCost: Long = parametersTable(MaxBlockCostIncrease)
+  lazy val maxBlockCost: Int = parametersTable(MaxBlockCostIncrease)
 
   lazy val softForkStartingHeight: Option[Height] = parametersTable.get(SoftForkStartingHeight)
   lazy val softForkVotesCollected: Option[Int] = parametersTable.get(SoftForkVotesCollected)
@@ -208,6 +208,10 @@ class Parameters(val height: Height,
       Seq(SoftForkDisablingRulesKey -> ErgoValidationSettingsUpdateSerializer.toBytes(proposedUpdate))
     }
     ExtensionCandidate(paramFields ++ rulesToDisableFields)
+  }
+
+  def withBlockCost(cost: Int): Parameters = {
+    Parameters(height, parametersTable.updated(MaxBlockCostIncrease, cost), proposedUpdate)
   }
 
   override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")}; $proposedUpdate)"

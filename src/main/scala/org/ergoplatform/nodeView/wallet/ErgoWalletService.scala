@@ -24,6 +24,7 @@ import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.SigmaBoolean
 
+import java.io.FileNotFoundException
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -179,8 +180,9 @@ trait ErgoWalletService {
     *
     * @param state current wallet state
     * @param block - block to scan
+    * @param dustLimit - Boxes with value smaller than dustLimit are disregarded in wallet scan logic
     */
-  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState]
+  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState]
 
   /**
     * Sign a transaction
@@ -243,7 +245,12 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
         log.info("Trying to read wallet in secure mode ..")
         JsonSecretStorage.readFile(secretStorageSettings).fold(
           e => {
-            log.warn(s"Failed to read wallet. Manual initialization is required. Details: ", e)
+            e match {
+              case e: FileNotFoundException =>
+                log.info(s"Wallet secret storage not found. Details: {}", e.getMessage)
+              case _ =>
+                log.warn(s"Failed to read wallet. Manual initialization is required. Details: ", e)
+            }
             state
           },
           secretStorage => {
@@ -521,8 +528,8 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
         Failure(new Exception("Unable to derive key, wallet is not initialized"))
     }
 
-  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState] =
-      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter)
+  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =
+      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter, dustLimit)
         .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
 
   def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {

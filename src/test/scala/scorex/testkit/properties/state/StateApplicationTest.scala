@@ -21,7 +21,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
   property(propertyNameGenerator("apply modifier")) {
     forAll(stateGenWithValidModifier) { case (s, m) =>
       val ver = s.version
-      val sTry = s.applyModifier(m)(_ => ())
+      val sTry = s.applyModifier(m, None)(_ => ())
         sTry.isSuccess shouldBe true
       sTry.get.version == ver shouldBe false
     }
@@ -30,17 +30,17 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
   property(propertyNameGenerator("do not apply same valid modifier twice")) {
     forAll(stateGenWithValidModifier) { case (s, m) =>
       val ver = s.version
-      val sTry = s.applyModifier(m)(_ => ())
+      val sTry = s.applyModifier(m, None)(_ => ())
       sTry.isSuccess shouldBe true
       val s2 = sTry.get
       s2.version == ver shouldBe false
-      s2.applyModifier(m)(_ => ()).isSuccess shouldBe false
+      s2.applyModifier(m, None)(_ => ()).isSuccess shouldBe false
     }
   }
 
   property(propertyNameGenerator("do not apply invalid modifier")) {
     forAll(stateGenWithInvalidModifier) { case (s, m) =>
-      val sTry = s.applyModifier(m)(_ => ())
+      val sTry = s.applyModifier(m, None)(_ => ())
       sTry.isSuccess shouldBe false
     }
   }
@@ -48,7 +48,8 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
   property(propertyNameGenerator("apply valid modifier after rollback")) {
     forAll(stateGenWithValidModifier) { case (s, m) =>
       val ver = s.version
-      val sTry = s.applyModifier(m)(_ => ())
+      s.store.setKeepVersions(10)
+      val sTry = s.applyModifier(m, Some(0))(_ => ())
       sTry.isSuccess shouldBe true
       val s2 = sTry.get
       s2.version == ver shouldBe false
@@ -57,7 +58,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
       val s3 = s2.rollbackTo(ver).get
       s3.version == ver shouldBe true
 
-      val sTry2 = s3.applyModifier(m)(_ => ())
+      val sTry2 = s3.applyModifier(m, None)(_ => ())
       sTry2.isSuccess shouldBe true
       val s4 = sTry2.get
       s4.version == ver shouldBe false
@@ -67,7 +68,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
 
   property(propertyNameGenerator("application after rollback is possible")) {
     forAll(stateGen) { s =>
-
+      s.store.setKeepVersions(10)
       val maxRollbackDepth = s match {
         case ds: DigestState =>
           ds.store.rollbackVersions().size
@@ -82,7 +83,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
       val s2 = (0 until rollbackDepth).foldLeft(s) { case (state, _) =>
         val modifier = semanticallyValidModifier(state)
         buf += modifier
-        val sTry = state.applyModifier(modifier)(_ => ())
+        val sTry = state.applyModifier(modifier, Some(rollbackDepth))(_ => ())
         sTry shouldBe 'success
         sTry.get
       }
@@ -94,7 +95,7 @@ trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
       s3.version == ver shouldBe true
 
       val s4 = buf.foldLeft(s3) { case (state, m) =>
-        val sTry = state.applyModifier(m)(_ => ())
+        val sTry = state.applyModifier(m, Some(0))(_ => ())
         sTry shouldBe 'success
         sTry.get
       }

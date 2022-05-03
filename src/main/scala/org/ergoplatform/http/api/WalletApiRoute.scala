@@ -124,6 +124,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
       }
     }
 
+  /** POST body field - from what height to rescan wallet */
   private val heightEntityField: Directive1[Int] = entity(as[Option[Json]])
     .flatMap {
       _.map[Directive1[Int]] { entity =>
@@ -433,7 +434,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
     }
   }
 
-  def rescanWalletR: Route = (path("rescan") & (get & heightParam) | (post & heightEntityField)) { fromHeight =>
+  def rescanWalletR: Route = (path("rescan") & post & heightEntityField) { fromHeight =>
     withWalletOp(_.rescanWallet(fromHeight)) {
       _.fold(
         e => BadRequest(e.getMessage),

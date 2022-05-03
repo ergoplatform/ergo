@@ -147,25 +147,9 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "rescan wallet get" in {
-    Get(prefix + "/rescan") ~> route ~> check {
-      status shouldBe StatusCodes.OK
-    }
-  }
-
   it should "rescan wallet post" in {
     Post(prefix + "/rescan") ~> route ~> check {
       status shouldBe StatusCodes.OK
-    }
-  }
-
-  it should "rescan wallet get with fromHeight" in {
-    Get(prefix + "/rescan?fromHeight=0") ~> route ~> check {
-      status shouldBe StatusCodes.OK
-    }
-
-    Get(prefix + "/rescan?fromHeight=-1") ~> route ~> check {
-      rejection shouldEqual ValidationRejection("fromHeight field must be >= 0", None)
     }
   }
 

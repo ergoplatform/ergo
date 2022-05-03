@@ -209,6 +209,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       context.become(loadedWallet(newState))
 
+    // forceScan=true means we serve a user request for rescan from arbitrary height
     case ScanInThePast(blockHeight, forceScan) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
       if (nextBlockHeight == blockHeight || forceScan) {
@@ -477,6 +478,7 @@ object ErgoWalletActor extends ScorexLogging {
     * A signal the wallet actor sends to itself to scan a block in the past
     *
     * @param blockHeight - height of a block to scan
+    * @param forceScan - scan a block even if height is out of order, to serve rescan requests from arbitrary height
     */
   private final case class ScanInThePast(blockHeight: ErgoHistory.Height, forceScan: Boolean)
 

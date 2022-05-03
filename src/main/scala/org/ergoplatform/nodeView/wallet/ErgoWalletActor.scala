@@ -258,6 +258,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case Rollback(version: VersionTag) =>
+      // wallet must be initialized for wallet registry rollback
       if (state.secretStorageOpt.isDefined || settings.walletSettings.testMnemonic.isDefined) {
         state.registry.rollback(version) match {
           case Failure(t) =>

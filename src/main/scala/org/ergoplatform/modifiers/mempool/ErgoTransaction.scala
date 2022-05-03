@@ -139,7 +139,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     )
 
     // Cost limit per block
-    val maxCost = stateContext.currentParameters.maxBlockCost
+    val maxCost = stateContext.currentParameters.maxBlockCost.toLong
 
     // We sum up previously accumulated cost and transaction initialization cost
     val startCost = addExact(initialCost, accumulatedCost)
@@ -250,8 +250,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long = 0L)
-                      (implicit verifier: ErgoInterpreter): Try[Long] = {
-    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
+                      (implicit verifier: ErgoInterpreter): Try[Int] = {
+    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry.map(_.toInt)
   }
 
   override type M = ErgoTransaction

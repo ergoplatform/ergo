@@ -13,7 +13,6 @@ import scorex.util.encode.Base16
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
 
-import scala.util.Random
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.secrets.PrimitiveSecretKey
@@ -302,7 +301,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
       bs0.walletBalance shouldBe 0
       bs0.walletAssetBalances shouldBe empty
 
-      val balance1 = Random.nextInt(1000) + 1
+      val balance1 = settings.walletSettings.dustLimit.getOrElse(1000000L) + 1
       val box1 = IndexedSeq(new ErgoBoxCandidate(balance1, pubKey, startHeight, randomNewAsset.toColl))
       wallet.scanOffchain(ErgoTransaction(fakeInputs, box1))
 
@@ -313,7 +312,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         bs1.walletAssetBalances shouldBe assetAmount(box1)
       }
 
-      val balance2 = Random.nextInt(1000) + 1
+      val balance2 = settings.walletSettings.dustLimit.getOrElse(1000000L) + 1
       val box2 = IndexedSeq(new ErgoBoxCandidate(balance2, pubKey, startHeight, randomNewAsset.toColl))
       wallet.scanOffchain(ErgoTransaction(fakeInputs, IndexedSeq(), box2))
 

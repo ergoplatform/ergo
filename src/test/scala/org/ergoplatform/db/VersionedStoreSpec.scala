@@ -65,7 +65,9 @@ class VersionedStoreSpec extends AnyPropSpec with Matchers with DBSpec {
       store.versionIdExists(v1) shouldBe true
 
       store.insert(v3, Seq(keyC -> valC)).get
+      store.insert(v4, Seq(keyA -> valA)).get
 
+      store.versionIdExists(v4) shouldBe true
       store.versionIdExists(v3) shouldBe true
       store.versionIdExists(v2) shouldBe true
       store.versionIdExists(v1) shouldBe false

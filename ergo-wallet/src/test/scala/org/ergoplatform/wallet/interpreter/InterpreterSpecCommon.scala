@@ -26,7 +26,7 @@ trait InterpreterSpecCommon {
 
     override def outputCost: Int = 100
 
-    override def maxBlockCost: Long = 1000000
+    override def maxBlockCost: Int = 1000000
 
     override def softForkStartingHeight: Option[Int] = None
 

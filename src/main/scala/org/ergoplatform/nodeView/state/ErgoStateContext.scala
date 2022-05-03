@@ -138,13 +138,18 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   /**
-    * Helper method to decide whether enough support (at least 90% mining hashpower support) for EIP-27 was expressed
+    * Helper method to decide whether enough support (at least ~90% mining hashpower support) for EIP-27 was expressed
     * before. Called at the beginning of each voting epoch.
     */
-  private def updateEip27Supported(epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Boolean = {
+  private def updateEip27Supported(epochVotes: Seq[(Byte, Int)],
+                                   chainSettings: ChainSettings,
+                                   height: Height): Boolean = {
+    val votingSettings = chainSettings.voting
+    val eip27ActivationHeight = chainSettings.reemission.activationHeight
+
     if (this.eip27Supported) {
       true
-    } else {
+    } else if (height < eip27ActivationHeight) {
       // about 90% for large enough epochs, 888 for the mainnet.
       val threshold = if (votingSettings.votingLength == 1024) {
         888
@@ -159,6 +164,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       } else {
         false
       }
+    } else {
+      false // this.eip27Supported value
     }
   }
 
@@ -228,7 +235,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
             val extractedValidationSettings = processed._2
             val proposedVotes = votes.map(_ -> 1)
             val newVoting = VotingData(proposedVotes)
-            val eip27Supported = updateEip27Supported(votingData.epochVotes, ergoSettings.chainSettings.voting)
+            val eip27Supported = updateEip27Supported(votingData.epochVotes, ergoSettings.chainSettings, height)
             new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, params,
               extractedValidationSettings, newVoting, eip27Supported)(ergoSettings)
           }

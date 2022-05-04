@@ -1,7 +1,7 @@
 package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{Route, ValidationRejection}
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
@@ -147,12 +147,21 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "rescan wallet" in {
-    Get(prefix + "/rescan") ~> route ~> check {
+  it should "rescan wallet post" in {
+    Post(prefix + "/rescan") ~> route ~> check {
       status shouldBe StatusCodes.OK
     }
   }
 
+  it should "rescan wallet post with fromHeight" in {
+    Post(prefix + "/rescan", Json.obj("fromHeight" -> 0.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+
+    Post(prefix + "/rescan", Json.obj("fromHeight" -> (-1).asJson)) ~> route ~> check {
+      rejection shouldEqual ValidationRejection("fromHeight field must be >= 0", None)
+    }
+  }
 
   it should "derive new key according to a provided path" in {
     Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "m/1/2".asJson)) ~> route ~> check {

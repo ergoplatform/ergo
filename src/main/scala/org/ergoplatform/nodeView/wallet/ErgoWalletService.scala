@@ -109,11 +109,17 @@ trait ErgoWalletService {
   /**
     * @param state current wallet state
     * @param scanId to get boxes for
-    * @param unspentOnly only boxes that have not been spent yet
     * @param considerUnconfirmed whether to look for boxes in off-chain registry
-    * @return Wallet boxes corresponding to `scanId`
+    * @return Unspent wallet boxes corresponding to `scanId`
     */
-  def getScanBoxes(state: ErgoWalletState, scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
+  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox]
+
+  /**
+    * @param state current wallet state
+    * @param scanId to get boxes for
+    * @return Spent wallet boxes corresponding to `scanId`
+    */
+  def getScanSpentBoxes(state: ErgoWalletState, scanId: ScanId): Seq[WalletBox]
 
   /**
     * @param registry - wallet registry database
@@ -395,7 +401,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
-  def getScanBoxes(state: ErgoWalletState, scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {
+  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox] = {
     val unconfirmed = if (considerUnconfirmed) {
       state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
     } else {
@@ -403,11 +409,13 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     }
 
     val currentHeight = state.fullHeight
-    val boxes = (if (unspentOnly) {
-      state.registry.unspentBoxes(scanId)
-    } else {
-      state.registry.confirmedBoxes(scanId)
-    }) ++ unconfirmed
+    val boxes = state.registry.unspentBoxes(scanId)  ++ unconfirmed
+    boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+  }
+
+  def getScanSpentBoxes(state: ErgoWalletState, scanId: ScanId): Seq[WalletBox] = {
+    val currentHeight = state.fullHeight
+    val boxes = state.registry.spentBoxes(scanId)
     boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 

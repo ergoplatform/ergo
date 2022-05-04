@@ -167,7 +167,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case LockWallet => ()
 
-      case RescanWallet => sender ! Success(())
+      case RescanWallet(_) => sender ! Success(())
 
       case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistory.GenesisHeight, error = None)
 
@@ -217,13 +217,16 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! RemoveScanResponse(res)
 
-      case GetScanBoxes(_, _, considerUnconfirmed) =>
+      case GetScanUnspentBoxes(_, considerUnconfirmed) =>
         val res = if(considerUnconfirmed) {
           Seq(walletBoxN_N, walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         } else {
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         }
         sender() ! res
+
+      case GetScanSpentBoxes(_) =>
+        sender() ! Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
 
       case StopTracking(_, _) =>
         sender() ! StopTrackingResponse(Success(()))

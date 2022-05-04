@@ -411,11 +411,12 @@ class ErgoWalletActor(settings: ErgoSettings,
     case CollectWalletBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]) =>
       sender() ! ReqBoxesResponse(ergoWalletService.collectBoxes(state, boxSelector, targetBalance, targetAssets))
 
-    case GetScanTransactions(scanId: ScanId) =>
-      sender() ! ScanRelatedTxsResponse(ergoWalletService.getScanTransactions(scanId, state.registry, state.fullHeight))
+    case GetScanTransactions(scanId: ScanId, includeUnconfirmed) =>
+      val scanTxs = ergoWalletService.getScanTransactions(state, scanId, state.fullHeight, includeUnconfirmed)
+      sender() ! ScanRelatedTxsResponse(scanTxs)
 
-    case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)  =>
-      readFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum)
+    case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed)  =>
+      readFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed)
 
   }
 
@@ -424,7 +425,8 @@ class ErgoWalletActor(settings: ErgoSettings,
                    minHeight: Int,
                    maxHeight: Int,
                    minConfNum: Int,
-                   maxConfNum: Int): Unit = {
+                   maxConfNum: Int,
+                   includeUnconfirmed: Boolean): Unit = {
     val heightFrom = if (maxConfNum == Int.MaxValue) {
       minHeight
     } else {
@@ -441,8 +443,15 @@ class ErgoWalletActor(settings: ErgoSettings,
       .sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, state.fullHeight - tx.inclusionHeight))
     val ts = System.currentTimeMillis()
-    log.debug(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
-    sender() ! txs
+    val txsToSend =
+      if (includeUnconfirmed && heightTo > state.fullHeight) {
+        // in order to include unconfirmed txs, heightTo should be grater than current height
+        txs ++ scanIds.flatMap( scanId => ergoWalletService.getUnconfirmedTransactions(state, scanId) )
+      } else {
+        txs
+      }
+    log.debug(s"Wallet: ${txsToSend.size} read in ${ts-ts0} ms")
+    sender() ! txsToSend
   }
 
   override def receive: Receive = emptyWallet
@@ -637,7 +646,7 @@ object ErgoWalletActor extends ScorexLogging {
     *
     * @param scanId  - Scan identifier
     */
-  final case class GetScanTransactions(scanId: ScanId)
+  final case class GetScanTransactions(scanId: ScanId, includeUnconfirmed: Boolean)
 
   /**
     * Response for requested scan related transactions
@@ -713,7 +722,12 @@ object ErgoWalletActor extends ScorexLogging {
   /**
     * Get filtered scan-related txs
     */
-  case class GetFilteredScanTxs(scanId: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
+  case class GetFilteredScanTxs(scanId: List[ScanId],
+                                minHeight: Int,
+                                maxHeight: Int,
+                                minConfNum: Int,
+                                maxConfNum: Int,
+                                includeUnconfirmed: Boolean)
 
   /**
     * Derive next key-pair according to BIP-32

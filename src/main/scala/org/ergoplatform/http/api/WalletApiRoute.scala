@@ -1,7 +1,7 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive, Directive1, Route}
+import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
@@ -122,6 +122,21 @@ case class WalletApiRoute(readersHolder: ActorRef,
         case Right(value: P2PKAddress) => provide(value)
         case _ => reject
       }
+    }
+
+  /** POST body field - from what height to rescan wallet */
+  private val heightEntityField: Directive1[Int] = entity(as[Option[Json]])
+    .flatMap {
+      _.map[Directive1[Int]] { entity =>
+        entity.hcursor.downField("fromHeight").as[Int] match {
+          case Right(fromHeight) if fromHeight >= 0 =>
+            provide(fromHeight)
+          case Right(_) =>
+            reject(ValidationRejection("fromHeight field must be >= 0"))
+          case Left(_) =>
+            reject
+        }
+      }.getOrElse(provide(0))
     }
 
   private def withFee(requests: Seq[TransactionGenerationRequest]): Seq[TransactionGenerationRequest] = {
@@ -419,8 +434,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
     }
   }
 
-  def rescanWalletR: Route = (path("rescan") & get) {
-    withWalletOp(_.rescanWallet()) {
+  def rescanWalletR: Route = (path("rescan") & post & heightEntityField) { fromHeight =>
+    withWalletOp(_.rescanWallet(fromHeight)) {
       _.fold(
         e => BadRequest(e.getMessage),
         _ => ApiResponse.toRoute(ApiResponse.OK)

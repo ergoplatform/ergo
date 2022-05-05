@@ -67,7 +67,7 @@ case class NipopowApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, erg
   /**
     * Get NiPoPow proof for current moment of time (for header from k blocks ago)
     */
-  def getPopowProofR: Route = (pathPrefix("proof" / IntNumber / IntNumber) & get) { case (m, k) =>
+  def getPopowProofR: Route = (pathPrefix("proof" / IntNumber / IntNumber) & pathEndOrSingleSlash & get) { case (m, k) =>
     onSuccess(getPopowProof(m, k, None)) {
       _.fold(
         e => BadRequest(e.getMessage),

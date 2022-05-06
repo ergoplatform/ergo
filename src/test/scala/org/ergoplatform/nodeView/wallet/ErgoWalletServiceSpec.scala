@@ -1,18 +1,21 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
+import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R1}
 import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.nodeView.wallet.scanning.LegacyScan
 import org.ergoplatform.utils.fixtures.WalletFixture
+import org.ergoplatform.utils.MempoolTestHelpers
 import org.ergoplatform.utils.generators.{ErgoTransactionGenerators, WalletGenerators}
 import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
 import org.ergoplatform.wallet.interface4j.SecretString
-import org.ergoplatform.wallet.Constants.PaymentsScanId
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
 import org.ergoplatform.wallet.crypto.ErgoSignature
@@ -28,8 +31,8 @@ import sigmastate.{SType, Values}
 
 import scala.util.Random
 
-class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletGenerators with WalletTestOps
-  with ErgoWalletSupport with ErgoTransactionGenerators with DBSpec with BeforeAndAfterAll {
+class ErgoWalletServiceSpec extends ErgoPropertyTest
+  with WalletGenerators with MempoolTestHelpers with WalletTestOps with ErgoWalletSupport with ErgoTransactionGenerators with DBSpec with BeforeAndAfterAll {
 
   private implicit val x: WalletFixture = new WalletFixture(settings, parameters, getCurrentView(_).vault)
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 4)
@@ -38,7 +41,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletGenerators with 
 
   override def afterAll(): Unit = try super.afterAll() finally x.stop()
 
-  private def initialState(store: LDBKVStore, versionedStore: LDBVersionedStore) = {
+  private def initialState(store: LDBKVStore, versionedStore: LDBVersionedStore, mempool: Option[ErgoMemPoolReader] = None) = {
     ErgoWalletState(
       new WalletStorage(store, settings),
       secretStorageOpt = Option.empty,
@@ -47,7 +50,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletGenerators with 
       outputsFilter = Option.empty,
       WalletVars(Some(defaultProver), Seq.empty, None),
       stateReaderOpt = Option.empty,
-      mempoolReaderOpt = Option.empty,
+      mempoolReaderOpt = mempool,
       utxoStateReaderOpt = Option.empty,
       parameters,
       maxInputsToUse = 1000
@@ -138,6 +141,64 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletGenerators with 
         validCandidate.additionalTokens.toMap shouldBe Map(ergoBox.id -> 1)
         validCandidate.creationHeight shouldBe startHeight
         validCandidate.ergoTree shouldBe pks.head.script
+    }
+  }
+
+  property("it should get scan confirmed and unconfirmed transactions") {
+    forAll(Gen.nonEmptyListOf(trackedBoxGen), modifierIdGen) { case (boxes, txId) =>
+      withVersionedStore(10) { versionedStore =>
+        withStore { store =>
+          val allBoxes = {
+            val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(ScanId @@ 0)))
+            val spentBox = boxes.head.copy(spendingHeightOpt = Some(100), spendingTxIdOpt = Some(txId), scans = Set(ScanId @@ 0))
+            unspentBoxes :+ spentBox
+          }
+          val encodedBoxes = allBoxes.map { box =>
+            Base16.encode(ErgoBoxSerializer.toBytes(box.box))
+          }
+
+          val paymentRequest = PaymentRequest(pks.head, 50000, Seq.empty, Map.empty)
+          val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs)
+
+          val walletService = new ErgoWalletServiceImpl
+          val unconfirmedTx =
+            walletService.generateTransaction(
+              initialState(store, versionedStore),
+              boxSelector,
+              Seq(paymentRequest),
+              inputsRaw = encodedBoxes,
+              dataInputsRaw = Seq.empty,
+              sign = true
+            ).get.asInstanceOf[ErgoTransaction]
+
+          // let's create wallet state with an unconfirmed transaction in mempool
+          val wState = initialState(store, versionedStore, Some(new FakeMempool(Seq(unconfirmedTx))))
+          val signedTx1 =
+            walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, sign = true)
+              .get.asInstanceOf[ErgoTransaction]
+          val walletTx1 = WalletTransaction(signedTx1, 100, Seq(ScanId @@ 0))
+
+          // let's update wallet registry with a transaction from a block
+          val genesisBlock = makeGenesisBlock(pks.head.pubkey, randomNewAsset)
+          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq(walletTx1)), genesisBlock.id, blockHeight = 100).get
+
+          // transaction should be retrieved by only a scan id that was associated with it
+          val txs1 = walletService.getScanTransactions(wState, ScanId @@ 0, 100)
+          assert(txs1.nonEmpty)
+          val txs2 = walletService.getScanTransactions(wState, ScanId @@ 1, 100)
+          assert(txs2.isEmpty)
+
+          // let's test that unconfirmed transaction is retrieved
+          val scanId =
+            walletService.addScan(wState, ScanRequest("foo", EqualsScanningPredicate(R1, ByteArrayConstant(pks.head.script.bytes)), Some(ScanWalletInteraction.Off), Some(false)))
+              .get._1.scanId
+
+          val txs3 = walletService.getScanTransactions(wState, scanId, 100, includeUnconfirmed = true)
+          txs3.size shouldBe 1
+
+          txs3.head.wtx.tx.id shouldBe unconfirmedTx.id
+        }
+      }
     }
   }
 

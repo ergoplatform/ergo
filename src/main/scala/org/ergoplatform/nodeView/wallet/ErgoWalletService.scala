@@ -109,11 +109,17 @@ trait ErgoWalletService {
   /**
     * @param state current wallet state
     * @param scanId to get boxes for
-    * @param unspentOnly only boxes that have not been spent yet
     * @param considerUnconfirmed whether to look for boxes in off-chain registry
-    * @return Wallet boxes corresponding to `scanId`
+    * @return Unspent wallet boxes corresponding to `scanId`
     */
-  def getScanBoxes(state: ErgoWalletState, scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
+  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox]
+
+  /**
+    * @param state current wallet state
+    * @param scanId to get boxes for
+    * @return Spent wallet boxes corresponding to `scanId`
+    */
+  def getScanSpentBoxes(state: ErgoWalletState, scanId: ScanId): Seq[WalletBox]
 
   /**
     * @param registry - wallet registry database
@@ -157,12 +163,25 @@ trait ErgoWalletService {
   def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)]
 
   /**
+    * Get unconfirmed transactions from mempool that are associated with given scan id
+    * @param state current wallet state
     * @param scanId to get transactions for
-    * @param registry wallet registry
+    * @return Unconfirmed transactions for `scanId`
+    */
+  def getUnconfirmedTransactions(state: ErgoWalletState, scanId: ScanId): Seq[AugWalletTransaction]
+
+  /**
+    * Get transactions aassociated with given scan id
+    * @param state current wallet state
+    * @param scanId to get transactions for
     * @param fullHeight of the chain (last blocked applied to the state, not the wallet)
+    * @param includeUnconfirmed whether to include transactions from mempool that match given scanId
     * @return Wallet transactions for `scanId`
     */
-  def getScanTransactions(scanId: ScanId, registry: WalletRegistry, fullHeight: Int): Seq[AugWalletTransaction]
+  def getScanTransactions(state: ErgoWalletState,
+                          scanId: ScanId,
+                          fullHeight: Int,
+                          includeUnconfirmed: Boolean): Seq[AugWalletTransaction]
 
   def addScan(state: ErgoWalletState, appRequest: ScanRequest): Try[(Scan, ErgoWalletState)]
 
@@ -382,7 +401,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
-  def getScanBoxes(state: ErgoWalletState, scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {
+  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox] = {
     val unconfirmed = if (considerUnconfirmed) {
       state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
     } else {
@@ -390,11 +409,13 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     }
 
     val currentHeight = state.fullHeight
-    val boxes = (if (unspentOnly) {
-      state.registry.unspentBoxes(scanId)
-    } else {
-      state.registry.confirmedBoxes(scanId)
-    }) ++ unconfirmed
+    val boxes = state.registry.unspentBoxes(scanId)  ++ unconfirmed
+    boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+  }
+
+  def getScanSpentBoxes(state: ErgoWalletState, scanId: ScanId): Seq[WalletBox] = {
+    val currentHeight = state.fullHeight
+    val boxes = state.registry.spentBoxes(scanId)
     boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
@@ -561,9 +582,34 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
       scan -> state.copy(walletVars = state.walletVars.addScan(scan))
     }
 
-  def getScanTransactions(scanId: ScanId, registry: WalletRegistry, fullHeight: Int): Seq[AugWalletTransaction] = {
-    registry.allWalletTxs().filter(wtx => wtx.scanIds.contains(scanId))
-      .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
+  def getUnconfirmedTransactions(state: ErgoWalletState, scanId: ScanId): Seq[AugWalletTransaction] = {
+    state.mempoolReaderOpt.flatMap { mempool =>
+      state.storage.getScan(scanId).map { scan =>
+        mempool.getAllPrioritized.filter { tx =>
+          tx.outputs.exists(scan.trackingRule.filter)
+        }.map { tx =>
+          // unconfirmed transaction has 0 confirmations
+          AugWalletTransaction(WalletTransaction(tx, state.fullHeight, Seq(scanId)), 0)
+        }
+      }
+    }.getOrElse(Nil)
+  }
+
+  def getScanTransactions(state: ErgoWalletState,
+                          scanId: ScanId,
+                          fullHeight: Int,
+                          includeUnconfirmed: Boolean = false): Seq[AugWalletTransaction] = {
+    val walletTxs =
+      state.registry.allWalletTxs().filter(wtx => wtx.scanIds.contains(scanId))
+        .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
+
+    val unconfirmedTxs =
+      if (includeUnconfirmed) {
+        getUnconfirmedTransactions(state, scanId)
+      } else {
+        Nil
+      }
+    walletTxs ++ unconfirmedTxs
   }
 
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],

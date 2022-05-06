@@ -141,6 +141,26 @@ class ScanApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "list spent boxes for a scan" in {
+    val minInclusionHeight = 10
+
+    val suffix = s"/spentBoxes/101"
+
+    Get(prefix + suffix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[List[Json]])
+      response shouldBe 'success
+      response.get.nonEmpty shouldBe true
+      response.get.foreach { json =>
+        json.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
+      }
+
+      // unconfirmed box not returned
+      response.get.flatMap(_.hcursor.downField("confirmationsNum").as[Option[Int]].toOption)
+        .exists(_.isDefined == false) shouldBe false
+    }
+  }
+
   it should "stop tracking a box" in {
     val scanIdBoxId = ScanIdBoxId(ScanId @@ (51), ADKey @@ Random.randomBytes(32))
 

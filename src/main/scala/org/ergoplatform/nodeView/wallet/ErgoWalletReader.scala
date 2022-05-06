@@ -48,7 +48,7 @@ trait ErgoWalletReader extends VaultReader {
 
   def lockWallet(): Unit = walletActor ! LockWallet
 
-  def rescanWallet(): Future[Try[Unit]] = (walletActor ? RescanWallet).mapTo[Try[Unit]]
+  def rescanWallet(fromHeight: Int): Future[Try[Unit]] = (walletActor ? RescanWallet(fromHeight)).mapTo[Try[Unit]]
 
   def getWalletStatus: Future[WalletStatus] =
     (walletActor ? GetWalletStatus).mapTo[WalletStatus]
@@ -76,10 +76,11 @@ trait ErgoWalletReader extends VaultReader {
   def walletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 
-  def appBoxes(scanId: ScanId,
-               unspentOnly: Boolean = false,
-               considerUnconfirmed: Boolean = false): Future[Seq[WalletBox]] =
-    (walletActor ? GetScanBoxes(scanId, unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
+  def scanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean = false): Future[Seq[WalletBox]] =
+    (walletActor ? GetScanUnspentBoxes(scanId, considerUnconfirmed)).mapTo[Seq[WalletBox]]
+
+  def scanSpentBoxes(scanId: ScanId): Future[Seq[WalletBox]] =
+    (walletActor ? GetScanSpentBoxes(scanId)).mapTo[Seq[WalletBox]]
 
   def updateChangeAddress(address: P2PKAddress): Future[Unit] =
     walletActor.askWithStatus(UpdateChangeAddress(address)).mapTo[Unit]
@@ -141,10 +142,15 @@ trait ErgoWalletReader extends VaultReader {
   def collectBoxes(request: BoxesRequest): Future[ReqBoxesResponse] =
     (walletActor ? CollectWalletBoxes(request.targetBalance, request.targetAssets)).mapTo[ReqBoxesResponse]
 
-  def transactionsByScanId(scanId: ScanId): Future[ScanRelatedTxsResponse] =
-    (walletActor ? GetScanTransactions(scanId)).mapTo[ScanRelatedTxsResponse]
+  def transactionsByScanId(scanId: ScanId, includeUnconfirmed: Boolean): Future[ScanRelatedTxsResponse] =
+    (walletActor ? GetScanTransactions(scanId, includeUnconfirmed)).mapTo[ScanRelatedTxsResponse]
 
-  def filteredScanTransactions(scanIds: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int): Future[Seq[AugWalletTransaction]] =
-    (walletActor ? GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)).mapTo[Seq[AugWalletTransaction]]
+  def filteredScanTransactions(scanIds: List[ScanId],
+                               minHeight: Int,
+                               maxHeight: Int,
+                               minConfNum: Int,
+                               maxConfNum: Int,
+                               includeUnconfirmed: Boolean): Future[Seq[AugWalletTransaction]] =
+    (walletActor ? GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed)).mapTo[Seq[AugWalletTransaction]]
 
 }

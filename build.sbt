@@ -87,6 +87,7 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.2.10" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
+  "com.lihaoyi" %% "pprint" % "0.5.4" % Test,  // the last version with Scala 2.11 support
 
   "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
   "io.circe" %% "circe-core" % circeVersion,

@@ -1,18 +1,20 @@
 package org.ergoplatform.reemission
 
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoScriptPredef, Input}
+import org.ergoplatform._
 import org.ergoplatform.settings.{MonetarySettings, ReemissionSettings}
-import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestConstants}
+import org.ergoplatform.utils.{ErgoTestConstants, ErgoPropertyTest}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.ModifierId
 import sigmastate.AvlTreeData
 import sigmastate.TrivialProp.TrueProp
-import sigmastate.eval.{Colls, Digest32RType, IRContext, RuntimeCosting}
-import sigmastate.helpers.{ContextEnrichingTestProvingInterpreter, ErgoLikeContextTesting, ErgoLikeTestInterpreter}
+import sigmastate.Values.ErgoTree
+import sigmastate.eval.{Digest32RType, Colls, IRContext, RuntimeCosting}
+import sigmastate.helpers.{ErgoLikeTestInterpreter, ContextEnrichingTestProvingInterpreter, ErgoLikeContextTesting}
 import sigmastate.helpers.TestingHelpers.testBox
+import sigmastate.interpreter.Interpreter
 import sigmastate.interpreter.Interpreter.emptyEnv
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 // done similarly to ErgoScriptPredefSpec in sigma repo
 class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
@@ -210,4 +212,28 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
     prover.prove(emptyEnv, pay2RewardsProp, ctx, fakeMessage).isFailure shouldBe true
   }
 
+  def compareSizes(tree: ErgoTree, name: String) = {
+    println(s"Original size of $name: ${tree.bytes.length}")
+    val IR.Pair(calcF, _) = IR.doCosting(Interpreter.emptyEnv, tree.toProposition(true), true)
+    val compiledProp = IR.buildTree(calcF).toSigmaProp
+    val version: Byte = 1
+    val headerFlags = ErgoTree.headerWithVersion(version)
+    val compiledTree = ErgoTree.fromProposition(headerFlags, compiledProp)
+    println(s"Compiled size of $name: ${compiledTree.bytes.length}")
+//    SigmaPPrint.pprintln(compiledTree, 150, 250)
+  }
+
+  property("compile reemission scripts") {
+//    val compiler = SigmaCompiler(CompilerSettings(ErgoAddressEncoder.MainnetNetworkPrefix, TransformingSigmaBuilder, lowerMethodCalls = true))
+
+    val p2r = rr.payToReemission
+    compareSizes(p2r, "pay2Reemission")
+    compareSizes(prop, "reemissionBoxProp")
+
+//  Output:
+//  Original size of pay2Reemission: 61
+//  Compiled size of pay2Reemission: 62
+//  Original size of reemissionBoxProp: 262
+//  Compiled size of reemissionBoxProp: 254
+  }
 }

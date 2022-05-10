@@ -213,27 +213,37 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
   }
 
   def compareSizes(tree: ErgoTree, name: String) = {
-    println(s"Original size of $name: ${tree.bytes.length}")
+    println(s"\n\n====  original $name  ================================")
+    println(s"size of $name: ${tree.bytes.length}")
+//    SigmaPPrint.pprintln(tree, 150, 250)
+
     val IR.Pair(calcF, _) = IR.doCosting(Interpreter.emptyEnv, tree.toProposition(true), true)
     val compiledProp = IR.buildTree(calcF).toSigmaProp
     val version: Byte = 1
     val headerFlags = ErgoTree.headerWithVersion(version)
     val compiledTree = ErgoTree.fromProposition(headerFlags, compiledProp)
-    println(s"Compiled size of $name: ${compiledTree.bytes.length}")
+
+    println(s"====  compiled $name  ================================")
+    println(s"size of $name: ${compiledTree.bytes.length}")
 //    SigmaPPrint.pprintln(compiledTree, 150, 250)
   }
 
   property("compile reemission scripts") {
-//    val compiler = SigmaCompiler(CompilerSettings(ErgoAddressEncoder.MainnetNetworkPrefix, TransformingSigmaBuilder, lowerMethodCalls = true))
-
     val p2r = rr.payToReemission
     compareSizes(p2r, "pay2Reemission")
     compareSizes(prop, "reemissionBoxProp")
 
 //  Output:
-//  Original size of pay2Reemission: 61
-//  Compiled size of pay2Reemission: 62
-//  Original size of reemissionBoxProp: 262
-//  Compiled size of reemissionBoxProp: 254
+//  ====  original pay2Reemission  ================================
+//  size of pay2Reemission: 61
+//  ====  compiled pay2Reemission  ================================
+//  size of pay2Reemission: 62
+//
+//
+//  ====  original reemissionBoxProp  ================================
+//  size of reemissionBoxProp: 262
+//  ====  compiled reemissionBoxProp  ================================
+//  size of reemissionBoxProp: 254
+
   }
 }

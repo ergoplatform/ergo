@@ -650,6 +650,7 @@ object ErgoWalletActor extends ScorexLogging {
     * Get scan related transactions
     *
     * @param scanId  - Scan identifier
+    * @param includeUnconfirmed  - whether to include transactions from mempool that match given scanId
     */
   final case class GetScanTransactions(scanId: ScanId, includeUnconfirmed: Boolean)
 
@@ -726,8 +727,14 @@ object ErgoWalletActor extends ScorexLogging {
 
   /**
     * Get filtered scan-related txs
+    * @param scanIds - scan identifiers
+    * @param minHeight - minimal tx inclusion height
+    * @param maxHeight - maximal tx inclusion height
+    * @param minConfNum - minimal confirmations number
+    * @param maxConfNum - maximal confirmations number
+    * @param includeUnconfirmed - whether to include transactions from mempool that match given scanId
     */
-  case class GetFilteredScanTxs(scanId: List[ScanId],
+  case class GetFilteredScanTxs(scanIds: List[ScanId],
                                 minHeight: Int,
                                 maxHeight: Int,
                                 minConfNum: Int,

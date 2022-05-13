@@ -263,11 +263,18 @@ Activation height: *777,217*
  
  use utxo/byIdBinary/997369af025fa60dab11d11f94bd5492dbb8731ea3a31154a0388e329f7edf4a request in node API to get 
  injection box bytes :
- ```{
+```
+ {
    "boxId": "997369af025fa60dab11d11f94bd5492dbb8731ea3a31154a0388e329f7edf4a",
    "bytes": "80a8d6b9071003040005808098f4e9b5ca6a0402d1ed91c1b2a4730000730193c5a7c5b2a47302008f9e2d0220fa2bf23962cdf51b07722d6237c0c7b8a44f78856c0f7ec308dc1ef1a92a5101d9a2cc8a09abfaed87afacfbb7daee79a6b26f10c6613fc13d3f3953e5521d1a808088fccdbcc32300fca71b8b95f6ad14ce600a126c8842334d40d35f8754176c4cda2c95219f19f700"
- }```
+ }
+```
 )
+
+Pay-2-Reemission and re-emission contracts ErgoTrees built using v1 ErgoTree, P2S addresses are as follows:
+
+* Pay-2-Reemission contract P2S address: 6KxusedL87PBibr1t1f4ggzAyTAmWEPqSpqXbkdoybNwHVw5Nb7cUESBmQw5XK8TyvbQiueyqkR9XMNaUgpWx3jT54p
+* Re-emission contract P2S address: EV2tXrpGJsizAgMRHtT6JVpuHnhjdf9iLUDJtHWSjin3vSU8npY4XbF9BXGPtvYsEV6DU53VsJieqVFa4fdQeJ88H9BHZSyn2bjzUPhXxfzzFmP41F5PbKwwu31FLRsYmzTG3eZeqgdpVYiL5vdohSWEb45L3VVMFAwmpLSyWtNbu1WqM2Z6Mq38gjEpsSHADLNiApbX5rhq75TB9RkkugoXBFXtDDxaoC5CK3LZxvMJcKdMQWrbJZUGKff7j2EhVw1gphu6a74Mv5kypjXCnuy8RbTQG9nb4pH6qX3Ct27xQXTxrRCGkkicNqYEWX3gYMkpPxZHURXm7DfYn43bJQPQcFGCVgsJtgdvoAjJqQuMcwbp
 
 References
 ----------

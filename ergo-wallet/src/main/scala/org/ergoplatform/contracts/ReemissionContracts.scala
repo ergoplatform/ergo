@@ -1,11 +1,11 @@
 package org.ergoplatform.contracts
 
-import org.ergoplatform.ErgoBox.R2
+import org.ergoplatform.ErgoBox.{R2, STokensRegType}
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
-import org.ergoplatform.{Height, MinerPubkey, Outputs, Self}
+import org.ergoplatform.{ErgoAddressEncoder, Height, MinerPubkey, Outputs, Pay2SAddress, Self}
 import org.ergoplatform.settings.MonetarySettings
-import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SByte, SCollection, SLong, STuple}
-import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant}
+import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SBox, SCollection, STuple}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant, SigmaPropValue, Value}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes, OptionGet, SelectField, SizeOf}
 
 /**
@@ -28,36 +28,48 @@ trait ReemissionContracts {
     */
   def reemissionStartHeight: Int
 
+  /** Helper method to extract tokens from a box. */
+  private def extractTokens(box: Value[SBox.type]): OptionGet[SCollection[STuple]] = {
+    val rOutTokens = OptionGet(ExtractRegisterAs(box, R2)(STokensRegType))
+    rOutTokens
+  }
+
+  def v1Tree(prop: SigmaPropValue): ErgoTree = {
+    val version: Byte = 1
+    val headerFlags = ErgoTree.headerWithVersion(version)
+    ErgoTree.fromProposition(headerFlags, prop)
+  }
+
   /**
     * Contract for boxes miners paying to remission contract according to EIP-27.
     * Anyone can merge multiple boxes locked by this contract with reemission box
     */
-  lazy val payToReemission: ErgoTree = {
+  lazy val payToReemission: ErgoTree = v1Tree({
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
-
-    val rOutTokens = OptionGet(ExtractRegisterAs(reemissionOut, R2)(SCollection(STuple(SCollection(SByte), SLong))))
+    val rOutTokens = extractTokens(reemissionOut)
 
     val firstTokenId = SelectField(ByIndex(rOutTokens, IntConstant(0)), 1.toByte)
 
     EQ(firstTokenId, ByteArrayConstant(reemissionNftIdBytes))
-  }.toSigmaProp.treeWithSegregation
+  })
 
   /**
     * Re-emission contract
     */
-  def reemissionBoxProp(ms: MonetarySettings): ErgoTree = {
+  def reemissionBoxProp(ms: MonetarySettings): ErgoTree = v1Tree({
 
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
 
+    val secondOut = ByIndex(Outputs, IntConstant(1))
+
     // output to pay miner
-    val minerOut = ByIndex(Outputs, IntConstant(1))
+    val minerOut = secondOut
 
-    val rOutTokens = OptionGet(ExtractRegisterAs(reemissionOut, R2)(SCollection(STuple(SCollection(SByte), SLong))))
-
+    // check that first (re-emission) output contains re-emission NFT (in the first position)
+    val rOutTokens = extractTokens(reemissionOut)
     val firstTokenId = SelectField(ByIndex(rOutTokens, IntConstant(0)), 1.toByte)
-
     val correctNftId = EQ(firstTokenId, ByteArrayConstant(reemissionNftIdBytes))
 
     // miner's output must have script which is time-locking reward for miner's pubkey
@@ -84,7 +96,7 @@ trait ReemissionContracts {
 
     // when reemission contract box got merged with other boxes
     val sponsored = {
-      val feeOut = ByIndex(Outputs, IntConstant(1))
+      val feeOut = secondOut
       AND(
         GT(ExtractAmount(reemissionOut), ExtractAmount(Self)),
         LE(ExtractAmount(feeOut), LongConstant(10000000)), // 0.01 ERG
@@ -106,5 +118,6 @@ trait ReemissionContracts {
         )
       )
     )
-  }.toSigmaProp.treeWithSegregation
+  }.toSigmaProp)
+
 }

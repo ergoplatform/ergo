@@ -31,7 +31,7 @@ case class EmissionApiRoute(ergoSettings: ErgoSettings)
   /**
     * API method to display emission data for given height
     */
-  val emissionAt: Route = (pathPrefix("at" / LongNumber) & get) { height =>
+  val emissionAt: Route = (pathPrefix("at" / IntNumber) & get) { height =>
     ApiResponse(emissionInfoAtHeight(height, emissionRules, reemissionSettings))
   }
 
@@ -54,20 +54,34 @@ case class EmissionApiRoute(ergoSettings: ErgoSettings)
 
 object EmissionApiRoute {
 
-  final case class EmissionInfo(minerReward: Long, totalCoinsIssued: Long, totalRemainCoins: Long, reemissionAmt: Long)
+  /**
+    * Data container for emission/at API request output. Contains emission info for a block at a given height.
+    *
+    * @param height - height emission info is given for
+    * @param minerReward - miner reward for given height
+    * @param totalCoinsIssued - total amount of ERG emitted
+    * @param totalRemainCoins - total amount of ERGs left in the emission contract box
+    * @param reemissionAmt - re-emission tokens issuance for given height (if EIP-27 is activated)
+    */
+  final case class EmissionInfo(height: Int,
+                                minerReward: Long,
+                                totalCoinsIssued: Long,
+                                totalRemainCoins: Long,
+                                reemissionAmt: Long)
 
-  def emissionInfoAtHeight(height: Long,
+  def emissionInfoAtHeight(height: Int,
                            emissionRules: EmissionRules,
                            reemissionSettings: ReemissionSettings): EmissionInfo = {
     val reemissionAmt = reemissionSettings.reemissionRules.reemissionForHeight(height.toInt, emissionRules)
     val minerReward = emissionRules.minersRewardAtHeight(height) - reemissionAmt
     val totalCoinsIssued = emissionRules.issuedCoinsAfterHeight(height)
     val totalRemainCoins = emissionRules.coinsTotal - totalCoinsIssued
-    EmissionInfo(minerReward, totalCoinsIssued, totalRemainCoins, reemissionAmt)
+    EmissionInfo(height, minerReward, totalCoinsIssued, totalRemainCoins, reemissionAmt)
   }
 
   // todo: add totalReemitted ?
   implicit val encoder: Encoder[EmissionInfo] = (ei: EmissionInfo) => Json.obj(
+    "height" -> Json.fromInt(ei.height),
     "minerReward" -> Json.fromLong(ei.minerReward),
     "totalCoinsIssued" -> Json.fromLong(ei.totalCoinsIssued),
     "totalRemainCoins" -> Json.fromLong(ei.totalRemainCoins),

@@ -2,12 +2,12 @@ package org.ergoplatform.contracts
 
 import org.ergoplatform.ErgoBox.{R2, STokensRegType}
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
-import org.ergoplatform.{ErgoAddressEncoder, Height, MinerPubkey, Outputs, Pay2SAddress, Self}
+import org.ergoplatform.{Height, MinerPubkey, Outputs, Self}
 import org.ergoplatform.settings.MonetarySettings
-import scorex.util.encode.Base16
 import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SBox, SCollection, STuple}
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant, SigmaPropValue, Value}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes, OptionGet, SelectField, SizeOf}
+import org.ergoplatform.mining.emission.EmissionRules.CoinsInOneErgo
 
 /**
   * Container for re-emission related contracts. Contains re-emission contract and pay-to-reemission contract.
@@ -17,7 +17,7 @@ trait ReemissionContracts {
   /**
     * How much miner can take per block from re-emission contract
     */
-  val reemissionRewardPerBlock: Long = 3 * 1000000000L // 3 ERG
+  val reemissionRewardPerBlock: Long = 3 * CoinsInOneErgo // 3 ERG
 
   /**
     * @return - ID of NFT token associated with re-emission contract
@@ -101,7 +101,7 @@ trait ReemissionContracts {
       val feeOut = secondOut
       AND(
         GT(ExtractAmount(reemissionOut), ExtractAmount(Self)),
-        LE(ExtractAmount(feeOut), LongConstant(10000000)), // 0.01 ERG
+        LE(ExtractAmount(feeOut), LongConstant(CoinsInOneErgo / 100)), // 0.01 ERG
         EQ(SizeOf(Outputs), 2)
       )
     }

@@ -145,6 +145,28 @@ object ErgoStatsCollector {
 
   case object GetNodeInfo
 
+  /**
+    * Data container for /info API request output
+    *
+    * @param nodeName - node (peer) self-chosen name from config
+    * @param appVersion - node version
+    * @param network - network type (mainnet/testnet)
+    * @param unconfirmedCount - number of unconfirmed transactions in the mempool
+    * @param peersCount - number of peer the node is connected with
+    * @param stateRoot - current UTXO set digest
+    * @param stateType - whether the node storing UTXO set, or only its digest
+    * @param stateVersion - id of a block UTXO set digest is taken from
+    * @param isMining - whether the node is mining
+    * @param bestHeaderOpt - best header ID
+    * @param headersScore - cumulative difficulty of best headers-chain
+    * @param bestFullBlockOpt - best full-block id (header id of such block)
+    * @param fullBlocksScore - cumulative difficulty of best full blocks chain
+    * @param launchTime - when the node was launched (in Java time format, basically, UNIX time * 1000)
+    * @param lastIncomingMessageTime - when the node received last p2p message (in Java time)
+    * @param genesisBlockIdOpt - header id of genesis block
+    * @param parameters - array with network parameters at the moment
+    * @param eip27Supported - whether EIP-27 locked in
+    */
   case class NodeInfo(nodeName: String,
                       appVersion: String,
                       network: String,

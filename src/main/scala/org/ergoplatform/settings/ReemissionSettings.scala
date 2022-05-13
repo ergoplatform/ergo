@@ -17,7 +17,7 @@ case class ReemissionSettings(checkReemissionRules: Boolean,
                               reemissionNftId: ModifierId,
                               activationHeight: Int,
                               reemissionStartHeight: Int,
-                              injectionBoxBytesEncoded: ModifierId) {
+                              injectionBoxBytesEncoded: String) {
 
   val emissionNftIdBytes: Array[Byte] = Algos.decode(emissionNftId).get
   val reemissionNftIdBytes: Array[Byte] = Algos.decode(reemissionNftId).get

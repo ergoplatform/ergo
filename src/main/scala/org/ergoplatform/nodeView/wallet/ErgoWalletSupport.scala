@@ -104,15 +104,14 @@ trait ErgoWalletSupport extends ScorexLogging {
       case Some(x: Seq[String]) if x.isEmpty =>
         AssetUtils.mergeAssets(
           TransactionBuilder.collTokensToMap(
-            input
-              .map(tMap => (IdUtils.decodedTokenId(tMap._1), tMap._2)).toColl
+            input.map { case (id, amt) => (IdUtils.decodedTokenId(id), amt) }.toColl
           ),
           burnTokensRequestMap)
       case Some(x: Seq[String]) => AssetUtils.mergeAssets(
         TransactionBuilder.collTokensToMap(
           input
             .filterNot(tMap => x.contains(tMap._1))
-            .map(tMap => (IdUtils.decodedTokenId(tMap._1), tMap._2)).toColl
+            .map { case (id, amt) => (IdUtils.decodedTokenId(id), amt) }.toColl
         ),
         burnTokensRequestMap)
       case None =>

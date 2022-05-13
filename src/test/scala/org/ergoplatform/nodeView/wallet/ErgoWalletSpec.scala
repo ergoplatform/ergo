@@ -240,7 +240,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
     }
   }
 
-  property("Whitelist set, preserve tokens from auto-burn") {
+  property("whitelist set, preserve tokens from auto-burn") {
     val inputs = {
       val x = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
       Seq(encodedTokenId(Digest32 @@ x.head.boxId))
@@ -280,7 +280,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
     }
   }
 
-  property("Whitelist empty, auto-burn tokens on arbitrary tx") {
+  property("whitelist empty, auto-burn tokens on arbitrary tx") {
     implicit val ww: WalletFixture = new WalletFixture(settings
       .copy(walletSettings = settings
         .walletSettings.copy(tokensWhitelist = Some(Seq.empty))), parameters, getCurrentView(_).vault)
@@ -312,7 +312,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
     }
   }
 
-  property("Whitelist not set, ignore auto-burn") {
+  property("whitelist not set, ignore auto-burn") {
     implicit val ww: WalletFixture = new WalletFixture(settings
       .copy(walletSettings = settings
         .walletSettings.copy(tokensWhitelist = None)), parameters, getCurrentView(_).vault)

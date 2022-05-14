@@ -216,6 +216,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       val invData = InvData(Header.modifierTypeId, Seq(chain.last.id))
       val invSpec = new InvSpec(10)
 
+      // pass and let apply expected header modifier, delivery status should be Received
       node ! Message(invSpec, Left(invSpec.toBytes(invData)), Some(peer))
       pchProbe.fishForMessage(3 seconds) { case m =>
         m match {
@@ -242,6 +243,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       val invData = InvData(Header.modifierTypeId, Seq(olderChain.last.id))
       val invSpec = new InvSpec(10)
 
+      // pass and let apply future header modifier while the previous headers not being applied yet
       node ! Message(invSpec, Left(invSpec.toBytes(invData)), Some(peer))
       pchProbe.fishForMessage(3 seconds) { case m =>
         m match {

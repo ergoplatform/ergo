@@ -164,7 +164,7 @@ object ErgoStatsCollector {
                       headersScore: Option[BigInt],
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       fullBlocksScore: Option[BigInt],
-                      maxPeerHeight : Option[Int],
+                      maxPeerHeight : Option[Int], // Maximum block height of connected peers
                       launchTime: Long,
                       lastIncomingMessageTime: Long,
                       genesisBlockIdOpt: Option[String],

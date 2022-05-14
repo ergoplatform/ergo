@@ -94,7 +94,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
-  override implicit val patienceConfig: PatienceConfig = PatienceConfig(1.seconds, 20.millis)
+  override implicit val patienceConfig: PatienceConfig = PatienceConfig(1.seconds, 5.millis)
   val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
   val olderChain = genHeaderChain(2010, history, diffBitsOpt = None, useRealTs = false)
   val chain = olderChain.take(2000)

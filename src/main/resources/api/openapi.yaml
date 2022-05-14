@@ -1888,7 +1888,7 @@ components:
         maxPeerHeight:
           type: integer
           format: int32
-          description: Can be 'null' if state is empty (no peer connected since node launch)
+          description: Maximum block height of connected peers. Can be 'null' if state is empty (no peer connected since node launch)
           minimum: 0
           example: 706162
           nullable: true

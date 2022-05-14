@@ -805,8 +805,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
 
-    case RecoverableFailedModification(_, _) =>
-      // we ignore this one as we should try to apply this modifier again
+    case RecoverableFailedModification(mod, _) =>
+      deliveryTracker.setUnknown(mod.id, mod.modifierTypeId)
+      requestMoreModifiers(historyReader)
 
     case SyntacticallyFailedModification(mod, e) =>
       logger.debug(s"Invalidating syntactically failed modifier ${mod.id}", e)

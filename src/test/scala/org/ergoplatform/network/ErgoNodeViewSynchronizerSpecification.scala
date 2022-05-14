@@ -94,6 +94,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
+  override implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second, 10.millis)
   val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
   val olderChain = genHeaderChain(2010, history, diffBitsOpt = None, useRealTs = false)
   val chain = olderChain.take(2000)
@@ -258,6 +259,10 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
             // eventually header should be Requested again as it was delivered in invalid order
             eventually {
               deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Requested
+            }
+            // and eventually Received
+            eventually {
+              deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
             }
             true
           case _ =>

@@ -34,7 +34,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.{MempoolReader, Transaction}
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
-import scorex.core.validation.MalformedModifierError
+import scorex.core.validation.{MalformedModifierError, RecoverableModifierError}
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
@@ -655,6 +655,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.warn(s"Modifier ${pmod.encodedId} is permanently invalid", e)
         deliveryTracker.setInvalid(pmod.id, pmod.modifierTypeId)
         penalizeMisbehavingPeer(remote)
+        false
+      case Failure(e) if e.isInstanceOf[RecoverableModifierError] =>
+        context.system.eventStream.publish(RecoverableFailedModification(pmod, e))
         false
       case _ =>
         deliveryTracker.setReceived(pmod.id, pmod.modifierTypeId, remote)

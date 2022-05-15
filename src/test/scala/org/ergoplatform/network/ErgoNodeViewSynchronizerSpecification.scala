@@ -94,10 +94,9 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
-  override implicit val patienceConfig: PatienceConfig = PatienceConfig(10.seconds, 100.millis)
+  override implicit val patienceConfig: PatienceConfig = PatienceConfig(2.seconds, 100.millis)
   val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
-  val olderChain = genHeaderChain(2010, history, diffBitsOpt = None, useRealTs = false)
-  val chain = olderChain.take(2000)
+  val chain = genHeaderChain(2000, history, diffBitsOpt = None, useRealTs = false)
   val localChain = chain.take(1000)
   val altchain = genHeaderChain(1000, history, diffBitsOpt = None, useRealTs = false)
 
@@ -213,7 +212,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   property("NodeViewSynchronizer: receiving valid header") {
     withFixture { ctx =>
       import ctx._
-      val invData = InvData(Header.modifierTypeId, Seq(chain.last.id))
+      val olderChain = chain.take(1001)
+      val invData = InvData(Header.modifierTypeId, Seq(olderChain.last.id))
       val invSpec = new InvSpec(10)
 
       // pass and let apply expected header modifier, delivery status should be Received
@@ -221,13 +221,13 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       pchProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case Message(_, Right(InvData(_, _)), _) =>
-            val modData = ModifiersData(Header.modifierTypeId, Map(chain.last.id -> chain.last.bytes))
+            val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
             val modSpec = new ModifiersSpec(100)
             deliveryTracker.reset()
             node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
             // desired state of submitting valid headers is Received
             eventually {
-              deliveryTracker.status(chain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
+              deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
             }
             true
           case _ =>
@@ -240,7 +240,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   property("NodeViewSynchronizer: receiving out-of-order header should request it again") {
     withFixture { ctx =>
       import ctx._
-      val invData = InvData(Header.modifierTypeId, Seq(olderChain.last.id))
+      val invData = InvData(Header.modifierTypeId, Seq(chain.last.id))
       val invSpec = new InvSpec(10)
 
       // pass and let apply future header modifier while the previous headers not being applied yet
@@ -248,13 +248,13 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       pchProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case Message(_, Right(InvData(_, _)), _) =>
-            val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
+            val modData = ModifiersData(Header.modifierTypeId, Map(chain.last.id -> chain.last.bytes))
             val modSpec = new ModifiersSpec(100)
             deliveryTracker.reset()
             node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
             // desired state of submitting headers out of order is Unknown, they need to be downloaded again
             eventually {
-              deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+              deliveryTracker.status(chain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
             }
             true
           case _ =>

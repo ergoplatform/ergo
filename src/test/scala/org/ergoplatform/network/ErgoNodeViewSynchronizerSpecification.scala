@@ -1,6 +1,6 @@
 package org.ergoplatform.network
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
@@ -94,7 +94,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
-  override implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
+  override implicit val patienceConfig: PatienceConfig = PatienceConfig(2.seconds, 100.millis)
   val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
   val chain = genHeaderChain(2000, history, diffBitsOpt = None, useRealTs = false)
   val localChain = chain.take(1000)
@@ -212,29 +212,15 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   property("NodeViewSynchronizer: receiving valid header") {
     withFixture { ctx =>
       import ctx._
+      deliveryTracker.reset()
+      deliveryTracker.setRequested(Seq(chain.take(1001).last.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
       val olderChain = chain.take(1001)
-      val invData = InvData(Header.modifierTypeId, Seq(olderChain.last.id))
-      val invSpec = new InvSpec(10)
-
-      // pass and let apply expected header modifier, delivery status should be Received
-      node ! Message(invSpec, Left(invSpec.toBytes(invData)), Some(peer))
+      val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
+      val modSpec = new ModifiersSpec(100)
+      node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+      // desired state of submitting valid headers is Received
       eventually {
-        pchProbe.fishForMessage(3 seconds) { case m =>
-          m match {
-            case Message(_, Right(InvData(_, _)), _) =>
-              val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
-              val modSpec = new ModifiersSpec(100)
-              deliveryTracker.reset()
-              node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
-              // desired state of submitting valid headers is Received
-              eventually {
-                deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
-              }
-              true
-            case _ =>
-              false
-            }
-        }
+        deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
       }
     }
   }
@@ -242,28 +228,14 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   property("NodeViewSynchronizer: receiving out-of-order header should request it again") {
     withFixture { ctx =>
       import ctx._
-      val invData = InvData(Header.modifierTypeId, Seq(chain.last.id))
-      val invSpec = new InvSpec(10)
-
-      // pass and let apply future header modifier while the previous headers not being applied yet
-      node ! Message(invSpec, Left(invSpec.toBytes(invData)), Some(peer))
+      deliveryTracker.reset()
+      deliveryTracker.setRequested(Seq(chain.last.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(Header.modifierTypeId, Map(chain.last.id -> chain.last.bytes))
+      val modSpec = new ModifiersSpec(100)
+      node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+      // desired state of submitting headers out of order is Unknown, they need to be downloaded again
       eventually {
-        pchProbe.fishForMessage(3 seconds) { case m =>
-          m match {
-            case Message(_, Right(InvData(_, _)), _) =>
-              val modData = ModifiersData(Header.modifierTypeId, Map(chain.last.id -> chain.last.bytes))
-              val modSpec = new ModifiersSpec(100)
-              deliveryTracker.reset()
-              node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
-              // desired state of submitting headers out of order is Unknown, they need to be downloaded again
-              eventually {
-                deliveryTracker.status(chain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
-              }
-              true
-            case _ =>
-              false
-          }
-        }
+        deliveryTracker.status(chain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
       }
     }
   }

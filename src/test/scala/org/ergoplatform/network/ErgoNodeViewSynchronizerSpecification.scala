@@ -218,21 +218,23 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // pass and let apply expected header modifier, delivery status should be Received
       node ! Message(invSpec, Left(invSpec.toBytes(invData)), Some(peer))
-      pchProbe.fishForMessage(3 seconds) { case m =>
-        m match {
-          case Message(_, Right(InvData(_, _)), _) =>
-            val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
-            val modSpec = new ModifiersSpec(100)
-            deliveryTracker.reset()
-            node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
-            // desired state of submitting valid headers is Received
-            eventually {
-              deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
+      eventually {
+        pchProbe.fishForMessage(3 seconds) { case m =>
+          m match {
+            case Message(_, Right(InvData(_, _)), _) =>
+              val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
+              val modSpec = new ModifiersSpec(100)
+              deliveryTracker.reset()
+              node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+              // desired state of submitting valid headers is Received
+              eventually {
+                deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
+              }
+              true
+            case _ =>
+              false
             }
-            true
-          case _ =>
-            false
-          }
+        }
       }
     }
   }
@@ -245,20 +247,22 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // pass and let apply future header modifier while the previous headers not being applied yet
       node ! Message(invSpec, Left(invSpec.toBytes(invData)), Some(peer))
-      pchProbe.fishForMessage(3 seconds) { case m =>
-        m match {
-          case Message(_, Right(InvData(_, _)), _) =>
-            val modData = ModifiersData(Header.modifierTypeId, Map(chain.last.id -> chain.last.bytes))
-            val modSpec = new ModifiersSpec(100)
-            deliveryTracker.reset()
-            node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
-            // desired state of submitting headers out of order is Unknown, they need to be downloaded again
-            eventually {
-              deliveryTracker.status(chain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
-            }
-            true
-          case _ =>
-            false
+      eventually {
+        pchProbe.fishForMessage(3 seconds) { case m =>
+          m match {
+            case Message(_, Right(InvData(_, _)), _) =>
+              val modData = ModifiersData(Header.modifierTypeId, Map(chain.last.id -> chain.last.bytes))
+              val modSpec = new ModifiersSpec(100)
+              deliveryTracker.reset()
+              node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+              // desired state of submitting headers out of order is Unknown, they need to be downloaded again
+              eventually {
+                deliveryTracker.status(chain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+              }
+              true
+            case _ =>
+              false
+          }
         }
       }
     }

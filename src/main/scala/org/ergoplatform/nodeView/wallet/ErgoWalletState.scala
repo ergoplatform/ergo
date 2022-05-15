@@ -27,7 +27,8 @@ case class ErgoWalletState(
     utxoStateReaderOpt: Option[UtxoStateReader],
     parameters: Parameters,
     maxInputsToUse: Int,
-    error: Option[String] = None
+    error: Option[String] = None,
+    rescanInProgress: Boolean
   ) extends ScorexLogging {
 
   /**
@@ -151,7 +152,8 @@ object ErgoWalletState {
         mempoolReaderOpt = None,
         utxoStateReaderOpt = None,
         parameters,
-        maxInputsToUse
+        maxInputsToUse,
+        rescanInProgress = false
       )
     }
   }

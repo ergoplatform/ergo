@@ -51,7 +51,8 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest
       mempoolReaderOpt = mempool,
       utxoStateReaderOpt = Option.empty,
       parameters,
-      maxInputsToUse = 1000
+      maxInputsToUse = 1000,
+      rescanInProgress = false
     )
   }
 

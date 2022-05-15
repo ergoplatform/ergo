@@ -683,7 +683,7 @@ object CandidateGenerator extends ScorexLogging {
       }
 
       val minerAmt = if (nextHeight == eip27ActivationHeight) {
-        // injection - inhection box value going to miner
+        // injection - injection box value going to miner
         emissionAmount + reemissionSettings.injectionBox.value
       } else {
         emissionAmount

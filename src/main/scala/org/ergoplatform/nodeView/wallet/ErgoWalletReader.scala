@@ -145,6 +145,15 @@ trait ErgoWalletReader extends VaultReader {
   def transactionsByScanId(scanId: ScanId, includeUnconfirmed: Boolean): Future[ScanRelatedTxsResponse] =
     (walletActor ? GetScanTransactions(scanId, includeUnconfirmed)).mapTo[ScanRelatedTxsResponse]
 
+  /**
+    * Get filtered scan-related txs
+    * @param scanIds - scan identifiers
+    * @param minHeight - minimal tx inclusion height
+    * @param maxHeight - maximal tx inclusion height
+    * @param minConfNum - minimal confirmations number
+    * @param maxConfNum - maximal confirmations number
+    * @param includeUnconfirmed - whether to include transactions from mempool that match given scanId
+    */
   def filteredScanTransactions(scanIds: List[ScanId],
                                minHeight: Int,
                                maxHeight: Int,

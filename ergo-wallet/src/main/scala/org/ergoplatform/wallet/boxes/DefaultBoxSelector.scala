@@ -8,7 +8,7 @@ import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import org.ergoplatform.wallet.Utils._
+import org.ergoplatform.wallet.transactions.TransactionBuilder._
 
 /**
   * Default implementation of the box selector. It simply picks boxes till sum of their monetary values

@@ -1,6 +1,5 @@
 package org.ergoplatform.wallet.transactions
 
-import scala.collection.IndexedSeq
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.DataInput
 import org.ergoplatform.ErgoBoxCandidate
@@ -19,9 +18,102 @@ import scorex.crypto.hash.Digest32
 import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
+import scorex.crypto.authds.ADKey
+import scorex.util.encode.Base16
 
 
 object TransactionBuilder {
+
+  /**
+    * @param recipientAddress - payment recipient address
+    * @param changeAddress - chnage recipient address
+    * @param transferAmt - amount of ERGs to transfer
+    * @param feeAmt - fee amount
+    * @param changeAmt - amount to return back to `changeAddress`
+    * @param inputIds - identifiers of inputs to be used in transaction
+    * @param currentHeight - current blockchain height
+    */
+  case class TxParams(
+    recipientAddress: ErgoAddress,
+    changeAddress: ErgoAddress,
+    transferAmt: Long,
+    feeAmt: Long,
+    changeAmt: Long,
+    inputIds: Array[String],
+    currentHeight: Int
+  )
+
+  def txParams(
+    recipientAddress: ErgoAddress,
+    changeAddress: ErgoAddress,
+    transferAmt: Long,
+    feeAmt: Long,
+    changeAmt: Long,
+    inputIds: Array[String],
+    currentHeight: Int
+  ): TxParams = TxParams(recipientAddress, changeAddress, transferAmt, feeAmt, changeAmt, inputIds, currentHeight)
+
+
+  /**
+    * Assembles multiple unsigned payment transactions from transaction parameter list
+    *
+    * @param txParamsList list of transaction parameters
+    * @return unsigned transactions
+    */
+  def paymentTransactions(txParamsList: java.util.List[TxParams]): java.util.List[UnsignedErgoLikeTransaction] = {
+    import scala.collection.JavaConverters._
+    txParamsList.asScala.map(paymentTransaction).asJava
+  }
+
+  /**
+    * Assembles unsigned payment transaction.
+    *
+    * @param txParams transaction parameters
+    * @return unsigned transaction
+    */
+  def paymentTransaction(txParams: TxParams): UnsignedErgoLikeTransaction = {
+    val payTo = new ErgoBoxCandidate(
+      txParams.transferAmt,
+      txParams.recipientAddress.script,
+      txParams.currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val fee = new ErgoBoxCandidate(
+      txParams.feeAmt,
+      ErgoScriptPredef.feeProposition(),
+      txParams.currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val change = new ErgoBoxCandidate(
+      txParams.changeAmt,
+      txParams.changeAddress.script,
+      txParams.currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val unsignedInputs = txParams.inputIds
+      .flatMap { id =>
+        Base16.decode(id)
+          .map(x => new UnsignedInput(ADKey @@ x))
+          .toOption
+      }
+      .toIndexedSeq
+
+    val dataInputs = IndexedSeq.empty
+    val outputs = if (txParams.changeAmt == 0) {
+      IndexedSeq(payTo, fee)
+    } else {
+      IndexedSeq(payTo, change, fee)
+    }
+
+    new UnsignedErgoLikeTransaction(
+      unsignedInputs,
+      dataInputs,
+      outputs
+    )
+  }
 
   def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap =
     AssetUtils.mergeAssets(
@@ -144,6 +236,30 @@ object TransactionBuilder {
       dataInputs,
       finalOutputCandidates.toIndexedSeq
     )
+  }
+
+  implicit class EitherOpsFor211[+A, +B](val source: Either[A, B]) extends AnyVal {
+
+    /** The given function is applied if this is a `Right`.
+      *
+      *  {{{
+      *  Right(12).map(x => "flower") // Result: Right("flower")
+      *  Left(12).map(x => "flower")  // Result: Left(12)
+      *  }}}
+      */
+    def mapRight[B1](f: B => B1): Either[A, B1] = source match {
+      case Right(b) => Right(f(b))
+      case _        => source.asInstanceOf[Either[A, B1]]
+    }
+
+    /** Binds the given function across `Right`.
+      *
+      *  @param f The function to bind across `Right`.
+      */
+    def flatMapRight[A1 >: A, B1](f: B => Either[A1, B1]): Either[A1, B1] = source match {
+      case Right(b) => f(b)
+      case _        => source.asInstanceOf[Either[A1, B1]]
+    }
   }
 
 }

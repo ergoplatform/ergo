@@ -230,6 +230,31 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "return wallet transactions by scanId" in {
+    Get(prefix + "/transactionsByScanId/1") ~> route ~> check {
+      import AugWalletTransaction._
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[AugWalletTransaction]]
+      val walletTxs = response.filter { awtx =>
+        awtx.wtx.scanIds.contains(1.shortValue())
+      }
+      walletTxs.size shouldBe response.size
+    }
+  }
+
+  it should "return wallet transactions by scanId including unconfirmed txs" in {
+    Get(prefix + "/transactionsByScanId/1?includeUnconfirmed=true") ~> route ~> check {
+      import AugWalletTransaction._
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[AugWalletTransaction]]
+      val walletTxs = response.filter { awtx =>
+        awtx.wtx.scanIds.contains(1.shortValue())
+      }
+      walletTxs.size shouldBe response.size
+      walletTxs.forall(_.numConfirmations == 0) shouldBe true
+    }
+  }
+
   it should "get lock status" in {
     Get(prefix + "/status") ~> route ~> check {
       status shouldBe StatusCodes.OK

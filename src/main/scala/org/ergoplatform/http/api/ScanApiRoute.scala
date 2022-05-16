@@ -38,6 +38,7 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       deregisterR ~
       listScansR ~
       unspentR ~
+      spentR ~
       stopTrackingR ~
       addBoxR
   }
@@ -63,7 +64,14 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) { (scanIdInt, minConfNum, minHeight) =>
     val scanId = ScanId @@ scanIdInt.toShort
     val considerUnconfirmed = minConfNum == -1
-    withWallet(_.appBoxes(scanId, unspentOnly = true, considerUnconfirmed).map {
+    withWallet(_.scanUnspentBoxes(scanId, considerUnconfirmed).map {
+      _.filter(boxFilterPredicate(_, minConfNum, minHeight))
+    })
+  }
+
+  def spentR: Route = (path("spentBoxes" / IntNumber) & get & boxParams) { (scanIdInt, minConfNum, minHeight) =>
+    val scanId = ScanId @@ scanIdInt.toShort
+    withWallet(_.scanSpentBoxes(scanId).map {
       _.filter(boxFilterPredicate(_, minConfNum, minHeight))
     })
   }

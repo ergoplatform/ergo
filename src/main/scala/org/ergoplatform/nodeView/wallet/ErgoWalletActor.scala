@@ -160,8 +160,12 @@ class ErgoWalletActor(settings: ErgoSettings,
       val boxes = ergoWalletService.getWalletBoxes(state, unspent, considerUnconfirmed)
       sender() ! boxes
 
-    case GetScanBoxes(scanId, unspent, considerUnconfirmed) =>
-      val boxes = ergoWalletService.getScanBoxes(state, scanId, unspent, considerUnconfirmed)
+    case GetScanUnspentBoxes(scanId, considerUnconfirmed) =>
+      val boxes = ergoWalletService.getScanUnspentBoxes(state, scanId, considerUnconfirmed)
+      sender() ! boxes
+
+    case GetScanSpentBoxes(scanId) =>
+      val boxes = ergoWalletService.getScanSpentBoxes(state, scanId)
       sender() ! boxes
 
     case GetTransactions =>
@@ -209,17 +213,18 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       context.become(loadedWallet(newState))
 
-    // forceScan=true means we serve a user request for rescan from arbitrary height
-    case ScanInThePast(blockHeight, forceScan) =>
+    // rescan=true means we serve a user request for rescan from arbitrary height
+    case ScanInThePast(blockHeight, rescan) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
-      if (nextBlockHeight == blockHeight || forceScan) {
+      if (nextBlockHeight == blockHeight || rescan) {
         val newState =
           historyReader.bestFullBlockAt(blockHeight) match {
             case Some(block) =>
-              log.info(s"Wallet is going to scan a block ${block.id} in the past at height ${block.height}")
+              val operation = if (rescan) "rescanning" else "scanning"
+              log.info(s"Wallet is $operation a block ${block.id} in the past at height ${block.height}")
               ergoWalletService.scanBlockUpdate(state, block, settings.walletSettings.dustLimit) match {
                 case Failure(ex) =>
-                  val errorMsg = s"Scanning block ${block.id} at height $blockHeight failed : ${ex.getMessage}"
+                  val errorMsg = s"Block ${block.id} $operation at height $blockHeight failed : ${ex.getMessage}"
                   log.error(errorMsg, ex)
                   state.copy(error = Some(errorMsg))
                 case Success(updatedState) =>
@@ -230,7 +235,10 @@ class ErgoWalletActor(settings: ErgoSettings,
         }
         context.become(loadedWallet(newState))
         if (blockHeight < newState.fullHeight) {
-          self ! ScanInThePast(blockHeight + 1, forceScan)
+          self ! ScanInThePast(blockHeight + 1, rescan)
+        } else if (rescan) {
+          log.info(s"Rescanning finished at height $blockHeight")
+          context.become(loadedWallet(newState.copy(rescanInProgress = false)))
         }
       }
 
@@ -312,9 +320,9 @@ class ErgoWalletActor(settings: ErgoSettings,
       log.info(s"Rescanning the wallet from height: $fromHeight")
       ergoWalletService.recreateRegistry(state, settings) match {
         case Success(newState) =>
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState.copy(rescanInProgress = true)))
           val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
-          self ! ScanInThePast(heightToScanFrom, forceScan = true)
+          self ! ScanInThePast(heightToScanFrom, rescan = true)
         case f@Failure(t) =>
           log.error("Error during rescan attempt: ", t)
           sender() ! f
@@ -412,11 +420,12 @@ class ErgoWalletActor(settings: ErgoSettings,
     case CollectWalletBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]) =>
       sender() ! ReqBoxesResponse(ergoWalletService.collectBoxes(state, boxSelector, targetBalance, targetAssets))
 
-    case GetScanTransactions(scanId: ScanId) =>
-      sender() ! ScanRelatedTxsResponse(ergoWalletService.getScanTransactions(scanId, state.registry, state.fullHeight))
+    case GetScanTransactions(scanId: ScanId, includeUnconfirmed) =>
+      val scanTxs = ergoWalletService.getScanTransactions(state, scanId, state.fullHeight, includeUnconfirmed)
+      sender() ! ScanRelatedTxsResponse(scanTxs)
 
-    case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)  =>
-      readFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum)
+    case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed)  =>
+      readFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed)
 
   }
 
@@ -425,7 +434,8 @@ class ErgoWalletActor(settings: ErgoSettings,
                    minHeight: Int,
                    maxHeight: Int,
                    minConfNum: Int,
-                   maxConfNum: Int): Unit = {
+                   maxConfNum: Int,
+                   includeUnconfirmed: Boolean): Unit = {
     val heightFrom = if (maxConfNum == Int.MaxValue) {
       minHeight
     } else {
@@ -442,8 +452,15 @@ class ErgoWalletActor(settings: ErgoSettings,
       .sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, state.fullHeight - tx.inclusionHeight))
     val ts = System.currentTimeMillis()
-    log.debug(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
-    sender() ! txs
+    val txsToSend =
+      if (includeUnconfirmed && heightTo > state.fullHeight) {
+        // in order to include unconfirmed txs, heightTo should be grater than current height
+        txs ++ scanIds.flatMap( scanId => ergoWalletService.getUnconfirmedTransactions(state, scanId) )
+      } else {
+        txs
+      }
+    log.debug(s"Wallet: ${txsToSend.size} read in ${ts-ts0} ms")
+    sender() ! txsToSend
   }
 
   override def receive: Receive = emptyWallet
@@ -483,9 +500,9 @@ object ErgoWalletActor extends ScorexLogging {
     * A signal the wallet actor sends to itself to scan a block in the past
     *
     * @param blockHeight - height of a block to scan
-    * @param forceScan - scan a block even if height is out of order, to serve rescan requests from arbitrary height
+    * @param rescan - scan a block even if height is out of order, to serve rescan requests from arbitrary height
     */
-  private final case class ScanInThePast(blockHeight: ErgoHistory.Height, forceScan: Boolean)
+  private final case class ScanInThePast(blockHeight: ErgoHistory.Height, rescan: Boolean)
 
 
   // Publicly available signals for the wallet actor
@@ -637,8 +654,9 @@ object ErgoWalletActor extends ScorexLogging {
     * Get scan related transactions
     *
     * @param scanId  - Scan identifier
+    * @param includeUnconfirmed  - whether to include transactions from mempool that match given scanId
     */
-  final case class GetScanTransactions(scanId: ScanId)
+  final case class GetScanTransactions(scanId: ScanId, includeUnconfirmed: Boolean)
 
   /**
     * Response for requested scan related transactions
@@ -648,14 +666,19 @@ object ErgoWalletActor extends ScorexLogging {
   final case class ScanRelatedTxsResponse(result: Seq[AugWalletTransaction])
 
   /**
-    * Get boxes related to a scan
+    * Get unspent boxes related to a scan
     *
     * @param scanId              - scan identifier
-    * @param unspentOnly         - return only unspent boxes
-    * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
-    *                            boxes created in the pool for both values of unspentOnly).
+    * @param considerUnconfirmed - consider boxes from mempool
     */
-  final case class GetScanBoxes(scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean)
+  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean)
+
+  /**
+    * Get spent boxes related to a scan
+    *
+    * @param scanId - scan identifier
+    */
+  final case class GetScanSpentBoxes(scanId: ScanId)
 
   /**
     * Set or update address for change outputs. Initially the address is set to root key address
@@ -708,8 +731,19 @@ object ErgoWalletActor extends ScorexLogging {
 
   /**
     * Get filtered scan-related txs
+    * @param scanIds - scan identifiers
+    * @param minHeight - minimal tx inclusion height
+    * @param maxHeight - maximal tx inclusion height
+    * @param minConfNum - minimal confirmations number
+    * @param maxConfNum - maximal confirmations number
+    * @param includeUnconfirmed - whether to include transactions from mempool that match given scanId
     */
-  case class GetFilteredScanTxs(scanId: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
+  case class GetFilteredScanTxs(scanIds: List[ScanId],
+                                minHeight: Int,
+                                maxHeight: Int,
+                                minConfNum: Int,
+                                maxConfNum: Int,
+                                includeUnconfirmed: Boolean)
 
   /**
     * Derive next key-pair according to BIP-32

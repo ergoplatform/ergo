@@ -147,25 +147,9 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "rescan wallet get" in {
-    Get(prefix + "/rescan") ~> route ~> check {
-      status shouldBe StatusCodes.OK
-    }
-  }
-
   it should "rescan wallet post" in {
     Post(prefix + "/rescan") ~> route ~> check {
       status shouldBe StatusCodes.OK
-    }
-  }
-
-  it should "rescan wallet get with fromHeight" in {
-    Get(prefix + "/rescan?fromHeight=0") ~> route ~> check {
-      status shouldBe StatusCodes.OK
-    }
-
-    Get(prefix + "/rescan?fromHeight=-1") ~> route ~> check {
-      rejection shouldEqual ValidationRejection("fromHeight field must be >= 0", None)
     }
   }
 
@@ -243,6 +227,31 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
       response.size shouldBe walletTxs.size
       responseAs[Seq[AugWalletTransaction]] shouldEqual walletTxs
+    }
+  }
+
+  it should "return wallet transactions by scanId" in {
+    Get(prefix + "/transactionsByScanId/1") ~> route ~> check {
+      import AugWalletTransaction._
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[AugWalletTransaction]]
+      val walletTxs = response.filter { awtx =>
+        awtx.wtx.scanIds.contains(1.shortValue())
+      }
+      walletTxs.size shouldBe response.size
+    }
+  }
+
+  it should "return wallet transactions by scanId including unconfirmed txs" in {
+    Get(prefix + "/transactionsByScanId/1?includeUnconfirmed=true") ~> route ~> check {
+      import AugWalletTransaction._
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[AugWalletTransaction]]
+      val walletTxs = response.filter { awtx =>
+        awtx.wtx.scanIds.contains(1.shortValue())
+      }
+      walletTxs.size shouldBe response.size
+      walletTxs.forall(_.numConfirmations == 0) shouldBe true
     }
   }
 

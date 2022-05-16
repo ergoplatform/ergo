@@ -113,6 +113,15 @@ case class WalletApiRoute(readersHolder: ActorRef,
     "maxConfirmations".as[Int] ? Int.MaxValue
   )
 
+  private val txsByScanIdParams: Directive[(Int, Int, Int, Int, Boolean)] = parameters(
+    "minInclusionHeight".as[Int] ? 0,
+    "maxInclusionHeight".as[Int] ? Int.MaxValue,
+    "minConfirmations".as[Int] ? 0,
+    "maxConfirmations".as[Int] ? Int.MaxValue,
+    "includeUnconfirmed".as[Boolean] ? false
+  )
+
+
   private val p2pkAddress: Directive1[P2PKAddress] = entity(as[Json])
     .flatMap {
       _.hcursor.downField("address").as[String]
@@ -124,6 +133,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
       }
     }
 
+  /** POST body field - from what height to rescan wallet */
   private val heightEntityField: Directive1[Int] = entity(as[Option[Json]])
     .flatMap {
       _.map[Directive1[Int]] { entity =>
@@ -326,7 +336,14 @@ case class WalletApiRoute(readersHolder: ActorRef,
         }
       } else {
         withWallet {
-          _.filteredScanTransactions(List(Constants.PaymentsScanId, Constants.MiningScanId), minHeight, maxHeight, minConfNum, maxConfNum)
+          _.filteredScanTransactions(
+            List(Constants.PaymentsScanId, Constants.MiningScanId),
+            minHeight,
+            maxHeight,
+            minConfNum,
+            maxConfNum,
+            includeUnconfirmed = false
+          )
         }
       }
   }
@@ -337,17 +354,24 @@ case class WalletApiRoute(readersHolder: ActorRef,
     }
   }
 
-  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get & txParams) {
-    case (id, minHeight, maxHeight, minConfNum, maxConfNum) =>
+  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get & txsByScanIdParams) {
+    case (id, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed) =>
       if ((minHeight > 0 || maxHeight < Int.MaxValue) && (minConfNum > 0 || maxConfNum < Int.MaxValue))
         BadRequest("Bad request: both heights and confirmations set")
       else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
-        withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort)) {
+        withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort, includeUnconfirmed)) {
           resp => ApiResponse(resp.result.asJson)
         }
       }
       else {
-        withWalletOp(_.filteredScanTransactions(List(ScanId @@ id.toShort), minHeight, maxHeight, minConfNum, maxConfNum)) {
+        withWalletOp(_.filteredScanTransactions(
+          List(ScanId @@ id.toShort),
+          minHeight,
+          maxHeight,
+          minConfNum,
+          maxConfNum,
+          includeUnconfirmed)
+        ) {
           resp => ApiResponse(resp.asJson)
         }
       }
@@ -433,7 +457,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
     }
   }
 
-  def rescanWalletR: Route = (path("rescan") & (get & heightParam) | (post & heightEntityField)) { fromHeight =>
+  def rescanWalletR: Route = (path("rescan") & post & heightEntityField) { fromHeight =>
     withWalletOp(_.rescanWallet(fromHeight)) {
       _.fold(
         e => BadRequest(e.getMessage),

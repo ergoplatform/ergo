@@ -4,6 +4,8 @@ import akka.Done
 import akka.actor.{ActorRef, ActorSystem, CoordinatedShutdown}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.Http.ServerBinding
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.LoggerContext
 import org.ergoplatform.http._
 import org.ergoplatform.http.api._
 import org.ergoplatform.local._
@@ -12,6 +14,7 @@ import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.slf4j.{Logger, LoggerFactory}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
@@ -22,8 +25,8 @@ import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
-import java.net.InetSocketAddress
 
+import java.net.InetSocketAddress
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
 
@@ -39,6 +42,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
   log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")
 
   implicit private def scorexSettings: ScorexSettings = ergoSettings.scorexSettings
+
+  overrideLogLevel()
 
   implicit private val actorSystem: ActorSystem = ActorSystem(scorexSettings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
@@ -163,6 +168,16 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   if (!ergoSettings.nodeSettings.stateType.requireProofs) {
     MempoolAuditorRef(nodeViewHolderRef, networkControllerRef, ergoSettings)
+  }
+
+  /**
+    * Override the log level at runtime with values provided in config/user provided config.
+    */
+  private def overrideLogLevel() {
+    val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
+    val root = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
+
+    root.setLevel(Level.toLevel(ergoSettings.scorexSettings.logging.level))
   }
 
   private def swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")

@@ -34,17 +34,17 @@ class EmissionApiRouteSpec extends AnyFlatSpec
   it should "get correct emission values" in {
     Get(prefix + "/1") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      EmissionApiRoute.emissionInfoAtHeight(1L, coinEmission, reemissionSettings).asJson shouldEqual responseAs[Json]
+      EmissionApiRoute.emissionInfoAtHeight(1, coinEmission, reemissionSettings).asJson shouldEqual responseAs[Json]
     }
 
     Get(prefix + "/10000") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      EmissionApiRoute.emissionInfoAtHeight(10000L, coinEmission, reemissionSettings).asJson shouldEqual responseAs[Json]
+      EmissionApiRoute.emissionInfoAtHeight(10000, coinEmission, reemissionSettings).asJson shouldEqual responseAs[Json]
     }
 
     Get(prefix + "/1000000") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      EmissionApiRoute.emissionInfoAtHeight(1000000L, coinEmission, reemissionSettings).asJson shouldEqual responseAs[Json]
+      EmissionApiRoute.emissionInfoAtHeight(1000000, coinEmission, reemissionSettings).asJson shouldEqual responseAs[Json]
     }
   }
 

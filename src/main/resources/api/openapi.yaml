@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.27"
+  version: "4.0.28"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -3445,31 +3445,6 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /wallet/rescan:
-    get:
-      security:
-        - ApiKeyAuth: [api_key]
-      summary: Rescan wallet (all the available full blocks)
-      operationId: walletRescan
-      tags:
-        - wallet
-      parameters:
-        - in: query
-          name: fromHeight
-          required: false
-          description: Height to rescan wallet from
-          schema:
-            type: integer
-            format: int32
-            minimum: 0
-      responses:
-        '200':
-          description: Wallet rescanned
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
     post:
       security:
         - ApiKeyAuth: [api_key]
@@ -3747,6 +3722,13 @@ paths:
           type: integer
           format: int32
           minimum: 0
+      - in: query
+        name: includeUnconfirmed
+        required: false
+        description: Include transactions from mempool
+        schema:
+          type: boolean
+          default: false
     get:
       security:
         - ApiKeyAuth: [ api_key ]
@@ -4748,6 +4730,57 @@ paths:
       responses:
         '200':
           description: List of unspent boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/spentBoxes/{scanId}:
+    parameters:
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: -1
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: List boxes which are spent.
+      operationId: listSpentScans
+      tags:
+        - scan
+      parameters:
+        - in: path
+          name: scanId
+          required: true
+          description: identifier of a scan
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: List of spent boxes
           content:
             application/json:
               schema:

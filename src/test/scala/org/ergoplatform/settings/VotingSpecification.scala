@@ -108,6 +108,7 @@ class VotingSpecification extends ErgoPropertyTest {
     val h = defaultHeaderGen.sample.get.copy(height = 1, votes = votes, version = 0: Byte)
     val esc2 = esc.appendHeader(h).get
 
+    // proposing a vote for non-existing param is not allowed
     val h2 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
     esc2.appendHeader(h2).toEither.left.get.getMessage.contains("Incorrect vote") shouldBe true
   }
@@ -350,6 +351,8 @@ class VotingSpecification extends ErgoPropertyTest {
     esc31.votingData.epochVotes.toMap.apply(ErgoStateContext.eip27Vote) shouldBe 2
     esc31.eip27Supported shouldBe false
 
+    // We use vote for parameter #8 to vote for EIP-27. The same parameter is used for voting for
+    // readjusting output cost
     val p2: Parameters = Parameters(2, Map(OutputCostIncrease -> 101, BlockVersion -> 0), proposedUpdate)
     val esc41 = process(esc31, p2, he.copy(height = 4)).get
     esc41.eip27Supported shouldBe true

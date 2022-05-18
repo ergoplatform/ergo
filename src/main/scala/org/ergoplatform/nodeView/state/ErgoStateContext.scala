@@ -159,7 +159,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       } else {
         votingSettings.votingLength / 10 * 9
       }
-      if (epochVotes.find(_._1 == ErgoStateContext.eip27Vote).map(_._2).getOrElse(0) >= threshold) {
+      val eip27Votes = epochVotes.find(_._1 == ErgoStateContext.eip27Vote).map(_._2).getOrElse(0)
+      log.warn(s"Votes for EIP-27 collected: $eip27Votes , height: $height")
+      if (eip27Votes >= threshold) {
         true
       } else {
         false

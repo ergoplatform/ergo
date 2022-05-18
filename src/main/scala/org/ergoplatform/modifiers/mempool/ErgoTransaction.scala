@@ -315,7 +315,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           Success(())
         }
       } else {
-        log.warn("Checking EIP-27 win digest mode")
+        log.warn("Checking EIP-27 in digest mode")
       }
     }
   }

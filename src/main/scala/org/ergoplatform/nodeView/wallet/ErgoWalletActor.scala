@@ -336,15 +336,21 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     // We do wallet rescan by closing the wallet's database, deleting it from the disk, then reopening it and sending a rescan signal.
     case RescanWallet(fromHeight) =>
-      log.info(s"Rescanning the wallet from height: $fromHeight")
-      ergoWalletService.recreateRegistry(state, settings) match {
-        case Success(newState) =>
-          context.become(loadedWallet(newState.copy(rescanInProgress = true)))
-          val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
-          self ! ScanInThePast(heightToScanFrom, rescan = true)
-        case f@Failure(t) =>
-          log.error("Error during rescan attempt: ", t)
-          sender() ! f
+      if (!state.rescanInProgress) {
+        log.info(s"Rescanning the wallet from height: $fromHeight")
+        ergoWalletService.recreateRegistry(state, settings) match {
+          case Success(newState) =>
+            context.become(loadedWallet(newState.copy(rescanInProgress = true)))
+            val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
+            self ! ScanInThePast(heightToScanFrom, rescan = true)
+            sender() ! Success(())
+          case f@Failure(t) =>
+            log.error("Error during rescan attempt: ", t)
+            sender() ! f
+        }
+      } else {
+        log.info(s"Skipping rescan request from height: $fromHeight as one is already in progress")
+        sender() ! Failure(new IllegalStateException("Rescan already in progress"))
       }
 
     case GetWalletStatus =>

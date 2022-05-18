@@ -52,7 +52,7 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
       boxesToSpend = inputBoxes,
       spendingTransaction,
       self = inputBoxes.head,
-      0)
+      1: Byte) //activated script version
     Try(prover.prove(emptyEnv, prop, ctx, fakeMessage).get) match {
       case Success(pr) =>
         verifier.verify(emptyEnv, prop, ctx, pr, fakeMessage).get._1 shouldBe expectedValidity

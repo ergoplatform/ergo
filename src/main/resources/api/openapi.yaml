@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.28"
+  version: "4.0.29"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -2202,6 +2202,20 @@ components:
         totalRemainCoins:
           type: integer
           format: int64
+        reemitted:
+          type: integer
+          format: int64
+
+    EmissionScripts:
+      description: Emission related scripts
+      type: object
+      properties:
+        emission:
+          type: string
+        reemission:
+          type: string
+        pay2Reemission:
+          type: string
 
     BalancesSnapshot:
       description: Amount of Ergo tokens and assets
@@ -4918,6 +4932,54 @@ paths:
       responses:
         '200':
           description: The node will be shut down in 5 seconds
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /emission/at/{blockHeight}:
+    get:
+      summary: Get emission data for a given height
+      operationId: emissionAt
+      tags:
+        - emission
+      parameters:
+        - in: path
+          name: blockHeight
+          required: true
+          description: Height to get emission data for
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: Emission data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmissionInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /emission/scripts:
+    get:
+      summary: Print emission-related scripts
+      operationId: emissionScripts
+      tags:
+        - emission
+      responses:
+        '200':
+          description: Emission-related scripts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmissionScripts'
         default:
           description: Error
           content:

@@ -56,7 +56,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val digestState: DigestState = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
-      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants, parameters)
+      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
     }
   }.sample.value
 
@@ -155,7 +155,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     private val apps = mutable.Map[ScanId, Scan]()
 
-    private val ergoWalletService = new ErgoWalletServiceImpl
+    private val ergoWalletService = new ErgoWalletServiceImpl(settings)
 
     def receive: Receive = {
 

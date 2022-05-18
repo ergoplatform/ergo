@@ -21,11 +21,11 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       val fb = validFullBlock(parentOpt = None, us, bh)
       val dir2 = createTempDir
-      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, stateConstants, parameters)
+      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, stateConstants)
       ds.applyModifier(fb, None)(_ => ()) shouldBe 'success
       ds.close()
 
-      val state = DigestState.create(None, None, dir2, stateConstants, parameters)
+      val state = DigestState.create(None, None, dir2, stateConstants)
       state.version shouldEqual fb.header.id
       state.rootHash shouldEqual fb.header.stateRoot
     }

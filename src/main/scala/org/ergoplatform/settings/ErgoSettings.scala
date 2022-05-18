@@ -188,6 +188,9 @@ object ErgoSettings extends ScorexLogging
     } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {
       failWithError(s"Malformed network config. Desired networkType is `${desiredNetworkTypeOpt.get}`, " +
         s"but one declared in config is `${settings.networkType}`")
+    } else if(!settings.nodeSettings.stateType.holdsUtxoSet &&
+                settings.chainSettings.reemission.checkReemissionRules) {
+      failWithError("EIP-27 rules can be checked only in UTXO mode")
     } else {
       settings
     }

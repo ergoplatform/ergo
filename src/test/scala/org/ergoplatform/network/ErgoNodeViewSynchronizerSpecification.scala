@@ -45,7 +45,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
-  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings, timeProvider, parameters)
+  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
 
   class SynchronizerMock(networkControllerRef: ActorRef,
                          viewHolderRef: ActorRef,

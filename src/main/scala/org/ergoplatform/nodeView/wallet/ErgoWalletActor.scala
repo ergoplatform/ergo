@@ -39,7 +39,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   import ErgoWalletActor._
 
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
+  private val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy(maxNrOfRetries = 5, withinTimeRange = 1.minute) {
@@ -126,7 +126,26 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     /** READERS */
     case ReadBalances(chainStatus) =>
-      sender() ! (if (chainStatus.onChain) state.registry.fetchDigest() else state.offChainRegistry.digest)
+      val walletDigest = if (chainStatus.onChain) {
+        state.registry.fetchDigest()
+      } else {
+        state.offChainRegistry.digest
+      }
+      val res = if (settings.walletSettings.checkEIP27) {
+        // If re-emission token in the wallet, subtract it from ERG balance
+        val reemissionAmt = walletDigest.walletAssetBalances
+          .find(_._1 == settings.chainSettings.reemission.reemissionTokenId)
+          .map(_._2)
+          .getOrElse(0L)
+        if (reemissionAmt == 0) {
+          walletDigest
+        } else {
+          walletDigest.copy(walletBalance = walletDigest.walletBalance - reemissionAmt)
+        }
+      } else {
+        walletDigest
+      }
+      sender() ! res
 
     case ReadPublicKeys(from, until) =>
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)
@@ -337,7 +356,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case GetWalletStatus =>
       val isSecretSet = state.secretIsSet(settings.walletSettings.testMnemonic)
       val isUnlocked = state.walletVars.proverOpt.isDefined
-      val changeAddress = state.getChangeAddress
+      val changeAddress = state.getChangeAddress(ergoAddressEncoder)
       val height = state.getWalletHeight
       val lastError = state.error
       val status = WalletStatus(isSecretSet, isUnlocked, changeAddress, height, lastError)
@@ -370,7 +389,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! ExtractHintsResult(bag)
 
     case DeriveKey(encodedPath) =>
-      ergoWalletService.deriveKeyFromPath(state, encodedPath) match {
+      ergoWalletService.deriveKeyFromPath(state, encodedPath, ergoAddressEncoder) match {
         case Success((p2pkAddress, newState)) =>
           context.become(loadedWallet(newState))
           sender() ! Success(p2pkAddress)

@@ -23,10 +23,11 @@ import org.ergoplatform.wallet.boxes.DefaultBoxSelector
 
 object TransactionBuilder {
 
-  def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap =
+  def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap = {
     AssetUtils.mergeAssets(
       initialMap = Map.empty[ModifierId, Long],
-      maps = outputCandidates.map(b => collTokensToMap(b.additionalTokens)):_*)
+      maps = outputCandidates.map(b => collTokensToMap(b.additionalTokens)): _*)
+  }
 
   def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
     tokens.toArray.map(t => bytesToId(t._1) -> t._2).toMap
@@ -73,7 +74,7 @@ object TransactionBuilder {
     minChangeValue: Long,
     minerRewardDelay: Int,
     burnTokens: TokensMap = Map.empty,
-    boxSelector: BoxSelector = DefaultBoxSelector
+    boxSelector: BoxSelector = new DefaultBoxSelector(None)
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
     validateStatelessChecks(inputs, dataInputs, outputCandidates)

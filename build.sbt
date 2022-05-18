@@ -36,7 +36,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "4.0.5"
+val sigmaStateVersion = "4.0.6"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -154,6 +154,7 @@ assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
   case x if x.endsWith("module-info.class") => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
+  case PathList("org", "bouncycastle", xs @ _*) => MergeStrategy.first
   case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
   case PathList("org", "bouncycastle", xs @ _*) => MergeStrategy.first
   case PathList("javax", "activation", xs @ _*) => MergeStrategy.last

@@ -14,7 +14,6 @@ import scorex.util.encode.Base16
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
 
-import scala.util.Random
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.secrets.PrimitiveSecretKey
@@ -60,7 +59,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           log.info(s"Payment request $req")
           val tx = await(wallet.generateTransaction(req)).get
           log.info(s"Generated transaction $tx")
-          val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+          val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty, false)
           val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
           tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
           val block = makeNextBlock(getUtxoState, Seq(tx))
@@ -115,7 +114,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           startDigest,
           parameters,
           validationSettingsNoIl,
-          VotingData.empty)
+          VotingData.empty,
+          false)
         val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
         tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
       }
@@ -374,7 +374,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
             startDigest,
             parameters,
             validationSettingsNoIl,
-            VotingData.empty
+            VotingData.empty,
+            false
           )
           val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
           tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
@@ -392,7 +393,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         log.info(s"Payment requests 2 $req2")
         val tx2 = await(wallet.generateTransaction(req2)).get
         log.info(s"Generated transaction $tx2")
-        val context2 = new ErgoStateContext(Seq(block.header), Some(block.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+        val context2 = new ErgoStateContext(Seq(block.header), Some(block.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty, false)
         val knownBoxes = tx.outputs ++ genesisTx.outputs
         val boxesToSpend2 = tx2.inputs.map(i => knownBoxes.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
         tx2.statefulValidity(boxesToSpend2, emptyDataBoxes, context2) shouldBe 'success
@@ -408,7 +409,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
       bs0.walletBalance shouldBe 0
       bs0.walletAssetBalances shouldBe empty
 
-      val balance1 = Random.nextInt(1000) + 1
+      val balance1 = settings.walletSettings.dustLimit.getOrElse(1000000L) + 1
       val box1 = IndexedSeq(new ErgoBoxCandidate(balance1, pubKey, startHeight, randomNewAsset.toColl))
       wallet.scanOffchain(ErgoTransaction(fakeInputs, box1))
 
@@ -419,7 +420,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         bs1.walletAssetBalances shouldBe assetAmount(box1)
       }
 
-      val balance2 = Random.nextInt(1000) + 1
+      val balance2 = settings.walletSettings.dustLimit.getOrElse(1000000L) + 1
       val box2 = IndexedSeq(new ErgoBoxCandidate(balance2, pubKey, startHeight, randomNewAsset.toColl))
       wallet.scanOffchain(ErgoTransaction(fakeInputs, IndexedSeq(), box2))
 

@@ -56,7 +56,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val digestState: DigestState = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
-      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants, parameters)
+      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
     }
   }.sample.value
 
@@ -155,7 +155,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     private val apps = mutable.Map[ScanId, Scan]()
 
-    private val ergoWalletService = new ErgoWalletServiceImpl
+    private val ergoWalletService = new ErgoWalletServiceImpl(settings)
 
     def receive: Receive = {
 
@@ -167,7 +167,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case LockWallet => ()
 
-      case RescanWallet => sender ! Success(())
+      case RescanWallet(_) => sender ! Success(())
 
       case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistory.GenesisHeight, error = None)
 
@@ -180,6 +180,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         }
         sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
+
+      case GetScanTransactions(scanId, includeUnconfirmed) =>
+        if (includeUnconfirmed) {
+          sender() ! ScanRelatedTxsResponse(walletTxsForScan(scanId, includeUnconfirmed = true))
+        } else {
+          sender() ! ScanRelatedTxsResponse(walletTxsForScan(scanId))
+        }
 
       case GetTransactions =>
         sender() ! walletTxs
@@ -210,13 +217,16 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! RemoveScanResponse(res)
 
-      case GetScanBoxes(_, _, considerUnconfirmed) =>
+      case GetScanUnspentBoxes(_, considerUnconfirmed) =>
         val res = if(considerUnconfirmed) {
           Seq(walletBoxN_N, walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         } else {
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         }
         sender() ! res
+
+      case GetScanSpentBoxes(_) =>
+        sender() ! Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
 
       case StopTracking(_, _) =>
         sender() ! StopTrackingResponse(Success(()))
@@ -282,6 +292,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     )
     val walletTxs: Seq[AugWalletTransaction] =
       Gen.listOf(augWalletTransactionGen).sample.get
+
+    def walletTxsForScan(scanId: ScanId, includeUnconfirmed: Boolean = false): Seq[AugWalletTransaction] =
+      Gen.listOf(augWalletTransactionForScanGen(scanId, includeUnconfirmed)).sample.get
 
     def props(): Props = Props(new WalletActorStub)
 

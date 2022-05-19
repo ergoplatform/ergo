@@ -20,80 +20,121 @@ import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
-
+import scala.collection.JavaConverters._
 
 object TransactionBuilder {
 
   /**
     * @param recipientAddress - payment recipient address
-    * @param changeAddress - chnage recipient address
     * @param transferAmt - amount of ERGs to transfer
-    * @param feeAmt - fee amount
+    * @param changeAddress - change recipient address
     * @param changeAmt - amount to return back to `changeAddress`
-    * @param inputIds - identifiers of inputs to be used in transaction
-    * @param currentHeight - current blockchain height
     */
-  case class TxParams(
+  case class Payment(
     recipientAddress: ErgoAddress,
-    changeAddress: ErgoAddress,
     transferAmt: Long,
-    feeAmt: Long,
-    changeAmt: Long,
-    inputIds: Array[String],
-    currentHeight: Int
+    changeAddress: ErgoAddress,
+    changeAmt: Long
   )
 
-  def txParams(
-    recipientAddress: ErgoAddress,
-    changeAddress: ErgoAddress,
-    transferAmt: Long,
-    feeAmt: Long,
-    changeAmt: Long,
-    inputIds: Array[String],
-    currentHeight: Int
-  ): TxParams = TxParams(recipientAddress, changeAddress, transferAmt, feeAmt, changeAmt, inputIds, currentHeight)
-
-
   /**
-    * Assembles multiple unsigned payment transactions from transaction parameter list
+    * Assembles unsigned payment transaction with multiple outputs
     *
-    * @param txParamsList list of transaction parameters
-    * @return unsigned transactions
+    * @param inputIds - identifiers of inputs to be used in transaction
+    * @param payments - list of addresses and corresponding amounts to make outputs from
+    * @param feeAmt - fee amount
+    * @param currentHeight - current blockchain height
+    * @return unsigned transaction
     */
-  def paymentTransactions(txParamsList: java.util.List[TxParams]): java.util.List[UnsignedErgoLikeTransaction] = {
-    import scala.collection.JavaConverters._
-    txParamsList.asScala.map(paymentTransaction).asJava
+  def multiPaymentTransaction(inputIds: Array[String],
+                              feeAmt: Long,
+                              payments: java.util.List[Payment],
+                              currentHeight: Int): UnsignedErgoLikeTransaction = {
+    val outputs =
+      payments.asScala.flatMap { case Payment(recipientAddress, transferAmt, changeAddress, changeAmt) =>
+        val payTo = new ErgoBoxCandidate(
+          transferAmt,
+          recipientAddress.script,
+          currentHeight,
+          Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+          Map.empty
+        )
+        val fee = new ErgoBoxCandidate(
+          feeAmt,
+          ErgoScriptPredef.feeProposition(),
+          currentHeight,
+          Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+          Map.empty
+        )
+        val change = new ErgoBoxCandidate(
+          changeAmt,
+          changeAddress.script,
+          currentHeight,
+          Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+          Map.empty
+        )
+        if (changeAmt == 0) {
+          IndexedSeq(payTo, fee)
+        } else {
+          IndexedSeq(payTo, change, fee)
+        }
+      }.toIndexedSeq
+
+    val unsignedInputs = inputIds
+      .flatMap { id =>
+        Base16.decode(id)
+          .map(x => new UnsignedInput(ADKey @@ x))
+          .toOption
+      }.toIndexedSeq
+
+    new UnsignedErgoLikeTransaction(
+      unsignedInputs,
+      dataInputs = IndexedSeq.empty,
+      outputs
+    )
   }
 
   /**
     * Assembles unsigned payment transaction.
     *
-    * @param txParams transaction parameters
+    * @param recipientAddress - payment recipient address
+    * @param changeAddress - change recipient address
+    * @param transferAmt - amount of ERGs to transfer
+    * @param feeAmt - fee amount
+    * @param changeAmt - amount to return back to `changeAddress`
+    * @param inputIds - identifiers of inputs to be used in transaction
+    * @param currentHeight - current blockchain height
     * @return unsigned transaction
     */
-  def paymentTransaction(txParams: TxParams): UnsignedErgoLikeTransaction = {
+  def paymentTransaction(recipientAddress: ErgoAddress,
+                         changeAddress: ErgoAddress,
+                         transferAmt: Long,
+                         feeAmt: Long,
+                         changeAmt: Long,
+                         inputIds: Array[String],
+                         currentHeight: Int): UnsignedErgoLikeTransaction = {
     val payTo = new ErgoBoxCandidate(
-      txParams.transferAmt,
-      txParams.recipientAddress.script,
-      txParams.currentHeight,
+      transferAmt,
+      recipientAddress.script,
+      currentHeight,
       Seq.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
     )
     val fee = new ErgoBoxCandidate(
-      txParams.feeAmt,
+      feeAmt,
       ErgoScriptPredef.feeProposition(),
-      txParams.currentHeight,
+      currentHeight,
       Seq.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
     )
     val change = new ErgoBoxCandidate(
-      txParams.changeAmt,
-      txParams.changeAddress.script,
-      txParams.currentHeight,
+      changeAmt,
+      changeAddress.script,
+      currentHeight,
       Seq.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
     )
-    val unsignedInputs = txParams.inputIds
+    val unsignedInputs = inputIds
       .flatMap { id =>
         Base16.decode(id)
           .map(x => new UnsignedInput(ADKey @@ x))
@@ -102,7 +143,7 @@ object TransactionBuilder {
       .toIndexedSeq
 
     val dataInputs = IndexedSeq.empty
-    val outputs = if (txParams.changeAmt == 0) {
+    val outputs = if (changeAmt == 0) {
       IndexedSeq(payTo, fee)
     } else {
       IndexedSeq(payTo, change, fee)

@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.25"
+  version: "4.0.29"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -13,7 +13,7 @@ info:
     url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
 
 servers:
-  - url: http://127.0.0.1:9053
+  - url: /
     description: Local full node
   - url: http://213.239.193.208:9053
     description: Known public node
@@ -1778,7 +1778,7 @@ components:
           example: '127.0.0.1:5673'
         version:
           type: string
-          example: '4.0.25'
+          example: '4.0.26'
         checks:
           type: integer
           description: How many times we checked for modifier delivery status
@@ -1799,7 +1799,7 @@ components:
           example: '127.0.0.1:5673'
         version:
           type: string
-          example: '4.0.25'
+          example: '4.0.26'
         lastMessage:
           $ref: '#/components/schemas/Timestamp'
 
@@ -2210,6 +2210,20 @@ components:
         totalRemainCoins:
           type: integer
           format: int64
+        reemitted:
+          type: integer
+          format: int64
+
+    EmissionScripts:
+      description: Emission related scripts
+      type: object
+      properties:
+        emission:
+          type: string
+        reemission:
+          type: string
+        pay2Reemission:
+          type: string
 
     BalancesSnapshot:
       description: Amount of Ergo tokens and assets
@@ -3439,22 +3453,36 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /wallet/rescan:
-    get:
+    post:
       security:
         - ApiKeyAuth: [api_key]
       summary: Rescan wallet (all the available full blocks)
       operationId: walletRescan
       tags:
         - wallet
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fromHeight
+              properties:
+                fromHeight:
+                  type: integer
+                  format: int32
+                  minimum: 0
       responses:
         '200':
-          description: Wallet storage recreated
+          description: Wallet rescanned
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
 
   /wallet/status:
     get:
@@ -3702,6 +3730,13 @@ paths:
           type: integer
           format: int32
           minimum: 0
+      - in: query
+        name: includeUnconfirmed
+        required: false
+        description: Include transactions from mempool
+        schema:
+          type: boolean
+          default: false
     get:
       security:
         - ApiKeyAuth: [ api_key ]
@@ -4716,6 +4751,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /scan/spentBoxes/{scanId}:
+    parameters:
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: -1
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: List boxes which are spent.
+      operationId: listSpentScans
+      tags:
+        - scan
+      parameters:
+        - in: path
+          name: scanId
+          required: true
+          description: identifier of a scan
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: List of spent boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /scan/stopTracking:
     post:
       security:
@@ -4854,6 +4940,54 @@ paths:
       responses:
         '200':
           description: The node will be shut down in 5 seconds
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /emission/at/{blockHeight}:
+    get:
+      summary: Get emission data for a given height
+      operationId: emissionAt
+      tags:
+        - emission
+      parameters:
+        - in: path
+          name: blockHeight
+          required: true
+          description: Height to get emission data for
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: Emission data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmissionInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /emission/scripts:
+    get:
+      summary: Print emission-related scripts
+      operationId: emissionScripts
+      tags:
+        - emission
+      responses:
+        '200':
+          description: Emission-related scripts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmissionScripts'
         default:
           description: Error
           content:

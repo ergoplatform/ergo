@@ -99,6 +99,16 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     scanId <- ScanId @@ Gen.posNum[Short]
   } yield WalletTransaction(tx, inclusionHeight, Seq(scanId))
 
+  def walletTransactionForScanGen(scanId: ScanId): Gen[WalletTransaction] = for {
+    tx <- invalidErgoTransactionGen
+    inclusionHeight <- Gen.posNum[Int]
+  } yield WalletTransaction(tx, inclusionHeight, Seq(scanId))
+
+  def augWalletTransactionForScanGen(scanId: ScanId, includeUnconfirmed: Boolean): Gen[AugWalletTransaction] = for {
+    tx <- walletTransactionForScanGen(scanId)
+    numConfirmation <- if (includeUnconfirmed) Gen.const(0) else Gen.posNum[Int]
+  } yield AugWalletTransaction(tx, numConfirmation)
+
   lazy val augWalletTransactionGen: Gen[AugWalletTransaction] = for {
     tx <- walletTransactionGen
     numConfirmation <- Gen.posNum[Int]
@@ -317,7 +327,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   } yield {
     blocks match {
       case _ :: _ =>
-        val sc = new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+        val sc = new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty, false)
         blocks.foldLeft(sc -> 1) { case ((c, h), b) =>
           val block = b.copy(header = b.header.copy(height = h, votes = votes(h - 1)))
           c.appendFullBlock(block).get -> (h + 1)

@@ -34,7 +34,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.{MempoolReader, Transaction}
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
-import scorex.core.validation.MalformedModifierError
+import scorex.core.validation.{MalformedModifierError, RecoverableModifierError}
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
@@ -300,7 +300,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"$remote has equal header-chain")
     }
 
-    if ((oldStatus != status) || syncTracker.isOutdated(remote) || status == Older || status == Fork) {
+    if ((oldStatus != status) || syncTracker.notSyncedOrOutdated(remote) || status == Older || status == Fork) {
       val ownSyncInfo = getV1SyncInfo(hr)
       sendSyncToPeer(remote, ownSyncInfo)
     }
@@ -350,7 +350,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"$remote has equal header-chain")
     }
 
-    if ((oldStatus != status) || syncTracker.isOutdated(remote) || status == Older || status == Fork) {
+    if ((oldStatus != status) || syncTracker.notSyncedOrOutdated(remote) || status == Older || status == Fork) {
       val ownSyncInfo = getV2SyncInfo(hr, full = true)
       sendSyncToPeer(remote, ownSyncInfo)
     }
@@ -656,6 +656,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         deliveryTracker.setInvalid(pmod.id, pmod.modifierTypeId)
         penalizeMisbehavingPeer(remote)
         false
+      case Failure(e) if e.isInstanceOf[RecoverableModifierError] =>
+        context.system.eventStream.publish(RecoverableFailedModification(pmod, e))
+        false
       case _ =>
         deliveryTracker.setReceived(pmod.id, pmod.modifierTypeId, remote)
         true
@@ -805,8 +808,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
 
-    case RecoverableFailedModification(_, _) =>
-      // we ignore this one as we should try to apply this modifier again
+    case RecoverableFailedModification(mod, e) =>
+      logger.debug(s"Setting recoverable failed modifier ${mod.id} as Unknown", e)
+      deliveryTracker.setUnknown(mod.id, mod.modifierTypeId)
 
     case SyntacticallyFailedModification(mod, e) =>
       logger.debug(s"Invalidating syntactically failed modifier ${mod.id}", e)

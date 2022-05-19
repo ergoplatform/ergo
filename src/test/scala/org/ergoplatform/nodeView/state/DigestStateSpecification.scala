@@ -21,11 +21,11 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       val fb = validFullBlock(parentOpt = None, us, bh)
       val dir2 = createTempDir
-      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, stateConstants, parameters)
-      ds.applyModifier(fb)(_ => ()) shouldBe 'success
+      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, stateConstants)
+      ds.applyModifier(fb, None)(_ => ()) shouldBe 'success
       ds.close()
 
-      val state = DigestState.create(None, None, dir2, stateConstants, parameters)
+      val state = DigestState.create(None, None, dir2, stateConstants)
       state.version shouldEqual fb.header.id
       state.rootHash shouldEqual fb.header.stateRoot
     }
@@ -40,8 +40,8 @@ class DigestStateSpecification extends ErgoPropertyTest {
       val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new RandomWrapper(Some(seed)))
       val block = blBh._1
       bh = blBh._2
-      ds = ds.applyModifier(block)(_ => ()).get
-      us = us.applyModifier(block)(_ => ()).get
+      ds = ds.applyModifier(block, None)(_ => ()).get
+      us = us.applyModifier(block, None)(_ => ()).get
       parentOpt = Some(block)
     }
   }
@@ -62,14 +62,14 @@ class DigestStateSpecification extends ErgoPropertyTest {
       block.blockTransactions.transactions.exists(_.dataInputs.nonEmpty) shouldBe true
 
       val ds = createDigestState(us.version, us.rootHash, parameters)
-      ds.applyModifier(block)(_ => ()) shouldBe 'success
+      ds.applyModifier(block, None)(_ => ()) shouldBe 'success
     }
   }
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
       val state = createDigestState(emptyVersion, emptyAdDigest, parameters)
-      state.applyModifier(b)(_ => ()).isFailure shouldBe true
+      state.applyModifier(b, None)(_ => ()).isFailure shouldBe true
     }
   }
 
@@ -84,7 +84,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       ds.rollbackVersions.size shouldEqual 1
 
-      val ds2 = ds.applyModifier(block)(_ => ()).get
+      val ds2 = ds.applyModifier(block, None)(_ => ()).get
 
       ds2.rollbackVersions.size shouldEqual 2
 
@@ -97,7 +97,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       ds3.stateContext.lastHeaders.size shouldEqual 0
 
-      ds3.applyModifier(block)(_ => ()).get.rootHash shouldBe ds2.rootHash
+      ds3.applyModifier(block, None)(_ => ()).get.rootHash shouldBe ds2.rootHash
     }
   }
 

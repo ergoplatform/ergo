@@ -1,5 +1,6 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
@@ -22,6 +23,7 @@ case class ChainSettings(protocolVersion: Byte,
                          voting: VotingSettings,
                          powScheme: AutolykosPowScheme,
                          monetary: MonetarySettings,
+                         reemission: ReemissionSettings,
                          noPremineProof: Seq[String],
                          foundersPubkeys: Seq[String],
                          genesisStateDigestHex: String,
@@ -32,6 +34,8 @@ case class ChainSettings(protocolVersion: Byte,
     .fold(_ => throw new Error(s"Failed to parse genesisStateDigestHex = $genesisStateDigestHex"), ADDigest @@ _)
 
   val emissionRules: EmissionRules = new EmissionRules(monetary)
+
+  val addressEncoder = new ErgoAddressEncoder(addressPrefix)
 
   val initialDifficulty: BigInt = Base16.decode(initialDifficultyHex)
     .fold(_ => throw new Error(s"Failed to parse initialDifficultyHex = $initialDifficultyHex"), BigInt(_))

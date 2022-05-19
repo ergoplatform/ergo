@@ -11,7 +11,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.{Args, ErgoSettings}
 import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
 import scorex.core.network.{DeliveryTracker, PeerFeature}
@@ -43,7 +43,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, LaunchParameters)
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
@@ -53,6 +53,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   val statsCollectorRef: ActorRef =
     ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider, LaunchParameters)
+
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     ErgoUtilsApiRoute(ergoSettings),

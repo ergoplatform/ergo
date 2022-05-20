@@ -14,8 +14,8 @@ import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, LaunchParameters, NetworkType}
 import org.slf4j.{Logger, LoggerFactory}
+import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
@@ -91,9 +91,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val networkControllerRef: ActorRef = NetworkControllerRef(
     "networkController", scorexSettings.network, peerManagerRef, scorexContext)
 
-  private val parameters = LaunchParameters
-
-  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, parameters)
+  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
@@ -106,7 +104,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     }
 
   private val statsCollectorRef: ActorRef =
-    ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider, parameters)
+    ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
 
   private val syncTracker = ErgoSyncTracker(actorSystem, scorexSettings.network, timeProvider)
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
@@ -122,8 +120,10 @@ class ErgoApp(args: Args) extends ScorexLogging {
     deliveryTracker
   )
 
-  // Launching PeerSynchronizer actor which is then registering itself at network controller
-  PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network, featureSerializers)
+  if (ergoSettings.scorexSettings.network.peerDiscovery) {
+    // Launching PeerSynchronizer actor which is then registering itself at network controller
+    PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network, featureSerializers)
+  }
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
@@ -185,9 +185,14 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private def run(): Future[ServerBinding] = {
     require(scorexSettings.network.agentName.length <= ErgoApp.ApplicationNameLimit)
 
-    log.debug(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
-    log.debug(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
-    log.debug(s"RPC is allowed at ${scorexSettings.restApi.bindAddress.toString}")
+    log.info(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
+    log.info(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
+    log.info(s"RPC is allowed at ${scorexSettings.restApi.bindAddress.toString}")
+
+    if (ergoSettings.chainSettings.reemission.checkReemissionRules) {
+      log.info("Checking re-emission rules enabled")
+      log.info(s"EIP27 activation height: " + ergoSettings.chainSettings.reemission.activationHeight)
+    }
 
     val bindAddress = scorexSettings.restApi.bindAddress
 

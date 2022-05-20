@@ -31,14 +31,14 @@ trait ValidBlocksGenerators
   }
 
   def createUtxoState(constants: StateConstants, parameters: Parameters): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, constants, parameters)
+    ErgoState.generateGenesisUtxoState(createTempDir, constants)
   }
 
   def createUtxoState(bh: BoxHolder, parameters: Parameters): UtxoState =
     UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants, parameters)
 
   def createDigestState(version: VersionTag, digest: ADDigest, parameters: Parameters): DigestState =
-    DigestState.create(Some(version), Some(digest), createTempDir, stateConstants, parameters)
+    DigestState.create(Some(version), Some(digest), createTempDir, stateConstants)
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new RandomWrapper)
@@ -77,7 +77,7 @@ trait ValidBlocksGenerators
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
           val currentHeight: Int = emissionBox.creationHeight.toInt
-          val rewards = CandidateGenerator.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, emission)
+          val rewards = CandidateGenerator.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, emptyStateContext)
           val outs = rewards.flatMap(_.outputs)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = outs.filter(b => isEmissionBox(b))

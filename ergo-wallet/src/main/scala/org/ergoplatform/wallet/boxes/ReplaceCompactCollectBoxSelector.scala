@@ -23,8 +23,12 @@ import scala.collection.mutable
   * @param maxInputs     - maximum number of inputs a transaction can have
   * @param optimalInputs - optimal number of inputs, when transaction is still not expensive. The box selector is
   *                      trying to add dust if a transaction has less inputs than this.
+  * @param reemissionDataOpt - re-emission settings. If provided, re-emission tokens are considered by box selector
   */
-class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) extends BoxSelector {
+class ReplaceCompactCollectBoxSelector(maxInputs: Int,
+                                       optimalInputs: Int,
+                                       override val reemissionDataOpt: Option[ReemissionData])
+  extends DefaultBoxSelector(reemissionDataOpt) {
 
   import ReplaceCompactCollectBoxSelector._
 
@@ -45,7 +49,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                                           targetBalance: Long,
                                           targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     // First picking up boxes in given order (1,2,3,4,...) by using DefaultBoxSelector
-    DefaultBoxSelector.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMapRight { initialSelection =>
+    super.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMapRight { initialSelection =>
       val tail = inputBoxes.take(maxInputs * BoxSelector.ScanDepthFactor).filter(filterFn).toSeq
       // if number of inputs exceeds the limit, the selector is sorting remaining boxes(actually, only 10*maximum
       // boxes) by value in descending order and replaces small-value boxes in the inputs by big-value from the tail (1,2,3,4 => 10)
@@ -80,10 +84,11 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                                                       targetBalance: Long,
                                                       targetAssets: TokensMap
                                                      ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
-    val compactedBalance = boxes.map(_.value).sum
+    val compactedBalance = boxes.map(b => BoxSelector.valueOf(b, reemissionDataOpt)).sum
     val compactedAssets = mutable.Map[ModifierId, Long]()
     AssetUtils.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
-    DefaultBoxSelector.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets)
+    val ra = reemissionAmount(boxes)
+    super.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets, ra)
   }
 
   protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
@@ -91,6 +96,8 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                                                        targetBalance: Long,
                                                        targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     val diff = optimalInputs - bsr.boxes.length
+
+    // it is okay to not to consider reemission tokens here probably, so sorting is done by _.value just, not valueOf()
     val dust = tail.sortBy(_.value).take(diff).filter(b => !bsr.boxes.contains(b))
 
     val boxes = bsr.boxes ++ dust
@@ -101,15 +108,15 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                                                     targetBalance: Long,
                                                     targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     val boxes = bsr.boxes
-    val diff = boxes.map(_.value).sum - targetBalance
+    val diff = boxes.map(b => BoxSelector.valueOf(b,reemissionDataOpt)).sum - targetBalance
 
     val boxesToThrowAway = boxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
-    val sorted = boxesToThrowAway.sortBy(_.value)
+    val sorted = boxesToThrowAway.sortBy(b => BoxSelector.valueOf(b, reemissionDataOpt))
 
-    if (diff >= sorted.head.value) {
+    if (diff >= BoxSelector.valueOf(sorted.head, reemissionDataOpt)) {
       var thrownValue = 0L
       val thrownBoxes = sorted.takeWhile { b =>
-        thrownValue = thrownValue + b.value
+        thrownValue = thrownValue + BoxSelector.valueOf(b, reemissionDataOpt)
         thrownValue <= diff
       }
       val compactedBoxes = boxes.filter(b => !thrownBoxes.contains(b))
@@ -124,9 +131,9 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                                                    tail: Seq[T],
                                                    targetBalance: Long,
                                                    targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
-    val bigBoxes = tail.sortBy(-_.value)
+    val bigBoxes = tail.sortBy(b => -BoxSelector.valueOf(b, reemissionDataOpt))
     val boxesToThrowAway = bsr.boxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
-    val sorted = boxesToThrowAway.sortBy(_.value)
+    val sorted = boxesToThrowAway.sortBy(b => BoxSelector.valueOf(b, reemissionDataOpt))
 
     type BoxesToAdd = Seq[T]
     type BoxesToDrop = Seq[T]
@@ -136,12 +143,15 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     def replaceStep(candidates: Seq[T], toDrop: Seq[T], currentOps: Operations): Operations = {
       candidates match {
         case Seq() => currentOps
-        case Seq(cand) if cand.value <= toDrop.headOption.map(_.value).getOrElse(Long.MaxValue) => currentOps
+        case Seq(cand)
+          if BoxSelector.valueOf(cand, reemissionDataOpt) <=
+            toDrop.headOption.map(b => BoxSelector.valueOf(b, reemissionDataOpt)).getOrElse(Long.MaxValue) =>
+          currentOps
         case Seq(cand, cs@_*) =>
           var collected = 0L
           val (dropped, remain) = toDrop.partition { b =>
-            collected = collected + b.value
-            collected <= cand.value
+            collected = collected + BoxSelector.valueOf(b, reemissionDataOpt)
+            collected <= BoxSelector.valueOf(cand, reemissionDataOpt)
           }
           replaceStep(cs, remain, (currentOps._1 :+ cand, currentOps._2 ++ dropped))
       }

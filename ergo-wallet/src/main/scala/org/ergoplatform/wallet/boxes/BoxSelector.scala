@@ -4,6 +4,7 @@ import org.ergoplatform.ErgoBoxAssets
 import org.ergoplatform.SigmaConstants.MaxBoxSize
 import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectionResult}
+import scorex.util.ScorexLogging
 
 
 /**
@@ -11,7 +12,13 @@ import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectio
   * assets and possible user-defined filter. The interface could have many instantiations implementing
   * different strategies.
   */
-trait BoxSelector {
+trait BoxSelector extends ScorexLogging {
+
+  /**
+    * Re-emission settings, if provided. Used to consider re-emission tokens
+    * stored in boxes being spent.
+    */
+  def reemissionDataOpt: Option[ReemissionData]
 
   /**
     * A method which is selecting boxes to spend in order to collect needed amounts of ergo tokens and assets.
@@ -36,6 +43,17 @@ trait BoxSelector {
   ): Either[BoxSelectionError, BoxSelectionResult[T]] =
     select(inputBoxes, _ => true, targetBalance, targetAssets)
 
+  /**
+    * Helper method to get total amount of re-emission tokens stored in input `boxes`.
+    */
+  def reemissionAmount[T <: ErgoBoxAssets](boxes: Seq[T]): Long = {
+    reemissionDataOpt.map { reemissionData =>
+      boxes
+        .flatMap(_.tokens.get(reemissionData.reemissionTokenId))
+        .sum
+    }.getOrElse(0L)
+  }
+
 }
 
 object BoxSelector {
@@ -51,6 +69,21 @@ object BoxSelector {
   val ScanDepthFactor = 300
 
   final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
+
+  /**
+    * Returns how much ERG can be taken from a box when it is spent.
+    *
+    * @param box - box which may be spent
+    * @param reemissionDataOpt - re-emission data, if box selector is checking re-emission rules
+    * @return if no re-emission tokens are there, returns ERG value of the box, otherwise,
+    *         subtract amount of re-emission tokens in the box from its ERG value.
+    */
+  def valueOf[T <: ErgoBoxAssets](box: T, reemissionDataOpt: Option[ReemissionData]): Long = {
+    reemissionDataOpt match {
+      case Some(reemissionData) => box.value - box.tokens.getOrElse(reemissionData.reemissionTokenId, 0L)
+      case None => box.value
+    }
+  }
 
   trait BoxSelectionError {
     def message: String

@@ -143,7 +143,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Useful when checking mempool transactions.
     */
   def withTransactions(txns: Seq[ErgoTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, constants, parameters) {
+    new UtxoState(persistentProver, version, store, constants) {
       lazy val createdBoxes: Seq[ErgoBox] = txns.flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {

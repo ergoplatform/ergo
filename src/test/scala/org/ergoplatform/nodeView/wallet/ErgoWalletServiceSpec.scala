@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.utils.{ErgoPropertyTest, MempoolTestHelpers, WalletTestOps}
@@ -29,8 +30,16 @@ import sigmastate.{SType, Values}
 
 import scala.util.Random
 
-class ErgoWalletServiceSpec extends ErgoPropertyTest
-  with MempoolTestHelpers with WalletTestOps with ErgoWalletSupport with ErgoTransactionGenerators with DBSpec with BeforeAndAfterAll {
+class ErgoWalletServiceSpec
+  extends ErgoPropertyTest
+    with MempoolTestHelpers
+    with WalletTestOps
+    with ErgoWalletSupport
+    with ErgoTransactionGenerators
+    with DBSpec
+    with BeforeAndAfterAll {
+
+  override val ergoSettings: ErgoSettings = settings
 
   private implicit val x: WalletFixture = new WalletFixture(settings, parameters, getCurrentView(_).vault)
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 4)
@@ -60,7 +69,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
         val walletState = initialState(store, versionedStore)
-        val walletService = new ErgoWalletServiceImpl
+        val walletService = new ErgoWalletServiceImpl(settings)
         val settingsWithPruning = settings.copy(nodeSettings = settings.nodeSettings.copy(blocksToKeep = 0))
         walletService.restoreWallet(
           walletState,
@@ -157,9 +166,9 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest
           }
 
           val paymentRequest = PaymentRequest(pks.head, 50000, Seq.empty, Map.empty)
-          val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs)
+          val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
 
-          val walletService = new ErgoWalletServiceImpl
+          val walletService = new ErgoWalletServiceImpl(ergoSettings)
           val unconfirmedTx =
             walletService.generateTransaction(
               initialState(store, versionedStore),
@@ -212,7 +221,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest
           val allBoxes = unspentBoxes :+ spentBox
           wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq.empty), blockId, 100).get
 
-          val walletService = new ErgoWalletServiceImpl
+          val walletService = new ErgoWalletServiceImpl(settings)
           val actualUnspentOnlyWalletBoxes = walletService.getWalletBoxes(wState, unspentOnly = true, considerUnconfirmed = false).toList
           val expectedUnspentOnlyWalletBoxes = unspentBoxes.map(x => WalletBox(x, wState.fullHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
           actualUnspentOnlyWalletBoxes should contain theSameElementsAs expectedUnspentOnlyWalletBoxes
@@ -236,7 +245,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest
               Base16.encode(ErgoBoxSerializer.toBytes(box))
             }
         val paymentRequest = PaymentRequest(pks.head, 50000, Seq.empty, Map.empty)
-        val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs)
+        val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
 
         val (tx, inputs, dataInputs) = generateUnsignedTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty).get
         dataInputs shouldBe empty
@@ -245,7 +254,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest
         tx.outputs.size shouldBe 2
         tx.outputs.map(_.value).sum shouldBe inputs.map(_.value).sum
 
-        val walletService = new ErgoWalletServiceImpl
+        val walletService = new ErgoWalletServiceImpl(settings)
         val signedTx = walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, sign = true).get.asInstanceOf[ErgoTransaction]
 
         ErgoSignature.verify(signedTx.messageToSign, signedTx.inputs.head.spendingProof.proof, pks.head.pubkey.h) shouldBe true
@@ -284,7 +293,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
         val walletState = initialState(store, versionedStore)
-        val walletService = new ErgoWalletServiceImpl
+        val walletService = new ErgoWalletServiceImpl(settings)
         val pass = Random.nextString(10)
         val initializedState = walletService.initWallet(walletState, settings, SecretString.create(pass), Option.empty).get._2
 

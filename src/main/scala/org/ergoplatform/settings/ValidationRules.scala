@@ -92,6 +92,9 @@ object ValidationRules {
     txNegHeight -> RuleStatus(s => fatal(s"Transaction outputs should have non-negative creationHeight. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
+    txReemission -> RuleStatus(s => fatal(s"Transaction should conform EIP-27 rules $s"),
+      Seq(classOf[ErgoTransaction]),
+      mayBeDisabled = true),
 
     // header validation
     hdrGenesisParent -> RuleStatus(s => fatal(s"Genesis header should have genesis parent id. $s"),
@@ -246,6 +249,7 @@ object ValidationRules {
   val txBoxSize: Short = 120
   val txBoxPropositionSize: Short = 121
   val txNegHeight: Short = 122
+  val txReemission: Short = 123
 
   // header validation
   val hdrGenesisParent: Short = 200

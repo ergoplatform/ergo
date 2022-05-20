@@ -31,7 +31,8 @@ case class ErgoWalletState(
     utxoStateReaderOpt: Option[UtxoStateReader],
     parameters: Parameters,
     maxInputsToUse: Int,
-    error: Option[String] = None
+    error: Option[String] = None,
+    rescanInProgress: Boolean
   ) extends ScorexLogging {
 
   /**
@@ -84,11 +85,11 @@ case class ErgoWalletState(
     */
   def fullHeight: Int = stateContext.currentHeight
 
-  def getChangeAddress(implicit addrEncoder: ErgoAddressEncoder): Option[P2PKAddress] = {
+  def getChangeAddress(addrEncoder: ErgoAddressEncoder): Option[P2PKAddress] = {
     walletVars.proverOpt.map { prover =>
       storage.readChangeAddress.getOrElse {
         log.debug("Change address not specified. Using root address from wallet.")
-        P2PKAddress(prover.hdPubKeys.head.key)
+        P2PKAddress(prover.hdPubKeys.head.key)(addrEncoder)
       }
     }
   }
@@ -162,7 +163,7 @@ object ErgoWalletState extends ScorexLogging {
 
   def initial(ergoSettings: ErgoSettings, parameters: Parameters): Try[ErgoWalletState] = {
     WalletRegistry.apply(ergoSettings).map { registry =>
-      val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)(ergoSettings.addressEncoder)
+      val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)
       val offChainRegistry = OffChainRegistry.init(registry)
       val walletVars = WalletVars(ergoStorage, ergoSettings)
       val maxInputsToUse = ergoSettings.walletSettings.maxInputs
@@ -178,7 +179,8 @@ object ErgoWalletState extends ScorexLogging {
         mempoolReaderOpt = None,
         utxoStateReaderOpt = None,
         parameters,
-        maxInputsToUse
+        maxInputsToUse,
+        rescanInProgress = false
       )
     }
   }

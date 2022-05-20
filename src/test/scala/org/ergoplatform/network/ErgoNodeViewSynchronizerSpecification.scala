@@ -1,36 +1,38 @@
 package org.ergoplatform.network
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.DownloadRequest
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.sanity.ErgoSanity.{HT, PM, SI, TX, UTXO_ST}
+import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.HistoryTestHelpers
 import org.scalacheck.Gen
+import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.DownloadRequest
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.PersistentNodeViewModifier
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.core.network.ModifiersStatus.{Received, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{RegisterMessageSpecs, SendToNetwork}
-import ErgoNodeViewSynchronizer.ReceivableMessages._
-import scorex.core.network.message.{InvData, InvSpec, Message, MessageSpec}
+import scorex.core.network.message._
 import scorex.core.network.peer.PeerInfo
+import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 import scorex.testkit.utils.AkkaFixture
 
+import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
-import scala.concurrent.duration.Duration
-import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matchers {
+class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matchers with Eventually {
 
   // ToDo: factor this out of here and NVHTests?
   private def withFixture(testCode: SynchronizerFixture => Any): Unit = {
@@ -43,14 +45,16 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
-  class SyncronizerMock(networkControllerRef: ActorRef,
-                        viewHolderRef: ActorRef,
-                        syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-                        settings: ErgoSettings,
-                        timeProvider: NetworkTimeProvider,
-                        syncTracker: ErgoSyncTracker,
-                        deliveryTracker: DeliveryTracker)
-                       (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
+  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
+
+  class SynchronizerMock(networkControllerRef: ActorRef,
+                         viewHolderRef: ActorRef,
+                         syncInfoSpec: ErgoSyncInfoMessageSpec.type,
+                         settings: ErgoSettings,
+                         timeProvider: NetworkTimeProvider,
+                         syncTracker: ErgoSyncTracker,
+                         deliveryTracker: DeliveryTracker)
+                        (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
     networkControllerRef,
     viewHolderRef,
     syncInfoSpec,
@@ -90,6 +94,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
+  override implicit val patienceConfig: PatienceConfig = PatienceConfig(2.seconds, 100.millis)
   val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
   val chain = genHeaderChain(2000, history, diffBitsOpt = None, useRealTs = false)
   val localChain = chain.take(1000)
@@ -130,7 +135,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   }
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
-  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM]) = {
+  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM], DeliveryTracker) = {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val h = localHistoryGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
@@ -140,16 +145,17 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")
-    val vhProbe = TestProbe("ViewHolderProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
     val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
-    val ref = system.actorOf(Props(
-      new SyncronizerMock(
+    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+
+    val synchronizerMockRef = system.actorOf(Props(
+      new SynchronizerMock(
         ncProbe.ref,
-        vhProbe.ref,
+        nodeViewHolderMockRef,
         ErgoSyncInfoMessageSpec,
         settings,
         tp,
@@ -168,15 +174,15 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       lastMessage = 0,
       Some(peerInfo)
     )
-    ref ! ChangedHistory(history)
-    ref ! ChangedMempool(pool)
+    synchronizerMockRef ! ChangedHistory(history)
+    synchronizerMockRef ! ChangedMempool(pool)
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
-    (ref, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener, serializer)
+    (synchronizerMockRef, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, eventListener, serializer, deliveryTracker)
   }
 
   class SynchronizerFixture extends AkkaFixture {
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
-    val (node, syncInfo, mod, tx, peer, pchProbe, ncProbe, vhProbe, eventListener, modSerializer) = nodeViewSynchronizer
+    val (node, syncInfo, mod, tx, peer, pchProbe, ncProbe, eventListener, modSerializer, deliveryTracker) = nodeViewSynchronizer
   }
 
   property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - younger peer") {
@@ -196,9 +202,40 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
           case stn: SendToNetwork =>
             val msg = stn.message
             msg.spec.messageCode == InvSpec.MessageCode &&
-              msg.data.get.asInstanceOf[InvData].ids.head == chain.head.id
+            msg.data.get.asInstanceOf[InvData].ids.head == chain.head.id
           case _ => false
         }
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: receiving valid header") {
+    withFixture { ctx =>
+      import ctx._
+      deliveryTracker.reset()
+      deliveryTracker.setRequested(Seq(chain.take(1001).last.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+      val olderChain = chain.take(1001)
+      val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
+      val modSpec = new ModifiersSpec(100)
+      node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+      // desired state of submitting valid headers is Received
+      eventually {
+        deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: receiving out-of-order header should request it again") {
+    withFixture { ctx =>
+      import ctx._
+      deliveryTracker.reset()
+      deliveryTracker.setRequested(Seq(chain.last.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(Header.modifierTypeId, Map(chain.last.id -> chain.last.bytes))
+      val modSpec = new ModifiersSpec(100)
+      node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+      // desired state of submitting headers out of order is Unknown, they need to be downloaded again
+      eventually {
+        deliveryTracker.status(chain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
       }
     }
   }

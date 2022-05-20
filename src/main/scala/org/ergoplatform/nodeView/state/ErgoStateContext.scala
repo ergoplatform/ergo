@@ -32,8 +32,10 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
                                 override val genesisStateDigest: ADDigest,
                                 override val currentParameters: Parameters,
                                 override val validationSettings: ErgoValidationSettings,
-                                override val votingData: VotingData)(implicit ergoSettings: ErgoSettings)
-  extends ErgoStateContext(lastHeaders, lastExtensionOpt, genesisStateDigest, currentParameters, validationSettings, votingData)(ergoSettings) {
+                                override val votingData: VotingData,
+                                override val eip27Supported: Boolean)(implicit ergoSettings: ErgoSettings)
+  extends ErgoStateContext(lastHeaders, lastExtensionOpt, genesisStateDigest, currentParameters,
+                            validationSettings, votingData, eip27Supported)(ergoSettings) {
 
   override def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
@@ -53,13 +55,15 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
   * @param genesisStateDigest - genesis state digest (before the very first block)
   * @param currentParameters  - parameters at the beginning of the current voting epoch
   * @param votingData         - votes for parameters change within the current voting epoch
+  * @param eip27Supported     - whether a voting epoch before indicated support for EIP-27
   */
 class ErgoStateContext(val lastHeaders: Seq[Header],
                        val lastExtensionOpt: Option[Extension],
                        val genesisStateDigest: ADDigest,
                        val currentParameters: Parameters,
                        val validationSettings: ErgoValidationSettings,
-                       val votingData: VotingData)
+                       val votingData: VotingData,
+                       val eip27Supported: Boolean)
                       (implicit val ergoSettings: ErgoSettings)
   extends ErgoLikeStateContext
     with BytesSerializable
@@ -115,7 +119,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
     val (calculatedParams, updated) = currentParameters.update(height, forkVote, votingData.epochVotes, proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
-    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
+    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
+                          calculatedValidationSettings, votingData, eip27Supported)
   }
 
   protected def checkForkVote(height: Height): Unit = {
@@ -129,6 +134,40 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
         (height >= finishingHeight && height < afterActivationHeight && votingSettings.softForkApproved(votesCollected))) {
         throw new Exception(s"Voting for fork is prohibited at height $height")
       }
+    }
+  }
+
+  /**
+    * Helper method to decide whether enough support (at least ~90% mining hashpower support) for EIP-27 was expressed
+    * before. Called at the beginning of each voting epoch.
+    */
+  private def updateEip27Supported(epochVotes: Seq[(Byte, Int)],
+                                   chainSettings: ChainSettings,
+                                   height: Height): Boolean = {
+    val votingSettings = chainSettings.voting
+    val eip27ActivationHeight = chainSettings.reemission.activationHeight
+
+    if (this.eip27Supported) {
+      true
+    } else if (height < eip27ActivationHeight) {
+      // about 90% for large enough epochs, 888 for the mainnet.
+      val threshold = if (votingSettings.votingLength == 1024) {
+        888
+      } else if (votingSettings.votingLength < 10) {
+        // used in tests only
+        votingSettings.votingLength
+      } else {
+        votingSettings.votingLength / 10 * 9
+      }
+      val eip27Votes = epochVotes.find(_._1 == ErgoStateContext.eip27Vote).map(_._2).getOrElse(0)
+      log.warn(s"Votes for EIP-27 collected: $eip27Votes , height: $height")
+      if (eip27Votes >= threshold) {
+        true
+      } else {
+        false
+      }
+    } else {
+      false // this.eip27Supported value
     }
   }
 
@@ -198,13 +237,16 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
             val extractedValidationSettings = processed._2
             val proposedVotes = votes.map(_ -> 1)
             val newVoting = VotingData(proposedVotes)
-            new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, params, extractedValidationSettings, newVoting)(ergoSettings)
+            val eip27Supported = updateEip27Supported(votingData.epochVotes, ergoSettings.chainSettings, height)
+            new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, params,
+              extractedValidationSettings, newVoting, eip27Supported)(ergoSettings)
           }
         case _ =>
           val newVotes = votes
           val newVotingResults = newVotes.foldLeft(votingData) { case (v, id) => v.update(id) }
           state.result.toTry.map { _ =>
-            new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, currentParameters, validationSettings, newVotingResults)(ergoSettings)
+            new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, currentParameters, validationSettings,
+              newVotingResults, eip27Supported)(ergoSettings)
           }
       }
     }.flatten
@@ -296,6 +338,12 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
 object ErgoStateContext {
 
+  /**
+    * Parameter to vote for to support EIP-27 soft-fork.
+    * Also used for output cost.
+    */
+  val eip27Vote: Byte = 8
+
   def empty(constants: StateConstants, parameters: Parameters): ErgoStateContext = {
     empty(constants.settings.chainSettings.genesisStateDigest, constants.settings, parameters)
   }
@@ -309,11 +357,13 @@ object ErgoStateContext {
     */
   def empty(genesisStateDigest: ADDigest, settings: ErgoSettings, parameters: Parameters): ErgoStateContext = {
     new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters, ErgoValidationSettings.initial,
-      VotingData.empty)(settings)
+      VotingData.empty, eip27Supported = false)(settings)
   }
 
   /**
     * Recovers state context at the beginning of the voting epoch.
+    *
+    * Used in the digest mode only.
     */
   def recover(genesisStateDigest: ADDigest,
               extension: Extension,
@@ -324,7 +374,8 @@ object ErgoStateContext {
       val currentHeader = lastHeaders.last
       Parameters.parseExtension(currentHeader.height, extension).flatMap { params =>
         ErgoValidationSettings.parseExtension(extension).map { validationSettings =>
-          new ErgoStateContext(lastHeaders.reverse, Some(extension), genesisStateDigest, params, validationSettings, VotingData.empty)(settings)
+          new ErgoStateContext(lastHeaders.reverse, Some(extension), genesisStateDigest, params,
+            validationSettings, VotingData.empty, false)(settings)
         }
       }
     } else {
@@ -336,21 +387,35 @@ object ErgoStateContext {
 
 case class ErgoStateContextSerializer(ergoSettings: ErgoSettings) extends ScorexSerializer[ErgoStateContext] {
 
-  override def serialize(obj: ErgoStateContext, w: Writer): Unit = {
+  private val Eip27SupportValue = 100 // see comment in serialize()
+
+  override def serialize(esc: ErgoStateContext, w: Writer): Unit = {
     /* NOHF PROOF:
     Changed: added assert to not let `UpcomingStateContext` get serialized.
     Motivation: only `ErgoStateContext` is supported in `parse`.
     Safety: `UpcomingStateContext` is used only in `ErgoMiner.createCandidate` and does not get serialized.
   */
-    assert(!obj.isInstanceOf[UpcomingStateContext], "UpcomingStateContext serialization is not supported")
-    w.putBytes(obj.genesisStateDigest)
-    w.putUByte(obj.lastHeaders.size)
-    obj.lastHeaders.foreach(h => HeaderSerializer.serialize(h, w))
-    VotingDataSerializer.serialize(obj.votingData, w)
-    ParametersSerializer.serialize(obj.currentParameters, w)
-    ErgoValidationSettingsSerializer.serialize(obj.validationSettings, w)
-    w.putUByte(obj.lastExtensionOpt.size)
-    obj.lastExtensionOpt.foreach(e => ExtensionSerializer.serialize(e.toExtension(Header.GenesisParentId), w))
+    assert(!esc.isInstanceOf[UpcomingStateContext], "UpcomingStateContext serialization is not supported")
+    w.putBytes(esc.genesisStateDigest)
+    w.putUByte(esc.lastHeaders.size)
+    esc.lastHeaders.foreach(h => HeaderSerializer.serialize(h, w))
+    VotingDataSerializer.serialize(esc.votingData, w)
+    ParametersSerializer.serialize(esc.currentParameters, w)
+    ErgoValidationSettingsSerializer.serialize(esc.validationSettings, w)
+
+    // serialization hack to encode EIP-27 support (lock-in) flag along with extension availability in a single byte
+    // to have the same serialization format for nodes before EIP-27 implementation and after
+    val eip27AndExtensionSize = {
+      val lastExtensionSize = esc.lastExtensionOpt.size // 0 or 1
+      val eip27Support = if (esc.eip27Supported) {
+        Eip27SupportValue
+      } else {
+        0
+      }
+      eip27Support + lastExtensionSize
+    }
+    w.putUByte(eip27AndExtensionSize)
+    esc.lastExtensionOpt.foreach(e => ExtensionSerializer.serialize(e.toExtension(Header.GenesisParentId), w))
   }
 
   override def parse(r: Reader): ErgoStateContext = {
@@ -360,9 +425,21 @@ case class ErgoStateContextSerializer(ergoSettings: ErgoSettings) extends Scorex
     val votingData = VotingDataSerializer.parse(r)
     val params = ParametersSerializer.parse(r)
     val validationSettings = ErgoValidationSettingsSerializer.parse(r)
-    val extensionLength = r.getUByte()
-    val lastExtension = (1 to extensionLength).map(_ => ExtensionSerializer.parse(r)).headOption
-    new ErgoStateContext(lastHeaders, lastExtension, genesisDigest, params, validationSettings, votingData)(ergoSettings)
+
+    var lastExtensionOpt: Option[Extension] = None
+    var eip27Supported = false
+    var eip27AndExtensionSize = r.getUByte()
+
+    if (eip27AndExtensionSize >= Eip27SupportValue) {
+      eip27Supported = true
+      eip27AndExtensionSize = eip27AndExtensionSize - Eip27SupportValue
+    }
+    if (eip27AndExtensionSize == 1) {
+      lastExtensionOpt = Some(ExtensionSerializer.parse(r))
+    }
+
+    new ErgoStateContext(lastHeaders, lastExtensionOpt, genesisDigest, params, validationSettings,
+      votingData, eip27Supported)(ergoSettings)
   }
 
 }

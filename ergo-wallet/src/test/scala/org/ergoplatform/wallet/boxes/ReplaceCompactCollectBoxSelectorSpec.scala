@@ -21,7 +21,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
   def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), Set(PaymentsScanId))
 
   property("compress() done properly") {
-    val selector = new ReplaceCompactCollectBoxSelector(3, 2)
+    val selector = new ReplaceCompactCollectBoxSelector(3, 2, None)
 
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1300
@@ -39,7 +39,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
   }
 
   property("replace() - no candidates") {
-    val selector = new ReplaceCompactCollectBoxSelector(3, 2)
+    val selector = new ReplaceCompactCollectBoxSelector(3, 2, None)
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
     val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
@@ -48,7 +48,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
   }
 
   property("replace() done - partial replacement") {
-    val selector = new ReplaceCompactCollectBoxSelector(3, 2)
+    val selector = new ReplaceCompactCollectBoxSelector(3, 2, None)
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
     val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
@@ -58,7 +58,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
   }
 
   property("replace() done - full replacement") {
-    val selector = new ReplaceCompactCollectBoxSelector(3, 2)
+    val selector = new ReplaceCompactCollectBoxSelector(3, 2, None)
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
     val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
@@ -68,7 +68,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
   }
 
   property("compact() and replace() under select()"){
-    val selector = new ReplaceCompactCollectBoxSelector(3, 3)
+    val selector = new ReplaceCompactCollectBoxSelector(3, 3, None)
     val inputValues = (1 to 10).map(v => trackedBox(v))
 
     {
@@ -98,7 +98,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
 
   property("dust collection under select()") {
     val optimalInputs = 5
-    val selector = new ReplaceCompactCollectBoxSelector(20, optimalInputs)
+    val selector = new ReplaceCompactCollectBoxSelector(20, optimalInputs, None)
     val inputValues = (1 to 10).map(v => trackedBox(v))
 
     {

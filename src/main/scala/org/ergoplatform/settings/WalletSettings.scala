@@ -13,4 +13,5 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           maxInputs: Int = 100,
                           optimalInputs: Int = 3,
                           testMnemonic: Option[String] = None,
-                          testKeysQty: Option[Int] = None)
+                          testKeysQty: Option[Int] = None,
+                          checkEIP27: Boolean = false)

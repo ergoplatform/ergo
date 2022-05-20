@@ -40,7 +40,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   import ErgoWalletActor._
 
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
+  private val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy(maxNrOfRetries = 5, withinTimeRange = 1.minute) {
@@ -141,7 +141,26 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     /** READERS */
     case ReadBalances(chainStatus) =>
-      sender() ! (if (chainStatus.onChain) state.registry.fetchDigest() else state.offChainRegistry.digest)
+      val walletDigest = if (chainStatus.onChain) {
+        state.registry.fetchDigest()
+      } else {
+        state.offChainRegistry.digest
+      }
+      val res = if (settings.walletSettings.checkEIP27) {
+        // If re-emission token in the wallet, subtract it from ERG balance
+        val reemissionAmt = walletDigest.walletAssetBalances
+          .find(_._1 == settings.chainSettings.reemission.reemissionTokenId)
+          .map(_._2)
+          .getOrElse(0L)
+        if (reemissionAmt == 0) {
+          walletDigest
+        } else {
+          walletDigest.copy(walletBalance = walletDigest.walletBalance - reemissionAmt)
+        }
+      } else {
+        walletDigest
+      }
+      sender() ! res
 
     case ReadPublicKeys(from, until) =>
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)
@@ -228,17 +247,18 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       context.become(loadedWallet(newState))
 
-    // forceScan=true means we serve a user request for rescan from arbitrary height
-    case ScanInThePast(blockHeight, forceScan) =>
+    // rescan=true means we serve a user request for rescan from arbitrary height
+    case ScanInThePast(blockHeight, rescan) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
-      if (nextBlockHeight == blockHeight || forceScan) {
+      if (nextBlockHeight == blockHeight || rescan) {
         val newState =
           historyReader.bestFullBlockAt(blockHeight) match {
             case Some(block) =>
-              log.info(s"Wallet is going to scan a block ${block.id} in the past at height ${block.height}")
+              val operation = if (rescan) "rescanning" else "scanning"
+              log.info(s"Wallet is $operation a block ${block.id} in the past at height ${block.height}")
               ergoWalletService.scanBlockUpdate(state, block, settings.walletSettings.dustLimit) match {
                 case Failure(ex) =>
-                  val errorMsg = s"Scanning block ${block.id} at height $blockHeight failed : ${ex.getMessage}"
+                  val errorMsg = s"Block ${block.id} $operation at height $blockHeight failed : ${ex.getMessage}"
                   log.error(errorMsg, ex)
                   state.copy(error = Some(errorMsg))
                 case Success(updatedState) =>
@@ -249,7 +269,10 @@ class ErgoWalletActor(settings: ErgoSettings,
         }
         context.become(loadedWallet(newState))
         if (blockHeight < newState.fullHeight) {
-          self ! ScanInThePast(blockHeight + 1, forceScan)
+          self ! ScanInThePast(blockHeight + 1, rescan)
+        } else if (rescan) {
+          log.info(s"Rescanning finished at height $blockHeight")
+          context.become(loadedWallet(newState.copy(rescanInProgress = false)))
         }
       }
 
@@ -328,21 +351,27 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     // We do wallet rescan by closing the wallet's database, deleting it from the disk, then reopening it and sending a rescan signal.
     case RescanWallet(fromHeight) =>
-      log.info(s"Rescanning the wallet from height: $fromHeight")
-      ergoWalletService.recreateRegistry(state, settings) match {
-        case Success(newState) =>
-          context.become(loadedWallet(newState))
-          val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
-          self ! ScanInThePast(heightToScanFrom, forceScan = true)
-        case f@Failure(t) =>
-          log.error("Error during rescan attempt: ", t)
-          sender() ! f
+      if (!state.rescanInProgress) {
+        log.info(s"Rescanning the wallet from height: $fromHeight")
+        ergoWalletService.recreateRegistry(state, settings) match {
+          case Success(newState) =>
+            context.become(loadedWallet(newState.copy(rescanInProgress = true)))
+            val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
+            self ! ScanInThePast(heightToScanFrom, rescan = true)
+            sender() ! Success(())
+          case f@Failure(t) =>
+            log.error("Error during rescan attempt: ", t)
+            sender() ! f
+        }
+      } else {
+        log.info(s"Skipping rescan request from height: $fromHeight as one is already in progress")
+        sender() ! Failure(new IllegalStateException("Rescan already in progress"))
       }
 
     case GetWalletStatus =>
       val isSecretSet = state.secretIsSet(settings.walletSettings.testMnemonic)
       val isUnlocked = state.walletVars.proverOpt.isDefined
-      val changeAddress = state.getChangeAddress
+      val changeAddress = state.getChangeAddress(ergoAddressEncoder)
       val height = state.getWalletHeight
       val lastError = state.error
       val status = WalletStatus(isSecretSet, isUnlocked, changeAddress, height, lastError)
@@ -375,7 +404,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! ExtractHintsResult(bag)
 
     case DeriveKey(encodedPath) =>
-      ergoWalletService.deriveKeyFromPath(state, encodedPath) match {
+      ergoWalletService.deriveKeyFromPath(state, encodedPath, ergoAddressEncoder) match {
         case Success((p2pkAddress, newState)) =>
           context.become(loadedWallet(newState))
           sender() ! Success(p2pkAddress)
@@ -511,9 +540,9 @@ object ErgoWalletActor extends ScorexLogging {
     * A signal the wallet actor sends to itself to scan a block in the past
     *
     * @param blockHeight - height of a block to scan
-    * @param forceScan - scan a block even if height is out of order, to serve rescan requests from arbitrary height
+    * @param rescan - scan a block even if height is out of order, to serve rescan requests from arbitrary height
     */
-  private final case class ScanInThePast(blockHeight: ErgoHistory.Height, forceScan: Boolean)
+  private final case class ScanInThePast(blockHeight: ErgoHistory.Height, rescan: Boolean)
 
 
   // Publicly available signals for the wallet actor
@@ -665,6 +694,7 @@ object ErgoWalletActor extends ScorexLogging {
     * Get scan related transactions
     *
     * @param scanId  - Scan identifier
+    * @param includeUnconfirmed  - whether to include transactions from mempool that match given scanId
     */
   final case class GetScanTransactions(scanId: ScanId, includeUnconfirmed: Boolean)
 
@@ -741,8 +771,14 @@ object ErgoWalletActor extends ScorexLogging {
 
   /**
     * Get filtered scan-related txs
+    * @param scanIds - scan identifiers
+    * @param minHeight - minimal tx inclusion height
+    * @param maxHeight - maximal tx inclusion height
+    * @param minConfNum - minimal confirmations number
+    * @param maxConfNum - maximal confirmations number
+    * @param includeUnconfirmed - whether to include transactions from mempool that match given scanId
     */
-  case class GetFilteredScanTxs(scanId: List[ScanId],
+  case class GetFilteredScanTxs(scanIds: List[ScanId],
                                 minHeight: Int,
                                 maxHeight: Int,
                                 minConfNum: Int,

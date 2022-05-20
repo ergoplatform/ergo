@@ -48,7 +48,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
-  val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2)
+  val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2, None)
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/data") else new File(args(1))
@@ -76,7 +76,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   HistoryTestHelpers.allowToApplyOldBlocks(history)
-  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(fullHistorySettings), parameters)
+  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(fullHistorySettings))
   log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
   val chain = loop(state, None, None, Seq())
@@ -189,7 +189,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
       }
     }.getOrElse((interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion))
 
-    val emissionTxOpt = CandidateGenerator.collectEmission(state, minerPk, cs.emissionRules)
+    val emissionTxOpt = CandidateGenerator.collectEmission(state, minerPk, emptyStateContext)
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>

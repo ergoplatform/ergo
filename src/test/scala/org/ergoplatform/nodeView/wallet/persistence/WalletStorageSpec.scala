@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
 import org.ergoplatform.nodeView.wallet.scanning.{LegacyScan, ScanRequest, ScanWalletInteraction}
@@ -19,9 +18,6 @@ class WalletStorageSpec
     with WalletGenerators
     with ScalaCheckPropertyChecks
     with DBSpec {
-
-  private implicit val addressEncoder: ErgoAddressEncoder =
-    ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   it should "add and read derivation paths" in {
     def addPath(store: LDBKVStore, storedPaths: Seq[DerivationPath], derivationPath: DerivationPath): Unit = {

@@ -260,6 +260,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       deliveryTracker.reset()
 
+      // we generate fork of two headers, starting from the parent of the best header
+      // so the depth of the rollback is 1, and the fork bypasses the best chain by 1 header
       val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
       val parent = hhistory.lastHeaders(2).head
       val smallFork = genHeaderChain(_.size > 2, Some(parent), hhistory.difficultyCalculator, None, false)
@@ -267,7 +269,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       val secondForkHeader = smallFork.apply(2)
 
       sendHeader(synchronizerMockRef, secondForkHeader)
-      // desired state of submitting headers out of order is Unknown, they need to be downloaded again
+      // we submit header at best height + 1, but with parent not known, the status should  be unknown,
+      // so after some time the header could be downloaded again (when the parent may be known)
       eventually {
         deliveryTracker.status(secondForkHeader.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
       }

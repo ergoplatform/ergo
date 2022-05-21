@@ -7,7 +7,6 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.ErgoHistory
-// import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ModifiersFromRemote
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -251,6 +250,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     withFixture2 { ctx =>
       import ctx._
 
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
+
       def sendHeader(synchronizerRef: ActorRef,  header: Header): Unit = {
         deliveryTracker.setRequested(Seq(header.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
@@ -265,23 +266,13 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
       val parent = hhistory.lastHeaders(2).head
       val smallFork = genHeaderChain(_.size > 2, Some(parent), hhistory.difficultyCalculator, None, false)
-      val firstForkHeader = smallFork.apply(1)
-      val secondForkHeader = smallFork.apply(2)
+      val secondForkHeader = smallFork.last
 
       sendHeader(synchronizerMockRef, secondForkHeader)
       // we submit header at best height + 1, but with parent not known, the status should  be unknown,
       // so after some time the header could be downloaded again (when the parent may be known)
       eventually {
         deliveryTracker.status(secondForkHeader.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
-      }
-
-      sendHeader(synchronizerMockRef, firstForkHeader)
-      eventually {
-        deliveryTracker.status(firstForkHeader.id, Header.modifierTypeId, Seq.empty) shouldBe Received
-      }
-      sendHeader(synchronizerMockRef, secondForkHeader)
-      eventually {
-        deliveryTracker.status(secondForkHeader.id, Header.modifierTypeId, Seq.empty) shouldBe Received
       }
     }
   }

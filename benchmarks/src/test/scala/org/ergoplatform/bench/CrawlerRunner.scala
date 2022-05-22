@@ -52,7 +52,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
   private val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
 
   val statsCollectorRef: ActorRef =
-    ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider, LaunchParameters)
+    ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider)
 
 
   override val apiRoutes: Seq[ApiRoute] = Seq(

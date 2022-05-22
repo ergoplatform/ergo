@@ -175,7 +175,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   }
 
   class Synchronizer2Fixture extends AkkaFixture {
-      val pool = ErgoMemPool.empty(settings)
       implicit val ec: ExecutionContextExecutor = system.dispatcher
       val ncProbe = TestProbe("NetworkControllerProbe")
       val pchProbe = TestProbe("PeerHandlerProbe")
@@ -203,7 +202,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         lastMessage = 0,
         Some(peerInfo)
       )
-      synchronizerMockRef ! ChangedMempool(pool)
   }
 
   property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - younger peer") {

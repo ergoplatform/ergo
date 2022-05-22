@@ -24,6 +24,8 @@ final case class ErgoSyncTracker(system: ActorSystem,
   private val MinSyncInterval: FiniteDuration = 20.seconds
   private val SyncThreshold: FiniteDuration = 1.minute
 
+  val heights: mutable.Map[ConnectedPeer, Height] = mutable.Map[ConnectedPeer, Height]()
+
   protected[network] val statuses: mutable.Map[ConnectedPeer, ErgoPeerStatus] =
     mutable.Map[ConnectedPeer, ErgoPeerStatus]()
 

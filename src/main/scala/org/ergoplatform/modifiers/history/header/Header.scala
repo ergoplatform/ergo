@@ -149,7 +149,7 @@ object Header extends ApiCodecs {
       "powSolutions" -> h.powSolution.asJson,
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
-      "difficulty" -> h.requiredDifficulty.toLong.asJson,
+      "difficulty" -> h.requiredDifficulty.toString.asJson,
       "version" -> h.version.asJson,
       "votes" -> Algos.encode(h.votes).asJson,
       "size" -> h.size.asJson,

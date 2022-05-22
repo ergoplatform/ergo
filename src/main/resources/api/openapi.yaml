@@ -1847,6 +1847,7 @@ components:
         - appVersion
         - fullHeight
         - headersHeight
+        - maxPeerHeight
         - bestFullHeaderId
         - previousFullHeaderId
         - bestHeaderId
@@ -1883,6 +1884,13 @@ components:
           description: Can be 'null' if state is empty (no header applied since node launch)
           minimum: 0
           example: 667
+          nullable: true
+        maxPeerHeight:
+          type: integer
+          format: int32
+          description: Maximum block height of connected peers. Can be 'null' if state is empty (no peer connected since node launch)
+          minimum: 0
+          example: 706162
           nullable: true
         bestFullHeaderId:
           type: string

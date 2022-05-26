@@ -319,7 +319,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     import Parameters._
     val ps = Parameters(0, DefaultParameters.updated(MaxBlockCostIncrease, Int.MaxValue), emptyVSUpdate)
     val sc = new ErgoStateContext(Seq.empty, None, genesisStateDigest, ps, ErgoValidationSettings.initial,
-      VotingData.empty, false)(settings)
+      VotingData.empty)(settings)
       .upcoming(org.ergoplatform.mining.group.generator,
         0L,
         settings.chainSettings.initialNBits,

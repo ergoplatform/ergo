@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -85,6 +86,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
       fb.transactions
         .find(_.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition)
         .map(_.outputs.head)
+        .filter(_.value > 100000 * EmissionRules.CoinsInOneErgo)
     }
 
     emissionBoxIdOpt match {

@@ -86,7 +86,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
       fb.transactions
         .find(_.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition)
         .map(_.outputs.head)
-        .filter(_.value > 100000 * EmissionRules.CoinsInOneErgo)
+        .filter(_.value > 100000 * EmissionRules.CoinsInOneErgo) // to filter out possible spam
     }
 
     emissionBoxIdOpt match {

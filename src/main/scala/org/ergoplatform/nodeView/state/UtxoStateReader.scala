@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -79,21 +80,35 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * @param fb - ergo full block
     * @return emission box from this block transactions
     */
-  protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = emissionBoxIdOpt match {
-    case Some(id) =>
-      fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
-        case Some(tx) if tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition =>
-          tx.outputs.headOption
-        case Some(_) =>
-          log.info(s"Last possible emission box consumed")
-          None
-        case None =>
-          log.warn(s"Emission box not found in block ${fb.encodedId}")
-          boxById(id)
-      }
-    case None =>
-      log.debug("No emission box: emission should be already finished before this block")
-      None
+  // todo: search by emission box NFT after EIP-27 activation height, https://github.com/ergoplatform/ergo/issues/1718
+  protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
+    def fullSearch(fb: ErgoFullBlock): Option[ErgoBox] = {
+      fb.transactions
+        .find(_.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition)
+        .map(_.outputs.head)
+        .filter(_.value > 100000 * EmissionRules.CoinsInOneErgo) // to filter out possible spam
+    }
+
+    emissionBoxIdOpt match {
+      case Some(id) =>
+        fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
+          case Some(tx) if tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition =>
+            tx.outputs.headOption
+          case Some(_) =>
+            log.info(s"Last possible emission box consumed")
+            None
+          case None =>
+            log.warn(s"Emission box possibly not spent in block ${fb.encodedId}")
+            boxById(id) match {
+              case s: Some[ErgoBox] => s
+              case None => fullSearch(fb)
+            }
+
+        }
+      case None =>
+        log.debug("No emission box: emission should be already finished before this block")
+        fullSearch(fb)
+    }
   }
 
   protected def emissionBoxIdOpt: Option[ADKey] = store.get(UtxoState.EmissionBoxIdKey).map(s => ADKey @@ s)

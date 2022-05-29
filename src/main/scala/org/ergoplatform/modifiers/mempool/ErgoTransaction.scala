@@ -241,6 +241,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           // for efficiency, skip boxes with less than 100K ERG
           if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
             // on activation height, emissionNft is not in emission box yet, but in injection box
+            // injection box index (1) is enforced by injection box contract
             if (box.tokens.contains(emissionNftId) ||
               (height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId))) {
 

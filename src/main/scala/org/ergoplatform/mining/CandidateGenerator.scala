@@ -627,12 +627,8 @@ object CandidateGenerator extends ScorexLogging {
     // forming transaction collecting emission
     val reemissionSettings = chainSettings.reemission
     val reemissionRules = reemissionSettings.reemissionRules
-    val eip27Supported = stateContext.eip27Supported
-    val eip27ActivationHeight = if (eip27Supported) {
-      reemissionSettings.activationHeight
-    } else {
-      Int.MaxValue
-    }
+
+    val eip27ActivationHeight = reemissionSettings.activationHeight
     val reemissionTokenId = Digest32 @@ reemissionSettings.reemissionTokenIdBytes
 
     val nextHeight = currentHeight + 1

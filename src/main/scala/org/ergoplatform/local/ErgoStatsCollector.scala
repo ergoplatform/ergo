@@ -67,7 +67,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     lastIncomingMessageTime = networkTime(),
     None,
     LaunchParameters,
-    eip27Supported = false)
+    eip27Supported = true)
 
   override def receive: Receive =
     onConnectedPeers orElse
@@ -91,8 +91,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption,
         stateRoot = Some(Algos.encode(s.rootHash)),
         stateVersion = Some(s.version),
-        parameters = s.stateContext.currentParameters,
-        eip27Supported = s.stateContext.eip27Supported
+        parameters = s.stateContext.currentParameters
       )
   }
 
@@ -108,7 +107,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
       val sc = s.stateContext
-      nodeInfo = nodeInfo.copy(parameters = sc.currentParameters, eip27Supported = sc.eip27Supported)
+      nodeInfo = nodeInfo.copy(parameters = sc.currentParameters)
   }
 
   private def onHistoryChanged: Receive = {

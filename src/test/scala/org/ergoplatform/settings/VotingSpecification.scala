@@ -38,7 +38,7 @@ class VotingSpecification extends ErgoPropertyTest {
     Seq(VR.CheckDeserializedScriptType.id -> DisabledRule, VR.CheckValidOpCode.id -> ReplacedRule((VR.FirstRuleId + 11).toShort)))
   private val proposedUpdate2 = ErgoValidationSettingsUpdate(Seq(ValidationRules.fbOperationFailed), Seq())
   val ctx: ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters, validationSettingsNoIl, VotingData.empty, false)(updSettings)
+    new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters, validationSettingsNoIl, VotingData.empty)(updSettings)
       .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), emptyVSUpdate, 0.toByte)
   }
   val initialVs: ErgoValidationSettings = ctx.validationSettings
@@ -100,7 +100,7 @@ class VotingSpecification extends ErgoPropertyTest {
   property("voting for non-existing parameter") {
     val p: Parameters = Parameters(2, Map(BlockVersion -> 0), proposedUpdate)
     val vr: VotingData = VotingData.empty
-    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr, false)(updSettings)
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
     val invalidVote = 100: Byte
     val votes = Array(invalidVote , NoParameter, NoParameter)
 
@@ -119,7 +119,7 @@ class VotingSpecification extends ErgoPropertyTest {
 
     val p: Parameters = Parameters(2, Map(StorageFeeFactorIncrease -> kInit, BlockVersion -> 0), proposedUpdate)
     val vr: VotingData = VotingData.empty
-    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr, false)(updSettings)
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
     val votes = Array(StorageFeeFactorIncrease, NoParameter, NoParameter)
     val h = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
     val esc2 = process(esc, p, h).get
@@ -152,7 +152,7 @@ class VotingSpecification extends ErgoPropertyTest {
 
     val p: Parameters = Parameters(1, Map(BlockVersion -> 0), proposedUpdate)
     val vr: VotingData = VotingData.empty
-    val esc0 = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettings, vr, false)(updSettings)
+    val esc0 = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettings, vr)(updSettings)
     checkValidationSettings(esc0.validationSettings, emptyVSUpdate)
     val forkVote = Array(SoftFork, NoParameter, NoParameter)
     val emptyVotes = Array(NoParameter, NoParameter, NoParameter)
@@ -259,7 +259,7 @@ class VotingSpecification extends ErgoPropertyTest {
     val forkVote = Array(SoftFork, NoParameter, NoParameter)
     val emptyVotes = Array(NoParameter, NoParameter, NoParameter)
 
-    val esc0 = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr, false)(updSettings)
+    val esc0 = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
     val h1 = defaultHeaderGen.sample.get.copy(votes = forkVote, version = 0: Byte, height = 1)
     val esc1 = process(esc0, p, h1).get
 
@@ -317,7 +317,7 @@ class VotingSpecification extends ErgoPropertyTest {
 
   property("hardfork - v2 - activation") {
     val vr: VotingData = VotingData.empty
-    val esc0 = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), parameters, ErgoValidationSettings.initial, vr, false)(updSettings)
+    val esc0 = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), parameters, ErgoValidationSettings.initial, vr)(updSettings)
     val h1 = defaultHeaderGen.sample.get.copy(votes = Array.empty, version = 1: Byte, height = hfActivationHeight - 1)
     val expectedParameters1 = Parameters(hfActivationHeight - 1, DefaultParameters, ErgoValidationSettingsUpdate.empty)
     val esc1 = process(esc0, expectedParameters1, h1).get
@@ -325,43 +325,6 @@ class VotingSpecification extends ErgoPropertyTest {
     val expectedParameters2 = Parameters(hfActivationHeight, DefaultParameters.updated(BlockVersion, 2: Byte), ErgoValidationSettingsUpdate.empty)
     val esc2 = process(esc1, expectedParameters2, h2).get
     esc2.currentParameters.blockVersion shouldBe 2
-  }
-
-  property("eip-27 support") {
-    val p: Parameters = Parameters(2, Map(OutputCostIncrease -> 100, BlockVersion -> 0), proposedUpdate)
-    val vr: VotingData = VotingData.empty
-    val votes = Array(ErgoStateContext.eip27Vote, NoParameter, NoParameter)
-
-    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr, false)(updSettings)
-    esc.eip27Supported shouldBe false
-    val h = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
-    val esc2 = process(esc, p, h).get
-    esc2.eip27Supported shouldBe false
-    esc2.votingData.epochVotes.toMap.apply(ErgoStateContext.eip27Vote) shouldBe 1
-
-    // no quorum gathered - no EIP-27 support
-    val he = h.copy(votes = Array.fill(3)(NoParameter), height = 3)
-    val esc30 = process(esc2, p, he).get
-    val esc40 = process(esc30, p, he.copy(height = 4)).get
-    esc30.eip27Supported shouldBe false
-    esc40.eip27Supported shouldBe false
-
-    // EIP-27 support shown
-    val esc31 = process(esc2, p, h.copy(height = 3)).get
-    esc31.votingData.epochVotes.toMap.apply(ErgoStateContext.eip27Vote) shouldBe 2
-    esc31.eip27Supported shouldBe false
-
-    // We use vote for parameter #8 to vote for EIP-27. The same parameter is used for voting for
-    // readjusting output cost
-    val p2: Parameters = Parameters(2, Map(OutputCostIncrease -> 101, BlockVersion -> 0), proposedUpdate)
-    val esc41 = process(esc31, p2, he.copy(height = 4)).get
-    esc41.eip27Supported shouldBe true
-    val esc51 = process(esc41, p2, he.copy(height = 5)).get
-    esc51.eip27Supported shouldBe true
-    val esc61 = process(esc51, p2, he.copy(height = 6)).get
-    esc61.eip27Supported shouldBe true
-    val esc71 = process(esc61, p2, he.copy(height = 7)).get
-    esc71.eip27Supported shouldBe true
   }
 
   private def checkValidationSettings(vs: ErgoValidationSettings, updated: ErgoValidationSettingsUpdate): Unit = {

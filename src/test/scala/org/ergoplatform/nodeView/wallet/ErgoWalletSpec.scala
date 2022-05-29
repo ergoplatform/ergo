@@ -59,7 +59,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           log.info(s"Payment request $req")
           val tx = await(wallet.generateTransaction(req)).get
           log.info(s"Generated transaction $tx")
-          val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty, false)
+          val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
           val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
           tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
           val block = makeNextBlock(getUtxoState, Seq(tx))
@@ -114,8 +114,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           startDigest,
           parameters,
           validationSettingsNoIl,
-          VotingData.empty,
-          false)
+          VotingData.empty)
         val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
         tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
       }
@@ -374,9 +373,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
             startDigest,
             parameters,
             validationSettingsNoIl,
-            VotingData.empty,
-            false
-          )
+            VotingData.empty)
           val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
           tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
 
@@ -393,7 +390,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         log.info(s"Payment requests 2 $req2")
         val tx2 = await(wallet.generateTransaction(req2)).get
         log.info(s"Generated transaction $tx2")
-        val context2 = new ErgoStateContext(Seq(block.header), Some(block.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty, false)
+        val context2 = new ErgoStateContext(Seq(block.header), Some(block.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
         val knownBoxes = tx.outputs ++ genesisTx.outputs
         val boxesToSpend2 = tx2.inputs.map(i => knownBoxes.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
         tx2.statefulValidity(boxesToSpend2, emptyDataBoxes, context2) shouldBe 'success

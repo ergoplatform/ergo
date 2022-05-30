@@ -126,7 +126,7 @@ second one is to pay mining fee supposedly (its value can be 0.01 ERG at most)
     val correctCoinsIssued = EQ(reemissionRewardPerBlock, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
     
     // when reemission contract box got merged with other boxes
-    val sponsored = AND(
+    val merging = AND(
         GT(ExtractAmount(reemissionOut), ExtractAmount(Self)),
         LE(ExtractAmount(ByIndex(Outputs, IntConstant(1))), LongConstant(10000000)), // 0.01 ERG
         EQ(SizeOf(Outputs), 2)
@@ -136,7 +136,7 @@ second one is to pay mining fee supposedly (its value can be 0.01 ERG at most)
         correctNftId,
         sameScriptRule,
         OR(
-          sponsored,
+          merging,
           AND(
             heightCorrect,
             correctMinerOutput,

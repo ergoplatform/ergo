@@ -97,7 +97,7 @@ trait ReemissionContracts {
     val correctCoinsIssued = EQ(reemissionRewardPerBlock, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
 
     // when reemission contract box got merged with other boxes
-    val sponsored = {
+    val merging = {
       val feeOut = secondOut
       AND(
         GT(ExtractAmount(reemissionOut), ExtractAmount(Self)),
@@ -110,7 +110,7 @@ trait ReemissionContracts {
       correctNftId,
       sameScriptRule,
       OR(
-        sponsored,
+        merging,
         AND(
           heightCorrect,
           correctMinerOutput,

@@ -85,19 +85,19 @@ class ErgoWalletActor(settings: ErgoSettings,
       val ws = settings.walletSettings
       // Try to read wallet from json file or test mnemonic provided in a config file
       val newState = ergoWalletService.readWallet(state, ws.testMnemonic.map(SecretString.create(_)), ws.testKeysQty, ws.secretStorage)
-      context.become(loadedWallet(newState))
+      context.become(loadedWallet(newState, initialized = false))
       unstashAll()
     case _ => // stashing all messages until wallet is setup
       stash()
   }
 
-  private def loadedWallet(state: ErgoWalletState): Receive = {
+  private def loadedWallet(state: ErgoWalletState, initialized: Boolean): Receive = {
     // Init wallet (w. mnemonic generation) if secret is not set yet
     case InitWallet(pass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
       ergoWalletService.initWallet(state, settings, pass, mnemonicPassOpt) match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState, initialized = true))
           self ! UnlockWallet(pass)
           sender() ! Success(mnemonic)
         case Failure(t) =>
@@ -111,7 +111,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass) match {
         case Success(newState) =>
           log.info("Wallet is restored")
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState, initialized = false))
           self ! UnlockWallet(walletPass)
           sender() ! Success(())
         case Failure(t) =>
@@ -199,7 +199,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     /** STATE CHANGE */
     case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
       val newState = ergoWalletService.updateUtxoState(state.copy(mempoolReaderOpt = Some(mr)))
-      context.become(loadedWallet(newState))
+      context.become(loadedWallet(newState, initialized))
 
     case ChangedState(s: ErgoStateReader@unchecked) =>
       state.storage.updateStateContext(s.stateContext) match {
@@ -214,11 +214,11 @@ class ErgoWalletActor(settings: ErgoSettings,
           }
           val updState = state.copy(stateReaderOpt = Some(s), parameters = cp, walletVars = newWalletVars)
           val newState = ergoWalletService.updateUtxoState(updState)
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState, initialized))
         case Failure(t) =>
           val errorMsg = s"Updating wallet state context failed : ${t.getMessage}"
           log.error(errorMsg, t)
-          context.become(loadedWallet(state.copy(error = Some(errorMsg))))
+          context.become(loadedWallet(state.copy(error = Some(errorMsg)), initialized))
       }
 
     /** SCAN COMMANDS */
@@ -230,7 +230,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       val newState = state.copy(offChainRegistry =
         state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
       )
-      context.become(loadedWallet(newState))
+      context.become(loadedWallet(newState, initialized))
 
     // rescan=true means we serve a user request for rescan from arbitrary height
     case ScanInThePast(blockHeight, rescan) =>
@@ -252,12 +252,12 @@ class ErgoWalletActor(settings: ErgoSettings,
             case None =>
               state // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
         }
-        context.become(loadedWallet(newState))
+        context.become(loadedWallet(newState, initialized))
         if (blockHeight < newState.fullHeight) {
           self ! ScanInThePast(blockHeight + 1, rescan)
         } else if (rescan) {
           log.info(s"Rescanning finished at height $blockHeight")
-          context.become(loadedWallet(newState.copy(rescanInProgress = false)))
+          context.become(loadedWallet(newState.copy(rescanInProgress = false), initialized))
         }
       }
 
@@ -265,7 +265,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ScanOnChain(newBlock) =>
       if (state.secretIsSet(settings.walletSettings.testMnemonic)) { // scan blocks only if wallet is initialized
         val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)
-        if (nextBlockHeight == newBlock.height) {
+        if (nextBlockHeight == newBlock.height || (initialized && state.getWalletHeight == 0)) {
           log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
           val newState =
             ergoWalletService.scanBlockUpdate(state, newBlock, settings.walletSettings.dustLimit) match {
@@ -276,10 +276,10 @@ class ErgoWalletActor(settings: ErgoSettings,
               case Success(updatedState) =>
                 updatedState
             }
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState, initialized))
         } else if (nextBlockHeight < newBlock.height) {
           log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
-          self ! ScanInThePast(nextBlockHeight, false)
+          self ! ScanInThePast(nextBlockHeight, rescan = false)
         } else {
           log.warn(s"Wallet: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
         }
@@ -292,11 +292,11 @@ class ErgoWalletActor(settings: ErgoSettings,
           case Failure(t) =>
             val errorMsg = s"Failed to rollback wallet registry to version $version due to: ${t.getMessage}"
             log.error(errorMsg, t)
-            context.become(loadedWallet(state.copy(error = Some(errorMsg))))
+            context.become(loadedWallet(state.copy(error = Some(errorMsg)), initialized))
           case _: Success[Unit] =>
             // Reset outputs Bloom filter to have it initialized again on next block scanned
             // todo: for offchain registry, refresh is also needed, https://github.com/ergoplatform/ergo/issues/1180
-            context.become(loadedWallet(state.copy(outputsFilter = None)))
+            context.become(loadedWallet(state.copy(outputsFilter = None), initialized))
         }
       } else {
         log.warn("Avoiding rollback as wallet is not initialized yet")
@@ -317,7 +317,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       ergoWalletService.unlockWallet(state, encPass, settings.walletSettings.usePreEip3Derivation) match {
         case Success(newState) =>
           log.info("Wallet successfully unlocked")
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState, initialized))
           sender() ! Success(())
         case f@Failure(t) =>
           log.warn("Wallet unlock failed with: ", t)
@@ -326,7 +326,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case LockWallet =>
       log.info("Locking wallet")
-      context.become(loadedWallet(ergoWalletService.lockWallet(state)))
+      context.become(loadedWallet(ergoWalletService.lockWallet(state), initialized))
 
     case CloseWallet =>
       log.info("Closing wallet actor")
@@ -340,7 +340,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         log.info(s"Rescanning the wallet from height: $fromHeight")
         ergoWalletService.recreateRegistry(state, settings) match {
           case Success(newState) =>
-            context.become(loadedWallet(newState.copy(rescanInProgress = true)))
+            context.become(loadedWallet(newState.copy(rescanInProgress = true), initialized))
             val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
             self ! ScanInThePast(heightToScanFrom, rescan = true)
             sender() ! Success(())
@@ -391,7 +391,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case DeriveKey(encodedPath) =>
       ergoWalletService.deriveKeyFromPath(state, encodedPath, ergoAddressEncoder) match {
         case Success((p2pkAddress, newState)) =>
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState, initialized))
           sender() ! Success(p2pkAddress)
         case f@Failure(_) =>
           sender() ! f
@@ -400,7 +400,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case DeriveNextKey =>
       ergoWalletService.deriveNextKey(state, settings.walletSettings.usePreEip3Derivation) match {
         case Success((derivationResult, newState)) =>
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState, initialized))
           sender() ! derivationResult
         case Failure(t) =>
           sender() ! DeriveNextKeyResult(Failure(t))
@@ -418,7 +418,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case RemoveScan(scanId) =>
       ergoWalletService.removeScan(state, scanId) match {
         case Success(newState) =>
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState, initialized))
           sender() ! RemoveScanResponse(Success(()))
         case Failure(t) =>
           log.warn(s"Unable to remove scanId: $scanId", t)
@@ -428,7 +428,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case AddScan(appRequest) =>
       ergoWalletService.addScan(state, appRequest) match {
         case Success((scan, newState)) =>
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState, initialized))
           sender() ! AddScanResponse(Success(scan))
         case Failure(t) =>
           log.warn(s"Unable to add scan: $appRequest", t)

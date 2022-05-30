@@ -90,7 +90,11 @@ case class ErgoWalletState(
     }
   }
 
-  // Read a box from UTXO set if the node has it, otherwise, from the wallet
+  /**
+    * Read a box from UTXO set if the node has it, otherwise, from the wallet
+    * @param boxId of the box to read
+    * @return maybe ErgoBox
+    */
   def readBoxFromUtxoWithWalletFallback(boxId: BoxId): Option[ErgoBox] = {
     utxoStateReaderOpt match {
       case Some(utxoReader) =>
@@ -100,7 +104,10 @@ case class ErgoWalletState(
     }
   }
 
-  // expected height of a next block when the wallet is receiving a new block with the height blockHeight
+  /** Get expected height of a next block when the wallet is receiving a new block with the height blockHeight
+    * @param blockHeight height of the block being currently received
+    * @param isFullBlocksPruned whether node has all the full blocks and applies them sequentially
+    */
   def expectedNextBlockHeight(blockHeight: Height, isFullBlocksPruned: Boolean): Height = {
     val walletHeight = getWalletHeight
     if (!isFullBlocksPruned) {

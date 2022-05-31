@@ -17,20 +17,20 @@ import scorex.util.ScorexLogging
 import scala.util.Try
 
 case class ErgoWalletState(
-                            storage: WalletStorage,
-                            secretStorageOpt: Option[JsonSecretStorage],
-                            registry: WalletRegistry,
-                            offChainRegistry: OffChainRegistry,
-                            outputsFilter: Option[BloomFilter[Array[Byte]]], // Bloom filter for boxes not being spent to the moment
-                            walletVars: WalletVars,
-                            stateReaderOpt: Option[ErgoStateReader],
-                            mempoolReaderOpt: Option[ErgoMemPoolReader],
-                            utxoStateReaderOpt: Option[UtxoStateReader],
-                            parameters: Parameters,
-                            maxInputsToUse: Int,
-                            walletState: WalletPhase,
-                            error: Option[String] = None,
-                            rescanInProgress: Boolean
+    storage: WalletStorage,
+    secretStorageOpt: Option[JsonSecretStorage],
+    registry: WalletRegistry,
+    offChainRegistry: OffChainRegistry,
+    outputsFilter: Option[BloomFilter[Array[Byte]]], // Bloom filter for boxes not being spent to the moment
+    walletVars: WalletVars,
+    stateReaderOpt: Option[ErgoStateReader],
+    mempoolReaderOpt: Option[ErgoMemPoolReader],
+    utxoStateReaderOpt: Option[UtxoStateReader],
+    parameters: Parameters,
+    maxInputsToUse: Int,
+    walletState: WalletPhase,
+    error: Option[String] = None,
+    rescanInProgress: Boolean
   ) extends ScorexLogging {
 
   /**

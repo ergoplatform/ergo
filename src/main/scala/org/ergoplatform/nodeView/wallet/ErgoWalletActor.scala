@@ -265,6 +265,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ScanOnChain(newBlock) =>
       if (state.secretIsSet(settings.walletSettings.testMnemonic)) { // scan blocks only if wallet is initialized
         val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)
+        // we want to scan a block either when it is its turn or when wallet is freshly initialized in order to prevent rescanning
         if (nextBlockHeight == newBlock.height || (state.walletState == WalletPhase.Initialized && state.getWalletHeight == 0)) {
           log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
           val newState =

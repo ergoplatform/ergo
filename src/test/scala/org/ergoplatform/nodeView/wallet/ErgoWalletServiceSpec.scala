@@ -5,6 +5,7 @@ import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletPhase
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
@@ -61,6 +62,7 @@ class ErgoWalletServiceSpec
       utxoStateReaderOpt = Option.empty,
       parameters,
       maxInputsToUse = 1000,
+      walletState = WalletPhase.Empty,
       rescanInProgress = false
     )
   }

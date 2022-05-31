@@ -6,6 +6,7 @@ import org.ergoplatform._
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletPhase
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
@@ -16,19 +17,20 @@ import scorex.util.ScorexLogging
 import scala.util.Try
 
 case class ErgoWalletState(
-    storage: WalletStorage,
-    secretStorageOpt: Option[JsonSecretStorage],
-    registry: WalletRegistry,
-    offChainRegistry: OffChainRegistry,
-    outputsFilter: Option[BloomFilter[Array[Byte]]], // Bloom filter for boxes not being spent to the moment
-    walletVars: WalletVars,
-    stateReaderOpt: Option[ErgoStateReader],
-    mempoolReaderOpt: Option[ErgoMemPoolReader],
-    utxoStateReaderOpt: Option[UtxoStateReader],
-    parameters: Parameters,
-    maxInputsToUse: Int,
-    error: Option[String] = None,
-    rescanInProgress: Boolean
+                            storage: WalletStorage,
+                            secretStorageOpt: Option[JsonSecretStorage],
+                            registry: WalletRegistry,
+                            offChainRegistry: OffChainRegistry,
+                            outputsFilter: Option[BloomFilter[Array[Byte]]], // Bloom filter for boxes not being spent to the moment
+                            walletVars: WalletVars,
+                            stateReaderOpt: Option[ErgoStateReader],
+                            mempoolReaderOpt: Option[ErgoMemPoolReader],
+                            utxoStateReaderOpt: Option[UtxoStateReader],
+                            parameters: Parameters,
+                            maxInputsToUse: Int,
+                            walletState: WalletPhase,
+                            error: Option[String] = None,
+                            rescanInProgress: Boolean
   ) extends ScorexLogging {
 
   /**
@@ -160,6 +162,7 @@ object ErgoWalletState {
         utxoStateReaderOpt = None,
         parameters,
         maxInputsToUse,
+        walletState = WalletPhase.Empty,
         rescanInProgress = false
       )
     }

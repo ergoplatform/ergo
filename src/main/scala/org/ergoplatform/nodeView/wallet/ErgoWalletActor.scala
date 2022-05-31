@@ -523,11 +523,11 @@ object ErgoWalletActor extends ScorexLogging {
   /** Wallet transitions either from Empty -> Initialized or Empty -> Restored */
   trait WalletPhase
   object WalletPhase {
-    /** Initial stage of a wallet */
-    case object Empty extends WalletPhase
-    /** New wallet initialized with generated mnemonic */
+    /** Stage of a wallet that is either empty or initialized/restored in previous runs */
+    case object Default extends WalletPhase
+    /** New wallet initialized with generated mnemonic in this runtime */
     case object Initialized extends WalletPhase
-    /** Wallet restored from existing mnemonic */
+    /** Wallet restored from existing mnemonic in this runtime */
     case object Restored extends WalletPhase
   }
 

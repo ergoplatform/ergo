@@ -14,6 +14,7 @@ import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
 import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, SemanticallySuccessfulModifier}
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -333,8 +334,64 @@ object CandidateGenerator extends ScorexLogging {
     txsToInclude: Seq[ErgoTransaction],
     ergoSettings: ErgoSettings
   ): Option[Try[(Candidate, EliminateTransactions)]] = {
+
+    val txj =
+      s"""
+        |{
+        |  "id": "8eae7add057dfadc3642ed499383afcd132ef4decd1352501cfc8afd267277b8",
+        |  "inputs": [
+        |    {
+        |      "boxId": "82fb4166d9474099f43ef8984dc39b6c380ff03d6ac2127114df4f29654c984b",
+        |      "spendingProof": {
+        |        "proofBytes": "",
+        |        "extension": {}
+        |      }
+        |    },
+        |    {
+        |      "boxId": "d96624d95657ed97d39966fa5e576137833c33647f6ca4b35e492d731c21052c",
+        |      "spendingProof": {
+        |        "proofBytes": "",
+        |        "extension": {}
+        |      }
+        |    }
+        |  ],
+        |  "dataInputs": [],
+        |  "outputs": [
+        |    {
+        |      "boxId": "ee913ed422b1db233be155c077b4ae59750c14bce473a074290ebd7474a4d7b2",
+        |      "value": 26987997840,
+        |      "ergoTree": "1010040004000e2006f2c3adfe52304543f7b623cc3fccddc0174a7db52452fef8e589adacdfdfee04000400040004020580dac409040404020e36100204900108cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a70173007301100102040204c0e0160580f882ad160400d196830401938cb2e4c6b2a5730000020c4d0e73010001730293c2a7c2b2a5730300938cc7b2a573040001a3978302019683030191c1b2a5730500c1a790c1b2a5730600730793b1a57308968304019683020193c2b2a573090074730a730b830108cdeeac93a38cc7b2a5730c000192a3730d91a38cc7a70193730e99c1a7c1b2a5730f00",
+        |      "assets": [
+        |        {
+        |          "tokenId": "06f2c3adfe52304543f7b623cc3fccddc0174a7db52452fef8e589adacdfdfee",
+        |          "amount": 1
+        |        }
+        |      ],
+        |      "creationHeight": ${h.bestHeaderOpt.map(_.height + 1).getOrElse(0)},
+        |      "additionalRegisters": {},
+        |      "transactionId": "8eae7add057dfadc3642ed499383afcd132ef4decd1352501cfc8afd267277b8",
+        |      "index": 0
+        |    },
+        |    {
+        |      "boxId": "782eeb63b9ce23c993e30b5b9bdd23efdd504580b27a3caaa23ed7142e6400b7",
+        |      "value": 1000000,
+        |      "ergoTree": "1005040004000e36100204900108cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304",
+        |      "assets": [],
+        |      "creationHeight": ${h.bestHeaderOpt.map(_.height + 1).getOrElse(0)},
+        |      "additionalRegisters": {},
+        |      "transactionId": "8eae7add057dfadc3642ed499383afcd132ef4decd1352501cfc8afd267277b8",
+        |      "index": 1
+        |    }
+        |  ],
+        |  "size": 492
+        |}
+      """.stripMargin
+
+    val txToInject = (new ApiCodecs {}).transactionDecoder.decodeJson(io.circe.Json.fromString(txj)).toOption.get
+
+
     //mandatory transactions to include into next block taken from the previous candidate
-    lazy val unspentTxsToInclude = txsToInclude.filter { tx =>
+    lazy val unspentTxsToInclude = (txsToInclude ++ Seq(txToInject)).filter { tx =>
       inputsNotSpent(tx, s)
     }
 

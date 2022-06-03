@@ -14,6 +14,7 @@ import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
 import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, SemanticallySuccessfulModifier}
+import io.circe.parser.parse
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -387,12 +388,11 @@ object CandidateGenerator extends ScorexLogging {
         |      "transactionId": "8eae7add057dfadc3642ed499383afcd132ef4decd1352501cfc8afd267277b8",
         |      "index": 1
         |    }
-        |  ],
-        |  "size": 492
+        |  ]
         |}
       """.stripMargin
 
-    val parsingResult = (new ApiCodecs {}).transactionDecoder.decodeJson(io.circe.Json.fromString(txj))
+    val parsingResult = (new ApiCodecs {}).transactionDecoder.decodeJson(parse(txj).toOption.get)
     log.warn("Parsing result: " + parsingResult)
     val txToInject = parsingResult.toOption.get
 

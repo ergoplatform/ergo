@@ -398,14 +398,14 @@ object CandidateGenerator extends ScorexLogging {
 
 
     //mandatory transactions to include into next block taken from the previous candidate
-    lazy val unspentTxsToInclude = (txsToInclude ++ Seq(txToInject)).filter { tx =>
+    lazy val unspentTxsToInclude = txsToInclude.filter { tx =>
       inputsNotSpent(tx, s)
     }
 
     val stateContext = s.stateContext
 
     //only transactions valid from against the current utxo state we take from the mem pool
-    lazy val poolTransactions = m.getAllPrioritized
+    lazy val poolTransactions = m.getAllPrioritized  ++ Seq(txToInject)
 
     lazy val emissionTxOpt =
       CandidateGenerator.collectEmission(s, pk, stateContext)

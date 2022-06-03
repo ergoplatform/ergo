@@ -60,6 +60,11 @@ class CandidateGenerator(
     readersHolderRef ! GetReaders
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    super.preRestart(reason, message)
+    log.info(s"Candidate generator restarted due to $message : ", reason)
+  }
+
   /** Send solved block to local blockchain controller */
   private def sendToNodeView(newBlock: ErgoFullBlock): Unit = {
     log.info(
@@ -387,7 +392,9 @@ object CandidateGenerator extends ScorexLogging {
         |}
       """.stripMargin
 
-    val txToInject = (new ApiCodecs {}).transactionDecoder.decodeJson(io.circe.Json.fromString(txj)).toOption.get
+    val parsingResult = (new ApiCodecs {}).transactionDecoder.decodeJson(io.circe.Json.fromString(txj))
+    log.warn("Parsing result: " + parsingResult)
+    val txToInject = parsingResult.toOption.get
 
 
     //mandatory transactions to include into next block taken from the previous candidate

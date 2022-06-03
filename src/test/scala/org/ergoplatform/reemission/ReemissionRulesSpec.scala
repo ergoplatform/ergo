@@ -38,7 +38,7 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
 
   private def prover = new ContextEnrichingTestProvingInterpreter
   private def verifier = new ErgoLikeTestInterpreter
-  private val prop = rr.reemissionBoxProp(ms)
+  private val prop = rr.reemissionBoxTree(ms)
 
   def checkRewardsTx(nextHeight: Int,
                      pkBytes: Array[Byte],
@@ -142,7 +142,7 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
     val pkBytes = minerPk.pkBytes
 
     val rewardsProp = prop
-    val pay2RewardsProp = rr.payToReemission
+    val pay2RewardsProp = rr.payToReemissionTree
 
     val mergedValue = 100000000L
 

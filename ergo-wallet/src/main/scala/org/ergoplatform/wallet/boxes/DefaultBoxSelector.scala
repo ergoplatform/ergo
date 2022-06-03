@@ -174,7 +174,7 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
               override val reemissionNftIdBytes: Array[Byte] = idToBytes(reemissionData.reemissionNftId)
               override val reemissionStartHeight: Int = 0
             }
-            val p2r = rc.payToReemission
+            val p2r = rc.payToReemissionTree
             val payToReemissionBox = new ErgoBoxCandidate(reemissionAmt, p2r, creationHeight = 0)
             Right(payToReemissionBox +: changeBoxes)
           case None =>

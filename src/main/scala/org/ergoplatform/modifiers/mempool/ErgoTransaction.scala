@@ -293,7 +293,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
         // if box with reemission tokens spent
         if (reemissionSpending) {
-          val payToReemissionContract = reemissionRules.payToReemission
+          val payToReemissionContract = reemissionRules.payToReemissionTree
           val toBurn = boxesToSpend.map { box =>
             box.tokens.getOrElse(reemissionTokenId, 0L)
           }.sum

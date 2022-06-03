@@ -2,12 +2,13 @@ package org.ergoplatform.contracts
 
 import org.ergoplatform.ErgoBox.{R2, STokensRegType}
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
-import org.ergoplatform.{Height, MinerPubkey, Outputs, Self}
-import org.ergoplatform.settings.MonetarySettings
+import org.ergoplatform.{ErgoAddressEncoder, Height, MinerPubkey, Outputs, Pay2SAddress, Self}
 import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SBox, SCollection, STuple}
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant, SigmaPropValue, Value}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes, OptionGet, SelectField, SizeOf}
 import org.ergoplatform.mining.emission.EmissionRules.CoinsInOneErgo
+import org.ergoplatform.settings.MonetarySettings
+import scorex.util.encode.Base16
 
 /**
   * Container for re-emission related contracts. Contains re-emission contract and pay-to-reemission contract.
@@ -42,11 +43,7 @@ trait ReemissionContracts {
     ErgoTree.fromProposition(headerFlags, prop)
   }
 
-  /**
-    * Contract for boxes miners paying to remission contract according to EIP-27.
-    * Anyone can merge multiple boxes locked by this contract with reemission box
-    */
-  lazy val payToReemission: ErgoTree = v1Tree({
+  private[contracts] def payToReemissionContract: SigmaPropValue = {
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
     val rOutTokens = extractTokens(reemissionOut)
@@ -54,12 +51,17 @@ trait ReemissionContracts {
     val firstTokenId = SelectField(ByIndex(rOutTokens, IntConstant(0)), 1.toByte)
 
     EQ(firstTokenId, ByteArrayConstant(reemissionNftIdBytes))
-  })
+  }
 
   /**
-    * Re-emission contract
+    * Contract for boxes miners paying to remission contract according to EIP-27.
+    * Anyone can merge multiple boxes locked by this contract with reemission box
     */
-  def reemissionBoxProp(ms: MonetarySettings): ErgoTree = v1Tree({
+  lazy val payToReemissionTree: ErgoTree = {
+    v1Tree(payToReemissionContract)
+  }
+
+  private[contracts] def reemissionContract(minerRewardDelay: Int): SigmaPropValue = {
 
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
@@ -77,7 +79,7 @@ trait ReemissionContracts {
     // miner's output must have script which is time-locking reward for miner's pubkey
     // box height must be the same as block height
     val correctMinerOutput = AND(
-      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(ms.minerRewardDelay, MinerPubkey)),
+      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(minerRewardDelay, MinerPubkey)),
       EQ(Height, boxCreationHeight(minerOut))
     )
 
@@ -120,6 +122,54 @@ trait ReemissionContracts {
         )
       )
     )
-  }.toSigmaProp)
+  }.toSigmaProp
 
+
+  /**
+    * Re-emission contract
+    */
+  def reemissionBoxTree(minerRewardDelay: Int): ErgoTree = {
+    v1Tree(reemissionContract(minerRewardDelay))
+  }
+
+  def reemissionBoxTree(ms: MonetarySettings): ErgoTree = {
+    v1Tree(reemissionContract(ms.minerRewardDelay))
+  }
+
+}
+
+object ReemissionContractsPrinter extends App {
+
+  val testnetContracts = new ReemissionContracts {
+    override def reemissionNftIdBytes: Array[Byte] = {
+      Base16.decode("06f2c3adfe52304543f7b623cc3fccddc0174a7db52452fef8e589adacdfdfee").get
+    }
+
+    override def reemissionStartHeight: Int = 186400
+  }
+
+  val mainnetContracts = new ReemissionContracts {
+    override def reemissionNftIdBytes: Array[Byte] = {
+      Base16.decode("d3feeffa87f2df63a7a15b4905e618ae3ce4c69a7975f171bd314d0b877927b8").get
+    }
+
+    override def reemissionStartHeight: Int = 2080800
+  }
+
+  val mainnetEncoder = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
+  val testnetEncoder = new ErgoAddressEncoder(ErgoAddressEncoder.TestnetNetworkPrefix)
+
+  println("Testnet pay-to-reemission P2S address: " +
+    Pay2SAddress(testnetContracts.payToReemissionTree)(testnetEncoder))
+
+  println("Testnet reemission P2S address: " +
+    Pay2SAddress(testnetContracts.reemissionContract(72).treeWithSegregation)(testnetEncoder))
+
+  println("==============================================================")
+
+  println("Mainnet pay-to-reemission P2S address: " +
+    Pay2SAddress(mainnetContracts.payToReemissionTree)(mainnetEncoder))
+
+  println("Mainnet reemission P2S address: " +
+    Pay2SAddress(mainnetContracts.reemissionBoxTree(720))(mainnetEncoder))
 }

@@ -44,8 +44,8 @@ case class EmissionApiRoute(ergoSettings: ErgoSettings)
     ApiResponse(
       Json.obj(
         "emission" -> Pay2SAddress(ErgoScriptPredef.emissionBoxProp(ms)).toString().asJson,
-        "reemission" -> Pay2SAddress(reemissionSettings.reemissionRules.reemissionBoxProp(ms)).toString().asJson,
-        "pay2Reemission" -> Pay2SAddress(reemissionSettings.reemissionRules.payToReemission).toString().asJson
+        "reemission" -> Pay2SAddress(reemissionSettings.reemissionRules.reemissionBoxTree(ms)).toString().asJson,
+        "pay2Reemission" -> Pay2SAddress(reemissionSettings.reemissionRules.payToReemissionTree).toString().asJson
       )
     )
   }

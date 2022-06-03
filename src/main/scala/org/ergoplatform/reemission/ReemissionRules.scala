@@ -87,7 +87,7 @@ object ReemissionRules {
     val emissionRules = settings.chainSettings.emissionRules
     val reemissionRules = settings.chainSettings.reemission.reemissionRules
 
-    val et = reemissionRules.reemissionBoxProp(ms)
+    val et = reemissionRules.reemissionBoxTree(ms)
     val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
     println("p2s address: " + enc.fromProposition(et))
 

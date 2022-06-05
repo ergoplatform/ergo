@@ -300,7 +300,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           log.debug(s"Reemission tokens to burn: $toBurn")
           val reemissionOutputs = outputCandidates.filter { out =>
             require(!out.tokens.contains(reemissionTokenId), "outputs contain reemission token")
-            out.ergoTree.toProposition(true) == payToReemissionContract.toProposition(true)
+            if (chainSettings.isMainnet) {
+              out.ergoTree == payToReemissionContract
+            } else {
+              out.ergoTree.toProposition(true) == payToReemissionContract.toProposition(true)
+            }
           }
           val sentToReemission = reemissionOutputs.map(_.value).sum
           require(sentToReemission == toBurn, "Burning condition violated")

@@ -2,18 +2,18 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
-import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
@@ -31,7 +31,7 @@ import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.language.postfixOps
 
-class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matchers with Eventually {
+class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matchers with FileUtils with Eventually {
 
   // ToDo: factor this out of here and NVHTests?
   private def withFixture(testCode: SynchronizerFixture => Any): Unit = {
@@ -175,33 +175,35 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   }
 
   class Synchronizer2Fixture extends AkkaFixture {
-      implicit val ec: ExecutionContextExecutor = system.dispatcher
-      val ncProbe = TestProbe("NetworkControllerProbe")
-      val pchProbe = TestProbe("PeerHandlerProbe")
-      val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
-      val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+    val ncProbe = TestProbe("NetworkControllerProbe")
+    val pchProbe = TestProbe("PeerHandlerProbe")
+    val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
+    val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
-      val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+    // each test should always start with empty history
+    deleteRecursive(ErgoHistory.historyDir(settings))
+    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
 
-      val synchronizerMockRef = system.actorOf(Props(
-        new SynchronizerMock(
-          ncProbe.ref,
-          nodeViewHolderMockRef,
-          ErgoSyncInfoMessageSpec,
-          settings,
-          timeProvider,
-          syncTracker,
-          deliveryTracker)
-      ))
+    val synchronizerMockRef = system.actorOf(Props(
+      new SynchronizerMock(
+        ncProbe.ref,
+        nodeViewHolderMockRef,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        timeProvider,
+        syncTracker,
+        deliveryTracker)
+    ))
 
-      val peerInfo = PeerInfo(defaultPeerSpec, timeProvider.time())
-      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-      val peer: ConnectedPeer = ConnectedPeer(
-        connectionIdGen.sample.get,
-        pchProbe.ref,
-        lastMessage = 0,
-        Some(peerInfo)
-      )
+    val peerInfo = PeerInfo(defaultPeerSpec, timeProvider.time())
+    @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+    val peer: ConnectedPeer = ConnectedPeer(
+      connectionIdGen.sample.get,
+      pchProbe.ref,
+      lastMessage = 0,
+      Some(peerInfo)
+    )
   }
 
   property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - younger peer") {
@@ -271,6 +273,63 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       // so after some time the header could be downloaded again (when the parent may be known)
       eventually {
         deliveryTracker.status(secondForkHeader.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+
+  property("NodeViewSynchronizer: longer fork is applied and shorter is not") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      def sendHeader(block: ErgoFullBlock): Unit = {
+        deliveryTracker.setRequested(Seq(block.header.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+        val modData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
+        val modSpec = new ModifiersSpec(100)
+        synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+      }
+
+      def sendBlockSection(block: BlockSection): Unit = {
+        deliveryTracker.setRequested(Seq(block.id), block.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+        val modData = ModifiersData(block.modifierTypeId, Map(block.id -> block.bytes))
+        val modSpec = new ModifiersSpec(10000)
+        synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+      }
+
+      def sendBlock(block: ErgoFullBlock): Unit = {
+        sendBlockSection(block.blockTransactions)
+        sendBlockSection(block.extension)
+        block.adProofs.foreach(sendBlockSection(_))
+      }
+
+      deliveryTracker.reset()
+
+      val hist = ErgoHistory.readOrGenerate(settings, timeProvider)
+      // generate smaller fork that is going to be reverted after applying a bigger fork
+      val smallFork = genChain(4, hist)
+
+      smallFork.foreach(sendHeader)
+      // history should eventually contain all smaller fork headers
+      eventually {
+        smallFork.forall(block => hist.contains(block.id))
+      }
+      smallFork.foreach(sendBlock)
+      // history should eventually contain smaller fork block parts
+      eventually {
+        smallFork.forall(block => hist.contains(block.extension.id) && hist.contains(block.blockTransactions.id))
+      }
+      // generate bigger fork that is going to win over smaller fork that is to be reverted
+      val bigFork = genChain(20, hist, extension = emptyExtension)
+
+      bigFork.foreach(sendHeader)
+      // history should revert all smaller fork headers
+      eventually {
+        smallFork.forall(block => !hist.contains(block.id))
+      }
+      bigFork.foreach(sendBlock)
+      // history should revert all smaller fork block parts
+      eventually {
+        smallFork.forall(block => !hist.contains(block.extension.id) && !hist.contains(block.blockTransactions.id))
       }
     }
   }

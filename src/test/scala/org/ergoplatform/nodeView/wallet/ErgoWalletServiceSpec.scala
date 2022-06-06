@@ -297,6 +297,7 @@ class ErgoWalletServiceSpec
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
         deleteRecursive(WalletStorage.storageFolder(settings))
+        deleteRecursive(WalletRegistry.registryFolder(settings))
         val walletState = initialState(store, versionedStore)
         val walletService = new ErgoWalletServiceImpl(settings)
         val pass = Random.nextString(10)

@@ -21,6 +21,7 @@ import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBo
 import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
@@ -38,6 +39,7 @@ class ErgoWalletServiceSpec
     with ErgoWalletSupport
     with ErgoTransactionGenerators
     with DBSpec
+    with FileUtils
     with BeforeAndAfterAll {
 
   override val ergoSettings: ErgoSettings = settings
@@ -294,6 +296,7 @@ class ErgoWalletServiceSpec
   property("it should lock/unlock wallet") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
+        deleteRecursive(WalletStorage.storageFolder(settings))
         val walletState = initialState(store, versionedStore)
         val walletService = new ErgoWalletServiceImpl(settings)
         val pass = Random.nextString(10)

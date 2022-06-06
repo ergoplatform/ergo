@@ -264,8 +264,10 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       // we generate fork of two headers, starting from the parent of the best header
       // so the depth of the rollback is 1, and the fork bypasses the best chain by 1 header
       val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
-      val parent = hhistory.lastHeaders(2).head
-      val smallFork = genHeaderChain(_.size > 2, Some(parent), hhistory.difficultyCalculator, None, false)
+      val newHeaders = genHeaderChain(2, hhistory, diffBitsOpt = None, useRealTs = false).headers
+      val newHistory = newHeaders.foldLeft(hhistory) { case (hist, header) => hist.append(header).get._1 }
+      val parent = newHistory.lastHeaders(2).head
+      val smallFork = genHeaderChain(_.size > 2, Some(parent), newHistory.difficultyCalculator, None, false)
       val secondForkHeader = smallFork.last
 
       sendHeader(synchronizerMockRef, secondForkHeader)

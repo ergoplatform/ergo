@@ -4,6 +4,7 @@ import io.circe.syntax._
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -20,7 +21,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationState}
+import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -101,6 +102,214 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     validateStateless().result.toTry
   }
 
+  private def verifyInput(validationBefore: ValidationState[Long],
+                          boxesToSpend: IndexedSeq[ErgoBox],
+                          dataBoxes: IndexedSeq[ErgoBox],
+                          box: ErgoBox,
+                          inputIndex: Short,
+                          stateContext: ErgoStateContext,
+                          currentTxCost: Long)
+                         (implicit verifier: ErgoInterpreter): ValidationResult[Long] = {
+
+    // Cost limit per block
+    val maxCost = stateContext.currentParameters.maxBlockCost.toLong
+
+    val input = inputs(inputIndex)
+
+    // Just in case, should always be true if client implementation is correct.
+    if(!box.id.sameElements(input.boxId)) {
+      log.error("Critical client error: box is not inputs(inputIndex)")
+    }
+
+    val proof = input.spendingProof
+    val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
+    val inputContext = InputContext(inputIndex, proof.extension)
+
+    val ctx = new ErgoContext(
+      stateContext, transactionContext, inputContext,
+      costLimit = maxCost - currentTxCost, // remaining cost so far
+      initCost = 0)
+
+    val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+    val (isCostValid, scriptCost: Long) =
+      costTry match {
+        case Failure(t) =>
+          log.warn(s"Tx verification failed: ${t.getMessage}")
+          log.warn(s"Tx $id verification context: " +
+            s"${JsonCodecsWrapper.ergoLikeContextEncoder.apply(ctx)} " +
+            s"input context: $inputContext " +
+            s"proof: $proof" +
+            s"messageToSign: $messageToSign")
+          (false, maxCost + 1)
+        case Success(result) =>
+          result
+      }
+
+    val currCost = addExact(currentTxCost, scriptCost)
+
+    validationBefore
+      // Check whether input box script interpreter raised exception
+      .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$inputIndex => $costTry")
+      // Check that cost of the transaction after checking the input becomes too big
+      .validate(bsBlockTransactionsCost, currCost <= maxCost, s"$id: cost exceeds limit after input #$inputIndex")
+      .map(c => addExact(c, scriptCost))
+  }
+
+  private def verifyOutput(validationBefore: ValidationState[Long],
+                           out: ErgoBox,
+                           stateContext: ErgoStateContext): ValidationResult[Long] = {
+
+    val blockVersion = stateContext.blockVersion
+
+    validationBefore
+      .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
+      .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
+      .validate(txNegHeight, (blockVersion == 1) || out.creationHeight >= 0, s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out")
+      .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
+      .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
+  }
+
+  private def verifyAssets(validationBefore: ValidationState[Long],
+                           outAssets: Map[Seq[Byte], Long],
+                           outAssetsNum: Int,
+                           boxesToSpend: IndexedSeq[ErgoBox],
+                           stateContext: ErgoStateContext): ValidationResult[Long] = {
+    // Cost limit per block
+    val maxCost = stateContext.currentParameters.maxBlockCost
+
+    ErgoBoxAssetExtractor.extractAssets(boxesToSpend) match {
+      case Success((inAssets, inAssetsNum)) =>
+        lazy val newAssetId = mutable.WrappedArray.make(inputs.head.boxId)
+        val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
+        val currentTxCost = validationBefore.result.payload.get
+
+        val totalAssetsAccessCost =
+          ErgoBoxAssetExtractor.totalAssetsAccessCost(inAssetsNum, inAssets.size, outAssetsNum, outAssets.size, tokenAccessCost)
+        val newCost = addExact(currentTxCost, totalAssetsAccessCost)
+
+        validationBefore
+          // Check that transaction is not too costly considering all the assets
+          .validate(bsBlockTransactionsCost, maxCost >= newCost, s"$id: assets cost")
+          .validateSeq(outAssets) {
+            case (validationState, (outAssetId, outAmount)) =>
+              val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
+
+              // Check that for each asset output amount is no more than input amount,
+              // with a possible exception for a new asset created by the transaction
+              validationState.validate(txAssetsPreservation,
+                inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
+                s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId")
+          }
+          .payload(newCost)
+      case Failure(e) =>
+        // should never be here as far as we've already checked this when we've created the box
+        ModifierValidator.fatal(e.getMessage)
+    }
+  }
+
+  /**
+    * Helper method to validate reemission rules according to EIP-27
+    */
+  def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
+                               outputCandidates: Seq[ErgoBoxCandidate],
+                               stateContext: ErgoStateContext): Try[Unit] = {
+    Try {
+      // we check that we're in utxo mode, as eip27Supported flag available only in this mode
+      // if we're in digest mode, skip validation
+      // todo: this check could be removed after EIP-27 activation
+      lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
+      lazy val reemissionRules = reemissionSettings.reemissionRules
+
+      lazy val reemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
+      lazy val reemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
+
+      lazy val emissionNftId = ModifierId @@ reemissionSettings.emissionNftId
+      lazy val emissionNftIdBytes = reemissionSettings.emissionNftIdBytes
+
+      lazy val chainSettings = stateContext.ergoSettings.chainSettings
+      lazy val emissionRules = chainSettings.emissionRules
+
+      lazy val height = stateContext.currentHeight
+
+      val activationHeight = reemissionSettings.activationHeight
+
+      if (stateContext.currentHeight >= activationHeight) {
+        // reemission check logic below
+        var reemissionSpending = false
+        boxesToSpend.foreach { box =>
+          // checking EIP-27 rules for emission box
+          // for efficiency, skip boxes with less than 100K ERG
+          if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
+            // on activation height, emissionNft is not in emission box yet, but in injection box
+            // injection box index (1) is enforced by injection box contract
+            if (box.tokens.contains(emissionNftId) ||
+              (height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId))) {
+
+              // if emission contract NFT is in the input, remission tokens should be there also
+              val reemissionTokensIn = if (height == activationHeight) {
+                boxesToSpend(1).tokens.getOrElse(reemissionTokenId, 0L)
+              } else {
+                box.tokens.getOrElse(reemissionTokenId, 0L)
+              }
+              require(reemissionTokensIn > 0, "No re-emission tokens in the emission or injection box")
+
+              // output positions guaranteed by emission contract
+              val emissionOut = outputCandidates(0)
+              val rewardsOut = outputCandidates(1)
+
+              // check positions of emission NFT and reemission token
+              val firstEmissionBoxTokenId = emissionOut.additionalTokens.apply(0)._1
+              val secondEmissionBoxTokenId = emissionOut.additionalTokens.apply(1)._1
+              require(
+                firstEmissionBoxTokenId.sameElements(emissionNftIdBytes),
+                "No emission box NFT in the emission box"
+              )
+              require(
+                secondEmissionBoxTokenId.sameElements(reemissionTokenIdBytes),
+                "No re-emission token in the emission box"
+              )
+
+              //we're checking how emission box is paying reemission tokens below
+              val emissionTokensOut = emissionOut.tokens.getOrElse(reemissionTokenId, 0L)
+              val rewardsTokensOut = rewardsOut.tokens.getOrElse(reemissionTokenId, 0L)
+              require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission tokens not preserved")
+
+              val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
+              require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
+            } else {
+              //this path can be removed after EIP-27 activation
+              if (height >= activationHeight && box.ergoTree == chainSettings.monetary.emissionBoxProposition) {
+                //we require emission contract NFT and reemission token to be presented in emission output
+                val emissionOutTokens = outputCandidates(0).tokens
+                require(emissionOutTokens.contains(emissionNftId))
+                require(emissionOutTokens.contains(reemissionTokenId))
+              }
+            }
+          } else if (box.tokens.contains(reemissionTokenId) && height > activationHeight) {
+            // reemission tokens spent after EIP-27 activation
+            reemissionSpending = true
+          }
+        }
+
+        // if box with reemission tokens spent
+        if (reemissionSpending) {
+          val payToReemissionContract = reemissionRules.payToReemission
+          val toBurn = boxesToSpend.map { box =>
+            box.tokens.getOrElse(reemissionTokenId, 0L)
+          }.sum
+          log.debug(s"Reemission tokens to burn: $toBurn")
+          val reemissionOutputs = outputCandidates.filter { out =>
+            require(!out.tokens.contains(reemissionTokenId), "outputs contain reemission token")
+            out.ergoTree == payToReemissionContract
+          }
+          val sentToReemission = reemissionOutputs.map(_.value).sum
+          require(sentToReemission == toBurn, "Burning condition violated")
+        }
+      } else {
+        Success(())
+      }
+    }
+  }
 
   /**
     * Checks whether transaction is valid against input boxes to spend, and
@@ -127,8 +336,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
-    val blockVersion = stateContext.blockVersion
-
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
     val initialCost: Long = addExact(
@@ -139,7 +346,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     )
 
     // Cost limit per block
-    val maxCost = stateContext.currentParameters.maxBlockCost
+    val maxCost = stateContext.currentParameters.maxBlockCost.toLong
 
     // We sum up previously accumulated cost and transaction initialization cost
     val startCost = addExact(initialCost, accumulatedCost)
@@ -154,14 +361,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)),
         s"$id: ${outputCandidates.map(_.additionalTokens)}")
       // Check that outputs are not dust, and not created in future
-      .validateSeq(outputs) { case (validationState, out) =>
-      validationState
-        .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
-        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
-        .validate(txNegHeight, (blockVersion == 1) || out.creationHeight >= 0, s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out")
-        .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
-        .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
-    }
+      .validateSeq(outputs) { case (validationState, out) => verifyOutput(validationState, out, stateContext) }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
       // Normally, this check should always pass, if the client is implemented properly
       // so it is not part of the protocol really.
@@ -172,75 +372,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // Check that transaction is not creating money out of thin air.
       .validate(txErgPreservation, inputSumTry == outputsSumTry, s"$id: $inputSumTry == $outputsSumTry")
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
-        ErgoBoxAssetExtractor.extractAssets(boxesToSpend) match {
-          case Success((inAssets, inAssetsNum)) =>
-            lazy val newAssetId = mutable.WrappedArray.make(inputs.head.boxId)
-            val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
-            val currentTxCost = validation.result.payload.get
-
-            val totalAssetsAccessCost =
-              ErgoBoxAssetExtractor.totalAssetsAccessCost(inAssetsNum, inAssets.size, outAssetsNum, outAssets.size, tokenAccessCost)
-            val newCost = addExact(currentTxCost, totalAssetsAccessCost)
-
-            validation
-              // Check that transaction is not too costly considering all the assets
-              .validate(bsBlockTransactionsCost, maxCost >= newCost, s"$id: assets cost")
-              .validateSeq(outAssets) {
-                case (validationState, (outAssetId, outAmount)) =>
-                  val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
-
-                  // Check that for each asset output amount is no more than input amount,
-                  // with a possible exception for a new asset created by the transaction
-                  validationState.validate(txAssetsPreservation,
-                    inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
-                    s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId")
-              }
-              .payload(newCost)
-          case Failure(e) =>
-            // should never be here as far as we've already checked this when we've created the box
-            ModifierValidator.fatal(e.getMessage)
-        }
+        verifyAssets(validation, outAssets, outAssetsNum, boxesToSpend, stateContext)
       }
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val currentTxCost = validation.result.payload.get
-
-        val input = inputs(idx)
-        val proof = input.spendingProof
-        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
-        val inputContext = InputContext(idx.toShort, proof.extension)
-
-        val ctx = new ErgoContext(
-          stateContext, transactionContext, inputContext,
-          costLimit = maxCost - currentTxCost, // remaining cost so far
-          initCost = 0)
-
-        val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-        val (isCostValid, scriptCost) =
-          costTry match {
-            case Failure(t) =>
-              log.warn(s"Tx $id verification failed: ${t.getMessage} : " , t)
-              log.warn(s"Tx $id verification context: " +
-                s"${JsonCodecsWrapper.ergoLikeContextEncoder.apply(ctx)} " +
-                s"input context: $inputContext " +
-                s"proof: $proof" +
-                s"messageToSign: $messageToSign")
-              (false, maxCost + 1)
-            case Success(result) =>
-              result
-          }
-
-        val currCost = addExact(currentTxCost, scriptCost)
-
-        validation
-          // Just in case, should always be true if client implementation is correct.
-          .validateEquals(txBoxToSpend, box.id, input.boxId)
-          // Check whether input box script interpreter raised exception
-          .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
-          // Check that cost of the transaction after checking the input becomes too big
-          .validate(bsBlockTransactionsCost, currCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
-          .map(c => addExact(c, scriptCost))
-    }
+        verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
+       }
+      .validate(txReemission, !stateContext.ergoSettings.chainSettings.reemission.checkReemissionRules ||
+                                verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess)
   }
 
   /**
@@ -250,8 +390,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long = 0L)
-                      (implicit verifier: ErgoInterpreter): Try[Long] = {
-    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
+                      (implicit verifier: ErgoInterpreter): Try[Int] = {
+    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry.map(_.toInt)
   }
 
   override type M = ErgoTransaction

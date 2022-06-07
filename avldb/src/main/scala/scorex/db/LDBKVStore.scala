@@ -27,6 +27,21 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
     }
   }
 
+  /**
+    * Insert single key-value into database
+    * @param id - key to insert
+    * @param value - value to insert
+    * @return - Success(()) in case of successful insertion, Failure otherwise
+    */
+  def insert(id: K,  value: V): Try[Unit] = {
+    try {
+      db.put(id, value)
+      Success(())
+    } catch {
+      case t: Throwable => Failure(t)
+    }
+  }
+
   def insert(values: Seq[(K, V)]): Try[Unit] = update(values, Seq.empty)
 
   def remove(keys: Seq[K]): Try[Unit] = update(Seq.empty, keys)

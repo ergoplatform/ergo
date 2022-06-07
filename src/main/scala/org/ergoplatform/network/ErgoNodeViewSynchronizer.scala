@@ -300,7 +300,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"$remote has equal header-chain")
     }
 
-    if ((oldStatus != status) || syncTracker.isOutdated(remote) || status == Older || status == Fork) {
+    if ((oldStatus != status) || syncTracker.notSyncedOrOutdated(remote) || status == Older || status == Fork) {
       val ownSyncInfo = getV1SyncInfo(hr)
       sendSyncToPeer(remote, ownSyncInfo)
     }
@@ -350,7 +350,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"$remote has equal header-chain")
     }
 
-    if ((oldStatus != status) || syncTracker.isOutdated(remote) || status == Older || status == Fork) {
+    if ((oldStatus != status) || syncTracker.notSyncedOrOutdated(remote) || status == Older || status == Fork) {
       val ownSyncInfo = getV2SyncInfo(hr, full = true)
       sendSyncToPeer(remote, ownSyncInfo)
     }
@@ -805,8 +805,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
 
-    case RecoverableFailedModification(_, _) =>
-      // we ignore this one as we should try to apply this modifier again
+    case RecoverableFailedModification(mod, e) =>
+      logger.debug(s"Setting recoverable failed modifier ${mod.id} as Unknown", e)
+      deliveryTracker.setUnknown(mod.id, mod.modifierTypeId)
 
     case SyntacticallyFailedModification(mod, e) =>
       logger.debug(s"Invalidating syntactically failed modifier ${mod.id}", e)

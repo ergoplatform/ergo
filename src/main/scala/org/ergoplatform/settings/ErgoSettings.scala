@@ -188,6 +188,10 @@ object ErgoSettings extends ScorexLogging
     } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {
       failWithError(s"Malformed network config. Desired networkType is `${desiredNetworkTypeOpt.get}`, " +
         s"but one declared in config is `${settings.networkType}`")
+    } else if(settings.networkType.isMainNet &&
+                settings.nodeSettings.mining &&
+                !settings.chainSettings.reemission.checkReemissionRules) {
+      failWithError(s"Mining is enabled, but chain.reemission.checkReemissionRules = false , set it to true")
     } else {
       settings
     }

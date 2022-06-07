@@ -9,6 +9,12 @@ sealed trait StateType {
   def allUtxos: Boolean
   def stateTypeName: String
   def requireProofs: Boolean
+
+  /**
+    * @return whether UTXO set is fully stored in a mode
+    */
+  def holdsUtxoSet: Boolean = !requireProofs
+
   override def toString: String = stateTypeName
 }
 

@@ -95,6 +95,19 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
   }
 
   /**
+    * Insert single object to database. This version allows for efficient insert
+    * when identifier and bytes of object (i.e. modifier, a block section) are known.
+    *
+    * @param objectIdToInsert - object id to insert
+    * @param objectToInsert - object bytes to insert
+    * @return - Success if insertion was successful, Failure otherwise
+    */
+  def insert(objectIdToInsert: Array[Byte],
+             objectToInsert: Array[Byte]): Try[Unit] = {
+    objectsStore.insert(objectIdToInsert, objectToInsert)
+  }
+
+  /**
     * Remove elements from stored indices and modifiers
     *
     * @param indicesToRemove - indices keys to remove

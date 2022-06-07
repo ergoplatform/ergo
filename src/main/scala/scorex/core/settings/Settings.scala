@@ -12,6 +12,8 @@ import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
 
+case class LoggingSettings(level: String)
+
 case class RESTApiSettings(bindAddress: InetSocketAddress,
                            apiKeyHash: Option[String],
                            corsAllowedOrigin: Option[String],
@@ -51,10 +53,12 @@ case class NetworkSettings(nodeName: String,
                            temporalBanDuration: FiniteDuration,
                            penaltySafeInterval: FiniteDuration,
                            penaltyScoreThreshold: Int,
-                           peerEvictionInterval: FiniteDuration)
+                           peerEvictionInterval: FiniteDuration,
+                           peerDiscovery: Boolean)
 
 case class ScorexSettings(dataDir: File,
                           logDir: File,
+                          logging: LoggingSettings,
                           network: NetworkSettings,
                           restApi: RESTApiSettings,
                           ntp: NetworkTimeProviderSettings)

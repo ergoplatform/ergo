@@ -213,7 +213,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
                                outputCandidates: Seq[ErgoBoxCandidate],
                                stateContext: ErgoStateContext): Try[Unit] = {
-    Try {
+    val res: Try[Unit] = Try {
       // we check that we're in utxo mode, as eip27Supported flag available only in this mode
       // if we're in digest mode, skip validation
       // todo: this check could be removed after EIP-27 activation
@@ -316,6 +316,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         Success(())
       }
     }
+
+    res match {
+      case Failure(e) => log.error(s"EIP-27 check failed due to ${e.getMessage} : ", e)
+      case _ =>
+    }
+
+    res
   }
 
   /**

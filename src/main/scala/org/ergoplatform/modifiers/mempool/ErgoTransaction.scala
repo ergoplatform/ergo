@@ -209,14 +209,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   /**
     * Helper method to validate reemission rules according to EIP-27
+    *
+    * @param boxesToSpend     - inputs of transaction
+    * @param outputCandidates - outputs of the transaction
+    * @param stateContext     - validation context
     */
-  def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
-                               outputCandidates: Seq[ErgoBoxCandidate],
-                               stateContext: ErgoStateContext): Try[Unit] = {
+  private def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
+                                       outputCandidates: Seq[ErgoBoxCandidate],
+                                       stateContext: ErgoStateContext): Try[Unit] = {
     val res: Try[Unit] = Try {
-      // we check that we're in utxo mode, as eip27Supported flag available only in this mode
-      // if we're in digest mode, skip validation
-      // todo: this check could be removed after EIP-27 activation
       lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
       lazy val reemissionRules = reemissionSettings.reemissionRules
 

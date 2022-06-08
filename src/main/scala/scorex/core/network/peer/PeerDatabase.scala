@@ -17,6 +17,8 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
 
   private val objectStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
 
+  private val peerInfoSerializer = PeerInfoSerializer(settings)
+
   private var peers = loadPeers()
 
   /**
@@ -55,7 +57,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
     var peers = Map.empty[InetSocketAddress, PeerInfo]
     for ((addr,peer) <- objectStore.getAll) {
       val address = deserialize(addr).asInstanceOf[InetSocketAddress]
-      val peerInfo = PeerInfoSerializer.parseBytes(peer)
+      val peerInfo = peerInfoSerializer.parseBytes(peer)
       peers += address -> peerInfo
     }
     peers
@@ -68,7 +70,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
       peerInfo.peerSpec.address.foreach { address =>
         log.debug(s"Updating peer info for $address")
         peers += address -> peerInfo
-        objectStore.insert(Array((serialize(address), PeerInfoSerializer.toBytes(peerInfo))))
+        objectStore.insert(Array((serialize(address), peerInfoSerializer.toBytes(peerInfo))))
       }
     }
   }

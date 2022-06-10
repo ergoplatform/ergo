@@ -209,14 +209,16 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   /**
     * Helper method to validate reemission rules according to EIP-27
+    *
+    * @param boxesToSpend     - inputs of transaction
+    * @param outputCandidates - outputs of the transaction
+    * @param stateContext     - validation context
     */
-  def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
-                               outputCandidates: Seq[ErgoBoxCandidate],
-                               stateContext: ErgoStateContext): Try[Unit] = {
-    Try {
-      // we check that we're in utxo mode, as eip27Supported flag available only in this mode
-      // if we're in digest mode, skip validation
-      // todo: this check could be removed after EIP-27 activation
+  private def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
+                                       outputCandidates: Seq[ErgoBoxCandidate],
+                                       stateContext: ErgoStateContext): Try[Unit] = {
+    val res: Try[Unit] = Try {
+
       lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
       lazy val reemissionRules = reemissionSettings.reemissionRules
 
@@ -233,17 +235,22 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
       val activationHeight = reemissionSettings.activationHeight
 
-      if (stateContext.currentHeight >= activationHeight) {
+      if (height >= activationHeight) { // we check EIP-27 rules only since activation height
         // reemission check logic below
-        var reemissionSpending = false
+        var reemissionSpending = false // flag indicating that inputs have re-emission tokens
         boxesToSpend.foreach { box =>
           // checking EIP-27 rules for emission box
           // for efficiency, skip boxes with less than 100K ERG
+          // secure, as charging emission box will be stopped
+          // before 100K ERG left in the emission box
+          // todo: for efficiency, we can raise the bar probably
           if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
             // on activation height, emissionNft is not in emission box yet, but in injection box
             // injection box index (1) is enforced by injection box contract
             if (box.tokens.contains(emissionNftId) ||
               (height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId))) {
+
+              // in this branch, we are checking spending of re-emission tokens from the emission boxes
 
               // if emission contract NFT is in the input, remission tokens should be there also
               val reemissionTokensIn = if (height == activationHeight) {
@@ -272,12 +279,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
               //we're checking how emission box is paying reemission tokens below
               val emissionTokensOut = emissionOut.tokens.getOrElse(reemissionTokenId, 0L)
               val rewardsTokensOut = rewardsOut.tokens.getOrElse(reemissionTokenId, 0L)
+              // it is prohibited to burn re-emission tokens on spending the emission box
               require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission tokens not preserved")
 
               val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
               require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
             } else {
-              //this path can be removed after EIP-27 activation
+              // this path can be removed after EIP-27 activation in 5.0
+              // that is not so easy though, see https://github.com/ergoplatform/ergo/issues/1736
               if (height >= activationHeight && box.ergoTree == chainSettings.monetary.emissionBoxProposition) {
                 //we require emission contract NFT and reemission token to be presented in emission output
                 val emissionOutTokens = outputCandidates(0).tokens
@@ -316,6 +325,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         Success(())
       }
     }
+
+    res match {
+      case Failure(e) => log.error(s"EIP-27 check failed due to ${e.getMessage} : ", e)
+      case _ =>
+    }
+
+    res
   }
 
   /**

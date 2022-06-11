@@ -30,7 +30,9 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
   private val fixedSizeValueMode = nodeParameters.valueSize.isDefined
 
   override def rollback(version: ADDigest): Try[(ProverNodes[D], Int)] = Try {
-    store.rollbackTo(version)
+    if (!this.version.contains(version)) { // do not rollback to self
+      store.rollbackTo(version)
+    }
 
     val top = VersionedLDBAVLStorage.fetch[D](ADKey @@ store.get(TopNodeKey).get)(hf, store, nodeParameters)
     val topHeight = Ints.fromByteArray(store.get(TopNodeHeight).get)
@@ -73,7 +75,7 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
         case _: ProverLeaf[D] => Seq(pair)
       }
     } else {
-      Seq()
+      Seq.empty
     }
   }
 

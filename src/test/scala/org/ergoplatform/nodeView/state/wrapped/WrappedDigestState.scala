@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.state.wrapped
 
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.state.DigestState
@@ -13,8 +14,9 @@ class WrappedDigestState(val digestState: DigestState,
                          val settings: ErgoSettings)
   extends DigestState(digestState.version, digestState.rootHash, digestState.store, settings) {
 
-  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height]): Try[WrappedDigestState] = {
-    wrapped(super.applyModifier(mod, estimatedTip), wrappedUtxoState.applyModifier(mod, estimatedTip))
+  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height])
+                            (generate: LocallyGeneratedModifier => Unit): Try[WrappedDigestState] = {
+    wrapped(super.applyModifier(mod, estimatedTip)(_ => ()), wrappedUtxoState.applyModifier(mod, estimatedTip)(_ => ()))
   }
 
   override def rollbackTo(version: VersionTag): Try[WrappedDigestState] = {

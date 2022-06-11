@@ -55,7 +55,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val history: HT = applyChain(generateHistory(), chain)
 
   val digestState: DigestState = {
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
       DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
     }
   }.sample.value
@@ -63,7 +63,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val utxoSettings: ErgoSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Utxo))
 
   val utxoState: WrappedUtxoState =
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, utxoSettings)).sample.value
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, utxoSettings)).sample.value
 
   lazy val wallet = new WalletStub
 
@@ -79,8 +79,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val peerSpec: PeerSpec = defaultPeerSpec.copy(protocolVersion = protocolVersion)
 
   val connectedPeers: Seq[Handshake] = Seq(
-    Handshake(peerSpec.copy(nodeName = "first"), ts1),
-    Handshake(peerSpec.copy(nodeName = "second"), ts2)
+    Handshake(peerSpec.copy(nodeName = "first"), System.currentTimeMillis() - 100),
+    Handshake(peerSpec.copy(nodeName = "second"), System.currentTimeMillis() + 100)
   )
 
   val blacklistedPeers: Seq[String] = Seq("4.4.4.4:1111", "8.8.8.8:2222")
@@ -155,7 +155,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     private val apps = mutable.Map[ScanId, Scan]()
 
-    private val ergoWalletService = new ErgoWalletServiceImpl
+    private val ergoWalletService = new ErgoWalletServiceImpl(settings)
 
     def receive: Receive = {
 
@@ -167,7 +167,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case LockWallet => ()
 
-      case RescanWallet => sender ! Success(())
+      case RescanWallet(_) => sender ! Success(())
 
       case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistory.GenesisHeight, error = None)
 
@@ -180,6 +180,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         }
         sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
+
+      case GetScanTransactions(scanId, includeUnconfirmed) =>
+        if (includeUnconfirmed) {
+          sender() ! ScanRelatedTxsResponse(walletTxsForScan(scanId, includeUnconfirmed = true))
+        } else {
+          sender() ! ScanRelatedTxsResponse(walletTxsForScan(scanId))
+        }
 
       case GetTransactions =>
         sender() ! walletTxs
@@ -210,13 +217,16 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! RemoveScanResponse(res)
 
-      case GetScanBoxes(_, _, considerUnconfirmed) =>
+      case GetScanUnspentBoxes(_, considerUnconfirmed) =>
         val res = if(considerUnconfirmed) {
           Seq(walletBoxN_N, walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         } else {
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         }
         sender() ! res
+
+      case GetScanSpentBoxes(_) =>
+        sender() ! Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
 
       case StopTracking(_, _) =>
         sender() ! StopTrackingResponse(Success(()))
@@ -230,9 +240,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! Success(tx)
 
       case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
-        val sc = ErgoStateContext.empty(stateConstants)
-        val params = LaunchParameters
-        sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, params, sc) { boxId =>
+        val sc = ErgoStateContext.empty(stateConstants, parameters)
+        sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
           utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
         }
     }
@@ -283,6 +292,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     )
     val walletTxs: Seq[AugWalletTransaction] =
       Gen.listOf(augWalletTransactionGen).sample.get
+
+    def walletTxsForScan(scanId: ScanId, includeUnconfirmed: Boolean = false): Seq[AugWalletTransaction] =
+      Gen.listOf(augWalletTransactionForScanGen(scanId, includeUnconfirmed)).sample.get
 
     def props(): Props = Props(new WalletActorStub)
 
@@ -338,11 +350,12 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
                       useLastEpochs: Int = 10): ErgoHistory = {
 
     val minimalSuffix = 2
-    val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
+    val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
+    val txSizeLimit      = initSettings.nodeSettings.maxTransactionSize
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      utxoBootstrap = false, poPoWBootstrap = PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, useExternalMiner = false,
+      utxoBootstrap = false, poPoWBootstrap = PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
+      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
     val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)

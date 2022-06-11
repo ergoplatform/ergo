@@ -130,6 +130,8 @@ class ModifiersSpec(maxMessageSize: Int) extends MessageSpecV1[ModifiersData] wi
 
   import ModifiersSpec._
 
+  private val maxMsgSizeWithReserve = maxMessageSize * 4 // due to big ADProofs
+
   override val messageCode: MessageCode = MessageCode
   override val messageName: String = MessageName
 
@@ -143,11 +145,10 @@ class ModifiersSpec(maxMessageSize: Int) extends MessageSpecV1[ModifiersData] wi
 
     val (msgCount, msgSize) = modifiers.foldLeft((0, HeaderLength)) { case ((c, s), (_, modifier)) =>
       val size = s + NodeViewModifier.ModifierIdSize + 4 + modifier.length
-      val count = if (size <= maxMessageSize) c + 1 else c
+      val count = if (size <= maxMsgSizeWithReserve) c + 1 else c
       count -> size
     }
 
-    val start = w.length()
     w.put(typeId)
     w.putUInt(msgCount)
 
@@ -157,22 +158,22 @@ class ModifiersSpec(maxMessageSize: Int) extends MessageSpecV1[ModifiersData] wi
       w.putBytes(modifier)
     }
 
-    if (msgSize > maxMessageSize) {
-      log.warn(s"Message with modifiers ${modifiers.keySet} has size $msgSize exceeding limit $maxMessageSize." +
-        s" Sending ${w.length() - start} bytes instead")
+    if (msgSize > maxMsgSizeWithReserve) {
+      log.warn(s"Message with modifiers ${modifiers.keySet} has size $msgSize exceeding limit $maxMsgSizeWithReserve.")
     }
   }
 
   override def parse(r: Reader): ModifiersData = {
     val typeId = ModifierTypeId @@ r.getByte() // 1 byte
     val count = r.getUInt().toIntExact // 8 bytes
+    require(count > 0, s"Illegal message with 0 modifiers of type $typeId")
     val resMap = immutable.Map.newBuilder[ModifierId, Array[Byte]]
     (0 until count).foldLeft(HeaderLength) { case (msgSize, _) =>
       val id = bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
       val objBytesCnt = r.getUInt().toIntExact
       val newMsgSize = msgSize + NodeViewModifier.ModifierIdSize + objBytesCnt
-      if (newMsgSize > maxMessageSize) {
-        throw new Exception("Too big message with modifiers, size: " + maxMessageSize)
+      if (newMsgSize > maxMsgSizeWithReserve) { // buffer for safety
+        throw new Exception("Too big message with modifiers, size: " + maxMsgSizeWithReserve)
       }
       val obj = r.getBytes(objBytesCnt)
       resMap += (id -> obj)
@@ -272,4 +273,5 @@ class HandshakeSpec(featureSerializers: PeerFeature.Serializers, sizeLimit: Int)
     val data = peersDataSerializer.parse(r)
     Handshake(data, t)
   }
+
 }

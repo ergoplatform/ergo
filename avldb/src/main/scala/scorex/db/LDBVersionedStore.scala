@@ -9,6 +9,8 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
+import scorex.crypto.hash.Blake2b256
+
 import scala.util.Try
 
 
@@ -21,13 +23,17 @@ import scala.util.Try
   * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is not possible.
   *
   * @param dir - folder to store data
-  * @param keepVersions - number of versions to keep
+  * @param initialKeepVersions - number of versions to keep when the store is created. Can be changed after.
   *
   */
-class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends KVStoreReader {
+class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) extends KVStoreReader {
   type VersionID = Array[Byte]
 
   type LSN = Long // logical serial number: type used to provide order of records in undo list
+
+  private val last_version_key = Blake2b256("last_version")
+
+  private var keepVersions: Int = initialKeepVersions
 
   override val db: DB = createDB(dir, "ldb_main") // storage for main data
   override val lock = new ReentrantReadWriteLock()
@@ -40,6 +46,7 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
   private val versions: ArrayBuffer[VersionID] = getAllVersions
   private var lastVersion: Option[VersionID] = versions.lastOption
 
+
   //default write options, no sync!
   private val writeOptions = new WriteOptions()
 
@@ -49,6 +56,23 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     op.paranoidChecks(true)
     factory.open(new File(dir, storeName), op)
   }
+
+  /** Set new keep versions threshold, remove not needed versions and return old value of keep versions */
+  def setKeepVersions(newKeepVersions: Int): Int = {
+    lock.writeLock().lock()
+    val oldKeepVersions = keepVersions
+    try {
+      if (newKeepVersions < oldKeepVersions) {
+        cleanStart(newKeepVersions)
+      }
+      keepVersions = newKeepVersions
+    } finally {
+      lock.writeLock().unlock()
+    }
+    oldKeepVersions
+  }
+
+  def getKeepVersions: Int = keepVersions
 
   /** returns value associated with the key or throws `NoSuchElementException` */
   def apply(key: K): V = getOrElse(key, {
@@ -158,7 +182,17 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     versionLsn += lastLsn // first LSN of oldest version
     versionLsn = versionLsn.reverse // LSNs should be in ascending order
     versionLsn.remove(versionLsn.size - 1) // remove last element which corresponds to next assigned LSN
-    versions.reverse
+
+    if (versions.nonEmpty) {
+      versions.reverse
+    } else {
+      val dbVersion = db.get(last_version_key)
+      if (dbVersion != null) {
+        versions += dbVersion
+        versionLsn += lastLsn
+      }
+      versions
+    }
   }
 
   /**
@@ -172,7 +206,7 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     val versionSize = versionID.length
     val keySize = key.length
     val packed = new Array[Byte](2 + versionSize + keySize + valueSize)
-    assert(keySize <= 0xFF)
+    require(keySize <= 0xFF)
     packed(0) = versionSize.asInstanceOf[Byte]
     packed(1) = keySize.asInstanceOf[Byte]
     Array.copy(versionID, 0, packed, 2, versionSize)
@@ -189,11 +223,17 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     val valueSize = undo.length - versionSize - keySize - 2
     val versionID = undo.slice(2, 2 + versionSize)
     val key = undo.slice(2 + versionSize, 2 + versionSize + keySize)
-    val value = if (valueSize == 0) null else undo.slice(2 + versionSize + keySize, undo.length)
+    val value = if (valueSize == 0){
+      null
+    } else{
+      undo.slice(2 + versionSize + keySize, undo.length)
+    }
     Undo(versionID, key, value)
   }
 
-  def update(versionID: VersionID, toRemove: Iterable[Array[Byte]], toUpdate: Iterable[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
+  def update(versionID: VersionID,
+             toRemove: Iterable[Array[Byte]],
+             toUpdate: Iterable[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
     lock.writeLock().lock()
     val lastLsn = lsn // remember current LSN value
     val batch = db.createWriteBatch()
@@ -209,14 +249,14 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
         }
       })
       for ((key, v) <- toUpdate) {
-        assert(key.length != 0) // empty keys are not allowed
+        require(key.length != 0) // empty keys are not allowed
         if (keepVersions > 0) {
           val old = db.get(key)
           undoBatch.put(newLSN(), serializeUndo(versionID, key, old))
         }
         batch.put(key, v)
       }
-      db.write(batch, writeOptions)
+
       if (keepVersions > 0) {
         if (lsn == lastLsn) { // no records were written for this version: generate dummy record
           undoBatch.put(newLSN(), serializeUndo(versionID, new Array[Byte](0), null))
@@ -227,7 +267,19 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
           versionLsn += lastLsn + 1 // first LSN for this version
           cleanStart(keepVersions)
         }
+      } else {
+        //keepVersions = 0
+        if (lastVersion.isEmpty || !versionID.sameElements(lastVersion.get)) {
+          batch.put(last_version_key, versionID)
+          versions.clear()
+          versions += versionID
+          if (versionLsn.isEmpty) {
+            versionLsn += lastLsn
+          }
+        }
       }
+
+      db.write(batch, writeOptions)
       lastVersion = Some(versionID)
     } finally {
       // Make sure you close the batch to avoid resource leaks.
@@ -242,12 +294,12 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
   def remove(versionID: VersionID, toRemove: Seq[K]): Try[Unit] = update(versionID, toRemove, Seq.empty)
 
 
-  // Keep last "count" versions and remove undo information for older versions
+  // Keep last "count"+1 versions and remove undo information for older versions
   private def cleanStart(count: Int): Unit = {
-    val deteriorated = versions.size - count
-    if (deteriorated > 0) {
+    val deteriorated = versions.size - count - 1
+    if (deteriorated >= 0) {
       val fromLsn = versionLsn(0)
-      val tillLsn = versionLsn(deteriorated)
+      val tillLsn = if (deteriorated+1 < versions.size) versionLsn(deteriorated+1) else lsn+1
       val batch = undo.createWriteBatch()
       try {
         for (lsn <- fromLsn until tillLsn) {
@@ -257,9 +309,12 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
       } finally {
         batch.close()
       }
+
       versions.remove(0, deteriorated)
       versionLsn.remove(0, deteriorated)
-      lastVersion = versions.lastOption
+      if (count == 0) {
+        db.put(last_version_key, versions(0))
+      }
     }
   }
 
@@ -295,49 +350,52 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     try {
       val versionIndex = versions.indexWhere(_.sameElements(versionID))
       if (versionIndex >= 0) {
-        val batch = db.createWriteBatch()
-        val undoBatch = undo.createWriteBatch()
-        var nUndoRecords: Long = 0
-        val iterator = undo.iterator()
-        var lastLsn: LSN = 0
-        try {
-          var undoing = true
-          iterator.seekToFirst()
-          while (undoing) {
-            assert(iterator.hasNext)
-            val entry = iterator.next()
-            val undo = deserializeUndo(entry.getValue)
-            if (undo.versionID.sameElements(versionID)) {
-              undoing = false
-              lastLsn = decodeLSN(entry.getKey)
-            } else {
-              undoBatch.delete(entry.getKey)
-              nUndoRecords += 1
-              if (undo.value == null) {
-                if (undo.key.length != 0) { // dummy record
-                  batch.delete(undo.key)
-                }
+        if (versionIndex != versions.size-1) {
+          val batch = db.createWriteBatch()
+          val undoBatch = undo.createWriteBatch()
+          var nUndoRecords: Long = 0
+          val iterator = undo.iterator()
+          var lastLsn: LSN = 0
+          try {
+            var undoing = true
+            iterator.seekToFirst()
+            while (undoing && iterator.hasNext) {
+              val entry = iterator.next()
+              val undo = deserializeUndo(entry.getValue)
+              if (undo.versionID.sameElements(versionID)) {
+                undoing = false
+                lastLsn = decodeLSN(entry.getKey)
               } else {
-                batch.put(undo.key, undo.value)
+                undoBatch.delete(entry.getKey)
+                nUndoRecords += 1
+                if (undo.value == null) {
+                  if (undo.key.length != 0) { // dummy record
+                    batch.delete(undo.key)
+                  }
+                } else {
+                  batch.put(undo.key, undo.value)
+                }
               }
             }
+            db.write(batch, writeOptions)
+            undo.write(undoBatch, writeOptions)
+          } finally {
+            // Make sure you close the batch to avoid resource leaks.
+            iterator.close()
+            batch.close()
+            undoBatch.close()
           }
-          db.write(batch, writeOptions)
-          undo.write(undoBatch, writeOptions)
-        } finally {
-          // Make sure you close the batch to avoid resource leaks.
-          iterator.close()
-          batch.close()
-          undoBatch.close()
+          val nVersions = versions.size
+          require((versionIndex + 1 == nVersions && nUndoRecords == 0) || (versionIndex + 1 < nVersions && lsn - versionLsn(versionIndex + 1) + 1 == nUndoRecords))
+          versions.remove(versionIndex + 1, nVersions - versionIndex - 1)
+          versionLsn.remove(versionIndex + 1, nVersions - versionIndex - 1)
+          lsn -= nUndoRecords // reuse deleted LSN to avoid holes in LSNs
+          require(lastLsn == 0 || lsn == lastLsn)
+          require(versions.last.sameElements(versionID))
+          lastVersion = Some(versionID)
+        } else {
+          require(lastVersion.get.sameElements(versionID))
         }
-        val nVersions = versions.size
-        assert((versionIndex + 1 == nVersions && nUndoRecords == 0) || (versionIndex + 1 < nVersions && lsn - versionLsn(versionIndex + 1) + 1 == nUndoRecords))
-        versions.remove(versionIndex + 1, nVersions - versionIndex - 1)
-        versionLsn.remove(versionIndex + 1, nVersions - versionIndex - 1)
-        lsn -= nUndoRecords // reuse deleted LSN to avoid holes in LSNs
-        assert(lsn == lastLsn)
-        assert(versions.last.sameElements(versionID))
-        lastVersion = Some(versionID)
       } else {
         throw new NoSuchElementException("versionID not found, can not rollback")
       }

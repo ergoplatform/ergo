@@ -15,6 +15,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.scalacheck.Gen
+import scorex.core.network.DeliveryTracker
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{PersistentNodeViewModifier, bytesToId}
 import scorex.crypto.authds.ADDigest
@@ -90,14 +91,16 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends HistoryTests
                         syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                         settings: ErgoSettings,
                         timeProvider: NetworkTimeProvider,
-                        syncTracker: ErgoSyncTracker)
+                        syncTracker: ErgoSyncTracker,
+                        deliveryTracker: DeliveryTracker)
                        (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
     networkControllerRef,
     viewHolderRef,
     syncInfoSpec,
     settings,
     timeProvider,
-    syncTracker)(ec) {
+    syncTracker,
+    deliveryTracker)(ec) {
 
     override protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
       mod match {

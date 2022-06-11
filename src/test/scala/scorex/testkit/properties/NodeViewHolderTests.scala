@@ -60,9 +60,9 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       import ctx._
       val p = TestProbe()
 
-      system.eventStream.subscribe(eventListener.ref, classOf[ModifiersProcessingResult])
+      system.eventStream.subscribe(eventListener.ref, classOf[ModifiersRemovedFromCache])
       p.send(node, ModifiersFromRemote(Seq(mod)))
-      eventListener.expectMsgType[ModifiersProcessingResult]
+      eventListener.expectMsgType[ModifiersRemovedFromCache]
     }
   }
 

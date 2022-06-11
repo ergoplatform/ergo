@@ -1,37 +1,39 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
-import java.io.File
-
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.wallet.utils.FileUtils
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, NetworkType}
 import scorex.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.{CurrentView, DownloadRequest}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import scorex.core.consensus.History.ProgressInfo
-import org.ergoplatform.wallet.utils.FileUtils
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.NetworkTimeProvider
-import scorex.core.utils.ScorexEncoding
+import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
+import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
+import java.io.File
+
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -71,6 +73,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * user-specific information stored in vault (it could be e.g. a wallet), and a memory pool.
     */
   private var nodeView: NodeView = restoreState().getOrElse(genesisState)
+
+  /** Tracking last modifier and header & block heights in time, being periodically checked for possible stuck */
+  private var chainProgress: Option[ChainProgress] = None
 
   protected def history(): ErgoHistory = nodeView._1
 
@@ -126,7 +131,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def extractTransactions(mod: BlockSection): Seq[ErgoTransaction] = mod match {
     case tcm: TransactionsCarryingPersistentNodeViewModifier => tcm.transactions
-    case _ => Seq()
+    case _ => Seq.empty
   }
 
 
@@ -138,7 +143,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private def trimChainSuffix(suffix: IndexedSeq[BlockSection],
                               rollbackPoint: scorex.util.ModifierId): IndexedSeq[BlockSection] = {
     val idx = suffix.indexWhere(_.id == rollbackPoint)
-    if (idx == -1) IndexedSeq() else suffix.drop(idx)
+    if (idx == -1) IndexedSeq.empty else suffix.drop(idx)
   }
 
   /**
@@ -185,7 +190,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       val branchingPoint = progressInfo.branchPoint.get //todo: .get
       if (state.version != branchingPoint) {
         state.rollbackTo(idToVersion(branchingPoint)) -> trimChainSuffix(suffixApplied, branchingPoint)
-      } else Success(state) -> IndexedSeq()
+      } else Success(state) -> IndexedSeq.empty
     } else Success(state) -> suffixApplied
 
     stateToApplyTry match {
@@ -211,13 +216,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  private def estimatedTip(): Option[Height] = Try { //error may happen if history not initialized
-    if(history.isHeadersChainSynced) {
-      Some(history.headersHeight)
-    } else {
-      None
-    }
-  }.getOrElse(None)
+  /**
+    * Get estimated height of headers-chain, if it is synced
+    * @return height of last header known, if headers-chain is synced, or None if not synced
+    */
+  private def estimatedTip(): Option[Height] = {
+    Try { //error may happen if history not initialized
+      if(history().isHeadersChainSynced) {
+        Some(history().headersHeight)
+      } else {
+        None
+      }
+    }.getOrElse(None)
+  }
 
   private def applyState(history: ErgoHistory,
                          stateToApply: State,
@@ -230,7 +241,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         f
       case (success@Success(updateInfo), modToApply) =>
         if (updateInfo.failedMod.isEmpty) {
-          updateInfo.state.applyModifier(modToApply, estimatedTip()) match {
+          updateInfo.state.applyModifier(modToApply, estimatedTip())(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 context.system.eventStream.publish(SemanticallySuccessfulModifier(modToApply))
@@ -273,13 +284,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[BlockSection]@unchecked) =>
       @tailrec
-      def applyFromCacheLoop(applied: Seq[BlockSection]): Seq[BlockSection] = {
+      def applyFromCacheLoop(): Unit = {
         modifiersCache.popCandidate(history()) match {
           case Some(mod) =>
             pmodModify(mod, local = false)
-            applyFromCacheLoop(mod +: applied)
+            applyFromCacheLoop()
           case None =>
-            applied
+            ()
         }
       }
 
@@ -287,19 +298,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         case Some(h) if h.isInstanceOf[Header] => // modifiers are always of the same type
           val sorted = mods.sortBy(_.asInstanceOf[Header].height)
 
-          val applied0 = if (sorted.head.asInstanceOf[Header].height == history().headersHeight + 1) {
-
+          if (sorted.head.asInstanceOf[Header].height == history().headersHeight + 1) {
             // we apply sorted headers while headers sequence is not broken
-            val appliedBuffer = mutable.Buffer[Header]()
-            var expectedHeight = history().headersHeight + 1
             var linkBroken = false
 
             cfor(0)(_ < sorted.length, _ + 1) { idx =>
               val header = sorted(idx).asInstanceOf[Header]
-              if (!linkBroken && header.height == expectedHeight) {
+              if (!linkBroken && header.height == history().headersHeight + 1) {
                 pmodModify(header, local = false)
-                header +=: appliedBuffer // prepend header, to be consistent with applyFromCacheLoop
-                expectedHeight += 1
               } else {
                 if (!linkBroken) {
                   linkBroken = true
@@ -308,26 +314,24 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 modifiersCache.put(header.id, header)
               }
             }
-            appliedBuffer
           } else {
-            mods.foreach(h => modifiersCache.put(h.id, h))
-            Seq.empty
+            sorted.foreach(h => modifiersCache.put(h.id, h))
           }
 
-          val applied = applyFromCacheLoop(applied0)
+          applyFromCacheLoop()
 
           val cleared = modifiersCache.cleanOverfull()
-          context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
+          context.system.eventStream.publish(ModifiersRemovedFromCache(cleared))
           log.debug(s"Cache size after: ${modifiersCache.size}")
         case _ =>
           mods.foreach(m => modifiersCache.put(m.id, m))
 
           log.debug(s"Cache size before: ${modifiersCache.size}")
 
-          val applied = applyFromCacheLoop(Seq())
+          applyFromCacheLoop()
           val cleared = modifiersCache.cleanOverfull()
 
-          context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
+          context.system.eventStream.publish(ModifiersRemovedFromCache(cleared))
           log.debug(s"Cache size after: ${modifiersCache.size}")
       }
   }
@@ -358,7 +362,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val wallet = ErgoWallet.readOrGenerate(
       history.getReader.asInstanceOf[ErgoHistoryReader],
-      settings)
+      settings,
+      LaunchParameters)
 
     val memPool = ErgoMemPool.empty(settings)
 
@@ -376,13 +381,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    val constants = StateConstants(Some(self), settings)
+    val constants = StateConstants(settings)
     restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[State], history) match {
       case Success(state) =>
-        log.info("State database read, state synchronized")
+        log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
           history.getReader.asInstanceOf[ErgoHistoryReader],
-          settings)
+          settings,
+          state.parameters)
         log.info("Wallet database read")
         Some((history, state, wallet, memPool))
       case Failure(ex) =>
@@ -395,64 +401,94 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   //todo: update state in async way?
   /**
     * Remote and local persistent modifiers need to be appended to history, applied to state
-    * which also needs to be propagated to mempool and wallet
+    * which also needs to be git propagated to mempool and wallet
     * @param pmod Remote or local persistent modifier
+    * @param local whether the modifier was generated locally or not
     */
-  protected def pmodModify(pmod: BlockSection, local: Boolean): Unit =
-    if (!history().contains(pmod.id)) {
-      context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
+  protected def pmodModify(pmod: BlockSection, local: Boolean): Unit = {
+    if (!history().contains(pmod.id)) { // todo: .contains reads modifier pmod fully here if in db
 
-      log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")
+      // if ADProofs block section generated locally, just dump it into the database
+      if (pmod.modifierTypeId == ADProofs.modifierTypeId && local && settings.networkType == NetworkType.MainNet) {
+        val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
+        history().dumpToDb(pmod.serializedId, bytes)
+        context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
+        context.system.eventStream.publish(SemanticallySuccessfulModifier(pmod))
+      } else {
 
-      history().append(pmod) match {
-        case Success((historyBeforeStUpdate, progressInfo)) =>
-          log.debug(s"Going to apply modifications to the state: $progressInfo")
-          context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
+        context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 
-          if (progressInfo.toApply.nonEmpty) {
-            val (newHistory, newStateTry, blocksApplied) =
-              updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq())
+        log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")
 
-            newStateTry match {
-              case Success(newMinState) =>
-                val newMemPool = updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool(), newMinState)
+        history().append(pmod) match {
+          case Success((historyBeforeStUpdate, progressInfo)) =>
+            log.debug(s"Going to apply modifications to the state: $progressInfo")
+            context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
 
-                //we consider that vault always able to perform a rollback needed
-                @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-                val newVault = if (progressInfo.chainSwitchingNeeded) {
-                  vault().rollback(idToVersion(progressInfo.branchPoint.get)).get
-                } else vault()
-                blocksApplied.foreach(newVault.scanPersistent)
+            if (progressInfo.toApply.nonEmpty) {
+              val (newHistory, newStateTry, blocksApplied) =
+                updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq.empty)
 
-                log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
-                updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
+              newStateTry match {
+                case Success(newMinState) =>
+                  val newMemPool = updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool(), newMinState)
 
-              case Failure(e) =>
-                log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
-                updateNodeView(updatedHistory = Some(newHistory))
-                context.system.eventStream.publish(SemanticallyFailedModification(pmod, e))
+                  @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+                  val v = vault()
+                  val newVault = if (progressInfo.chainSwitchingNeeded) {
+                    v.rollback(idToVersion(progressInfo.branchPoint.get)) match {
+                      case Success(nv) => nv
+                      case Failure(e) => log.warn("Wallet rollback failed: ", e); v
+                    }
+                  } else {
+                    v
+                  }
+
+                  // we assume that wallet scan may be started if fullblocks-chain is no more
+                  // than 20 blocks behind headers-chain
+                  val almostSyncedGap = 20
+
+                  val headersHeight = newHistory.headersHeight
+                  val fullBlockHeight = newHistory.fullBlockHeight
+                  if ((headersHeight - fullBlockHeight) < almostSyncedGap) {
+                    blocksApplied.foreach(newVault.scanPersistent)
+                  }
+
+                  log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
+                  updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
+                  chainProgress =
+                    Some(ChainProgress(pmod, headersHeight, fullBlockHeight, timeProvider.time()))
+                case Failure(e) =>
+                  log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
+                  updateNodeView(updatedHistory = Some(newHistory))
+                  context.system.eventStream.publish(SemanticallyFailedModification(pmod, e))
+              }
+            } else {
+              requestDownloads(progressInfo)
+              updateNodeView(updatedHistory = Some(historyBeforeStUpdate))
             }
-          } else {
-            requestDownloads(progressInfo)
-            updateNodeView(updatedHistory = Some(historyBeforeStUpdate))
-          }
-        case Failure(CriticalSystemException(error)) =>
-          log.error(error)
-          ErgoApp.shutdownSystem()(context.system)
-        case Failure(e) =>
-          log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
-          context.system.eventStream.publish(SyntacticallyFailedModification(pmod, e))
+          case Failure(CriticalSystemException(error)) =>
+            log.error(error)
+            ErgoApp.shutdownSystem()(context.system)
+          case Failure(e: RecoverableModifierError) =>
+            log.warn(s"Can`t yet apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
+            context.system.eventStream.publish(RecoverableFailedModification(pmod, e))
+          case Failure(e) =>
+            log.warn(s"Can`t apply invalid persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
+            context.system.eventStream.publish(SyntacticallyFailedModification(pmod, e))
+        }
       }
     } else {
       log.warn(s"Trying to apply modifier ${pmod.encodedId} that's already in history")
     }
+  }
 
   @SuppressWarnings(Array("AsInstanceOf"))
   private def recreatedState(): State = {
     val dir = stateDir(settings)
     deleteRecursive(dir)
 
-    val constants = StateConstants(Some(self), settings)
+    val constants = StateConstants(settings)
     ErgoState.readOrGenerate(settings, constants)
       .asInstanceOf[State]
       .ensuring(
@@ -487,10 +523,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           history.getFullBlock(h)
             .fold(throw new Error(s"Failed to get full block for header $h"))(fb => fb)
         }
-        toApply.foldLeft[Try[State]](Success(initState)){
-          (acc, block) =>
-            log.info(s"Applying block ${block.height} during consistent state restoration")
-            acc.flatMap(_.applyModifier(block, estimatedTip()))
+        toApply.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
+          log.info(s"Applying block ${m.height} during node start-up to restore consistent state: ${m.id}")
+          acc.flatMap(_.applyModifier(m, estimatedTip())(lm => self ! lm))
         }
     }
   }
@@ -499,7 +534,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * Recovers digest state from history.
     */
   private def recoverDigestState(bestFullBlock: ErgoFullBlock, history: ErgoHistory): Try[DigestState] = {
-    val constants = StateConstants(Some(self), settings)
+    val constants = StateConstants(settings)
     val votingLength = settings.chainSettings.voting.votingLength
     val bestHeight = bestFullBlock.header.height
     val newEpochHeadersQty = bestHeight % votingLength // how many blocks current epoch lasts
@@ -515,21 +550,22 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       .flatMap { ctx =>
         val recoverVersion = idToVersion(lastHeaders.last.id)
         val recoverRoot = bestFullBlock.header.stateRoot
-        DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), constants)
+        val parameters = ctx.currentParameters
+        DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), constants, parameters)
       }
 
     recoveredStateTry match {
       case Success(state) =>
         log.info("Recovering state using current epoch")
-        chainToApply.foldLeft[Try[DigestState]](Success(state)) { (acc, m) =>
-          acc.flatMap(_.applyModifier(m, estimatedTip()))
+        chainToApply.foldLeft[Try[DigestState]](Success(state)) { case (acc, m) =>
+          acc.flatMap(_.applyModifier(m, estimatedTip())(lm => self ! lm))
         }
       case Failure(exception) => // recover using whole headers chain
         log.warn(s"Failed to recover state from current epoch, using whole chain: ${exception.getMessage}")
         val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
         val genesisState = DigestState.create(None, None, stateDir(settings), constants)
-        wholeChain.foldLeft[Try[DigestState]](Success(genesisState)){(acc, m) =>
-          acc.flatMap(_.applyModifier(m, estimatedTip()))
+        wholeChain.foldLeft[Try[DigestState]](Success(genesisState)) { case (acc, m) =>
+          acc.flatMap(_.applyModifier(m, estimatedTip())(lm => self ! lm))
         }
     }
   }
@@ -571,23 +607,33 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (mempool) sender() ! ChangedMempool(nodeView._4.getReader)
   }
 
+  protected def handleHealthCheck: Receive = {
+    case IsChainHealthy =>
+      log.info(s"Check that chain is healthy, progress is $chainProgress")
+      val healthCheckReply = chainProgress.map { progress =>
+        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), timeProvider, settings)
+      }.getOrElse(ChainIsStuck("Node already stuck when started"))
+      sender() ! healthCheckReply
+  }
+
   override def receive: Receive =
     processRemoteModifiers orElse
       processLocallyGeneratedModifiers orElse
       transactionsProcessing orElse
       getCurrentInfo orElse
-      getNodeViewChanges orElse {
-      case a: Any => log.error("Strange input: " + a)
-    }
+      getNodeViewChanges orElse
+      handleHealthCheck orElse {
+        case a: Any => log.error("Strange input: " + a)
+      }
 
 }
 
 
 object ErgoNodeViewHolder {
 
-  case class BlockAppliedTransactions(txs: Seq[scorex.util.ModifierId])
-
   object ReceivableMessages {
+    // Tracking last modifier and header & block heights in time, being periodically checked for possible stuck
+    case class ChainProgress(lastMod: BlockSection, headersHeight: Int, blockHeight: Int, lastUpdate: Long)
 
     // Explicit request of NodeViewChange events of certain types.
     case class GetNodeViewChanges(history: Boolean, state: Boolean, vault: Boolean, mempool: Boolean)
@@ -611,12 +657,50 @@ object ErgoNodeViewHolder {
 
     case class EliminateTransactions(ids: Seq[scorex.util.ModifierId])
 
+    case object IsChainHealthy
+    sealed trait HealthCheckResult
+    case object ChainIsHealthy extends HealthCheckResult
+    case class ChainIsStuck(reason: String) extends HealthCheckResult
   }
+
+  case class BlockAppliedTransactions(txs: Seq[scorex.util.ModifierId]) extends NodeViewHolderEvent
 
   case class DownloadRequest(modifierTypeId: ModifierTypeId,
                              modifierId: scorex.util.ModifierId) extends NodeViewHolderEvent
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
+
+  /**
+    * Checks whether chain got stuck by comparing timestamp of bestFullBlock or last time a modifier was applied to history.
+    * @param progress metadata of last chain update
+    * @return ChainIsHealthy if chain is healthy and ChainIsStuck(error) with details if it got stuck
+    */
+  def checkChainIsHealthy(
+      progress: ChainProgress,
+      history: ErgoHistory,
+      timeProvider: NetworkTimeProvider,
+      settings: ErgoSettings): HealthCheckResult = {
+    val ChainProgress(lastMod, headersHeight, blockHeight, lastUpdate) = progress
+    val chainUpdateDelay = timeProvider.time() - lastUpdate
+    val acceptableChainUpdateDelay = settings.nodeSettings.acceptableChainUpdateDelay
+    def chainUpdateDelayed = chainUpdateDelay > acceptableChainUpdateDelay.toMillis
+    def chainSynced =
+      history.bestFullBlockOpt.map(_.id) == history.bestHeaderOpt.map(_.id)
+
+    if (chainUpdateDelayed) {
+      val bestFullBlockOpt =
+        history.bestFullBlockOpt
+          .filter(_.id != lastMod.id)
+          .fold("")(fb => s"\n best full block: $fb")
+      val repairNeeded = ErgoHistory.repairIfNeeded(history)
+      ChainIsStuck(s"Chain not modified for $chainUpdateDelay ms, headers-height: $headersHeight, " +
+        s"block-height $blockHeight, chain synced: $chainSynced, repair needed: $repairNeeded, " +
+        s"last modifier applied: $lastMod, " +
+        s"possible best full block $bestFullBlockOpt")
+    } else {
+      ChainIsHealthy
+    }
+  }
 }
 
 private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings,
@@ -632,11 +716,11 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
 object ErgoNodeViewRef {
 
   private def digestProps(settings: ErgoSettings,
-                  timeProvider: NetworkTimeProvider): Props =
+                          timeProvider: NetworkTimeProvider): Props =
     Props.create(classOf[DigestNodeViewHolder], settings, timeProvider)
 
   private def utxoProps(settings: ErgoSettings,
-                timeProvider: NetworkTimeProvider): Props =
+                        timeProvider: NetworkTimeProvider): Props =
     Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider)
 
   def props(settings: ErgoSettings,
@@ -646,8 +730,7 @@ object ErgoNodeViewRef {
       case StateType.Utxo => utxoProps(settings, timeProvider)
     }
 
-  def apply(settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
+  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
     system.actorOf(props(settings, timeProvider))
   
 }

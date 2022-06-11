@@ -58,7 +58,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return true if the proof is valid
     */
   def isValid: Boolean = {
-    this.hasValidConnections && this.hasValidHeights
+    this.hasValidConnections && this.hasValidHeights && this.hasValidProofs
   }
 
   /**
@@ -81,10 +81,20 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     */
   def hasValidConnections: Boolean = {
     prefix.zip(prefix.tail :+ suffixHead).forall({
-      case (prev, next) => next.interlinks.contains(prev.id)
+      // Note that blocks with level 0 do not appear at all within interlinks, which is why we need to check the parent
+      // block id as well.
+      case (prev, next) => next.interlinks.contains(prev.id) || next.header.parentId == prev.id
     }) && (suffixHead.header +: suffixTail).zip(suffixTail).forall({
       case (prev, next) => next.parentId == prev.id
     })
+  }
+
+  /**
+   * Checks the interlink proofs of the blocks in the proof.
+   */
+  def hasValidProofs: Boolean = {
+    prefix.forall(_.checkInterlinksProof()) &&
+      suffixHead.checkInterlinksProof()
   }
 }
 

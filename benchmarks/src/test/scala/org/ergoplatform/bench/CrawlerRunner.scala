@@ -1,6 +1,7 @@
 package org.ergoplatform.bench
 
 import java.io.File
+
 import akka.actor.ActorRef
 import org.ergoplatform.bench.misc.{CrawlerConfig, TempDir}
 import org.ergoplatform.http.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoApiRoute, TransactionsApiRoute}
@@ -13,7 +14,7 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
-import scorex.core.network.PeerFeature
+import scorex.core.network.{DeliveryTracker, PeerFeature}
 import scorex.core.network.message.MessageSpec
 import scorex.core.settings.ScorexSettings
 
@@ -48,21 +49,25 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
-  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, ergoSettings, timeProvider)
+  private val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
+
+  val statsCollectorRef: ActorRef =
+    ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider)
+
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     ErgoUtilsApiRoute(ergoSettings),
     InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
-  val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
+  private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      ergoSettings, timeProvider, syncTracker)
+      ergoSettings, timeProvider, syncTracker, deliveryTracker)
 
 }
 

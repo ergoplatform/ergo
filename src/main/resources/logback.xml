@@ -5,6 +5,8 @@
     <property name="default.pattern" value="%d{HH:mm:ss.SSS} %-5level [%.25thread] %logger{26} - %msg%n"/>
     <!--<property name="logback.file.final-directory" value="${logback.file.directory:-${ergo.directory}}"/>-->
 
+    <define name="loglevel" class="scorex.core.utils.TypesafeConfigPropertyDefiner"/>
+
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.out</target>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
@@ -20,21 +22,21 @@
             <level>${logback.file.level:-DEBUG}</level>
         </filter>
         <file>ergo.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!-- daily rollover -->
-            <fileNamePattern>ergo.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+            <fileNamePattern>ergo-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
 
             <!-- keep 30 days' worth of history capped at 1GB total size -->
             <maxHistory>30</maxHistory>
+            <maxFileSize>500MB</maxFileSize>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
-
         <encoder>
             <pattern>${default.pattern}</pattern>
         </encoder>
     </appender>
 
-    <root level="TRACE">
+    <root level="${loglevel}">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="FILE"/>
     </root>

@@ -27,7 +27,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   def newAssetIdStub: TokenId = Blake2b256.hash("new_asset")
 
   def withFixture[T](test: WalletFixture => T): T =
-    new WalletFixture(settings, getCurrentView(_).vault).apply(test)
+    new WalletFixture(settings, parameters, getCurrentView(_).vault).apply(test)
 
   def wallet(implicit w: WalletFixture): ErgoWallet = w.wallet
 
@@ -75,6 +75,22 @@ trait WalletTestOps extends NodeViewBaseOps {
     makeNextBlock(getUtxoState, Seq(makeGenesisTx(script, assets)))
   }
 
+  def makeGenesisTxWithAsset(publicKey: ProveDlog, issueAsset: Boolean): ErgoTransaction = {
+    val inputs = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
+    val assets: Seq[(TokenId, Long)] = if (issueAsset) {
+      Seq((Digest32 @@ inputs.head.boxId) -> 1L)
+    } else {
+      Seq.empty
+    }
+
+    CandidateGenerator.collectRewards(Some(genesisEmissionBox),
+      ErgoHistory.EmptyHistoryHeight,
+      Seq.empty,
+      publicKey,
+      emptyStateContext,
+      Colls.fromArray(assets.toArray)).head
+  }
+
   def makeGenesisTx(publicKey: ProveDlog, assetsIn: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
     val inputs = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
     val assets: Seq[(TokenId, Long)] = replaceNewAssetStub(assetsIn, inputs)
@@ -82,7 +98,7 @@ trait WalletTestOps extends NodeViewBaseOps {
       ErgoHistory.EmptyHistoryHeight,
       Seq.empty,
       publicKey,
-      emission,
+      emptyStateContext,
       Colls.fromArray(assets.toArray)).head
   }
 

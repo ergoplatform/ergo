@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.19"
+  version: "4.0.32"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -11,6 +11,12 @@ info:
   license:
     name: CC0 1.0 Universal
     url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
+
+servers:
+  - url: /
+    description: Local full node
+  - url: http://213.239.193.208:9053
+    description: Known public node
 
 components:
   securitySchemes:
@@ -31,12 +37,6 @@ components:
           $ref: '#/components/schemas/TransactionBoxId'
         spendingProof:
           $ref: '#/components/schemas/SpendingProof'
-        extension:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/SValue'
-          example:
-            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     ErgoTransactionDataInput:
       type: object
@@ -45,12 +45,6 @@ components:
       properties:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
-        extension:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/SValue'
-          example:
-            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     ErgoTransactionUnsignedInput:
       type: object
@@ -91,6 +85,14 @@ components:
       properties:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
+        bytes:
+          $ref: '#/components/schemas/HexString'
+
+    ScriptBytes:
+      type: object
+      required:
+        - bytes
+      properties:
         bytes:
           $ref: '#/components/schemas/HexString'
 
@@ -309,6 +311,23 @@ components:
       type: string
       example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
 
+    RewardAddress:
+      type: object
+      required:
+        - rewardAddress
+      properties:
+        rewardAddress:
+          $ref: '#/components/schemas/ErgoAddress'
+
+    RewardPubKey:
+      type: object
+      required:
+        - rewardPubkey
+      properties:
+        rewardPubkey:
+          type: string
+          example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+
     DlogSecret:
       description: Hex-encoded big-endian 256-bits secret exponent
       type: string
@@ -409,6 +428,15 @@ components:
           items:
             description: Pair of TokenId and Long
             type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              description: TokenId or Long
+              anyOf:
+                - description: TokenId
+                  type: string
+                - description: Long
+                  type: integer
         targetBalance:
           description: Target balance
           type: integer
@@ -426,6 +454,7 @@ components:
           items:
             anyOf:
               - $ref: '#/components/schemas/PaymentRequest'
+              - $ref: '#/components/schemas/BurnTokensRequest'
               - $ref: '#/components/schemas/AssetIssueRequest'
         fee:
           description: Transaction fee
@@ -772,7 +801,7 @@ components:
         - $ref: '#/components/schemas/ScanningPredicate'
         - type: object
         - required:
-          - bytes
+            - bytes
         - properties:
             register:
               type: string
@@ -1053,7 +1082,7 @@ components:
           description: Hints which contain public data only, share them freely!
           type: array
           items:
-              $ref: '#/components/schemas/InputHints'
+            $ref: '#/components/schemas/InputHints'
 
     GenerateCommitmentsRequest:
       description: request to generate commitments to sign a transaction
@@ -1114,6 +1143,18 @@ components:
         registers:
           $ref: '#/components/schemas/Registers'
 
+    BurnTokensRequest:
+      description: Request for burning tokens in wallet
+      type: object
+      required:
+        - assetsToBurn
+      properties:
+        assetsToBurn:
+          description: Assets list to burn in the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+
     AssetIssueRequest:
       description: Request for generation of asset issue transaction
       type: object
@@ -1128,7 +1169,8 @@ components:
           $ref: '#/components/schemas/ErgoAddress'
         ergValue:
           description: Optional, amount of ergs to be put into box with issued assets
-          type: int64
+          format: int64
+          type: integer
         amount:
           description: Supply amount
           type: integer
@@ -1343,10 +1385,8 @@ components:
           minimum: 0
           example: 667
         difficulty:
-          type: integer
-          format: int32
-          minimum: 0
-          example: 62
+          type: string
+          example: '9575989248'
         parentId:
           $ref: '#/components/schemas/ModifierId'
         votes:
@@ -1456,6 +1496,133 @@ components:
         votes:
           $ref: '#/components/schemas/Votes'
 
+    PassphraseMatch:
+      type: object
+      required:
+        - matched
+      properties:
+        matched:
+          type: boolean
+          description: true if passphrase matches wallet, false otherwise
+
+    WalletStatus:
+      description: Status of the node wallet
+      type: object
+      required:
+        - isInitialized
+        - isUnlocked
+        - changeAddress
+        - walletHeight
+        - error
+      properties:
+        isInitialized:
+          type: boolean
+          description: true if wallet is initialized, false otherwise
+        isUnlocked:
+          type: boolean
+          description: true if wallet is unlocked, false otherwise
+        changeAddress:
+          type: string
+          description: address to send change to. Empty when wallet is not initialized or locked.
+            By default change address correponds to root key address, could be set via
+            /wallet/updateChangeAddress method.
+          example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
+        walletHeight:
+          type: integer
+          description: last scanned height for the wallet (and external scans)
+        error:
+          type: string
+          description: last wallet error caught
+
+    InitWallet:
+      type: object
+      required:
+        - pass
+      properties:
+        pass:
+          type: string
+          description: Password to encrypt wallet file with
+        mnemonicPass:
+          type: string
+          description: Optional pass to password-protect mnemonic seed
+
+    InitWalletResult:
+      type: object
+      required:
+        - mnemonic
+      properties:
+        mnemonic:
+          type: string
+          description: Mnemonic seed phrase
+
+    RestoreWallet:
+      type: object
+      required:
+        - pass
+        - mnemonic
+      properties:
+        pass:
+          type: string
+          description: Password to encrypt wallet file with
+        mnemonic:
+          type: string
+          description: Mnemonic seed
+        mnemonicPass:
+          type: string
+          description: Optional pass to password-protect mnemonic seed
+
+    CheckWallet:
+      type: object
+      required:
+        - mnemonic
+      properties:
+        mnemonic:
+          type: string
+          description: Mnemonic seed (optional)
+        mnemonicPass:
+          type: string
+          description: Optional pass to password-protect mnemonic seed
+
+    UnlockWallet:
+      type: object
+      required:
+        - pass
+      properties:
+        pass:
+          type: string
+          description: Password to decrypt wallet file with
+
+    DeriveKey:
+      type: object
+      required:
+        - derivationPath
+      properties:
+        derivationPath:
+          type: string
+          description: Derivation path for a new secret to derive
+          example: 'm/1/2'
+
+    DeriveKeyResult:
+      type: object
+      required:
+        - address
+      properties:
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+
+    DeriveNextKeyResult:
+      type: object
+      required:
+        - derivationPath
+        - address
+      properties:
+        derivationPath:
+          type: string
+          description: Derivation path of the resulted secret
+          example: 'm/1/2'
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+
     MerkleProof:
       type: object
       description: Merkle proof for a leaf, which is an array of bytes (e.g. a transaction identifier)
@@ -1473,6 +1640,12 @@ components:
             type: array
             description: pairs of hash and side of hash
             example: ['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337', 0]
+            items:
+              anyOf:
+                - description: hash
+                  type: string
+                - description: side of hash
+                  type: integer
           example: [['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337', 0]]
 
     ProofOfUpcomingTransactions:
@@ -1569,7 +1742,7 @@ components:
           type: integer
           example: 2880
 
-    PeerInfo:
+    SyncInfo:
       type: object
       required:
         - address
@@ -1595,6 +1768,67 @@ components:
           type: integer
           example: 65780
 
+    RequestedInfo:
+      type: object
+      required:
+        - checks
+      properties:
+        address:
+          type: string
+          example: '127.0.0.1:5673'
+        version:
+          type: string
+          example: '4.0.26'
+        checks:
+          type: integer
+          description: How many times we checked for modifier delivery status
+          example: 4
+
+    RequestedInfoByModifierId:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/RequestedInfo'
+
+    ConnectedPeer:
+      type: object
+      required:
+        - address
+      properties:
+        address:
+          type: string
+          example: '127.0.0.1:5673'
+        version:
+          type: string
+          example: '4.0.26'
+        lastMessage:
+          $ref: '#/components/schemas/Timestamp'
+
+    ConnectedPeerByModifierId:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/ConnectedPeer'
+
+    TrackInfo:
+      type: object
+      required:
+        - invalidModifierApproxSize
+        - requested
+        - received
+      properties:
+        invalidModifierApproxSize:
+          type: integer
+          example: 65780
+        requested:
+          type: object
+          description: Currently requested modifiers
+          additionalProperties:
+            $ref: '#/components/schemas/RequestedInfoByModifierId'
+        received:
+          type: object
+          description: Received modifiers
+          additionalProperties:
+            $ref: '#/components/schemas/ConnectedPeerByModifierId'
+
     BlacklistedPeers:
       type: object
       required:
@@ -1613,6 +1847,7 @@ components:
         - appVersion
         - fullHeight
         - headersHeight
+        - maxPeerHeight
         - bestFullHeaderId
         - previousFullHeaderId
         - bestHeaderId
@@ -1649,6 +1884,13 @@ components:
           description: Can be 'null' if state is empty (no header applied since node launch)
           minimum: 0
           example: 667
+          nullable: true
+        maxPeerHeight:
+          type: integer
+          format: int32
+          description: Maximum block height of connected peers. Can be 'null' if state is empty (no peer connected since node launch)
+          minimum: 0
+          example: 706162
           nullable: true
         bestFullHeaderId:
           type: string
@@ -1701,11 +1943,12 @@ components:
           example: 327
         difficulty:
           type: integer
-          format: int32
           minimum: 0
           nullable: true
           example: 667
-          description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
+          description: >
+            Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch.
+            Difficulty is a BigInt integer.
         currentTime:
           type: integer
           description: Current internal node time
@@ -1718,11 +1961,11 @@ components:
             - $ref: '#/components/schemas/Timestamp'
         headersScore:
           type: integer
-          description: Can be 'null' if no headers is applied since node launch
+          description: Can be 'null' if no headers is applied since node launch. headersScore is a BigInt integer.
           nullable: true
         fullBlocksScore:
           type: integer
-          description: Can be 'null' if no full block is applied since node launch
+          description: Can be 'null' if no full block is applied since node launch. fullBlocksScore is a BigInt integer.
           nullable: true
         genesisBlockId:
           type: string
@@ -1839,6 +2082,14 @@ components:
       type: string
       format: base16
       example: '0008cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041'
+
+    ErgoTreeObject:
+      type: object
+      properties:
+        tree:
+          type: string
+          description: serialized Ergo tree
+          example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
 
     Transactions:
       description: Ergo transaction objects
@@ -1959,6 +2210,20 @@ components:
         totalRemainCoins:
           type: integer
           format: int64
+        reemitted:
+          type: integer
+          format: int64
+
+    EmissionScripts:
+      description: Emission related scripts
+      type: object
+      properties:
+        emission:
+          type: string
+        reemission:
+          type: string
+        pay2Reemission:
+          type: string
 
     BalancesSnapshot:
       description: Amount of Ergo tokens and assets
@@ -2539,7 +2804,7 @@ paths:
   /transactions/check:
     post:
       summary: Checks an Ergo transaction without sending it over the network. Checks that transaction is valid and
-                its inputs are in the UTXO set. Returns transaction identifier if the transaction is passing the checks.
+        its inputs are in the UTXO set. Returns transaction identifier if the transaction is passing the checks.
       operationId: checkTransaction
       tags:
         - transactions
@@ -2836,7 +3101,7 @@ paths:
   /peers/syncInfo:
     get:
       summary: Get sync info reported by peers, including versions, current status and height (if available)
-      operationId: getPeersFullInfo
+      operationId: getPeersSyncInfo
       tags:
         - peers
       responses:
@@ -2847,7 +3112,29 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PeerInfo'
+                  $ref: '#/components/schemas/SyncInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /peers/trackInfo:
+    get:
+      summary: Get track info reported by peers, including count of invalid modifiers and details of requested and received modifiers
+      operationId: getPeersTrackInfo
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Network status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrackInfo'
         default:
           description: Error
           content:
@@ -3056,29 +3343,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - pass
-              properties:
-                pass:
-                  type: string
-                  description: Password to encrypt wallet file with
-                mnemonicPass:
-                  type: string
-                  description: Optional pass to password-protect mnemonic seed
+              $ref: '#/components/schemas/InitWallet'
       responses:
         '200':
           description: New wallet with randomly generated seed created successfully
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - mnemonic
-                properties:
-                  mnemonic:
-                    type: string
-                    description: Mnemonic seed phrase
+                $ref: '#/components/schemas/InitWalletResult'
         default:
           description: Error
           content:
@@ -3099,20 +3371,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - pass
-                - mnemonic
-              properties:
-                pass:
-                  type: string
-                  description: Password to encrypt wallet file with
-                mnemonic:
-                  type: string
-                  description: Mnemonic seed
-                mnemonicPass:
-                  type: string
-                  description: Optional pass to password-protect mnemonic seed
+              $ref: '#/components/schemas/RestoreWallet'
       responses:
         '200':
           description: Wallet restored successfully
@@ -3136,29 +3395,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - mnemonic
-              properties:
-                mnemonic:
-                  type: string
-                  description: Mnemonic seed (optional)
-                mnemonicPass:
-                  type: string
-                  description: Optional pass to password-protect mnemonic seed
+              $ref: '#/components/schemas/CheckWallet'
       responses:
         '200':
           description: Whether passphrase match wallet
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - matched
-                properties:
-                  matched:
-                    type: boolean
-                    description: true if passphrase matches wallet, false otherwise
+                $ref: '#/components/schemas/PassphraseMatch'
         default:
           description: Error
           content:
@@ -3179,13 +3423,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - pass
-              properties:
-                pass:
-                  type: string
-                  description: Password to decrypt wallet file with
+              $ref: '#/components/schemas/UnlockWallet'
       responses:
         '200':
           description: Wallet unlocked successfully
@@ -3215,22 +3453,36 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /wallet/rescan:
-    get:
+    post:
       security:
         - ApiKeyAuth: [api_key]
       summary: Rescan wallet (all the available full blocks)
       operationId: walletRescan
       tags:
         - wallet
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fromHeight
+              properties:
+                fromHeight:
+                  type: integer
+                  format: int32
+                  minimum: 0
       responses:
         '200':
-          description: Wallet storage recreated
+          description: Wallet rescanned
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
 
   /wallet/status:
     get:
@@ -3246,32 +3498,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - isInitialized
-                  - isUnlocked
-                  - changeAddress
-                  - walletHeight
-                  - error
-                properties:
-                  isInitialized:
-                    type: boolean
-                    description: true if wallet is initialized, false otherwise
-                  isUnlocked:
-                    type: boolean
-                    description: true if wallet is unlocked, false otherwise
-                  changeAddress:
-                    type: string
-                    description: address to send change to. Empty when wallet is not initialized or locked.
-                                 By default change address correponds to root key address, could be set via
-                                 /wallet/updateChangeAddress method.
-                    example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
-                  walletHeight:
-                    type: integer
-                    description: last scanned height for the wallet (and external scans)
-                  error:
-                    type: string
-                    description: last wallet error caught
+                $ref: '#/components/schemas/WalletStatus'
         default:
           description: Error
           content:
@@ -3292,14 +3519,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - address
-              properties:
-                address:
-                  type: string
-                  description: Pay2PubKey address
-                  example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
+              $ref: "#/components/schemas/ErgoAddress"
       responses:
         '200':
           description: Change address updated successfully
@@ -3323,26 +3543,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - derivationPath
-              properties:
-                derivationPath:
-                  type: string
-                  description: Derivation path for a new secret to derive
-                  example: 'm/1/2'
+              $ref: '#/components/schemas/DeriveKey'
       responses:
         '200':
           description: Resulted address
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - address
-                properties:
-                  address:
-                    $ref: '#/components/schemas/ErgoAddress'
+                $ref: '#/components/schemas/DeriveKeyResult'
         default:
           description: Error
           content:
@@ -3364,17 +3572,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - derivationPath
-                  - address
-                properties:
-                  derivationPath:
-                    type: string
-                    description: Derivation path of the resulted secret
-                    example: 'm/1/2'
-                  address:
-                    $ref: '#/components/schemas/ErgoAddress'
+                $ref: '#/components/schemas/DeriveNextKeyResult'
         default:
           description: Error
           content:
@@ -3532,6 +3730,13 @@ paths:
           type: integer
           format: int32
           minimum: 0
+      - in: query
+        name: includeUnconfirmed
+        required: false
+        description: Include transactions from mempool
+        schema:
+          type: boolean
+          default: false
     get:
       security:
         - ApiKeyAuth: [ api_key ]
@@ -3593,7 +3798,7 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Get a list of all wallet-related boxes, both spent and unspent. Set minConfirmations to -1 to get
-               mempool boxes included.
+        mempool boxes included.
       operationId: walletBoxes
       tags:
         - wallet
@@ -3988,12 +4193,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - rewardAddress
-                properties:
-                  rewardAddress:
-                    $ref: '#/components/schemas/ErgoAddress'
+                $ref: '#/components/schemas/RewardAddress'
         default:
           description: Error
           content:
@@ -4015,13 +4215,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - rewardPubkey
-                properties:
-                  rewardAddress:
-                    type: string
-                    example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+                $ref: '#/components/schemas/RewardPubKey'
         default:
           description: Error
           content:
@@ -4048,6 +4242,42 @@ paths:
           description: Solution is valid
         '400':
           description: Solution is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/getBoxesBinaryProof:
+    post:
+      security:
+        -  ApiKeyAuth: [api_key]
+      summary: Get serialized batch proof for given set of boxes
+      operationId: getBoxesBinaryProof
+      tags:
+        - utxo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/TransactionBoxId'
+      responses:
+        '200':
+          description: Serialized batch proof
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerializedAdProof'
+        '400':
+          description: Prove error
           content:
             application/json:
               schema:
@@ -4309,12 +4539,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  tree:
-                    type: string
-                    description: serialized Ergo tree
-                    example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+                $ref: '#/components/schemas/ErgoTreeObject'
         default:
           description: Error
           content:
@@ -4341,12 +4566,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  tree:
-                    type: string
-                    description: Base16-encoded bytes
-                    example: '0e0710010101d17300'
+                $ref: '#/components/schemas/ScriptBytes'
         default:
           description: Error
           content:
@@ -4531,6 +4751,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /scan/spentBoxes/{scanId}:
+    parameters:
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: -1
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: List boxes which are spent.
+      operationId: listSpentScans
+      tags:
+        - scan
+      parameters:
+        - in: path
+          name: scanId
+          required: true
+          description: identifier of a scan
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: List of spent boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /scan/stopTracking:
     post:
       security:
@@ -4669,6 +4940,54 @@ paths:
       responses:
         '200':
           description: The node will be shut down in 5 seconds
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /emission/at/{blockHeight}:
+    get:
+      summary: Get emission data for a given height
+      operationId: emissionAt
+      tags:
+        - emission
+      parameters:
+        - in: path
+          name: blockHeight
+          required: true
+          description: Height to get emission data for
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: Emission data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmissionInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /emission/scripts:
+    get:
+      summary: Print emission-related scripts
+      operationId: emissionScripts
+      tags:
+        - emission
+      responses:
+        '200':
+          description: Emission-related scripts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmissionScripts'
         default:
           description: Error
           content:

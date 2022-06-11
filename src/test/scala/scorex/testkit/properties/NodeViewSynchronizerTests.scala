@@ -218,12 +218,5 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
     }
   }
 
-  property("NodeViewSynchronizer: ResponseFromLocal") {
-    withFixture { ctx =>
-      import ctx._
-      node ! ResponseFromLocal(peer, mod.modifierTypeId, Seq(mod.id -> mod.bytes))
-      pchProbe.expectMsgType[Message[_]]
-    }
-  }
 
 }

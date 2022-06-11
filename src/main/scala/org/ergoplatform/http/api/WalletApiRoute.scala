@@ -1,7 +1,7 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive, Directive1, Route}
+import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
@@ -26,7 +26,9 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
+case class WalletApiRoute(readersHolder: ActorRef,
+                          nodeViewActorRef: ActorRef,
+                          ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
@@ -111,6 +113,15 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     "maxConfirmations".as[Int] ? Int.MaxValue
   )
 
+  private val txsByScanIdParams: Directive[(Int, Int, Int, Int, Boolean)] = parameters(
+    "minInclusionHeight".as[Int] ? 0,
+    "maxInclusionHeight".as[Int] ? Int.MaxValue,
+    "minConfirmations".as[Int] ? 0,
+    "maxConfirmations".as[Int] ? Int.MaxValue,
+    "includeUnconfirmed".as[Boolean] ? false
+  )
+
+
   private val p2pkAddress: Directive1[P2PKAddress] = entity(as[Json])
     .flatMap {
       _.hcursor.downField("address").as[String]
@@ -122,6 +133,21 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       }
     }
 
+  /** POST body field - from what height to rescan wallet */
+  private val heightEntityField: Directive1[Int] = entity(as[Option[Json]])
+    .flatMap {
+      _.map[Directive1[Int]] { entity =>
+        entity.hcursor.downField("fromHeight").as[Int] match {
+          case Right(fromHeight) if fromHeight >= 0 =>
+            provide(fromHeight)
+          case Right(_) =>
+            reject(ValidationRejection("fromHeight field must be >= 0"))
+          case Left(_) =>
+            reject
+        }
+      }.getOrElse(provide(0))
+    }
+
   private def withFee(requests: Seq[TransactionGenerationRequest]): Seq[TransactionGenerationRequest] = {
     requests :+ PaymentRequest(Pay2SAddress(ergoSettings.chainSettings.monetary.feeProposition),
       ergoSettings.walletSettings.defaultTransactionFee, Seq.empty, Map.empty)
@@ -130,8 +156,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def generateTransactionAndProcess(requests: Seq[TransactionGenerationRequest],
                                             inputsRaw: Seq[String],
                                             dataInputsRaw: Seq[String],
+                                            verifyFn: ErgoTransaction => Future[Try[ErgoTransaction]],
                                             processFn: ErgoTransaction => Route): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw)) {
+    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap(txTry => txTry match {
+      case Success(tx) => verifyFn(tx)
+      case f: Failure[ErgoTransaction] => Future(f)
+    })) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => processFn(tx)
     }
@@ -140,7 +170,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def generateTransaction(requests: Seq[TransactionGenerationRequest],
                                   inputsRaw: Seq[String],
                                   dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => ApiResponse(tx))
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => Future(Success(tx)), tx => ApiResponse(tx))
   }
 
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
@@ -155,25 +185,27 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def sendTransaction(requests: Seq[TransactionGenerationRequest],
                               inputsRaw: Seq[String],
                               dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, { tx =>
-      nodeViewActorRef ! LocallyGeneratedTransaction(tx)
-      ApiResponse(tx.id)
-    })
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw,
+      tx => verifyTransaction(tx, readersHolder, ergoSettings),
+      { tx =>
+        nodeViewActorRef ! LocallyGeneratedTransaction(tx)
+        ApiResponse(tx.id)
+      })
   }
 
   def sendTransactionR: Route =
     (path("transaction" / "send") & post & entity(as[RequestsHolder])) { holder =>
-      sendTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+      sendTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateTransactionR: Route =
     (path("transaction" / "generate") & post & entity(as[RequestsHolder])) { holder =>
-      generateTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+      generateTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateUnsignedTransactionR: Route =
     (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])) { holder =>
-      generateUnsignedTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+      generateUnsignedTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateCommitmentsR: Route = (path("generateCommitments")
@@ -304,7 +336,14 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         }
       } else {
         withWallet {
-          _.filteredScanTransactions(List(Constants.PaymentsScanId, Constants.MiningScanId), minHeight, maxHeight, minConfNum, maxConfNum)
+          _.filteredScanTransactions(
+            List(Constants.PaymentsScanId, Constants.MiningScanId),
+            minHeight,
+            maxHeight,
+            minConfNum,
+            maxConfNum,
+            includeUnconfirmed = false
+          )
         }
       }
   }
@@ -315,17 +354,24 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get & txParams) {
-    case (id, minHeight, maxHeight, minConfNum, maxConfNum) =>
+  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get & txsByScanIdParams) {
+    case (id, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed) =>
       if ((minHeight > 0 || maxHeight < Int.MaxValue) && (minConfNum > 0 || maxConfNum < Int.MaxValue))
         BadRequest("Bad request: both heights and confirmations set")
       else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
-        withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort)) {
+        withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort, includeUnconfirmed)) {
           resp => ApiResponse(resp.result.asJson)
         }
       }
       else {
-        withWalletOp(_.filteredScanTransactions(List(ScanId @@ id.toShort), minHeight, maxHeight, minConfNum, maxConfNum)) {
+        withWalletOp(_.filteredScanTransactions(
+          List(ScanId @@ id.toShort),
+          minHeight,
+          maxHeight,
+          minConfNum,
+          maxConfNum,
+          includeUnconfirmed)
+        ) {
           resp => ApiResponse(resp.asJson)
         }
       }
@@ -411,8 +457,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def rescanWalletR: Route = (path("rescan") & get) {
-    withWalletOp(_.rescanWallet()) {
+  def rescanWalletR: Route = (path("rescan") & post & heightEntityField) { fromHeight =>
+    withWalletOp(_.rescanWallet(fromHeight)) {
       _.fold(
         e => BadRequest(e.getMessage),
         _ => ApiResponse.toRoute(ApiResponse.OK)

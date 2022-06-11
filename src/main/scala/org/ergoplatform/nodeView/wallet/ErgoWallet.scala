@@ -6,15 +6,15 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
-import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.wallet.boxes.ReplaceCompactCollectBoxSelector
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
+import org.ergoplatform.wallet.boxes.{ReemissionData, ReplaceCompactCollectBoxSelector}
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
-class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
+class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, parameters: Parameters)
                 (implicit val actorSystem: ActorSystem)
   extends Vault[ErgoTransaction, BlockSection, ErgoWallet]
     with ErgoWalletReader
@@ -26,10 +26,18 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   // and also optimal number of inputs(a selector is collecting dust if transaction has less inputs than optimal).
   private val maxInputs = walletSettings.maxInputs
   private val optimalInputs = walletSettings.optimalInputs
-  private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
+
+  // if checkEIP27 flag is on, we pass re-emission parameters to box selector
+  private val reemissionDataOpt = if (walletSettings.checkEIP27) {
+    val rs = settings.chainSettings.reemission
+    Some(ReemissionData(rs.reemissionNftId, rs.reemissionTokenId))
+  } else {
+    None
+  }
+  private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs, reemissionDataOpt)
 
   override val walletActor: ActorRef =
-    ErgoWalletActor(settings, new ErgoWalletServiceImpl, boxSelector, historyReader)
+    ErgoWalletActor(settings, parameters, new ErgoWalletServiceImpl(settings), boxSelector, historyReader)
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)
@@ -69,8 +77,9 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
 object ErgoWallet {
 
   def readOrGenerate(historyReader: ErgoHistoryReader,
-                     settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
-    new ErgoWallet(historyReader, settings)
+                     settings: ErgoSettings,
+                     parameters: Parameters)(implicit actorSystem: ActorSystem): ErgoWallet = {
+    new ErgoWallet(historyReader, settings, parameters)
   }
 
 }

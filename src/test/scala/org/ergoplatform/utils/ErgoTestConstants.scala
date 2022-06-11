@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UpcomingStateContext}
 import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.settings.Parameters.{MaxBlockCostIncrease, MinValuePerByteIncrease}
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.interface4j.SecretString
@@ -36,12 +37,22 @@ trait ErgoTestConstants extends ScorexLogging {
     .updated(ErgoValidationSettingsUpdate(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty), Seq()))
 
   val parameters: Parameters = LaunchParameters
+
+  val extendedParameters: Parameters = {
+    // Randomness in tests is causing occasional cost overflow in the state context and insufficient box value
+    val extension = Map(
+      MaxBlockCostIncrease -> Math.ceil(parameters.parametersTable(MaxBlockCostIncrease) * 1.3).toInt,
+      MinValuePerByteIncrease -> (parameters.parametersTable(MinValuePerByteIncrease) - 30)
+    )
+    Parameters(0, Parameters.DefaultParameters ++ extension, ErgoValidationSettingsUpdate.empty)
+  }
+
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(Args(Some("src/test/resources/application.conf"), None))
 
   implicit val settings: ErgoSettings = initSettings
 
-  val popowAlgos = new NipopowAlgos(powScheme)
+  val nipopowAlgos = new NipopowAlgos(powScheme)
 
   val lightModeSettings: ErgoSettings = initSettings.copy(
     nodeSettings = initSettings.nodeSettings.copy(stateType = StateType.Digest)
@@ -49,7 +60,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val emission: EmissionRules = settings.chainSettings.emissionRules
   val coinsTotal: Long = emission.coinsTotal
-  val stateConstants: StateConstants = StateConstants(None, settings)
+  val stateConstants: StateConstants = StateConstants(settings)
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
   val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
 
@@ -74,9 +85,10 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultVersion: Byte = 0
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val emptyVSUpdate = ErgoValidationSettingsUpdate.empty
-  val emptyStateContext: UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings)
+  val emptyStateContext: UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings, parameters)
     .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
-
+  def stateContextWith(parameters: Parameters): UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings, parameters)
+    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest
 

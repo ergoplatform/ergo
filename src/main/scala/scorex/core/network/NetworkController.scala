@@ -72,13 +72,25 @@ class NetworkController(settings: NetworkSettings,
   //bind to listen incoming connections
   tcpManager ! Bind(self, bindAddress, options = Nil, pullMode = false)
 
-  override def receive: Receive =
+  override def receive: Receive = {
     bindingLogic orElse
       businessLogic orElse
       peerCommands orElse
       connectionEvents orElse
       interfaceCalls orElse
       nonsense
+  }
+
+  override def postRestart(reason: Throwable): Unit = {
+    log.error(s"Network controller restarted due to ${reason.getMessage}", reason)
+    super.postRestart(reason)
+  }
+
+  override def postStop(): Unit = {
+    log.warn("Network controller stopped")
+    super.postStop()
+  }
+
 
   private def bindingLogic: Receive = {
     case Bound(_) =>

@@ -34,11 +34,13 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     syncTracker.updateLastSyncSentTime(connectedPeer)
     // peer should be synced now
     syncTracker.notSyncedOrOutdated(connectedPeer) shouldBe false
+    
     syncTracker.clearStatus(connectedPeer.connectionId.remoteAddress)
     // peer should not be tracked anymore
     syncTracker.getStatus(connectedPeer) shouldBe None
     syncTracker.peersByStatus.isEmpty shouldBe true
     syncTracker.statuses.get(connectedPeer) shouldBe None
     syncTracker.peersToSyncWith().length shouldBe 0
+    syncTracker.maxHeight() shouldBe None
   }
 }

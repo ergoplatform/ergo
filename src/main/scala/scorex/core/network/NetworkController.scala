@@ -542,26 +542,6 @@ object NetworkControllerRef {
     Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager))
   }
 
-  def apply(settings: NetworkSettings,
-            peerManagerRef: ActorRef,
-            scorexContext: ScorexContext)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
-    system.actorOf(
-      props(settings, peerManagerRef, scorexContext, IO(Tcp))
-    )
-  }
-
-  def apply(name: String,
-            settings: NetworkSettings,
-            peerManagerRef: ActorRef,
-            scorexContext: ScorexContext,
-            tcpManager: ActorRef)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
-    system.actorOf(
-      props(settings, peerManagerRef, scorexContext, tcpManager),
-      name)
-  }
-
   def apply(name: String,
             settings: NetworkSettings,
             peerManagerRef: ActorRef,

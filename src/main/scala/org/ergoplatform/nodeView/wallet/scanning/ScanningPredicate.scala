@@ -60,11 +60,15 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedVa
   override def filter(box: ErgoBox): Boolean = {
     value match {
       case Values.ByteArrayConstant(bytes) =>
-        box.get(regId).exists {
-          _ match {
-            case Values.ByteArrayConstant(arr) => arr.toArray.sameElements(bytes.toArray)
-            case _ => false
+        if(box.get(regId).isDefined && box.get(regId).get.tpe.equals(value.tpe)) {
+          box.get(regId).exists {
+            _ match {
+              case Values.ByteArrayConstant(arr) => arr.toArray.sameElements(bytes.toArray)
+              case _ => false
+            }
           }
+        } else {
+          false
         }
       case Values.GroupElementConstant(groupElement) =>
         box.get(regId).exists {

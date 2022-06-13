@@ -229,6 +229,7 @@ object ErgoStatsCollector {
         "parameters" -> ni.parameters.asJson,
         "eip27Supported" -> ni.eip27Supported.asJson
       ) ++ optionalFields).asJson
+    }
   }
 
 }

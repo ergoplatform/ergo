@@ -64,7 +64,7 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
       case v2: ErgoSyncInfoV2 =>
         w.putUShort(0) // to stop sync v1 parser
         w.put(v2HeaderMode) // signal that v2 message started
-        w.put(v2.lastHeaders.length.toByte) // number of headers peer is announcing
+        w.putUByte(v2.lastHeaders.length) // number of headers peer is announcing
         v2.lastHeaders.foreach { h =>
           val headerBytes = h.bytes
           w.putUShort(headerBytes.length)

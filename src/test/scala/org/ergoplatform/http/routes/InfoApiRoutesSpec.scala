@@ -39,7 +39,7 @@ class InfoApiRoutesSpec extends AnyFlatSpec
 
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
-  val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, networkControllerRef, settings, fakeTimeProvider, parameters)
+  val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, networkControllerRef, null, settings, fakeTimeProvider)
   val route: Route = InfoApiRoute(statsCollector, settings.scorexSettings.restApi, fakeTimeProvider).route
   val requiredDifficulty = BigInt(1)
 
@@ -58,6 +58,7 @@ class InfoApiRoutesSpec extends AnyFlatSpec
       c.downField("stateType").as[String] shouldEqual Right(settings.nodeSettings.stateType.stateTypeName)
       c.downField("isMining").as[Boolean] shouldEqual Right(settings.nodeSettings.mining)
       c.downField("launchTime").as[Long] shouldEqual Right(fakeTimeProvider.time())
+      c.downField("eip27Supported").as[Boolean] shouldEqual Right(true)
       c.downField("restApiUrl").as[String] shouldEqual Right("https://example.com:80")
     }
   }

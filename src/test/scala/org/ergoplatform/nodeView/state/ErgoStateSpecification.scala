@@ -69,7 +69,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     val settings = ErgoSettings.read(Args.empty)
     val dir = createTempDir
     val rootHash = createUtxoState(parameters)._1.rootHash
-    val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings, parameters).rootHash
+    val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings).rootHash
     rootHash shouldBe expectedRootHash
   }
 

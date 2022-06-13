@@ -1,8 +1,8 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoScriptPredef
-import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.MonetarySettings
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -56,8 +56,8 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     val expectedReward = emission.minersRewardAtHeight(us.stateContext.currentHeight)
 
     val incorrectTxs =
-      CandidateGenerator.collectEmission(us, proveDlogGen.sample.get, emission).toSeq
-    val txs = CandidateGenerator.collectEmission(us, defaultMinerPk, emission).toSeq
+      CandidateGenerator.collectEmission(us, proveDlogGen.sample.get, emptyStateContext).toSeq
+    val txs = CandidateGenerator.collectEmission(us, defaultMinerPk, emptyStateContext).toSeq
 
     txs.size shouldBe 1
     val emissionTx = txs.head
@@ -81,9 +81,9 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     )
 
     val txs =
-      CandidateGenerator.collectFees(height, Seq(blockTx), defaultMinerPk, emission).toSeq
+      CandidateGenerator.collectFees(height, Seq(blockTx), defaultMinerPk, emptyStateContext).toSeq
     val incorrect = CandidateGenerator
-      .collectFees(height, Seq(blockTx), proveDlogGen.sample.get, emission)
+      .collectFees(height, Seq(blockTx), proveDlogGen.sample.get, emptyStateContext)
       .toSeq
     txs.length shouldBe 1
     val feeTx = txs.head
@@ -201,17 +201,15 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     var us     = createUtxoState(bh, parameters)
     val height = ErgoHistory.EmptyHistoryHeight
 
-    val emissionRules = new EmissionRules(
-      MonetarySettings(
-        minerRewardDelay = delta
-      )
-    )
+    val ms = MonetarySettings(minerRewardDelay = delta)
+    val st = settings.copy(chainSettings = settings.chainSettings.copy(monetary = ms))
+    val sc = ErgoStateContext.empty(genesisStateDigest, st, parameters)
     val txBoxes = bh.boxes.grouped(inputsNum).map(_.values.toIndexedSeq).toSeq
 
     val blockTx =
       validTransactionFromBoxes(txBoxes.head, outputsProposition = feeProposition)
     val txs = CandidateGenerator
-      .collectFees(height, Seq(blockTx), defaultMinerPk, emissionRules)
+      .collectFees(height, Seq(blockTx), defaultMinerPk, sc)
       .toSeq
     val block = validFullBlock(None, us, blockTx +: txs)
 
@@ -256,7 +254,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
         height,
         blockTxs,
         defaultMinerPk,
-        emission
+        emptyStateContext
       )
       txs.length shouldBe 2
 

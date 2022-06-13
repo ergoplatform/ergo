@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
+
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform._
@@ -13,7 +14,7 @@ import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult}
@@ -253,22 +254,21 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisUtxoState(stateDir: File,
-                               constants: StateConstants,
-                               parameters: Parameters): (UtxoState, BoxHolder) = {
+                               constants: StateConstants): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
     val boxes = genesisBoxes(constants.settings.chainSettings)
     val bh = BoxHolder(boxes)
 
-    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants, parameters).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants, LaunchParameters).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
       java.util.Arrays.equals(us.rootHash, constants.settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 
-  def generateGenesisDigestState(stateDir: File, settings: ErgoSettings, parameters: Parameters): DigestState = {
+  def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
     DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest),
-      stateDir, StateConstants(settings), parameters)
+      stateDir, StateConstants(settings))
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
@@ -276,15 +276,14 @@ object ErgoState extends ScorexLogging {
   lazy val genesisStateVersion: VersionTag = idToVersion(Header.GenesisParentId)
 
   def readOrGenerate(settings: ErgoSettings,
-                     constants: StateConstants,
-                     parameters: Parameters): ErgoState[_] = {
+                     constants: StateConstants): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
-      case StateType.Digest => DigestState.create(None, None, dir, constants, parameters)
-      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants, parameters)
-      case _ => ErgoState.generateGenesisUtxoState(dir, constants, parameters)._1
+      case StateType.Digest => DigestState.create(None, None, dir, constants)
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
+      case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
     }
   }
 

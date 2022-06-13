@@ -157,9 +157,15 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     }
   }
 
-  property("impossible to create an asset of non-positive amount") {
+  property("impossible to create an asset of negative amount") {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
       checkTx(from, updateAnAsset(tx, from, _ => -1)) shouldBe 'failure
+    }
+  }
+
+  property("impossible to create an asset of zero amount") {
+    forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
+      checkTx(from, updateAnAsset(tx, from, _ => 0)) shouldBe 'failure
     }
   }
 
@@ -328,10 +334,10 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   }
 
   property("transaction cost") {
-    def paramsWith(manualCost: Int) = new Parameters(
-      height = 0,
-      parametersTable = Parameters.DefaultParameters + (MaxBlockCostIncrease -> manualCost),
-      proposedUpdate = ErgoValidationSettingsUpdate.empty
+    def paramsWith(manualCost: Int) = Parameters(
+      0,
+      Parameters.DefaultParameters + (MaxBlockCostIncrease -> manualCost),
+      ErgoValidationSettingsUpdate.empty
     )
 
     val gen = validErgoTransactionGenTemplate(0, 0,10, trueLeafGen)

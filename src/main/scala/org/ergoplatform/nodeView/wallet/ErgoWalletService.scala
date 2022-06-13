@@ -32,6 +32,8 @@ import scala.util.{Failure, Success, Try}
   */
 trait ErgoWalletService {
 
+  val ergoSettings: ErgoSettings
+
   /**
     * Read encrypted wallet json file or bypass it by providing mnemonic directly (test mode only)
     * @param state current wallet state
@@ -56,7 +58,7 @@ trait ErgoWalletService {
   def initWallet(state: ErgoWalletState,
                  settings: ErgoSettings,
                  walletPass: SecretString,
-                 mnemonicPassOpt: Option[SecretString])(implicit addrEncoder: ErgoAddressEncoder): Try[(SecretString, ErgoWalletState)]
+                 mnemonicPassOpt: Option[SecretString]): Try[(SecretString, ErgoWalletState)]
 
   /**
     * @param state current wallet state
@@ -70,7 +72,7 @@ trait ErgoWalletService {
                     settings: ErgoSettings,
                     mnemonic: SecretString,
                     mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
+                    walletPass: SecretString): Try[ErgoWalletState]
 
   /**
     * Decrypt underlying encrypted storage using `walletPass` and update public keys
@@ -79,7 +81,7 @@ trait ErgoWalletService {
     * @param usePreEip3Derivation if true, the first key is the master key
     * @return Try of new wallet state
     */
-  def unlockWallet(state: ErgoWalletState, walletPass: SecretString, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
+  def unlockWallet(state: ErgoWalletState, walletPass: SecretString, usePreEip3Derivation: Boolean): Try[ErgoWalletState]
 
   /**
     * Clear secret from previously decrypted json storage and reset prover
@@ -102,18 +104,24 @@ trait ErgoWalletService {
     * @param settings settings read from config file
     * @return Try of new wallet state
     */
-  def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
+  def recreateStorage(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState]
 
   def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
 
   /**
     * @param state current wallet state
     * @param scanId to get boxes for
-    * @param unspentOnly only boxes that have not been spent yet
     * @param considerUnconfirmed whether to look for boxes in off-chain registry
-    * @return Wallet boxes corresponding to `scanId`
+    * @return Unspent wallet boxes corresponding to `scanId`
     */
-  def getScanBoxes(state: ErgoWalletState, scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
+  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox]
+
+  /**
+    * @param state current wallet state
+    * @param scanId to get boxes for
+    * @return Spent wallet boxes corresponding to `scanId`
+    */
+  def getScanSpentBoxes(state: ErgoWalletState, scanId: ScanId): Seq[WalletBox]
 
   /**
     * @param registry - wallet registry database
@@ -146,7 +154,7 @@ trait ErgoWalletService {
     * @param encodedPath derivation path from the master key
     * @return Try of pay-to-public-key-address and new wallet state
     */
-  def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String)(implicit addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)]
+  def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String, addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)]
 
   /**
     * Derive next key from master key
@@ -154,15 +162,28 @@ trait ErgoWalletService {
     * @param usePreEip3Derivation whether to use pre-EIP3 derivation or not
     * @return Try of the derived key and new wallet state
     */
-  def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)]
+  def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean): Try[(DeriveNextKeyResult, ErgoWalletState)]
 
   /**
+    * Get unconfirmed transactions from mempool that are associated with given scan id
+    * @param state current wallet state
     * @param scanId to get transactions for
-    * @param registry wallet registry
+    * @return Unconfirmed transactions for `scanId`
+    */
+  def getUnconfirmedTransactions(state: ErgoWalletState, scanId: ScanId): Seq[AugWalletTransaction]
+
+  /**
+    * Get transactions aassociated with given scan id
+    * @param state current wallet state
+    * @param scanId to get transactions for
     * @param fullHeight of the chain (last blocked applied to the state, not the wallet)
+    * @param includeUnconfirmed whether to include transactions from mempool that match given scanId
     * @return Wallet transactions for `scanId`
     */
-  def getScanTransactions(scanId: ScanId, registry: WalletRegistry, fullHeight: Int): Seq[AugWalletTransaction]
+  def getScanTransactions(state: ErgoWalletState,
+                          scanId: ScanId,
+                          fullHeight: Int,
+                          includeUnconfirmed: Boolean): Seq[AugWalletTransaction]
 
   def addScan(state: ErgoWalletState, appRequest: ScanRequest): Try[(Scan, ErgoWalletState)]
 
@@ -204,7 +225,7 @@ trait ErgoWalletService {
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
-                          sign: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoLikeTransactionTemplate[_]]
+                          sign: Boolean): Try[ErgoLikeTransactionTemplate[_]]
 
   /**
     * Generate commitments to be used then to sign a transaction.
@@ -229,10 +250,10 @@ trait ErgoWalletService {
 
 }
 
-class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport with FileUtils {
+class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends ErgoWalletService with ErgoWalletSupport with FileUtils {
 
 
-  def readWallet(state: ErgoWalletState,
+  override def readWallet(state: ErgoWalletState,
                  testMnemonic: Option[SecretString],
                  testKeysQty: Option[Int],
                  secretStorageSettings: SecretStorageSettings): ErgoWalletState = {
@@ -261,11 +282,10 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     }
   }
 
-  def initWallet(state: ErgoWalletState,
+  override def initWallet(state: ErgoWalletState,
                  settings: ErgoSettings,
                  walletPass: SecretString,
-                 mnemonicPassOpt: Option[SecretString]
-              )(implicit addrEncoder: ErgoAddressEncoder): Try[(SecretString, ErgoWalletState)] = {
+                 mnemonicPassOpt: Option[SecretString]): Try[(SecretString, ErgoWalletState)] = {
     val walletSettings = settings.walletSettings
     //Read high-quality random bits from Java's SecureRandom
     val entropy = scorex.utils.Random.randomBytes(walletSettings.seedStrengthBits / 8)
@@ -292,11 +312,11 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     result
   }
 
-  def restoreWallet(state: ErgoWalletState,
+  override def restoreWallet(state: ErgoWalletState,
                     settings: ErgoSettings,
                     mnemonic: SecretString,
                     mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
+                    walletPass: SecretString): Try[ErgoWalletState] =
     if (settings.nodeSettings.isFullBlocksPruned)
       Failure(new IllegalArgumentException("Unable to restore wallet when pruning is enabled"))
     else
@@ -311,9 +331,9 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
         }
 
 
-  def unlockWallet(state: ErgoWalletState,
+  override def unlockWallet(state: ErgoWalletState,
                    walletPass: SecretString,
-                   usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] = {
+                   usePreEip3Derivation: Boolean): Try[ErgoWalletState] = {
     if (state.walletVars.proverOpt.isEmpty) {
       state.secretStorageOpt match {
         case Some(secretStorage) =>
@@ -334,12 +354,12 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     }
   }
 
-  def lockWallet(state: ErgoWalletState): ErgoWalletState = {
+  override def lockWallet(state: ErgoWalletState): ErgoWalletState = {
     state.secretStorageOpt.foreach(_.lock())
     state.copy(walletVars = state.walletVars.resetProver())
   }
 
-  def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] = {
+  override def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] = {
     val registryFolder = WalletRegistry.registryFolder(settings)
     log.info(s"Removing the registry folder $registryFolder")
     state.registry.close()
@@ -351,7 +371,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     }
   }
 
-  def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
+  override def recreateStorage(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
     Try {
       val storageFolder = WalletStorage.storageFolder(settings)
       log.info(s"Removing the wallet storage folder $storageFolder")
@@ -360,7 +380,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
       state.copy(storage = WalletStorage.readOrCreate(settings))
     }
 
-  def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {
+  override def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {
     val currentHeight = state.fullHeight
     val boxes = if (unspentOnly) {
       val confirmed = state.registry.walletUnspentBoxes(state.maxInputsToUse * BoxSelector.ScanDepthFactor)
@@ -382,7 +402,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
-  def getScanBoxes(state: ErgoWalletState, scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {
+  override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox] = {
     val unconfirmed = if (considerUnconfirmed) {
       state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
     } else {
@@ -390,26 +410,28 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     }
 
     val currentHeight = state.fullHeight
-    val boxes = (if (unspentOnly) {
-      state.registry.unspentBoxes(scanId)
-    } else {
-      state.registry.confirmedBoxes(scanId)
-    }) ++ unconfirmed
+    val boxes = state.registry.unspentBoxes(scanId)  ++ unconfirmed
     boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
-  def getTransactions(registry: WalletRegistry,
+  override def getScanSpentBoxes(state: ErgoWalletState, scanId: ScanId): Seq[WalletBox] = {
+    val currentHeight = state.fullHeight
+    val boxes = state.registry.spentBoxes(scanId)
+    boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+  }
+
+  override def getTransactions(registry: WalletRegistry,
                       fullHeight: Int
                      ): Seq[AugWalletTransaction] = {
     registry.allWalletTxs().sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
   }
 
-  def getTransactionsByTxId(txId: ModifierId, registry: WalletRegistry, fullHeight: Int): Option[AugWalletTransaction] =
+  override def getTransactionsByTxId(txId: ModifierId, registry: WalletRegistry, fullHeight: Int): Option[AugWalletTransaction] =
     registry.getTx(txId)
       .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
 
-  def collectBoxes(state: ErgoWalletState, boxSelector: BoxSelector, targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]): Try[CollectedBoxes] = {
+  override def collectBoxes(state: ErgoWalletState, boxSelector: BoxSelector, targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]): Try[CollectedBoxes] = {
     val assetsMap = targetAssets.map(t => bytesToId(t._1) -> t._2)
     val inputBoxes = state.getBoxesToSpend
     boxSelector
@@ -422,12 +444,12 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
       }.toTry
   }
 
-  def generateTransaction(state: ErgoWalletState,
+  override def generateTransaction(state: ErgoWalletState,
                           boxSelector: BoxSelector,
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
-                          sign: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoLikeTransactionTemplate[_]] = {
+                          sign: Boolean): Try[ErgoLikeTransactionTemplate[_]] = {
     val tx = generateUnsignedTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw)
     if (sign) {
       tx.flatMap { case (unsignedTx, inputs, dataInputs) =>
@@ -447,7 +469,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     }
   }
 
-  def generateCommitments(state: ErgoWalletState,
+  override def generateCommitments(state: ErgoWalletState,
                           unsignedTx: UnsignedErgoTransaction,
                           externalSecretsOpt: Option[Seq[ExternalSecret]],
                           externalInputsOpt: Option[Seq[ErgoBox]],
@@ -471,7 +493,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     prover.generateCommitmentsFor(unsignedTx, inputBoxes, dataBoxes, state.stateContext)
   }
 
-  def extractHints(state: ErgoWalletState,
+  override def extractHints(state: ErgoWalletState,
                    tx: ErgoTransaction,
                    real: Seq[SigmaBoolean],
                    simulated: Seq[SigmaBoolean],
@@ -493,7 +515,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     prover.bagForTransaction(tx, inputBoxes, dataBoxes, state.stateContext, real, simulated)
   }
 
-  def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String)(implicit addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)] =
+  override def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String, addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)] =
     state.secretStorageOpt match {
       case Some(secretStorage) if !secretStorage.isLocked =>
         val rootSecret = secretStorage.secret.get // unlocked means Some(secret)
@@ -502,7 +524,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
             val secret = rootSecret.derive(path)
             addSecretToStorage(state, secret) match {
               case Success(newState) =>
-                Success(P2PKAddress(secret.publicKey.key) -> newState)
+                Success(P2PKAddress(secret.publicKey.key)(addrEncoder) -> newState)
               case Failure(t) =>
                 Failure(t)
             }
@@ -517,7 +539,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
         Failure(new Exception("Unable to derive key from path, wallet is not initialized"))
     }
 
-  def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)] =
+  override def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean): Try[(DeriveNextKeyResult, ErgoWalletState)] =
     state.secretStorageOpt match {
       case Some(secretStorage) if !secretStorage.isLocked =>
         val masterKey = secretStorage.secret.get // unlocked means Some(secret)
@@ -528,11 +550,11 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
         Failure(new Exception("Unable to derive key, wallet is not initialized"))
     }
 
-  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =
+  override def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =
       WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter, dustLimit)
         .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
 
-  def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
+  override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {
       case (Some(mr), Some(sr)) =>
         sr match {
@@ -546,7 +568,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
     }
   }
 
-  def removeScan(state: ErgoWalletState, scanId: ScanId): Try[ErgoWalletState] =
+  override def removeScan(state: ErgoWalletState, scanId: ScanId): Try[ErgoWalletState] =
     state.storage.getScan(scanId) match {
       case None =>
         Failure(new Exception(s"Scan #$scanId not found"))
@@ -556,17 +578,42 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport wit
         }
     }
 
-  def addScan(state: ErgoWalletState, scanRequest: ScanRequest): Try[(Scan, ErgoWalletState)] =
+  override def addScan(state: ErgoWalletState, scanRequest: ScanRequest): Try[(Scan, ErgoWalletState)] =
     state.storage.addScan(scanRequest).map { scan =>
       scan -> state.copy(walletVars = state.walletVars.addScan(scan))
     }
 
-  def getScanTransactions(scanId: ScanId, registry: WalletRegistry, fullHeight: Int): Seq[AugWalletTransaction] = {
-    registry.allWalletTxs().filter(wtx => wtx.scanIds.contains(scanId))
-      .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
+  override def getUnconfirmedTransactions(state: ErgoWalletState, scanId: ScanId): Seq[AugWalletTransaction] = {
+    state.mempoolReaderOpt.flatMap { mempool =>
+      state.storage.getScan(scanId).map { scan =>
+        mempool.getAllPrioritized.filter { tx =>
+          tx.outputs.exists(scan.trackingRule.filter)
+        }.map { tx =>
+          // unconfirmed transaction has 0 confirmations
+          AugWalletTransaction(WalletTransaction(tx, state.fullHeight, Seq(scanId)), 0)
+        }
+      }
+    }.getOrElse(Nil)
   }
 
-  def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
+  override def getScanTransactions(state: ErgoWalletState,
+                          scanId: ScanId,
+                          fullHeight: Int,
+                          includeUnconfirmed: Boolean = false): Seq[AugWalletTransaction] = {
+    val walletTxs =
+      state.registry.allWalletTxs().filter(wtx => wtx.scanIds.contains(scanId))
+        .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
+
+    val unconfirmedTxs =
+      if (includeUnconfirmed) {
+        getUnconfirmedTransactions(state, scanId)
+      } else {
+        Nil
+      }
+    walletTxs ++ unconfirmedTxs
+  }
+
+  override def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
                       tx: UnsignedErgoTransaction,
                       secrets: Seq[ExternalSecret],
                       hints: TransactionHintsBag,

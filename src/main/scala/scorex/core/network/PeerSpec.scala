@@ -45,7 +45,7 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
 
 
     w.putOption(obj.declaredAddress) { (writer, isa) =>
-      val addr = isa.getAddress.getAddress
+      val addr: Array[Byte] = Some(isa.getAddress.getAddress).getOrElse(Array.fill[Byte](4){0})
       writer.put((addr.size + 4).toByteExact)
       writer.putBytes(addr)
       writer.putUInt(isa.getPort)

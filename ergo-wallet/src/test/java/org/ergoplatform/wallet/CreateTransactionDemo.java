@@ -87,15 +87,15 @@ public class CreateTransactionDemo {
                 "d9ba3ed2f55bc61ec90b7ee3949362a9a20fbf8514d2306eb97f14e07d234797"
         };
 
-        Payment payment1 = new Payment(receiverAddress, 10000000, myAddress, changeAmt);
-        Payment payment2 = new Payment(receiverAddress, 15000000, myAddress, changeAmt);
+        Payment payment1 = new Payment(receiverAddress, 10000000);
+        Payment payment2 = new Payment(receiverAddress, 15000000);
 
         List<Payment> payments = new ArrayList<>();
         payments.add(payment1);
         payments.add(payment2);
         UnsignedErgoLikeTransaction unsignedTx =
                 TransactionBuilder.multiPaymentTransaction(
-                        myInputs, feeAmt, payments, currentNetworkHeight
+                        myInputs, feeAmt, payments, myAddress, changeAmt, currentNetworkHeight
                 );
 
         ErgoLikeTransaction tx = new ErgoUnsafeProver().prove(unsignedTx, extendedSecretKey.privateInput());

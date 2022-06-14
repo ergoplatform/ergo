@@ -43,9 +43,16 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
     ApplicationVersionSerializer.serialize(obj.protocolVersion, w)
     w.putShortString(obj.nodeName)
 
-
-    w.putOption(obj.declaredAddress) { (writer, isa) =>
-      val addr = if(isa.getAddress == null) Array.fill[Byte](4){0} else isa.getAddress.getAddress
+    val address = obj.declaredAddress match {
+      case Some(isa) =>
+        if(isa.getAddress == null)
+          None
+        else
+          Some(isa)
+      case None => None
+    }
+    w.putOption(address) { (writer, isa) =>
+      val addr = isa.getAddress.getAddress
       writer.put((addr.size + 4).toByteExact)
       writer.putBytes(addr)
       writer.putUInt(isa.getPort)

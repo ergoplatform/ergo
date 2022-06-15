@@ -61,7 +61,7 @@ class ScriptsSpec extends ErgoPropertyTest {
 
 
   private def fromString(str: String): ErgoTree = {
-    compiler.compile(Map(), str).asBoolValue.toSigmaProp
+    compiler.compile(Map(), str).buildTree.asBoolValue.toSigmaProp
   }
 
   private def applyBlockSpendingScript(script: ErgoTree): Try[UtxoState] = {

@@ -11,7 +11,6 @@ import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.interpreter.Interpreter.{VerificationResult, ScriptEnv}
-import sigmastate.interpreter.{CacheKey, PrecompiledScriptProcessor, ScriptProcessorSettings, ProcessorStats}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
 
 import scala.util.Try
@@ -91,7 +90,6 @@ object ErgoInterpreter {
     */
   def apply(params: ErgoLikeParameters): ErgoInterpreter =
     new ErgoInterpreter(params)(new RuntimeIRContext) {
-      override val precompiledScriptProcessor: PrecompiledScriptProcessor = scriptProcessor
     }
 
   /** Create [[AvlTreeData]] with the given digest and all operations enabled. */
@@ -115,31 +113,4 @@ object ErgoInterpreter {
     /*14435*/"100c0e20dcd3cdd11102e7cb675fd5185a1685ad007619badcf398864274b137d9f45a9e0e2019323d02836f596329b28b2d380d3cf27a10f55db7b1d33bc4537ab538594bae0402040005c08db701040404000404040205c08db70104060400d805d601d901010493cbc2b2a47201007300d602c5a7d603c2a7d604e4c6a70407d6057301eb02d1ecedededda7201017302dad901060493c5b2a47206007202017303dad9010604d801d608b2a5720600eded93c27208720393c1720899c1a7730493e4c6720804077204017305dad901066393cbc27206720501b2a5730600edededda7201017307dad901060493c5b2a47206007202017308dad9010604d801d608b2a5720600eded93c27208720393c1720899c1a7730993e4c672080407720401730adad901066393cbc27206720501b2a4730b00cd7204"
   )
 
-  /** Script processor which uses [[RuntimeIRContext]] to process graphs.
-    * Preforms pre-compilation of the given scripts during instantiation.
-    * Keeps pre-compiled data structures for the lifetime of JVM.
-    */
-  lazy val scriptProcessor: PrecompiledScriptProcessor = {
-    /** Script compilation requires an instance of [[org.ergoplatform.validation.SigmaValidationSettings]].
-      * The only way to pass it to the CacheLoader is via cache key.
-      * So here we augment each script bytes with the instance of validation settings.
-      */
-    val scriptKeys = frequentlyUsedScripts.map { s =>
-      val bytes = ErgoAlgos.decodeUnsafe(s)
-      CacheKey(bytes, ValidationRules.currentSettings)
-    }
-    new PrecompiledScriptProcessor(
-      ScriptProcessorSettings(
-        predefScripts = scriptKeys,
-        maxCacheSize = 100,  // takes up around 30Mb
-        recordCacheStats = true,
-        reportingInterval = 500
-      )) with ScorexLogging {
-      override protected def createIR(): IRContext = new RuntimeIRContext
-
-      override protected def onReportStats(stats: ProcessorStats): Unit = {
-        log.info(s"Stats: $stats")
-      }
-    }
-  }
 }

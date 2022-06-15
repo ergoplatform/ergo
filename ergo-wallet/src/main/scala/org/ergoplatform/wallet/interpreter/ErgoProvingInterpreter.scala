@@ -16,7 +16,6 @@ import sigmastate.basics.SigmaProtocolPrivateInput
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
 import sigmastate.eval.{IRContext, RuntimeIRContext}
-import sigmastate.utxo.CostTable
 import special.collection.Coll
 import special.sigma.{Header, PreHeader}
 
@@ -123,7 +122,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
           // Cost of transaction initialization: we should read and parse all inputs and data inputs,
           // and also iterate through all outputs to check rules, also we add some constant for interpreter initialization
           val initialCost: Long = addExact(
-            CostTable.interpreterInitCost,
+            10000, // CostTable.interpreterInitCost,
             multiplyExact(boxesToSpend.size, params.inputCost),
             multiplyExact(dataBoxes.size, params.dataInputCost),
             multiplyExact(unsignedTx.outputCandidates.size, params.outputCost),

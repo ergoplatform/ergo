@@ -50,36 +50,37 @@ object TransactionBuilder {
                               changeAddress: ErgoAddress,
                               changeAmt: Long,
                               currentHeight: Int): UnsignedErgoLikeTransaction = {
-    val outputs =
-      payments.asScala.flatMap { case Payment(recipientAddress, transferAmt) =>
-        val payTo = new ErgoBoxCandidate(
+    val feeBox = new ErgoBoxCandidate(
+      feeAmt,
+      ErgoScriptPredef.feeProposition(),
+      currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val paymentBoxes =
+      payments.asScala.map { case Payment(recipientAddress, transferAmt) =>
+        new ErgoBoxCandidate(
           transferAmt,
           recipientAddress.script,
           currentHeight,
           Seq.empty[(ErgoBox.TokenId, Long)].toColl,
           Map.empty
         )
-        val fee = new ErgoBoxCandidate(
-          feeAmt,
-          ErgoScriptPredef.feeProposition(),
-          currentHeight,
-          Seq.empty[(ErgoBox.TokenId, Long)].toColl,
-          Map.empty
-        )
-        val change = new ErgoBoxCandidate(
+      }.toVector
+
+    val outputs =
+      if (changeAmt == 0) {
+        paymentBoxes :+ feeBox
+      } else {
+        val changeBox = new ErgoBoxCandidate(
           changeAmt,
           changeAddress.script,
           currentHeight,
           Seq.empty[(ErgoBox.TokenId, Long)].toColl,
           Map.empty
         )
-        if (changeAmt == 0) {
-          IndexedSeq(payTo, fee)
-        } else {
-          IndexedSeq(payTo, change, fee)
-        }
-      }.toIndexedSeq
-
+        paymentBoxes ++ Vector(feeBox, changeBox)
+      }
     val unsignedInputs = inputIds
       .flatMap { id =>
         Base16.decode(id)

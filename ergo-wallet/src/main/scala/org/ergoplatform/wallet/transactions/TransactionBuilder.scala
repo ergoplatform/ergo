@@ -27,31 +27,31 @@ object TransactionBuilder {
   /**
     * @param recipientAddress - payment recipient address
     * @param transferAmt - amount of ERGs to transfer
-    * @param changeAddress - change recipient address
-    * @param changeAmt - amount to return back to `changeAddress`
     */
   case class Payment(
     recipientAddress: ErgoAddress,
-    transferAmt: Long,
-    changeAddress: ErgoAddress,
-    changeAmt: Long
+    transferAmt: Long
   )
 
   /**
     * Assembles unsigned payment transaction with multiple outputs
     *
     * @param inputIds - identifiers of inputs to be used in transaction
-    * @param payments - list of addresses and corresponding amounts to make outputs from
     * @param feeAmt - fee amount
     * @param currentHeight - current blockchain height
+    * @param payments - list of addresses and corresponding amounts to make outputs from
+    * @param changeAddress - change recipient address
+    * @param changeAmt - amount to return back to `changeAddress`
     * @return unsigned transaction
     */
   def multiPaymentTransaction(inputIds: Array[String],
                               feeAmt: Long,
                               payments: java.util.List[Payment],
+                              changeAddress: ErgoAddress,
+                              changeAmt: Long,
                               currentHeight: Int): UnsignedErgoLikeTransaction = {
     val outputs =
-      payments.asScala.flatMap { case Payment(recipientAddress, transferAmt, changeAddress, changeAmt) =>
+      payments.asScala.flatMap { case Payment(recipientAddress, transferAmt) =>
         val payTo = new ErgoBoxCandidate(
           transferAmt,
           recipientAddress.script,

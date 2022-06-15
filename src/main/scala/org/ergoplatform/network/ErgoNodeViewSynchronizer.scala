@@ -17,7 +17,6 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
-import scorex.core.app.Version
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.consensus.{HistoryReader, SyncInfo}
 import scorex.core.network.ModifiersStatus.Requested
@@ -173,11 +172,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Whether neighbour peer `remote` supports sync protocol V2.
     */
-  def syncV2Supported(remote: ConnectedPeer): Boolean = {
-    // If neighbour version is >= 4.0.16, the neighbour supports sync V2
-    val syncV2Version = Version(4, 0, 16)
-    remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
-  }
+  def syncV2Supported(remote: ConnectedPeer): Boolean = SyncV2Filter.condition(remote)
 
   /**
     * Send synchronization statuses to neighbour peers
@@ -384,18 +379,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }.map { case (syncState, peers) =>
         val peersFiltered =
           if (settings.nodeSettings.stateType == StateType.Digest) {
-            // 4.0.21.1 allows for downloading ADProofs that are too big in block at 667614
-            val requiredVersion = Version(4, 0, 22)
-            peers.filter { cp =>
-              val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
-              version.compare(requiredVersion) >= 0
-            }
+            DigestModeFilter.filter(peers)
           } else {
-            // filter out peers of 4.0.17 or 4.0.18 version as they are delivering broken modifiers
-            peers.filterNot { cp =>
-              val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
-              version == Version.v4017 || version == Version.v4018
-            }
+            BrokenModifiersFilter.filter(peers)
           }
         syncState -> peersFiltered
       }

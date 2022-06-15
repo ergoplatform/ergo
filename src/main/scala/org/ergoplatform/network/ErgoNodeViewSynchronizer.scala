@@ -344,6 +344,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
       case Older =>
         log.debug(s"Peer $remote is older, its height ${syncInfo.height}")
+        applyValidContinuationHeaderV2(syncInfo, hr)
 
       case Equal =>
         // does nothing for `Equal`
@@ -355,6 +356,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       sendSyncToPeer(remote, ownSyncInfo)
     }
   }
+
+  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2, hr: ErgoHistory): Unit =
+    hr.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
+      hr.applicableTry(continuationHeader) match {
+        case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
+          log.warn(s"Header from syncInfoV2 ${continuationHeader.encodedId} is invalid", e)
+        case _ =>
+          log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
+          viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
+      }
+    }
 
   /**
     * Headers should be downloaded from an Older node, it is triggered by received sync message from an older node

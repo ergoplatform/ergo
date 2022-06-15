@@ -267,6 +267,26 @@ trait ErgoHistoryReader
   }
 
   /**
+    * Finding other peer's continuation header from a header that is common to our node's history
+    * @param syncInfo  other's node sync info
+    * @return maybe continuation header
+    */
+  def continuationHeaderV2(syncInfo: ErgoSyncInfoV2): Option[Header] = {
+    if (syncInfo.lastHeaders.isEmpty) {
+      Option.empty
+    } else {
+      // let's find most recent header that is common to our history
+      commonPoint(syncInfo.lastHeaders) match {
+        case Some(commonHeader) =>
+          // now let's find continuation header whose parent is the common header
+          syncInfo.lastHeaders.find(_.parentId == commonHeader.id)
+        case None =>
+          Option.empty
+      }
+    }
+  }
+
+  /**
     * Calculating continuation from common header which will be sent to another node
     * if comparison status is YOUNGER or FORK.
     *

@@ -87,7 +87,7 @@ public class CreateTransactionDemo {
                 "d9ba3ed2f55bc61ec90b7ee3949362a9a20fbf8514d2306eb97f14e07d234797"
         };
 
-        Payment payment1 = new Payment(receiverAddress, 10000000);
+        Payment payment1 = new Payment(receiverAddress, 30000000);
         Payment payment2 = new Payment(receiverAddress, 15000000);
 
         List<Payment> payments = new ArrayList<>();

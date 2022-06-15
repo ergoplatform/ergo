@@ -347,7 +347,7 @@ trait ApiCodecs extends JsonCodecs {
           RealSecretProof(
             pubkey,
             Challenge @@ Base16.decode(challenge).get,
-            SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get),
+            SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)(null),
             position
           )
       case h: String if h == "proofSimulated" =>
@@ -360,7 +360,7 @@ trait ApiCodecs extends JsonCodecs {
           SimulatedSecretProof(
             pubkey,
             Challenge @@ Base16.decode(challenge).get,
-            SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get),
+            SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)(null),
             position
           )
       case _ =>

@@ -83,8 +83,11 @@ final case class ErgoSyncTracker(system: ActorSystem,
 
   def clearStatus(remote: InetSocketAddress): Unit = {
     statuses.find(_._1.connectionId.remoteAddress == remote) match {
-      case Some((peer, _)) => statuses -= peer
-      case None => log.warn(s"Trying to clear status for $remote, but it is not found")
+      case Some((peer, _)) =>
+        statuses -= peer
+        heights -= peer
+      case None =>
+        log.warn(s"Trying to clear status for $remote, but it is not found")
     }
   }
 
@@ -107,7 +110,13 @@ final case class ErgoSyncTracker(system: ActorSystem,
 
   protected def numOfSeniors(): Int = statuses.count(_._2.status == Older)
 
-  def maxHeight(): Option[Int] = if(heights.nonEmpty) Some(heights.maxBy(_._2)._2) else None
+  def maxHeight(): Option[Int] = {
+    if (heights.nonEmpty) {
+      Some(heights.maxBy(_._2)._2)
+    } else {
+      None
+    }
+  }
 
   /**
     * Return the peers to which this node should send a sync signal, including:

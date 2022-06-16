@@ -495,6 +495,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                             remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
       if (typeId == Transaction.ModifierTypeId && bytes.length > settings.nodeSettings.maxTransactionSize) {
+        deliveryTracker.setInvalid(id, typeId)
         penalizeMisbehavingPeer(remote)
         log.warn(s"Transaction size ${bytes.length} from ${remote.toString} exceeds limit ${settings.nodeSettings.maxTransactionSize}")
         None

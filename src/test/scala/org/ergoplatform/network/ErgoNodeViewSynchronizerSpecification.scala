@@ -30,6 +30,9 @@ import scorex.testkit.utils.AkkaFixture
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.language.postfixOps
+import akka.pattern.ask
+import akka.util.Timeout
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 
 class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matchers with Eventually {
 
@@ -124,7 +127,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   }
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
-  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM], DeliveryTracker) = {
+  (ActorRef, ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM], DeliveryTracker) = {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val h = localHistoryGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
@@ -166,12 +169,12 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     synchronizerMockRef ! ChangedHistory(history)
     synchronizerMockRef ! ChangedMempool(pool)
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
-    (synchronizerMockRef, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, eventListener, serializer, deliveryTracker)
+    (synchronizerMockRef, nodeViewHolderMockRef, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, eventListener, serializer, deliveryTracker)
   }
 
   class SynchronizerFixture extends AkkaFixture {
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
-    val (node, syncInfo, mod, tx, peer, pchProbe, ncProbe, eventListener, modSerializer, deliveryTracker) = nodeViewSynchronizer
+    val (synchronizer, nodeViewHolder, syncInfo, mod, tx, peer, pchProbe, ncProbe, eventListener, modSerializer, deliveryTracker) = nodeViewSynchronizer
   }
 
   class Synchronizer2Fixture extends AkkaFixture {
@@ -215,7 +218,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // we check that in case of neighbour with empty history (it has no any blocks),
       // inv message with our block ids will be sent
-      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
@@ -228,6 +231,29 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
+  property("to be done") {
+    withFixture { ctx =>
+      import ctx._
+      // sync message with 2 common headers and 2 new headers
+      val sync = ErgoSyncInfoV2(chain.take(1002).headers.takeRight(4).reverse)
+      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
+
+      // send this sync msg to synchronizer which should apply the header following the common header
+      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      implicit val timeout: Timeout = Timeout(1.second)
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 200.millis)
+      eventually {
+        val hist =
+        Await.result(
+          nodeViewHolder.ask(GetNodeViewChanges(history = true, false, false, false))
+            .mapTo[ChangedHistory[ErgoHistoryReader]], 1.second
+        )
+        val expectedHeaderId = chain.take(1001).headers.last.id
+        hist.reader.bestHeaderOpt.get.id shouldBe expectedHeaderId
+      }
+    }
+  }
+
   property("NodeViewSynchronizer: receiving valid header") {
     withFixture { ctx =>
       import ctx._
@@ -236,7 +262,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       val olderChain = chain.take(1001)
       val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
       val modSpec = new ModifiersSpec(100)
-      node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+      synchronizer ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
       // desired state of submitting valid headers is Received
       eventually {
         deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
@@ -287,7 +313,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
       // sync message will consist of 4 headers
-      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
@@ -312,7 +338,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
       // sync message will consist of 4 headers
-      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
@@ -336,7 +362,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // we check that in case of neighbour with older history (it has more blocks),
       // invs (extension for the forked peer) will be sent to the peer
-      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>

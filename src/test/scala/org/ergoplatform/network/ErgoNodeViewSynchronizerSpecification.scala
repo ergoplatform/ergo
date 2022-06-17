@@ -248,31 +248,17 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       import ctx._
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
 
-      def sendHeader(header: Header): Unit = {
-        deliveryTracker.setRequested(Seq(header.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
-        val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
-        val modSpec = new ModifiersSpec(100)
-        synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
-      }
-
-      deliveryTracker.reset()
-
       // we generate and apply existing base chain
       val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
-      baseChain.headers.foreach(sendHeader)
-      val bestHeader =
-        eventually {
-          val bestHeaderOpt = hhistory.bestHeaderOpt
-          assert(bestHeaderOpt.nonEmpty)
-          bestHeaderOpt
-        }
+      baseChain.headers.foreach(hhistory.append)
+      val bestHeaderOpt = hhistory.bestHeaderOpt
 
       // then a continuation chain that will be part of the syncV2 message
-      val continuationChain = genHeaderChain(_.size > 4, bestHeader, hhistory.difficultyCalculator, None, false)
+      val continuationChain = genHeaderChain(_.size > 4, bestHeaderOpt, hhistory.difficultyCalculator, None, false)
 
       // sync message carries best header of our base change + continuation chain whose Head header is supposed to be applied
-      val sync = ErgoSyncInfoV2((bestHeader.get +: continuationChain.headers).reverse)
+      val sync = ErgoSyncInfoV2((bestHeaderOpt.get +: continuationChain.headers).reverse)
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
 
       // send this sync msg to synchronizer which should apply the header following the common header from base chain
@@ -303,16 +289,10 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       // so the depth of the rollback is 1, and the fork bypasses the best chain by 1 header
       val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
       val baseChain = genHeaderChain(_.size > 2, None, hhistory.difficultyCalculator, None, false)
-      baseChain.headers.foreach(sendHeader)
+      baseChain.headers.foreach(hhistory.append)
+      val parentOpt = hhistory.lastHeaders(2).headOption
 
-      val parent =
-        eventually {
-          val parentOpt = hhistory.lastHeaders(2).headOption
-          assert(parentOpt.nonEmpty)
-          parentOpt.get
-        }
-
-      val smallFork = genHeaderChain(_.size > 2, Some(parent), hhistory.difficultyCalculator, None, false)
+      val smallFork = genHeaderChain(_.size > 2, parentOpt, hhistory.difficultyCalculator, None, false)
       val secondForkHeader = smallFork.last
 
       sendHeader(secondForkHeader)

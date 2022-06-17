@@ -231,29 +231,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
-  property("to be done") {
-    withFixture { ctx =>
-      import ctx._
-      // sync message with 2 common headers and 2 new headers
-      val sync = ErgoSyncInfoV2(chain.take(1002).headers.takeRight(4).reverse)
-      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
-
-      // send this sync msg to synchronizer which should apply the header following the common header
-      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
-      implicit val timeout: Timeout = Timeout(1.second)
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 200.millis)
-      eventually {
-        val hist =
-        Await.result(
-          nodeViewHolder.ask(GetNodeViewChanges(history = true, false, false, false))
-            .mapTo[ChangedHistory[ErgoHistoryReader]], 1.second
-        )
-        val expectedHeaderId = chain.take(1001).headers.last.id
-        hist.reader.bestHeaderOpt.get.id shouldBe expectedHeaderId
-      }
-    }
-  }
-
   property("NodeViewSynchronizer: receiving valid header") {
     withFixture { ctx =>
       import ctx._
@@ -270,17 +247,62 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
+  property("NodeViewSynchronizer: continuation header should be applied from syncV2 message directly") {
+    withFixture2 { ctx =>
+      import ctx._
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
+
+      def sendHeader(header: Header): Unit = {
+        deliveryTracker.setRequested(Seq(header.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+        val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
+        val modSpec = new ModifiersSpec(100)
+        synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+      }
+
+      deliveryTracker.reset()
+
+      val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(sendHeader)
+      val bestHeader =
+        eventually {
+          val bestHeaderOpt = hhistory.bestHeaderOpt
+          assert(bestHeaderOpt.nonEmpty)
+          bestHeaderOpt
+        }
+
+      val continuationChain = genHeaderChain(_.size > 4, bestHeader, hhistory.difficultyCalculator, None, false)
+
+      // sync message with 2 common headers and 2 new headers
+      val sync = ErgoSyncInfoV2((bestHeader.get +: continuationChain.headers).reverse)
+      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
+
+      // send this sync msg to synchronizer which should apply the header following the common header
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      implicit val timeout: Timeout = Timeout(1.second)
+      eventually {
+        val hist =
+          Await.result(
+            nodeViewHolderMockRef.ask(GetNodeViewChanges(history = true, false, false, false))
+              .mapTo[ChangedHistory[ErgoHistoryReader]], 1.second
+          )
+        val expectedHeaderId = continuationChain.head.id
+        hist.reader.bestHeaderOpt.get.id shouldBe expectedHeaderId
+      }
+    }
+  }
+
   property("NodeViewSynchronizer: receiving out-of-order header should request it again") {
     withFixture2 { ctx =>
       import ctx._
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
 
-      def sendHeader(synchronizerRef: ActorRef,  header: Header): Unit = {
+      def sendHeader(header: Header): Unit = {
         deliveryTracker.setRequested(Seq(header.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
         val modSpec = new ModifiersSpec(100)
-        synchronizerRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+        synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
       }
 
       deliveryTracker.reset()
@@ -288,11 +310,20 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       // we generate fork of two headers, starting from the parent of the best header
       // so the depth of the rollback is 1, and the fork bypasses the best chain by 1 header
       val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
-      val parent = hhistory.lastHeaders(2).head
+      val baseChain = genHeaderChain(_.size > 2, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(sendHeader)
+
+      val parent =
+        eventually {
+          val parentOpt = hhistory.lastHeaders(2).headOption
+          assert(parentOpt.nonEmpty)
+          parentOpt.get
+        }
+
       val smallFork = genHeaderChain(_.size > 2, Some(parent), hhistory.difficultyCalculator, None, false)
       val secondForkHeader = smallFork.last
 
-      sendHeader(synchronizerMockRef, secondForkHeader)
+      sendHeader(secondForkHeader)
       // we submit header at best height + 1, but with parent not known, the status should  be unknown,
       // so after some time the header could be downloaded again (when the parent may be known)
       eventually {

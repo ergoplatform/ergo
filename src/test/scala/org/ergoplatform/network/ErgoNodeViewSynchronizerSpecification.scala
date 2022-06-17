@@ -6,8 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
-import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
@@ -30,9 +29,6 @@ import scorex.testkit.utils.AkkaFixture
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.language.postfixOps
-import akka.pattern.ask
-import akka.util.Timeout
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 
 class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matchers with Eventually {
 
@@ -261,6 +257,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       deliveryTracker.reset()
 
+      // we generate and apply existing base chain
       val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(sendHeader)
@@ -271,23 +268,18 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
           bestHeaderOpt
         }
 
+      // then a continuation chain that will be part of the syncV2 message
       val continuationChain = genHeaderChain(_.size > 4, bestHeader, hhistory.difficultyCalculator, None, false)
 
-      // sync message with 2 common headers and 2 new headers
+      // sync message carries best header of our base change + continuation chain whose Head header is supposed to be applied
       val sync = ErgoSyncInfoV2((bestHeader.get +: continuationChain.headers).reverse)
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
 
-      // send this sync msg to synchronizer which should apply the header following the common header
+      // send this sync msg to synchronizer which should apply the header following the common header from base chain
       synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
-      implicit val timeout: Timeout = Timeout(1.second)
       eventually {
-        val hist =
-          Await.result(
-            nodeViewHolderMockRef.ask(GetNodeViewChanges(history = true, false, false, false))
-              .mapTo[ChangedHistory[ErgoHistoryReader]], 1.second
-          )
         val expectedHeaderId = continuationChain.head.id
-        hist.reader.bestHeaderOpt.get.id shouldBe expectedHeaderId
+        hhistory.bestHeaderOpt.get.id shouldBe expectedHeaderId
       }
     }
   }

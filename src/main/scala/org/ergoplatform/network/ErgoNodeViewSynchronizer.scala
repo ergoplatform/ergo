@@ -357,9 +357,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2, hr: ErgoHistory): Unit =
-    hr.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
-      hr.applicableTry(continuationHeader) match {
+  /**
+    * Calculates new continuation header from syncInfo message if any, validates it and sends it
+    * to nodeViewHolder as a remote modifier for it to be applied
+    * @param syncInfo other's node sync info
+    */
+  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2, history: ErgoHistory): Unit =
+    history.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
+      history.applicableTry(continuationHeader) match {
         case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
           log.warn(s"Header from syncInfoV2 ${continuationHeader.encodedId} is invalid", e)
         case _ =>

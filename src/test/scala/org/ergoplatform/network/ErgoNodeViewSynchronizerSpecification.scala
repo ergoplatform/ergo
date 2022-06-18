@@ -243,7 +243,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
-  property("NodeViewSynchronizer: continuation header should be applied from syncV2 message directly") {
+  property("NodeViewSynchronizer: apply continuation header from syncV2 and download its block") {
     withFixture2 { ctx =>
       import ctx._
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
@@ -258,14 +258,35 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       val continuationChain = genHeaderChain(_.size > 4, bestHeaderOpt, hhistory.difficultyCalculator, None, false)
 
       // sync message carries best header of our base change + continuation chain whose Head header is supposed to be applied
-      val sync = ErgoSyncInfoV2((bestHeaderOpt.get +: continuationChain.headers).reverse)
+      val sync = ErgoSyncInfoV2(continuationChain.headers.reverse)
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
 
       // send this sync msg to synchronizer which should apply the header following the common header from base chain
       synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      val appliedHeader = continuationChain.headers(1)
+      // calculate block sections for applied header and test whether they were attempted to be downloaded from remote peer
+      var remainingSectionIds = hhistory.requiredModifiersForHeader(appliedHeader).groupBy(_._1).mapValues(_.map(_._2).head)
+      while (remainingSectionIds.nonEmpty) {
+        ncProbe.fishForMessage(3 seconds) { case m =>
+          m match {
+            case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.MessageCode =>
+              val invData = stn.message.data.get.asInstanceOf[InvData]
+              remainingSectionIds.exists { case (sectionTypeId, sectionId) =>
+                val sectionFound = invData.typeId == sectionTypeId && invData.ids.head == sectionId
+                if (sectionFound) {
+                  remainingSectionIds = remainingSectionIds - sectionTypeId
+                }
+                sectionFound
+              }
+            case _ =>
+              false
+          }
+        }
+      }
       eventually {
-        val expectedHeaderId = continuationChain.head.id
-        hhistory.bestHeaderOpt.get.id shouldBe expectedHeaderId
+        // test whether applied header was actually persisted to history
+        val hist = ErgoHistory.readOrGenerate(settings, timeProvider)
+        hist.bestHeaderIdOpt.get shouldBe appliedHeader.id
       }
     }
   }

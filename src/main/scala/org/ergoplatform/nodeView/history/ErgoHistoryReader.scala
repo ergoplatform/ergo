@@ -275,13 +275,12 @@ trait ErgoHistoryReader
     if (syncInfo.lastHeaders.isEmpty) {
       Option.empty
     } else {
-      // let's find most recent header that is common to our history
-      commonPoint(syncInfo.lastHeaders) match {
-        case Some(commonHeader) =>
-          // now let's find continuation header whose parent is the common header
-          syncInfo.lastHeaders.find(_.parentId == commonHeader.id)
-        case None =>
-          Option.empty
+      val lastHeader = syncInfo.lastHeaders.head
+      // let's find continuation header whose parent is our bestHeader
+      if (bestHeaderIdOpt.contains(lastHeader.parentId)) {
+        Some(lastHeader)
+      } else {
+        Option.empty
       }
     }
   }

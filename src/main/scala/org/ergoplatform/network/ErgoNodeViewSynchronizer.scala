@@ -339,6 +339,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
       case Older =>
         log.debug(s"Peer $remote is older, its height ${syncInfo.height}")
+        applyValidContinuationHeaderV2(syncInfo, hr, remote)
 
       case Equal =>
         // does nothing for `Equal`
@@ -350,6 +351,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       sendSyncToPeer(remote, ownSyncInfo)
     }
   }
+
+  /**
+    * Calculates new continuation header from syncInfo message if any, validates it and sends it
+    * to nodeViewHolder as a remote modifier for it to be applied
+    * @param syncInfo other's node sync info
+    */
+  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2, history: ErgoHistory, peer: ConnectedPeer): Unit =
+    history.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
+      history.applicableTry(continuationHeader) match {
+        case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
+          log.warn(s"Header from syncInfoV2 ${continuationHeader.encodedId} is invalid", e)
+        case _ =>
+          log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId} and downloading its block sections")
+          viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
+          val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
+          modifiersToDownload.foreach { case (modifierTypeId, modifierId) =>
+            downloadModifiers(Seq(modifierId), modifierTypeId, peer)
+          }
+      }
+    }
 
   /**
     * Headers should be downloaded from an Older node, it is triggered by received sync message from an older node
@@ -388,6 +409,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
+    * Set modifiers of particular type as Requested and download them from given peer and periodically check for delivery
+    */
+  private def downloadModifiers(modifierIds: Seq[ModifierId], modifierTypeId: ModifierTypeId, peer: ConnectedPeer): Unit = {
+    deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer)) { deliveryCheck =>
+      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+    }
+    val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
+    networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+  }
+
+  /**
     * Modifier download method that is given min/max constraints for modifiers to download from peers.
     * It sends requests for modifiers to given peers in optimally sized batches.
     * @param maxModifiers maximum modifiers to download
@@ -413,11 +445,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
         // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
         modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
-          deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer)) { deliveryCheck =>
-            context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
-          }
-          val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
-          networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+          downloadModifiers(modifierIds, modifierTypeId, peer)
         }
       }
 

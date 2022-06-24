@@ -2,6 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
@@ -124,7 +125,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   }
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
-  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM], DeliveryTracker) = {
+  (ActorRef, ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM], DeliveryTracker) = {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val h = localHistoryGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
@@ -166,12 +167,12 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     synchronizerMockRef ! ChangedHistory(history)
     synchronizerMockRef ! ChangedMempool(pool)
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
-    (synchronizerMockRef, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, eventListener, serializer, deliveryTracker)
+    (synchronizerMockRef, nodeViewHolderMockRef, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, eventListener, serializer, deliveryTracker)
   }
 
   class SynchronizerFixture extends AkkaFixture {
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
-    val (node, syncInfo, mod, tx, peer, pchProbe, ncProbe, eventListener, modSerializer, deliveryTracker) = nodeViewSynchronizer
+    val (synchronizer, nodeViewHolder, syncInfo, mod, tx, peer, pchProbe, ncProbe, eventListener, modSerializer, deliveryTracker) = nodeViewSynchronizer
   }
 
   class Synchronizer2Fixture extends AkkaFixture {
@@ -217,7 +218,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // we check that in case of neighbour with empty history (it has no any blocks),
       // inv message with our block ids will be sent
-      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
@@ -238,10 +239,58 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       val olderChain = chain.take(1001)
       val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
       val modSpec = new ModifiersSpec(100)
-      node ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+      synchronizer ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
       // desired state of submitting valid headers is Received
       eventually {
         deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: apply continuation header from syncV2 and download its block") {
+    withFixture2 { ctx =>
+      import ctx._
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
+
+      // we generate and apply existing base chain
+      val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+      val bestHeaderOpt = hhistory.bestHeaderOpt
+
+      // then a continuation chain that will be part of the syncV2 message
+      val continuationChain = genHeaderChain(_.size > 4, bestHeaderOpt, hhistory.difficultyCalculator, None, false).tail
+
+      // sync message carries best header of our base change + continuation chain whose Head header is supposed to be applied
+      val sync = ErgoSyncInfoV2(continuationChain.headers)
+      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
+
+      // send this sync msg to synchronizer which should apply the header following the common header from base chain
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      val appliedHeader = continuationChain.headers.head
+      // calculate block sections for applied header and test whether they were attempted to be downloaded from remote peer
+      var remainingSectionIds = hhistory.requiredModifiersForHeader(appliedHeader).groupBy(_._1).mapValues(_.map(_._2).head)
+      while (remainingSectionIds.nonEmpty) {
+        ncProbe.fishForMessage(3 seconds) { case m =>
+          m match {
+            case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.MessageCode =>
+              val invData = stn.message.data.get.asInstanceOf[InvData]
+              remainingSectionIds.exists { case (sectionTypeId, sectionId) =>
+                val sectionFound = invData.typeId == sectionTypeId && invData.ids.head == sectionId
+                if (sectionFound) {
+                  remainingSectionIds = remainingSectionIds - sectionTypeId
+                }
+                sectionFound
+              }
+            case _ =>
+              false
+          }
+        }
+      }
+      eventually {
+        // test whether applied header was actually persisted to history
+        val hist = ErgoHistory.readOrGenerate(settings, timeProvider)
+        hist.bestHeaderIdOpt.get shouldBe appliedHeader.id
       }
     }
   }
@@ -252,11 +301,11 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
 
-      def sendHeader(synchronizerRef: ActorRef,  header: Header): Unit = {
+      def sendHeader(header: Header): Unit = {
         deliveryTracker.setRequested(Seq(header.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
         val modSpec = new ModifiersSpec(100)
-        synchronizerRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+        synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
       }
 
       deliveryTracker.reset()
@@ -266,11 +315,11 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
       val newHeaders = genHeaderChain(2, hhistory, diffBitsOpt = None, useRealTs = false).headers
       val newHistory = newHeaders.foldLeft(hhistory) { case (hist, header) => hist.append(header).get._1 }
-      val parent = newHistory.lastHeaders(2).head
-      val smallFork = genHeaderChain(_.size > 2, Some(parent), newHistory.difficultyCalculator, None, false)
+      val parentOpt = newHistory.lastHeaders(2).headOption
+      val smallFork = genHeaderChain(_.size > 2, parentOpt, newHistory.difficultyCalculator, None, false)
       val secondForkHeader = smallFork.last
 
-      sendHeader(synchronizerMockRef, secondForkHeader)
+      sendHeader(secondForkHeader)
       // we submit header at best height + 1, but with parent not known, the status should  be unknown,
       // so after some time the header could be downloaded again (when the parent may be known)
       eventually {
@@ -348,7 +397,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
       // sync message will consist of 4 headers
-      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
@@ -373,7 +422,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
       // sync message will consist of 4 headers
-      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
@@ -397,7 +446,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // we check that in case of neighbour with older history (it has more blocks),
       // invs (extension for the forked peer) will be sent to the peer
-      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>

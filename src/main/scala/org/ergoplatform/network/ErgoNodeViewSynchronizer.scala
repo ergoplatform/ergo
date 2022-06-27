@@ -17,7 +17,6 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
-import scorex.core.app.Version
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.consensus.{HistoryReader, SyncInfo}
 import scorex.core.network.ModifiersStatus.Requested
@@ -173,11 +172,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Whether neighbour peer `remote` supports sync protocol V2.
     */
-  def syncV2Supported(remote: ConnectedPeer): Boolean = {
-    // If neighbour version is >= 4.0.16, the neighbour supports sync V2
-    val syncV2Version = Version(4, 0, 16)
-    remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
-  }
+  def syncV2Supported(remote: ConnectedPeer): Boolean = SyncV2Filter.condition(remote)
 
   /**
     * Send synchronization statuses to neighbour peers
@@ -344,6 +339,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
       case Older =>
         log.debug(s"Peer $remote is older, its height ${syncInfo.height}")
+        applyValidContinuationHeaderV2(syncInfo, hr, remote)
 
       case Equal =>
         // does nothing for `Equal`
@@ -355,6 +351,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       sendSyncToPeer(remote, ownSyncInfo)
     }
   }
+
+  /**
+    * Calculates new continuation header from syncInfo message if any, validates it and sends it
+    * to nodeViewHolder as a remote modifier for it to be applied
+    * @param syncInfo other's node sync info
+    */
+  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2, history: ErgoHistory, peer: ConnectedPeer): Unit =
+    history.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
+      history.applicableTry(continuationHeader) match {
+        case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
+          log.warn(s"Header from syncInfoV2 ${continuationHeader.encodedId} is invalid", e)
+        case _ =>
+          log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId} and downloading its block sections")
+          viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
+          val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
+          modifiersToDownload.foreach { case (modifierTypeId, modifierId) =>
+            downloadModifiers(Seq(modifierId), modifierTypeId, peer)
+          }
+      }
+    }
 
   /**
     * Headers should be downloaded from an Older node, it is triggered by received sync message from an older node
@@ -384,21 +400,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }.map { case (syncState, peers) =>
         val peersFiltered =
           if (settings.nodeSettings.stateType == StateType.Digest) {
-            // 4.0.21.1 allows for downloading ADProofs that are too big in block at 667614
-            val requiredVersion = Version(4, 0, 22)
-            peers.filter { cp =>
-              val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
-              version.compare(requiredVersion) >= 0
-            }
+            DigestModeFilter.filter(peers)
           } else {
-            // filter out peers of 4.0.17 or 4.0.18 version as they are delivering broken modifiers
-            peers.filterNot { cp =>
-              val version = cp.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
-              version == Version.v4017 || version == Version.v4018
-            }
+            BrokenModifiersFilter.filter(peers)
           }
         syncState -> peersFiltered
       }
+  }
+
+  /**
+    * Set modifiers of particular type as Requested and download them from given peer and periodically check for delivery
+    */
+  private def downloadModifiers(modifierIds: Seq[ModifierId], modifierTypeId: ModifierTypeId, peer: ConnectedPeer): Unit = {
+    deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer)) { deliveryCheck =>
+      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+    }
+    val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
+    networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
 
   /**
@@ -427,11 +445,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
         // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
         modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
-          deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer)) { deliveryCheck =>
-            context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
-          }
-          val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
-          networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+          downloadModifiers(modifierIds, modifierTypeId, peer)
         }
       }
 
@@ -495,6 +509,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                             remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
       if (typeId == Transaction.ModifierTypeId && bytes.length > settings.nodeSettings.maxTransactionSize) {
+        deliveryTracker.setInvalid(id, typeId)
         penalizeMisbehavingPeer(remote)
         log.warn(s"Transaction size ${bytes.length} from ${remote.toString} exceeds limit ${settings.nodeSettings.maxTransactionSize}")
         None

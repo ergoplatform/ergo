@@ -62,7 +62,7 @@ class CandidateGenerator(
   /** Send solved block to local blockchain controller */
   private def sendToNodeView(newBlock: ErgoFullBlock): Unit = {
     log.info(
-      s"New block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
+      s"New block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n.toArray)}"
     )
     viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
     val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {

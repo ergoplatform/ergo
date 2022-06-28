@@ -132,7 +132,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val pkBytes = groupElemToBytes(s.pk)
     val wBytes = groupElemToBytes(s.w)
 
-    val seed = Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
+    val seed = Bytes.concat(msg, nonce.toArray) // Autolykos v1, Alg. 2, line4: m || nonce
     val indexes = genIndexes(seed, N)
 
     //height is not used in v1
@@ -159,10 +159,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     val N = calcN(header)
 
-    val prei8 = BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(msg, nonce)).takeRight(8))
+    val prei8 = BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(msg, nonce.toArray)).takeRight(8))
     val i = BigIntegers.asUnsignedByteArray(4, prei8.mod(BigInt(N).underlying()))
     val f = Blake2b256(Bytes.concat(i, h, M)).drop(1) // .drop(1) is the same as takeRight(31)
-    val seed = Bytes.concat(f, msg, nonce) // Autolykos v1, Alg. 2, line4:
+    val seed = Bytes.concat(f, msg, nonce.toArray) // Autolykos v1, Alg. 2, line4:
 
     val indexes = genIndexes(seed, N)
     //pk and w not used in v2

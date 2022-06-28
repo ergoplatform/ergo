@@ -11,6 +11,8 @@ import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
+import scala.collection.mutable
+
 /**
   * Solution for an Autolykos PoW puzzle.
   *
@@ -24,7 +26,7 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
   */
 case class AutolykosSolution(pk: EcPointType,
                              w: EcPointType,
-                             n: Array[Byte],
+                             n: mutable.WrappedArray[Byte],
                              d: BigInt) {
   val encodedPk: Array[Byte] = groupElemToBytes(pk)
 }
@@ -39,7 +41,7 @@ object AutolykosSolution extends ApiCodecs {
     Map(
       "pk" -> s.pk.asJson,
       "w" -> s.w.asJson,
-      "n" -> Algos.encode(s.n).asJson,
+      "n" -> Algos.encode(s.n.toArray).asJson,
       "d" -> s.d.asJson(bigIntEncoder)
     ).asJson
   }
@@ -48,7 +50,7 @@ object AutolykosSolution extends ApiCodecs {
     for {
       pkOpt <- c.downField("pk").as[Option[EcPointType]]
       wOpt <- c.downField("w").as[Option[EcPointType]]
-      n <- c.downField("n").as[Array[Byte]]
+      n <- c.downField("n").as[mutable.WrappedArray[Byte]]
       dOpt <- c.downField("d").as[Option[BigInt]]
     } yield {
       AutolykosSolution(pkOpt.getOrElse(pkForV2), wOpt.getOrElse(wForV2), n, dOpt.getOrElse(dForV2))
@@ -69,7 +71,7 @@ class AutolykosV1SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
     w.putBytes(groupElemToBytes(obj.pk))
     w.putBytes(groupElemToBytes(obj.w))
     require(obj.n.length == 8) // non-consensus check on prover side
-    w.putBytes(obj.n)
+    w.putBytes(obj.n.toArray)
     w.putUByte(dBytes.length)
     w.putBytes(dBytes)
   }
@@ -95,7 +97,7 @@ class AutolykosV2SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
   override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
     w.putBytes(groupElemToBytes(obj.pk))
     require(obj.n.length == 8) // non-consensus check on prover side
-    w.putBytes(obj.n)
+    w.putBytes(obj.n.toArray)
   }
 
   override def parse(r: Reader): AutolykosSolution = {

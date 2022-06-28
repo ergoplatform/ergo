@@ -109,7 +109,7 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
 
     Base16.encode(groupElemToBytes(header.powSolution.pk)) shouldBe "03bedaee069ff4829500b3c07c4d5fe6b3ea3d3bf76c5c28c1d4dcdb1bed0ade0c"
 
-    Base16.encode(header.powSolution.n) shouldBe "0000000000003105"
+    Base16.encode(header.powSolution.n.toArray) shouldBe "0000000000003105"
 
     pow.validate(header) shouldBe 'success
   }

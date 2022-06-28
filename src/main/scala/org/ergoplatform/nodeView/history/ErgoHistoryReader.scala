@@ -105,7 +105,13 @@ trait ErgoHistoryReader
     */
   private def commonPoint(headers: Seq[Header]): Option[Header] = {
     headers.find { h =>
-      contains(h.id)
+      contains(h.id) &&
+        historyStorage.modifierById(h.id).exists {
+          case Header(_, _, _, _, _, _, _, _, _, pow, _, _) =>
+            h.powSolution == pow
+          case _ =>
+            false
+        }
     }
   }
 
@@ -140,14 +146,15 @@ trait ErgoHistoryReader
         Younger
       } else {
         val myHeight = myLastHeader.height
+        val myPow = myLastHeader.powSolution
 
         val otherHeaders = info.lastHeaders
         val otherLastHeader = otherHeaders.head // always available
         val otherHeight = otherLastHeader.height
-        // todo: check PoW of otherLastHeader
+        val otherPow = otherLastHeader.powSolution
 
         if (otherHeight == myHeight) {
-          if (otherLastHeader.id == myLastHeader.id) {
+          if (otherLastHeader.id == myLastHeader.id && otherPow == myPow) {
             // Last headers are the same => chains are equal
             Equal
           } else {

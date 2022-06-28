@@ -25,7 +25,7 @@ class HeadersSpec extends ErgoPropertyTest {
       header.copy(nBits = header.nBits + 1).id should not equal initialId
       header.copy(height = header.height + 1).id should not equal initialId
       header.copy(extensionRoot = Blake2b256(header.extensionRoot)).id should not equal initialId
-      header.copy(powSolution = header.powSolution.copy(n = mutateNonce(header.powSolution.n))).id should not equal initialId
+      header.copy(powSolution = header.powSolution.copy(n = mutateNonce(header.powSolution.n.toArray))).id should not equal initialId
       if(header.version == 1) {
         header.copy(powSolution = header.powSolution.copy(d = header.powSolution.d + 1)).id should not equal initialId
       }

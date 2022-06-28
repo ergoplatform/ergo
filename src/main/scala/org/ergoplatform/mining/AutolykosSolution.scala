@@ -50,7 +50,7 @@ object AutolykosSolution extends ApiCodecs {
     for {
       pkOpt <- c.downField("pk").as[Option[EcPointType]]
       wOpt <- c.downField("w").as[Option[EcPointType]]
-      n <- c.downField("n").as[mutable.WrappedArray[Byte]]
+      n <- c.downField("n").as[Array[Byte]]
       dOpt <- c.downField("d").as[Option[BigInt]]
     } yield {
       AutolykosSolution(pkOpt.getOrElse(pkForV2), wOpt.getOrElse(wForV2), n, dOpt.getOrElse(dForV2))

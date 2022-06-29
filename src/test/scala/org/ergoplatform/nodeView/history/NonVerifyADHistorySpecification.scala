@@ -123,6 +123,28 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     history.compare(getInfoV2(fork2.tail)) shouldBe Older
   }
 
+  property("Consider chain properties like PoW in headers") {
+    var history = genHistory()
+
+    // generate common chain prefix
+    val common = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
+    history = applyHeaderChain(history, common)
+
+    val equalFork = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
+
+    history = applyHeaderChain(history, equalFork.tail)
+    history.bestHeaderOpt.get shouldBe equalFork.last
+
+    // identical header chain should be Equal
+    history.compare(ErgoSyncInfoV2(equalFork.headers.reverse)) shouldBe Equal
+
+    // identical header chain with modified PoW of last header should be considered a Fork
+    val equalForkHeader = equalFork.last
+    val differentHeader = equalForkHeader.copy(powSolution = equalForkHeader.powSolution.copy(d = 12345))
+    val forkWithInvalidPow = equalFork.headers.dropRight(1) :+ differentHeader
+    history.compare(ErgoSyncInfoV2(forkWithInvalidPow.reverse)) shouldBe Fork
+  }
+
   property("continuationIds() on forks") {
     var history1 = genHistory()
     var history2 = genHistory()

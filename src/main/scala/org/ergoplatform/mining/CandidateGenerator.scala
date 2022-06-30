@@ -378,6 +378,10 @@ object CandidateGenerator extends ScorexLogging {
     }
   }
 
+  private def forkOrdered(ergoSettings: ErgoSettings, height: Height): Boolean = {
+    ergoSettings.votingTargets.softFork != 0 && height >= 4096
+  }
+
   /**
     * Assemble correct block candidate based on
     *
@@ -435,8 +439,7 @@ object CandidateGenerator extends ScorexLogging {
           val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
             .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
           val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
-          val forkOrdered       = ergoSettings.votingTargets.softFork != 0
-          val voteForFork       = betterVersion && forkOrdered && forkVotingAllowed
+          val voteForFork       = betterVersion && forkVotingAllowed && forkOrdered(ergoSettings, newHeight)
 
           if (newHeight % votingSettings.votingLength == 0 && newHeight > 0) {
             val (newParams, activatedUpdate) = currentParams.update(

@@ -73,13 +73,25 @@ class NetworkController(scorexSettings: ScorexSettings,
   //bind to listen incoming connections
   tcpManager ! Bind(self, bindAddress, options = Nil, pullMode = false)
 
-  override def receive: Receive =
+  override def receive: Receive = {
     bindingLogic orElse
       businessLogic orElse
       peerCommands orElse
       connectionEvents orElse
       interfaceCalls orElse
       nonsense
+  }
+
+  override def postRestart(reason: Throwable): Unit = {
+    log.error(s"Network controller restarted due to ${reason.getMessage}", reason)
+    super.postRestart(reason)
+  }
+
+  override def postStop(): Unit = {
+    log.warn("Network controller stopped")
+    super.postStop()
+  }
+
 
   private def bindingLogic: Receive = {
     case Bound(_) =>
@@ -541,26 +553,6 @@ object NetworkControllerRef {
             scorexContext: ScorexContext,
             tcpManager: ActorRef)(implicit ec: ExecutionContext): Props = {
     Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager))
-  }
-
-  def apply(settings: ScorexSettings,
-            peerManagerRef: ActorRef,
-            scorexContext: ScorexContext)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
-    system.actorOf(
-      props(settings, peerManagerRef, scorexContext, IO(Tcp))
-    )
-  }
-
-  def apply(name: String,
-            settings: ScorexSettings,
-            peerManagerRef: ActorRef,
-            scorexContext: ScorexContext,
-            tcpManager: ActorRef)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
-    system.actorOf(
-      props(settings, peerManagerRef, scorexContext, tcpManager),
-      name)
   }
 
   def apply(name: String,

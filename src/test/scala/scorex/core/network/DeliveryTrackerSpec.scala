@@ -17,20 +17,27 @@ class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {
       val mid: ModifierId = ModifierId @@ "foo"
       val mTypeId: ModifierTypeId = ModifierTypeId @@ (104: Byte)
       tracker.setRequested(Seq(mid), mTypeId, Some(peer)) { _ => Cancellable.alreadyCancelled}
+      val infoFields =
+        Seq(
+          "address" -> peer.connectionId.remoteAddress.toString.asJson,
+          "checks" -> 0.asJson
+        ) ++ peer.peerInfo.map(_.peerSpec.protocolVersion.toString.asJson).map("version" -> _)
       tracker.fullInfo.asJson shouldBe Json.obj(
         "invalidModifierApproxSize" -> 0.asJson,
         "requested" -> Json.obj(
           "104" -> Json.obj(
-            "foo" -> Json.obj(
-              "address" -> peer.connectionId.remoteAddress.toString.asJson,
-              "checks" -> 0.asJson
-            )
+            "foo" -> Json.obj(infoFields:_*)
           )
         ),
         "received" -> Json.obj()
       )
 
       tracker.setReceived(mid, mTypeId, peer)
+      val infoFields2 =
+        Seq(
+          "address" -> peer.connectionId.remoteAddress.toString.asJson
+        ) ++ peer.peerInfo.map(_.peerSpec.protocolVersion.toString.asJson).map("version" -> _)
+
       tracker.fullInfo.asJson shouldBe Json.obj(
         "invalidModifierApproxSize" -> 0.asJson,
         "requested" -> Json.obj(
@@ -38,9 +45,7 @@ class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {
         ),
         "received" -> Json.obj(
           "104" -> Json.obj(
-            "foo" -> Json.obj(
-              "address" -> peer.connectionId.remoteAddress.toString.asJson
-            )
+            "foo" -> Json.obj(infoFields2:_*)
           ),
         )
       )

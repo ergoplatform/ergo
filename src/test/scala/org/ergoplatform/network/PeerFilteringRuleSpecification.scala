@@ -11,7 +11,7 @@ class PeerFilteringRuleSpecification extends ErgoPropertyTest {
 
   private def peerWithVersion(version: Version): ConnectedPeer = {
     val ref = ActorRef.noSender
-    val peerSpec = PeerSpec("", version, "", None, Seq.empty)
+    val peerSpec = PeerSpec("", version, "", None, Seq.empty, None)
     val peerInfo = PeerInfo(peerSpec, lastHandshake = 0L, None)
     ConnectedPeer(ConnectionId(null, null, null), ref, lastMessage = 0L, Some(peerInfo))
   }

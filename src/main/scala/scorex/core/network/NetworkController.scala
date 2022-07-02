@@ -12,7 +12,7 @@ import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message.{Message, MessageSpec}
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
 import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, SessionIdPeerFeature}
-import scorex.core.settings.NetworkSettings
+import scorex.core.settings.ScorexSettings
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.{NetworkUtils, TimeProvider}
 import scorex.util.ScorexLogging
@@ -25,7 +25,7 @@ import scala.util.{Random, Try}
   * Control all network interaction
   * must be singleton
   */
-class NetworkController(settings: NetworkSettings,
+class NetworkController(scorexSettings: ScorexSettings,
                         peerManagerRef: ActorRef,
                         scorexContext: ScorexContext,
                         tcpManager: ActorRef
@@ -48,16 +48,17 @@ class NetworkController(settings: NetworkSettings,
       Restart
   }
 
-  private implicit val timeout: Timeout = Timeout(settings.controllerTimeout.getOrElse(5.seconds))
+  private val networkSettings = scorexSettings.network
+  private implicit val timeout: Timeout = Timeout(networkSettings.controllerTimeout.getOrElse(5.seconds))
 
   private var messageHandlers = Map.empty[MessageCode, ActorRef]
 
-  private lazy val bindAddress = settings.bindAddress
+  private lazy val bindAddress = networkSettings.bindAddress
 
   private var connections = Map.empty[InetSocketAddress, ConnectedPeer]
   private var unconfirmedConnections = Set.empty[InetSocketAddress]
 
-  private val mySessionIdFeature = SessionIdPeerFeature(settings.magicBytes)
+  private val mySessionIdFeature = SessionIdPeerFeature(networkSettings.magicBytes)
   /**
     * Storing timestamp of a last message got via p2p network.
     * Used to check whether connectivity is lost.
@@ -94,13 +95,13 @@ class NetworkController(settings: NetworkSettings,
 
   private def bindingLogic: Receive = {
     case Bound(_) =>
-      log.info("Successfully bound to the port " + settings.bindAddress.getPort)
+      log.info("Successfully bound to the port " + networkSettings.bindAddress.getPort)
       scheduleConnectionToPeer()
       scheduleDroppingDeadConnections()
       scheduleEvictRandomConnections()
 
     case CommandFailed(_: Bind) =>
-      log.error("Network port " + settings.bindAddress.getPort + " already in use!")
+      log.error("Network port " + networkSettings.bindAddress.getPort + " already in use!")
       java.lang.System.exit(1) // Terminate node if port is in use
       context stop self
   }
@@ -187,7 +188,7 @@ class NetworkController(settings: NetworkSettings,
       // connectivity is not lost thus we're removing the peer
       // we add multiplier 6 to remove more dead peers (and still not dropping a lot when connectivity lost)
       val noNetworkMessagesFor = networkTime() - lastIncomingMessageTime
-      if (noNetworkMessagesFor < settings.connectionTimeout.toMillis * 6) {
+      if (noNetworkMessagesFor < networkSettings.connectionTimeout.toMillis * 6) {
         peerManagerRef ! RemovePeer(c.remoteAddress)
       }
 
@@ -233,7 +234,7 @@ class NetworkController(settings: NetworkSettings,
     */
   private def scheduleConnectionToPeer(): Unit = {
     context.system.scheduler.scheduleWithFixedDelay(5.seconds, 5.seconds) {
-      () => if (connections.size < settings.maxConnections) {
+      () => if (connections.size < networkSettings.maxConnections) {
         log.debug(s"Looking for a new random connection")
         val randomPeerF = peerManagerRef ? RandomPeerExcluding(connections.values.flatMap(_.peerInfo).toSeq)
         randomPeerF.mapTo[Option[PeerInfo]].foreach { peerInfoOpt =>
@@ -254,7 +255,7 @@ class NetworkController(settings: NetworkSettings,
     */
   private def scheduleEvictRandomConnections(): Unit = {
    val evictionThreshold = 5
-   context.system.scheduler.scheduleWithFixedDelay(settings.peerEvictionInterval, settings.peerEvictionInterval) {
+   context.system.scheduler.scheduleWithFixedDelay(networkSettings.peerEvictionInterval, networkSettings.peerEvictionInterval) {
      () =>
        val connectedPeers = connections.values.filter(_.peerInfo.nonEmpty).toSeq
        if (connectedPeers.length >= evictionThreshold) {
@@ -277,7 +278,7 @@ class NetworkController(settings: NetworkSettings,
         val now = networkTime()
         connections.values.foreach { cp =>
           val lastSeen = cp.lastMessage
-          val timeout = settings.inactiveConnectionDeadline.toMillis
+          val timeout = networkSettings.inactiveConnectionDeadline.toMillis
           val delta = now - lastSeen
           if (delta > timeout) {
             log.info(s"Dropping connection with ${cp.peerInfo}, last seen ${delta / 1000.0} seconds ago")
@@ -302,7 +303,7 @@ class NetworkController(settings: NetworkSettings,
           tcpManager ! Connect(
             remoteAddress = remote,
             options = Nil,
-            timeout = Some(settings.connectionTimeout),
+            timeout = Some(networkSettings.connectionTimeout),
             pullMode = true
           )
         } else {
@@ -333,7 +334,7 @@ class NetworkController(settings: NetworkSettings,
       connectionId.remoteAddress.getAddress.isLoopbackAddress
     val mandatoryFeatures = scorexContext.features :+ mySessionIdFeature
     val peerFeatures = if (isLocal) {
-      val la = new InetSocketAddress(connectionId.localAddress.getAddress, settings.bindAddress.getPort)
+      val la = new InetSocketAddress(connectionId.localAddress.getAddress, networkSettings.bindAddress.getPort)
       val localAddrFeature = LocalAddressPeerFeature(la)
       mandatoryFeatures :+ localAddrFeature
     } else {
@@ -346,7 +347,7 @@ class NetworkController(settings: NetworkSettings,
 
     val connectionDescription = ConnectionDescription(connection, connectionId, selfAddressOpt, peerFeatures)
 
-    val handlerProps: Props = PeerConnectionHandlerRef.props(settings, self, scorexContext, connectionDescription)
+    val handlerProps: Props = PeerConnectionHandlerRef.props(scorexSettings, self, scorexContext, connectionDescription)
 
     val handler = context.actorOf(handlerProps) // launch connection handler
     context.watch(handler)
@@ -462,10 +463,10 @@ class NetworkController(settings: NetworkSettings,
 
       case None =>
         if (!localAddr.isSiteLocalAddress && !localAddr.isLoopbackAddress
-          && localSocketAddress.getPort == settings.bindAddress.getPort) {
+          && localSocketAddress.getPort == networkSettings.bindAddress.getPort) {
           Some(localSocketAddress)
         } else {
-          val listenAddrs = NetworkUtils.getListenAddresses(settings.bindAddress)
+          val listenAddrs = NetworkUtils.getListenAddresses(networkSettings.bindAddress)
             .filterNot(addr => addr.getAddress.isSiteLocalAddress || addr.getAddress.isLoopbackAddress)
 
           listenAddrs.find(addr => localAddr == addr.getAddress).orElse(listenAddrs.headOption)
@@ -474,8 +475,8 @@ class NetworkController(settings: NetworkSettings,
   }
 
   private def validateDeclaredAddress(): Unit = {
-    if (!settings.localOnly) {
-      settings.declaredAddress.foreach { mySocketAddress =>
+    if (!networkSettings.localOnly) {
+      networkSettings.declaredAddress.foreach { mySocketAddress =>
         Try {
           val uri = new URI("http://" + mySocketAddress)
           val myHost = uri.getHost
@@ -547,7 +548,7 @@ object NetworkController {
 }
 
 object NetworkControllerRef {
-  def props(settings: NetworkSettings,
+  def props(settings: ScorexSettings,
             peerManagerRef: ActorRef,
             scorexContext: ScorexContext,
             tcpManager: ActorRef)(implicit ec: ExecutionContext): Props = {
@@ -555,7 +556,7 @@ object NetworkControllerRef {
   }
 
   def apply(name: String,
-            settings: NetworkSettings,
+            settings: ScorexSettings,
             peerManagerRef: ActorRef,
             scorexContext: ScorexContext)
            (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {

@@ -369,7 +369,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           modifiersToDownload.foreach {
             case (modifierTypeId, modifierId) =>
               if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
-                log.info(s"Downloading block sections for header ${continuationHeader.encodedId}")
+                log.info(s"Downloading block section for header ${continuationHeader.encodedId} : ($modifierId, $modifierTypeId)")
                 downloadModifiers(Seq(modifierId), modifierTypeId, peer)
               }
           }

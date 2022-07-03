@@ -21,6 +21,7 @@ import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
 import scorex.core.network.peer.PeersStatus
 
+import java.net.URL
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
@@ -67,7 +68,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     lastIncomingMessageTime = networkTime(),
     None,
     LaunchParameters,
-    eip27Supported = true)
+    eip27Supported = true,
+    settings.scorexSettings.restApi.publicUrl)
 
   override def receive: Receive =
     onConnectedPeers orElse
@@ -193,13 +195,16 @@ object ErgoStatsCollector {
                       lastIncomingMessageTime: Long,
                       genesisBlockIdOpt: Option[String],
                       parameters: Parameters,
-                      eip27Supported: Boolean)
+                      eip27Supported: Boolean,
+                      restApiUrl: Option[URL])
 
   object NodeInfo extends ApiCodecs {
     implicit val paramsEncoder: Encoder[Parameters] = org.ergoplatform.settings.ParametersSerializer.jsonEncoder
 
-    implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) =>
-      Map(
+    implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) => {
+      val optionalFields =
+        ni.restApiUrl.map(_.toString).map(restApiUrl => Map("restApiUrl" -> restApiUrl.asJson)).getOrElse(Map.empty)
+      (Map(
         "name" -> ni.nodeName.asJson,
         "appVersion" -> Version.VersionString.asJson,
         "network" -> ni.network.asJson,
@@ -223,7 +228,8 @@ object ErgoStatsCollector {
         "genesisBlockId" -> ni.genesisBlockIdOpt.asJson,
         "parameters" -> ni.parameters.asJson,
         "eip27Supported" -> ni.eip27Supported.asJson
-      ).asJson
+      ) ++ optionalFields).asJson
+    }
   }
 
 }

@@ -59,7 +59,8 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
             lastMessage = con.lastMessage,
             lastHandshake = peerInfo.lastHandshake,
             name = peerInfo.peerSpec.nodeName,
-            connectionType = peerInfo.connectionType.map(_.toString)
+            connectionType = peerInfo.connectionType.map(_.toString),
+            restApiUrl = peerInfo.peerSpec.restApiUrl.map(_.toString)
           )
         }
       }
@@ -116,7 +117,8 @@ object ErgoPeersApiRoute {
                               lastMessage: Long,
                               lastHandshake: Long,
                               name: String,
-                              connectionType: Option[String])
+                              connectionType: Option[String],
+                              restApiUrl: Option[String])
 
   object PeerInfoResponse {
     def fromAddressAndInfo(address: InetSocketAddress, peerInfo: PeerInfo): PeerInfoResponse = PeerInfoResponse(
@@ -124,16 +126,20 @@ object ErgoPeersApiRoute {
       0,
       peerInfo.lastHandshake,
       peerInfo.peerSpec.nodeName,
-      peerInfo.connectionType.map(_.toString)
+      peerInfo.connectionType.map(_.toString),
+      peerInfo.peerSpec.restApiUrl.map(_.toString)
     )
+
+    @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
+    implicit val encodePeerInfoResponse: Encoder[PeerInfoResponse] =
+      deriveEncoder[PeerInfoResponse].mapJsonObject { jsonObj =>
+        jsonObj.filter { case (_, v) => !v.isNull }
+      }
   }
 
   case class PeersStatusResponse(lastIncomingMessage: Long, currentSystemTime: Long)
 
   case class BlacklistedPeers(addresses: Seq[String])
-
-  @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
-  implicit val encodePeerInfoResponse: Encoder[PeerInfoResponse] = deriveEncoder
 
   @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
   implicit val encodeBlackListedPeers: Encoder[BlacklistedPeers] = deriveEncoder

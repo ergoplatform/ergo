@@ -109,7 +109,8 @@ trait ErgoTestConstants extends ScorexLogging {
     Version(settings.scorexSettings.network.appVersion),
     settings.scorexSettings.network.nodeName,
     None,
-    Seq.empty
+    Seq.empty,
+    None
   )
 
 }

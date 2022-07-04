@@ -11,9 +11,8 @@ import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.NodeViewComponent
-import scorex.core.consensus.{ContainsModifiers, ModifierSemanticValidity}
-import scorex.core.consensus.History._
+import scorex.core.{ModifierTypeId, NodeViewComponent}
+import scorex.core.consensus.{ContainsModifiers, Equal, Fork, HistoryComparisonResult, ModifierSemanticValidity, Older, Unknown, Younger}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
@@ -21,7 +20,6 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
 import scala.util.{Failure, Try}
-import scorex.core.consensus.History._
 
 /**
   * Read-only copy of ErgoHistory
@@ -35,6 +33,8 @@ trait ErgoHistoryReader
     with BlockSectionProcessor
     with ScorexLogging
     with ScorexEncoding {
+
+  type ModifierIds = Seq[(ModifierTypeId, ModifierId)]
 
   protected[history] val historyStorage: HistoryStorage
 

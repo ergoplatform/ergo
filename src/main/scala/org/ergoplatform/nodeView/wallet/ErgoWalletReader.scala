@@ -18,14 +18,14 @@ import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import scorex.core.transaction.wallet.VaultReader
+import scorex.core.NodeViewComponent
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
 
 import scala.concurrent.Future
 import scala.util.Try
 
-trait ErgoWalletReader extends VaultReader {
+trait ErgoWalletReader extends NodeViewComponent {
 
   val walletActor: ActorRef
 

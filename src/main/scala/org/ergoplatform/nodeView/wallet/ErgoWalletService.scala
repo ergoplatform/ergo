@@ -4,7 +4,7 @@ import cats.implicits._
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
@@ -457,6 +457,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
           case Some(prover) =>
               prover.sign(unsignedTx, inputs, dataInputs, state.stateContext, TransactionHintsBag.empty)
                 .map(ErgoTransaction.apply)
+                .map(UnconfirmedTransaction.apply)
                 .fold(
                   e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)),
                   tx => Success(tx))

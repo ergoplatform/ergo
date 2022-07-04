@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
@@ -27,22 +27,23 @@ import scala.util.Try
   */
 class ErgoMemPool private[mempool](pool: OrderedTxPool,
                                    private[mempool] val stats : MemPoolStatistics)(implicit settings: ErgoSettings)
-  extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader with ScorexLogging {
+  extends MemoryPool[UnconfirmedTransaction, ErgoMemPool] with ErgoMemPoolReader with ScorexLogging {
 
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
+
 
   private val nodeSettings: NodeConfigurationSettings = settings.nodeSettings
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
 
   override def size: Int = pool.size
 
-  override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = pool.get(modifierId)
+  override def modifierById(modifierId: ModifierId): Option[UnconfirmedTransaction] = pool.get(modifierId)
 
-  override def take(limit: Int): Iterable[ErgoTransaction] = pool.orderedTransactions.values.take(limit)
+  override def take(limit: Int): Iterable[UnconfirmedTransaction] = pool.orderedTransactions.values.take(limit)
 
-  def random(limit: Int): Iterable[ErgoTransaction] = {
-    val result = mutable.WrappedArray.newBuilder[ErgoTransaction]
+  def random(limit: Int): Iterable[UnconfirmedTransaction] = {
+    val result = mutable.WrappedArray.newBuilder[UnconfirmedTransaction]
     val txSeq = pool.orderedTransactions.values.to[Vector]
     val total = txSeq.size
     val start = if (total <= limit) {
@@ -61,34 +62,35 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
     result.result()
   }
 
-  override def getAll: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
+  override def getAll: Seq[UnconfirmedTransaction] = pool.orderedTransactions.values.toSeq
 
-  override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(pool.get)
+  override def getAll(ids: Seq[ModifierId]): Seq[UnconfirmedTransaction] = ids.flatMap(pool.get)
 
   /**
     * Returns all transactions resided in pool sorted by weight in descending order
     */
-  override def getAllPrioritized: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
+  override def getAllPrioritized: Seq[UnconfirmedTransaction] = pool.orderedTransactions.values.toSeq
 
-  override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
+  override def put(unconfirmedTx: UnconfirmedTransaction): Try[ErgoMemPool] = put(Seq(unconfirmedTx))
 
-  override def put(txs: Iterable[ErgoTransaction]): Try[ErgoMemPool] = Try {
-    putWithoutCheck(txs.filterNot(tx => pool.contains(tx.id)))
+  override def put(unconfirmedTxs: Iterable[UnconfirmedTransaction]): Try[ErgoMemPool] = Try {
+    putWithoutCheck(unconfirmedTxs.filterNot(unconfirmedTx => pool.contains(unconfirmedTx.transaction.id)))
   }
 
-  override def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
+  override def putWithoutCheck(txs: Iterable[UnconfirmedTransaction]): ErgoMemPool = {
     val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx) }
     new ErgoMemPool(updatedPool, stats)
   }
 
-  override def remove(tx: ErgoTransaction): ErgoMemPool = {
+  override def remove(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
+    val tx = unconfirmedTransaction.transaction
     val wtx = pool.transactionsRegistry.get(tx.id)
     val updStats = wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
       .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
-    new ErgoMemPool(pool.remove(tx), updStats)
+    new ErgoMemPool(pool.remove(unconfirmedTransaction), updStats)
   }
 
-  override def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
+  override def filter(condition: UnconfirmedTransaction => Boolean): ErgoMemPool = {
     new ErgoMemPool(pool.filter(condition), stats)
   }
 
@@ -97,8 +99,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
     *
     * @param tx - Transaction to invalidate
     */
-  def invalidate(tx: ErgoTransaction): ErgoMemPool = {
-    new ErgoMemPool(pool.invalidate(tx), stats)
+  def invalidate(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
+    new ErgoMemPool(pool.invalidate(unconfirmedTransaction), stats)
   }
 
   /**
@@ -109,7 +111,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
   // Check if transaction is double-spending inputs spent in the mempool.
   // If so, the new transacting is replacing older ones if it has bigger weight (fee/byte) than them on average.
   // Otherwise, the new transaction being rejected.
-  private def acceptIfNoDoubleSpend(tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) = {
+  private def acceptIfNoDoubleSpend(unconfirmedTransaction: UnconfirmedTransaction): (ErgoMemPool, ProcessingOutcome) = {
+    val tx = unconfirmedTransaction.transaction
     val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
       pool.inputs.get(inp.boxId)
     }.toSet
@@ -119,25 +122,25 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
       val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum / doubleSpendingWtxs.size
       if (ownWtx.weight > doubleSpendingTotalWeight) {
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
-        new ErgoMemPool(pool.put(tx).remove(doubleSpendingTxs), stats) -> ProcessingOutcome.Accepted
+        new ErgoMemPool(pool.put(unconfirmedTransaction).remove(doubleSpendingTxs), stats) -> ProcessingOutcome.Accepted
       } else {
         this -> ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id))
       }
     } else {
-      new ErgoMemPool(pool.put(tx), stats) -> ProcessingOutcome.Accepted
+      new ErgoMemPool(pool.put(unconfirmedTransaction), stats) -> ProcessingOutcome.Accepted
     }
   }
 
-  def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
+  def process(unconfirmedTx: UnconfirmedTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
+    val tx = unconfirmedTx.transaction
     log.info(s"Processing mempool transaction: $tx")
-
     val blacklistedTransactions = nodeSettings.blacklistedTransactions
     if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
-      new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
+      new ErgoMemPool(pool.invalidate(unconfirmedTx), stats) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
     } else {
       val fee = extractFee(tx)
       val minFee = settings.nodeSettings.minimalFeeAmount
-      val canAccept = pool.canAccept(tx)
+      val canAccept = pool.canAccept(unconfirmedTx)
 
       if (fee >= minFee) {
         if (canAccept) {
@@ -146,9 +149,9 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
               // Allow proceeded transaction to spend outputs of pooled transactions.
               val utxoWithPool = utxo.withTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
-                utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), nodeSettings.maxTransactionCost, None).fold(
-                  ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
-                  _ => acceptIfNoDoubleSpend(tx)
+                utxoWithPool.validateWithCost(unconfirmedTx, Some(utxo.stateContext), nodeSettings.maxTransactionCost, None).fold(
+                  ex => new ErgoMemPool(pool.invalidate(unconfirmedTx), stats) -> ProcessingOutcome.Invalidated(ex),
+                  _ => acceptIfNoDoubleSpend(unconfirmedTx)
                 )
               } else {
                 this -> ProcessingOutcome.Declined(new Exception("not all utxos in place yet"))
@@ -156,14 +159,14 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
             case validator: TransactionValidation =>
               // transaction validation currently works only for UtxoState, so this branch currently
               // will not be triggered probably
-              validator.validateWithCost(tx, nodeSettings.maxTransactionCost).fold(
-                ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
-                _ => acceptIfNoDoubleSpend(tx)
+              validator.validateWithCost(unconfirmedTx, nodeSettings.maxTransactionCost).fold(
+                ex => new ErgoMemPool(pool.invalidate(unconfirmedTx), stats) -> ProcessingOutcome.Invalidated(ex),
+                _ => acceptIfNoDoubleSpend(unconfirmedTx)
               )
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
               // peers though, so such transactions can come from the local wallet only.
-              acceptIfNoDoubleSpend(tx)
+              acceptIfNoDoubleSpend(unconfirmedTx)
           }
         } else {
           this -> ProcessingOutcome.Declined(

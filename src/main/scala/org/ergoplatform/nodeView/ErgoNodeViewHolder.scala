@@ -6,7 +6,7 @@ import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -25,11 +25,9 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
+
 import java.io.File
-
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
-
-
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 
 import scala.annotation.tailrec
@@ -256,8 +254,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  protected def txModify(tx: ErgoTransaction): Unit = {
-    memoryPool().process(tx, minimalState()) match {
+  protected def txModify(unconfirmedTx: UnconfirmedTransaction): Unit = {
+    val tx = unconfirmedTx.transaction
+    memoryPool().process(unconfirmedTx, minimalState()) match {
       case (newPool, ProcessingOutcome.Accepted) =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
         val newVault = vault().scanOffchain(tx)
@@ -643,14 +642,14 @@ object ErgoNodeViewHolder {
     case class ModifiersFromRemote(modifiers: Iterable[ErgoPersistentModifier])
 
     sealed trait NewTransactions{
-      val txs: Iterable[ErgoTransaction]
+      val txs: Iterable[UnconfirmedTransaction]
     }
 
-    case class LocallyGeneratedTransaction(tx: ErgoTransaction) extends NewTransactions {
-      override val txs: Iterable[ErgoTransaction] = Iterable(tx)
+    case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction) extends NewTransactions {
+      override val txs: Iterable[UnconfirmedTransaction] = Iterable(tx)
     }
 
-    case class TransactionsFromRemote(override val txs: Iterable[ErgoTransaction]) extends NewTransactions
+    case class TransactionsFromRemote(override val txs: Iterable[UnconfirmedTransaction]) extends NewTransactions
 
     case class LocallyGeneratedModifier(pmod: ErgoPersistentModifier)
 

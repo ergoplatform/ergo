@@ -1,6 +1,7 @@
 package scorex.core.transaction.state
 
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+
 import scala.util.Try
 
 /**
@@ -12,7 +13,7 @@ trait StateFeature
   * Instance of this trait supports stateful validation of any transaction
   */
 trait TransactionValidation extends StateFeature {
-  def validateWithCost(tx: ErgoTransaction, maxTxCost: Int): Try[Int]
+  def validateWithCost(tx: UnconfirmedTransaction, maxTxCost: Int): Try[Int]
 }
 
 object TransactionValidation {

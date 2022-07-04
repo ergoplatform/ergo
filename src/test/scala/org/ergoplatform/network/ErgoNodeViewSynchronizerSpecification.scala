@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.HistoryTestHelpers
@@ -140,8 +140,9 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
-    // each test should always start with empty history
+    // each test should always start with empty history and state
     deleteRecursive(ErgoHistory.historyDir(settings))
+    deleteRecursive(ErgoState.stateDir(settings))
     val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
 
     val synchronizerMockRef = system.actorOf(Props(
@@ -184,8 +185,9 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
-    // each test should always start with empty history
+    // each test should always start with empty history and state
     deleteRecursive(ErgoHistory.historyDir(settings))
+    deleteRecursive(ErgoState.stateDir(settings))
     val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
 
     val synchronizerMockRef = system.actorOf(Props(

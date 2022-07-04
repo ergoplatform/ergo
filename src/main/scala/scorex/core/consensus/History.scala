@@ -1,56 +1,10 @@
 package scorex.core.consensus
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
-import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoder
 import scorex.core.{ModifierTypeId, PersistentNodeViewModifier}
 import scorex.util.ModifierId
 
-import scala.util.Try
 
-/**
-  * History of a blockchain system is some blocktree in fact
-  * (like this: http://image.slidesharecdn.com/sfbitcoindev-chepurnoy-2015-150322043044-conversion-gate01/95/proofofstake-its-improvements-san-francisco-bitcoin-devs-hackathon-12-638.jpg),
-  * where longest chain is being considered as canonical one, containing right kind of history.
-  *
-  * In cryptocurrencies of today blocktree view is usually implicit, means code supports only linear history,
-  * but other options are possible.
-  *
-  * To say "longest chain" is the canonical one is simplification, usually some kind of "cumulative difficulty"
-  * function has been used instead.
-  */
-
-trait History[HT <: History[HT]] extends HistoryReader {
-
-  /**
-    * @return append modifier to history
-    */
-  def append(modifier: ErgoPersistentModifier): Try[(HT, ProgressInfo[ErgoPersistentModifier])]
-
-  /**
-    * Report that modifier is valid from point of view of the state component
-    *
-    * @param modifier - valid modifier
-    * @return modified history
-    */
-  def reportModifierIsValid(modifier: ErgoPersistentModifier): Try[HT]
-
-  /**
-    * Report that modifier is invalid from other nodeViewHolder components point of view
-    *
-    * @param modifier     - invalid modifier
-    * @param progressInfo - what suffix failed to be applied because of an invalid modifier
-    * @return modified history and new progress info
-    */
-  def reportModifierIsInvalid(modifier: ErgoPersistentModifier, progressInfo: ProgressInfo[ErgoPersistentModifier]): Try[(HT, ProgressInfo[ErgoPersistentModifier])]
-
-
-  /**
-    * @return read-only copy of this history
-    */
-  def getReader: HistoryReader = this
-
-}
 
 object History {
 

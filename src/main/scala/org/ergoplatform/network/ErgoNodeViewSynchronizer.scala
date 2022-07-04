@@ -1,8 +1,8 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-
 import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
@@ -18,12 +18,12 @@ import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
-import scorex.core.consensus.HistoryReader
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
+import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
@@ -31,14 +31,14 @@ import scorex.core.network.message.{InvData, Message, ModifiersData}
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
-import scorex.core.transaction.{MempoolReader, Transaction}
+import scorex.core.transaction.Transaction
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
-import scorex.core.transaction.wallet.VaultReader
+
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -114,8 +114,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[DisconnectedPeer])
 
     // subscribe for all the node view holder events involving modifiers and transactions
-    context.system.eventStream.subscribe(self, classOf[ChangedHistory[ErgoHistoryReader]])
-    context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPoolReader]])
+    context.system.eventStream.subscribe(self, classOf[ChangedHistory])
+    context.system.eventStream.subscribe(self, classOf[ChangedMempool])
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
@@ -975,11 +975,11 @@ object ErgoNodeViewSynchronizer {
 
     trait NodeViewChange extends NodeViewHolderEvent
 
-    case class ChangedHistory[HR <: HistoryReader](reader: HR) extends NodeViewChange
+    case class ChangedHistory(reader: ErgoHistoryReader) extends NodeViewChange
 
-    case class ChangedMempool[MR <: MempoolReader](mempool: MR) extends NodeViewChange
+    case class ChangedMempool(mempool: ErgoMemPoolReader) extends NodeViewChange
 
-    case class ChangedVault[VR <: VaultReader](reader: VR) extends NodeViewChange
+    case class ChangedVault(reader: ErgoWalletReader) extends NodeViewChange
 
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
 

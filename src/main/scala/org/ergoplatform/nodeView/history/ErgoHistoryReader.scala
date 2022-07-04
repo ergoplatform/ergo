@@ -11,8 +11,9 @@ import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.ErgoSettings
+import scorex.core.NodeViewComponent
+import scorex.core.consensus.{ContainsModifiers, ModifierSemanticValidity}
 import scorex.core.consensus.History._
-import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
@@ -20,12 +21,14 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
 import scala.util.{Failure, Try}
+import scorex.core.consensus.History._
 
 /**
   * Read-only copy of ErgoHistory
   */
 trait ErgoHistoryReader
-  extends HistoryReader
+  extends NodeViewComponent
+    with ContainsModifiers[ErgoPersistentModifier]
     with HeadersProcessor
     with PoPoWProofsProcessor
     with UTXOSnapshotChunkProcessor
@@ -116,7 +119,7 @@ trait ErgoHistoryReader
     * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead,
     *         Fork if other peer is on another chain, Unknown if we can't deduct neighbour's status
     */
-  override def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
+  def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
     info match {
       case syncV1: ErgoSyncInfoV1 =>
         compareV1(syncV1)
@@ -293,7 +296,7 @@ trait ErgoHistoryReader
     * @param size max return size
     * @return Ids of headers, that node with info should download and apply to synchronize
     */
-  override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
+  def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => continuationIdsV1(syncV1, size)
       case syncV2: ErgoSyncInfoV2 => continuationIdsV2(syncV2, size)
@@ -396,7 +399,13 @@ trait ErgoHistoryReader
     (offset until (limit + offset)).flatMap(height => bestHeaderIdAtHeight(height))
   }
 
-  override def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
+  /**
+    * Whether a modifier could be applied to the history
+    *
+    * @param modifier  - modifier to apply
+    * @return `Success` if modifier can be applied, `Failure(ModifierError)` if can not
+    */
+  def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {
       case header: Header =>
         validate(header)
@@ -501,6 +510,12 @@ trait ErgoHistoryReader
     (ourChain, commonBlockThenSuffixes)
   }
 
+  /**
+    * Return semantic validity status of modifier with id == modifierId
+    *
+    * @param modifierId - modifier id to check
+    * @return
+    */
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {
       case Some(b) if b.headOption.contains(Valid) => ModifierSemanticValidity.Valid

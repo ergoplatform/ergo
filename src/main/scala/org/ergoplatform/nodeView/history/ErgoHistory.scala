@@ -13,7 +13,6 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
-import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
@@ -22,6 +21,17 @@ import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import scala.util.{Failure, Success, Try}
 
 /**
+  *
+  * History of a blockchain system is some blocktree in fact
+  * (like this: http://image.slidesharecdn.com/sfbitcoindev-chepurnoy-2015-150322043044-conversion-gate01/95/proofofstake-its-improvements-san-francisco-bitcoin-devs-hackathon-12-638.jpg),
+  * where longest chain is being considered as canonical one, containing right kind of history.
+  *
+  * In cryptocurrencies of today blocktree view is usually implicit, means code supports only linear history,
+  * but other options are possible.
+  *
+  * To say "longest chain" is the canonical one is simplification, usually some kind of "cumulative difficulty"
+  * function has been used instead.
+  *
   * History implementation. It is processing persistent modifiers generated locally or coming from the network.
   * Depending on chosen node settings, it will process modifiers in a different way, different processors define how to
   * process different type of modifiers.
@@ -39,8 +49,7 @@ import scala.util.{Failure, Success, Try}
   *   2. Be ignored by history (verifyTransactions == false)
   */
 trait ErgoHistory
-  extends History[ErgoHistory]
-    with ErgoHistoryReader {
+  extends ErgoHistoryReader {
 
   override protected lazy val requireProofs: Boolean = nodeSettings.stateType.requireProofs
 
@@ -62,7 +71,7 @@ trait ErgoHistory
   /**
     * Append ErgoPersistentModifier to History if valid
     */
-  override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
+  def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
     log.debug(s"Trying to append modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} to history")
     applicableTry(modifier).flatMap { _ =>
       modifier match {
@@ -87,7 +96,7 @@ trait ErgoHistory
   /**
     * Mark modifier as valid
     */
-  override def reportModifierIsValid(modifier: ErgoPersistentModifier): Try[ErgoHistory] = synchronized {
+  def reportModifierIsValid(modifier: ErgoPersistentModifier): Try[ErgoHistory] = synchronized {
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
     modifier match {
       case fb: ErgoFullBlock =>
@@ -115,7 +124,7 @@ trait ErgoHistory
     * @return ProgressInfo with next modifier to try to apply
     */
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
-  override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
+  def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
                                        progressInfo: ProgressInfo[ErgoPersistentModifier]
                                       ): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
     log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
@@ -219,6 +228,12 @@ trait ErgoHistory
       }
     }
   }
+
+  /**
+    * @return read-only copy of this history
+    */
+  def getReader: ErgoHistoryReader = this
+
 }
 
 object ErgoHistory extends ScorexLogging {

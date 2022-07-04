@@ -6,7 +6,6 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
-import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
@@ -27,7 +26,7 @@ import scala.util.Try
   */
 class ErgoMemPool private[mempool](pool: OrderedTxPool,
                                    private[mempool] val stats : MemPoolStatistics)(implicit settings: ErgoSettings)
-  extends MemoryPool[ErgoMemPool] with ErgoMemPoolReader with ScorexLogging {
+  extends ErgoMemPoolReader with ScorexLogging {
 
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
@@ -70,27 +69,35 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
     */
   override def getAllPrioritized: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
 
-  override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
+  /**
+    * Method to put a transaction into the memory pool. Validation of tha transactions against
+    * the state is done in NodeVieHolder. This put() method can check whether a transaction is valid
+    * @param tx
+    * @return Success(updatedPool), if transaction successfully added to the pool, Failure(_) otherwise
+    */
+  def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
-  override def put(txs: Iterable[ErgoTransaction]): Try[ErgoMemPool] = Try {
+  def put(txs: Iterable[ErgoTransaction]): Try[ErgoMemPool] = Try {
     putWithoutCheck(txs.filterNot(tx => pool.contains(tx.id)))
   }
 
-  override def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
+  def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
     val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx) }
     new ErgoMemPool(updatedPool, stats)
   }
 
-  override def remove(tx: ErgoTransaction): ErgoMemPool = {
+  def remove(tx: ErgoTransaction): ErgoMemPool = {
     val wtx = pool.transactionsRegistry.get(tx.id)
     val updStats = wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
       .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
     new ErgoMemPool(pool.remove(tx), updStats)
   }
 
-  override def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
+  def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
     new ErgoMemPool(pool.filter(condition), stats)
   }
+
+  def filter(txs: Seq[ErgoTransaction]): ErgoMemPool = filter(t => !txs.exists(_.id == t.id))
 
   /**
     * Invalidate transaction and delete it from pool
@@ -230,6 +237,11 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
       0
     }
   }
+
+  /**
+    * @return read-only copy of this history
+    */
+  def getReader: ErgoMemPoolReader = this
 }
 
 object ErgoMemPool {

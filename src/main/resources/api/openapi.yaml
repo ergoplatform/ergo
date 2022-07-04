@@ -3783,12 +3783,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -3798,6 +3806,14 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -3858,12 +3874,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -3873,6 +3897,14 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -4709,12 +4741,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -4724,6 +4764,14 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -4760,12 +4808,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -4775,6 +4831,14 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]

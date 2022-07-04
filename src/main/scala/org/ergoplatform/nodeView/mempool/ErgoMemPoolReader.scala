@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import scorex.core.transaction.MempoolReader
 import scorex.util.ModifierId
 
-trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
+trait ErgoMemPoolReader extends MempoolReader {
 
   override def contains(id: ModifierId): Boolean
 

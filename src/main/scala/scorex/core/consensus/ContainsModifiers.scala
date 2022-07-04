@@ -1,12 +1,12 @@
 package scorex.core.consensus
 
-import scorex.core.NodeViewModifier
+import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import scorex.util.ModifierId
 
 /**
   * Object that contains modifiers of type `MOD`
   */
-trait ContainsModifiers[MOD <: NodeViewModifier] {
+trait ContainsModifiers[MOD <: ErgoNodeViewModifier] {
 
   /**
     *

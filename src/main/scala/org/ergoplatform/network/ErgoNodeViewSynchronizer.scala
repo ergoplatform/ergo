@@ -18,7 +18,7 @@ import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
-import scorex.core.consensus.{HistoryReader, SyncInfo}
+import scorex.core.consensus.HistoryReader
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs}
@@ -975,9 +975,9 @@ object ErgoNodeViewSynchronizer {
 
     trait NodeViewChange extends NodeViewHolderEvent
 
-    case class ChangedHistory[HR <: HistoryReader[_ <: PersistentNodeViewModifier, _ <: SyncInfo]](reader: HR) extends NodeViewChange
+    case class ChangedHistory[HR <: HistoryReader](reader: HR) extends NodeViewChange
 
-    case class ChangedMempool[MR <: MempoolReader[_ <: Transaction]](mempool: MR) extends NodeViewChange
+    case class ChangedMempool[MR <: MempoolReader](mempool: MR) extends NodeViewChange
 
     case class ChangedVault[VR <: VaultReader](reader: VR) extends NodeViewChange
 

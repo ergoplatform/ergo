@@ -27,7 +27,7 @@ import scala.util.Try
   */
 class ErgoMemPool private[mempool](pool: OrderedTxPool,
                                    private[mempool] val stats : MemPoolStatistics)(implicit settings: ErgoSettings)
-  extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader with ScorexLogging {
+  extends MemoryPool[ErgoMemPool] with ErgoMemPoolReader with ScorexLogging {
 
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo

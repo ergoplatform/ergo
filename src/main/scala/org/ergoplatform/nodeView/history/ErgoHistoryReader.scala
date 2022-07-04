@@ -25,7 +25,7 @@ import scala.util.{Failure, Try}
   * Read-only copy of ErgoHistory
   */
 trait ErgoHistoryReader
-  extends HistoryReader[ErgoPersistentModifier, ErgoSyncInfo]
+  extends HistoryReader
     with HeadersProcessor
     with PoPoWProofsProcessor
     with UTXOSnapshotChunkProcessor

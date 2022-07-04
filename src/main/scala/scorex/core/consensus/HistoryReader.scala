@@ -1,13 +1,14 @@
 package scorex.core.consensus
 
-import scorex.core.{NodeViewComponent, PersistentNodeViewModifier}
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.nodeView.history.ErgoSyncInfo
+import scorex.core.NodeViewComponent
 import scorex.util.ModifierId
 
 import scala.util.Try
 
 
-trait HistoryReader[PM <: PersistentNodeViewModifier, SI <: SyncInfo] extends NodeViewComponent
-  with ContainsModifiers[PM] {
+trait HistoryReader extends NodeViewComponent with ContainsModifiers[ErgoPersistentModifier] {
 
   import History._
 
@@ -22,7 +23,7 @@ trait HistoryReader[PM <: PersistentNodeViewModifier, SI <: SyncInfo] extends No
     * @param modifier  - modifier to apply
     * @return `Success` if modifier can be applied, `Failure(ModifierError)` if can not
     */
-  def applicableTry(modifier: PM): Try[Unit]
+  def applicableTry(modifier: ErgoPersistentModifier): Try[Unit]
 
   /**
     * Return semantic validity status of modifier with id == modifierId
@@ -35,7 +36,7 @@ trait HistoryReader[PM <: PersistentNodeViewModifier, SI <: SyncInfo] extends No
   /**
     * Ids of modifiers, that node with info should download and apply to synchronize
     */
-  def continuationIds(info: SI, size: Int): ModifierIds
+  def continuationIds(info: ErgoSyncInfo, size: Int): ModifierIds
 
   /**
     * Whether another's node syncinfo shows that another node is ahead or behind ours
@@ -43,5 +44,5 @@ trait HistoryReader[PM <: PersistentNodeViewModifier, SI <: SyncInfo] extends No
     * @param other other's node sync info
     * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead
     */
-  def compare(other: SI): HistoryComparisonResult
+  def compare(other: ErgoSyncInfo): HistoryComparisonResult
 }

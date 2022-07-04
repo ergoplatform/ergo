@@ -39,7 +39,7 @@ import scala.util.{Failure, Success, Try}
   *   2. Be ignored by history (verifyTransactions == false)
   */
 trait ErgoHistory
-  extends History[ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
+  extends History[ErgoHistory]
     with ErgoHistoryReader {
 
   override protected lazy val requireProofs: Boolean = nodeSettings.stateType.requireProofs

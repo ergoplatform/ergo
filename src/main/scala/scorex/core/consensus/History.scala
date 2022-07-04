@@ -1,5 +1,6 @@
 package scorex.core.consensus
 
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoder
 import scorex.core.{ModifierTypeId, PersistentNodeViewModifier}
@@ -19,13 +20,12 @@ import scala.util.Try
   * function has been used instead.
   */
 
-trait History[PM <: PersistentNodeViewModifier, SI <: SyncInfo, HT <: History[PM, SI, HT]]
-  extends HistoryReader[PM, SI] {
+trait History[HT <: History[HT]] extends HistoryReader {
 
   /**
     * @return append modifier to history
     */
-  def append(modifier: PM): Try[(HT, ProgressInfo[PM])]
+  def append(modifier: ErgoPersistentModifier): Try[(HT, ProgressInfo[ErgoPersistentModifier])]
 
   /**
     * Report that modifier is valid from point of view of the state component
@@ -33,7 +33,7 @@ trait History[PM <: PersistentNodeViewModifier, SI <: SyncInfo, HT <: History[PM
     * @param modifier - valid modifier
     * @return modified history
     */
-  def reportModifierIsValid(modifier: PM): Try[HT]
+  def reportModifierIsValid(modifier: ErgoPersistentModifier): Try[HT]
 
   /**
     * Report that modifier is invalid from other nodeViewHolder components point of view
@@ -42,13 +42,13 @@ trait History[PM <: PersistentNodeViewModifier, SI <: SyncInfo, HT <: History[PM
     * @param progressInfo - what suffix failed to be applied because of an invalid modifier
     * @return modified history and new progress info
     */
-  def reportModifierIsInvalid(modifier: PM, progressInfo: ProgressInfo[PM]): Try[(HT, ProgressInfo[PM])]
+  def reportModifierIsInvalid(modifier: ErgoPersistentModifier, progressInfo: ProgressInfo[ErgoPersistentModifier]): Try[(HT, ProgressInfo[ErgoPersistentModifier])]
 
 
   /**
     * @return read-only copy of this history
     */
-  def getReader: HistoryReader[PM, SI] = this
+  def getReader: HistoryReader = this
 
 }
 

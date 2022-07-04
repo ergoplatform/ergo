@@ -1,5 +1,6 @@
 package scorex.core.transaction
 
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.consensus.ContainsModifiers
 import scorex.core.NodeViewComponent
 import scorex.util.ModifierId
@@ -7,19 +8,18 @@ import scorex.util.ModifierId
 /**
   * Unconfirmed transactions pool
   *
-  * @tparam TX -type of transaction the pool contains
   */
-trait MempoolReader[TX <: Transaction] extends NodeViewComponent with ContainsModifiers[TX] {
+trait MempoolReader extends NodeViewComponent with ContainsModifiers[ErgoTransaction] {
 
   //getters
-  override def modifierById(modifierId: ModifierId): Option[TX]
+  override def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 
   def contains(id: ModifierId): Boolean
 
-  def getAll(ids: Seq[ModifierId]): Seq[TX]
+  def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction]
 
   def size: Int
 
-  def take(limit: Int): Iterable[TX]
+  def take(limit: Int): Iterable[ErgoTransaction]
 
 }

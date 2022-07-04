@@ -3,7 +3,7 @@ package org.ergoplatform.network
 import io.circe.{Encoder, Json}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.app.Version
-import scorex.core.consensus.History.HistoryComparisonResult
+import scorex.core.consensus.HistoryComparisonResult
 import scorex.core.network.ConnectedPeer
 import scorex.core.utils.TimeProvider.Time
 

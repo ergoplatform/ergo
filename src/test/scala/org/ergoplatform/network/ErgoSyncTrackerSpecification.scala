@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.ActorSystem
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.consensus.History.{Older, Younger}
+import scorex.core.consensus.{Older, Younger}
 import scorex.core.network.{ConnectedPeer, ConnectionId, Incoming}
 import scorex.core.network.peer.PeerInfo
 

@@ -140,6 +140,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
+    // each test should always start with empty history
+    deleteRecursive(ErgoHistory.historyDir(settings))
     val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
 
     val synchronizerMockRef = system.actorOf(Props(

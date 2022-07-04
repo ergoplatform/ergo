@@ -363,11 +363,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
           log.warn(s"Header from syncInfoV2 ${continuationHeader.encodedId} is invalid", e)
         case _ =>
-          log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId} and downloading its block sections")
+          log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
           viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
           val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
-          modifiersToDownload.foreach { case (modifierTypeId, modifierId) =>
-            downloadModifiers(Seq(modifierId), modifierTypeId, peer)
+          modifiersToDownload.foreach {
+            case (modifierTypeId, modifierId) =>
+              if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
+                log.info(s"Downloading block section for header ${continuationHeader.encodedId} : ($modifierId, $modifierTypeId)")
+                downloadModifiers(Seq(modifierId), modifierTypeId, peer)
+              }
           }
       }
     }

@@ -178,7 +178,15 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "return all wallet boxes" in {
+  it should "return wallet boxes" in {
+    Get(prefix + "/boxes") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe 3
+    }
+  }
+
+  it should "return wallet boxes with lower constraint" in {
     val minConfirmations = 15
     val minInclusionHeight = 20
     val postfix = s"/boxes?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
@@ -189,10 +197,29 @@ class WalletApiRouteSpec extends AnyFlatSpec
       response.head.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
       response.head.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
     }
-    Get(prefix + "/boxes") ~> route ~> check {
+  }
+
+  it should "return wallet boxes with upper constraint" in {
+    val maxConfirmations = 15
+    val maxInclusionHeight = 20
+    val postfix = s"/boxes?maxConfirmations=$maxConfirmations&maxInclusionHeight=$maxInclusionHeight"
+    Get(prefix + postfix) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
-      response.size shouldBe 3
+      response.size shouldBe 1
+      response.head.hcursor.downField("confirmationsNum").as[Int].forall(_ <= maxConfirmations) shouldBe true
+      response.head.hcursor.downField("inclusionHeight").as[Int].forall(_ <= maxInclusionHeight) shouldBe true
+    }
+  }
+
+  it should "return wallet boxes with both lower and upper constraint" in {
+    val confirmations = 15
+    val inclusionHeight = 20
+    val postfix = s"/boxes?$confirmations&minInclusionHeight=$inclusionHeight&maxConfirmations=$confirmations&maxInclusionHeight=$inclusionHeight"
+    Get(prefix + postfix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.isEmpty shouldBe true
     }
   }
 

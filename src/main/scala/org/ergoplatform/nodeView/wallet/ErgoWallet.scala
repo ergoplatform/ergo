@@ -9,16 +9,13 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.boxes.{ReemissionData, ReplaceCompactCollectBoxSelector}
 import scorex.core.VersionTag
-import scorex.core.transaction.wallet.Vault
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
 class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, parameters: Parameters)
                 (implicit val actorSystem: ActorSystem)
-  extends Vault[ErgoTransaction, BlockSection, ErgoWallet]
-    with ErgoWalletReader
-    with ScorexLogging {
+  extends ErgoWalletReader with ScorexLogging {
 
   private val walletSettings = settings.walletSettings
 
@@ -39,17 +36,17 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
   override val walletActor: ActorRef =
     ErgoWalletActor(settings, parameters, new ErgoWalletServiceImpl(settings), boxSelector, historyReader)
 
-  override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
+  def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)
     this
   }
 
-  override def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = {
+  def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = {
     txs.foreach(tx => scanOffchain(tx))
     this
   }
 
-  override def scanPersistent(modifier: BlockSection): ErgoWallet = {
+  def scanPersistent(modifier: BlockSection): ErgoWallet = {
     modifier match {
       case fb: ErgoFullBlock =>
         walletActor ! ScanOnChain(fb)
@@ -60,7 +57,13 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
     this
   }
 
-  override def rollback(to: VersionTag): Try[ErgoWallet] =
+  def scanPersistent(modifiers: Option[BlockSection]): ErgoWallet = {
+    modifiers.foldLeft(this) { case (v, mod) =>
+      v.scanPersistent(mod)
+    }
+  }
+
+  def rollback(to: VersionTag): Try[ErgoWallet] =
     historyReader.heightOf(scorex.core.versionToId(to)) match {
       case Some(_) =>
         walletActor ! Rollback(to)
@@ -71,6 +74,11 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
       case None =>
         Failure(new Exception(s"Height of a modifier with id $to not found"))
     }
+
+  /**
+    * @return read-only copy of this state
+    */
+  def getReader: ErgoWalletReader = this
 }
 
 

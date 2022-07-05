@@ -1,7 +1,6 @@
 package scorex.core.network
 
 import java.net.{InetAddress, InetSocketAddress}
-
 import scorex.core.app.{ApplicationVersionSerializer, Version}
 import scorex.core.network.peer.LocalAddressPeerFeature
 import scorex.core.serialization.ScorexSerializer
@@ -43,8 +42,15 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
     ApplicationVersionSerializer.serialize(obj.protocolVersion, w)
     w.putShortString(obj.nodeName)
 
-
-    w.putOption(obj.declaredAddress) { (writer, isa) =>
+    val address = obj.declaredAddress match {
+      case Some(isa) =>
+        if(isa.getAddress == null)
+          None
+        else
+          Some(isa)
+      case None => None
+    }
+    w.putOption(address) { (writer, isa) =>
       val addr = isa.getAddress.getAddress
       writer.put((addr.size + 4).toByteExact)
       writer.putBytes(addr)

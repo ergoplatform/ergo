@@ -4,7 +4,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.settings.RESTApiSettings
 
-import java.net.{InetSocketAddress, URL}
+import java.net.InetSocketAddress
 import scala.concurrent.duration._
 
 class ErgoSettingsSpecification extends ErgoPropertyTest {
@@ -62,8 +62,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       bindAddress = new InetSocketAddress("0.0.0.0", 9052),
       apiKeyHash = None,
       corsAllowedOrigin = Some("*"),
-      timeout = 5.seconds,
-      publicUrl = Some(new URL("https://example.com:80"))
+      timeout = 5.seconds
     )
   }
 

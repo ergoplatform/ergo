@@ -1,6 +1,6 @@
 package scorex.core.network
 
-import java.net.{InetAddress, InetSocketAddress, URL}
+import java.net.{InetAddress, InetSocketAddress}
 import scorex.core.app.{ApplicationVersionSerializer, Version}
 import scorex.core.network.peer.LocalAddressPeerFeature
 import scorex.core.serialization.ScorexSerializer
@@ -23,8 +23,7 @@ case class PeerSpec(agentName: String,
                     protocolVersion: Version,
                     nodeName: String,
                     declaredAddress: Option[InetSocketAddress],
-                    features: Seq[PeerFeature],
-                    restApiUrl: Option[URL]) {
+                    features: Seq[PeerFeature]) {
 
   lazy val localAddressOpt: Option[InetSocketAddress] = {
     features.collectFirst { case LocalAddressPeerFeature(addr) => addr }
@@ -65,12 +64,6 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
       w.putUShort(fBytes.length.toShortExact)
       w.putBytes(fBytes)
     }
-
-    w.putOption(obj.restApiUrl: Option[URL]) { (writer, url) =>
-      val addr = url.toString.getBytes("UTF-8")
-      writer.put(addr.size.toByteExact)
-      writer.putBytes(addr)
-    }
   }
 
   override def parse(r: Reader): PeerSpec = {
@@ -99,20 +92,8 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
         featureSerializer.parseTry(r.newReader(featChunk)).toOption
       }
     }
-    // backward compatibility hack, as writer.putOption does put(0.toByte)
-    // so old blobs has 0 missing in case of restApiUrl = None
-    val restApiUrlOpt =
-      if (r.remaining > 0) {
-        r.getOption {
-          val fas = r.getUByte()
-          val fa = r.getBytes(fas)
-          new URL(new String(fa))
-        }
-    } else {
-        None
-      }
 
-    PeerSpec(appName, protocolVersion, nodeName, declaredAddressOpt, feats, restApiUrlOpt)
+    PeerSpec(appName, protocolVersion, nodeName, declaredAddressOpt, feats)
   }
 
 }

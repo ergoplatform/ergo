@@ -26,7 +26,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
 
   val prefix = "/utils"
 
-  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
+  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val route: Route = ErgoUtilsApiRoute(settings).route
   val p2pkaddress = P2PKAddress(defaultMinerPk)
   val p2shaddress = Pay2SHAddress(feeProp)

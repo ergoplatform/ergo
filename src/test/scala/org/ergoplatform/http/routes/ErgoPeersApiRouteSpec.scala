@@ -36,7 +36,7 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
-  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
+  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val peerManagerProbe = TestProbe()
 
   it should "return connected peers" in {
@@ -55,9 +55,6 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
         val c = json.asArray.get.head.hcursor
         peer.peerInfo.get.peerSpec.address.foreach { address =>
           c.downField("address").as[String] shouldEqual Right(address.toString)
-        }
-        peer.peerInfo.get.peerSpec.restApiUrl.foreach { address =>
-          c.downField("restApiUrl").as[String] shouldEqual Right(address.toString)
         }
 
         c.downField("lastMessage").as[Long] shouldEqual Right(0L)

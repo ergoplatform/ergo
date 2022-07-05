@@ -28,7 +28,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
 
   val prefix = "/transactions"
 
-  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
+  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val route: Route = TransactionsApiRoute(utxoReadersRef, nodeViewRef, settings).route
 
   val inputBox: ErgoBox = utxoState.takeBoxes(1).head

@@ -21,7 +21,6 @@ import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
 import scorex.core.network.peer.PeersStatus
 
-import java.net.URL
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
@@ -39,9 +38,9 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     val ec: ExecutionContextExecutor = context.dispatcher
 
     readersHolder ! GetReaders
-    context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedHistory])
     context.system.eventStream.subscribe(self, classOf[ChangedState])
-    context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedMempool])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
@@ -68,8 +67,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     lastIncomingMessageTime = networkTime(),
     None,
     LaunchParameters,
-    eip27Supported = true,
-    settings.scorexSettings.restApi.publicUrl)
+    eip27Supported = true)
 
   override def receive: Receive =
     onConnectedPeers orElse
@@ -195,16 +193,13 @@ object ErgoStatsCollector {
                       lastIncomingMessageTime: Long,
                       genesisBlockIdOpt: Option[String],
                       parameters: Parameters,
-                      eip27Supported: Boolean,
-                      restApiUrl: Option[URL])
+                      eip27Supported: Boolean)
 
   object NodeInfo extends ApiCodecs {
     implicit val paramsEncoder: Encoder[Parameters] = org.ergoplatform.settings.ParametersSerializer.jsonEncoder
 
     implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) => {
-      val optionalFields =
-        ni.restApiUrl.map(_.toString).map(restApiUrl => Map("restApiUrl" -> restApiUrl.asJson)).getOrElse(Map.empty)
-      (Map(
+      Map(
         "name" -> ni.nodeName.asJson,
         "appVersion" -> Version.VersionString.asJson,
         "network" -> ni.network.asJson,
@@ -228,7 +223,7 @@ object ErgoStatsCollector {
         "genesisBlockId" -> ni.genesisBlockIdOpt.asJson,
         "parameters" -> ni.parameters.asJson,
         "eip27Supported" -> ni.eip27Supported.asJson
-      ) ++ optionalFields).asJson
+      ).asJson
     }
   }
 

@@ -5,7 +5,7 @@ import java.net.InetSocketAddress
 import akka.actor.ActorSystem
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.consensus.History.{Fork, HistoryComparisonResult, Older, Unknown}
+import scorex.core.consensus.{Fork, HistoryComparisonResult, Older, Unknown}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.Events.{BetterNeighbourAppeared, NoBetterNeighbour}
 import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings

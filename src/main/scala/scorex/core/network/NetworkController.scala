@@ -11,7 +11,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{Dis
 import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message.{Message, MessageSpec}
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
-import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, SessionIdPeerFeature}
+import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.{NetworkUtils, TimeProvider}
@@ -332,7 +332,8 @@ class NetworkController(scorexSettings: ScorexSettings,
     }
     val isLocal = connectionId.remoteAddress.getAddress.isSiteLocalAddress ||
       connectionId.remoteAddress.getAddress.isLoopbackAddress
-    val mandatoryFeatures = scorexContext.features :+ mySessionIdFeature
+    val restApiUrlPeerFeature = RestApiUrlPeerFeature(scorexSettings.restApi.publicUrl)
+    val mandatoryFeatures = scorexContext.features ++ Seq(mySessionIdFeature, restApiUrlPeerFeature)
     val peerFeatures = if (isLocal) {
       val la = new InetSocketAddress(connectionId.localAddress.getAddress, networkSettings.bindAddress.getPort)
       val localAddrFeature = LocalAddressPeerFeature(la)

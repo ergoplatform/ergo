@@ -938,16 +938,6 @@ object ErgoNodeViewSynchronizer {
 
   case object CheckModifiersToDownload
 
-  object Events {
-
-    trait NodeViewSynchronizerEvent
-
-    case object NoBetterNeighbour extends NodeViewSynchronizerEvent
-
-    case object BetterNeighbourAppeared extends NodeViewSynchronizerEvent
-
-  }
-
   object ReceivableMessages {
 
     // getLocalSyncInfo messages

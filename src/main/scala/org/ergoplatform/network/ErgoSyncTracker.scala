@@ -2,11 +2,10 @@ package org.ergoplatform.network
 
 import java.net.InetSocketAddress
 
-import akka.actor.ActorSystem
+import org.ergoplatform.network.ErgoSyncTracker.{NeighboursStatus, NeighboursStatusUnknown}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.consensus.{Fork, HistoryComparisonResult, Older, Unknown}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.Events.{BetterNeighbourAppeared, NoBetterNeighbour}
 import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.TimeProvider
@@ -16,10 +15,7 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scorex.core.utils.MapPimp
 
-final case class ErgoSyncTracker(system: ActorSystem,
-                                 networkSettings: NetworkSettings,
-                                 timeProvider: TimeProvider)
- extends ScorexLogging {
+final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider: TimeProvider) extends ScorexLogging {
 
   private val MinSyncInterval: FiniteDuration = 20.seconds
   private val SyncThreshold: FiniteDuration = 1.minute
@@ -51,7 +47,9 @@ final case class ErgoSyncTracker(system: ActorSystem,
     notSyncedOrMissing || outdated
   }
 
-  def updateStatus(peer: ConnectedPeer, status: HistoryComparisonResult, height: Option[Height]): Unit = {
+  def updateStatus(peer: ConnectedPeer,
+                   status: HistoryComparisonResult,
+                   height: Option[Height]): NeighboursStatus = {
     val seniorsBefore = numOfSeniors()
     statuses.adjust(peer){
       case None =>
@@ -65,13 +63,14 @@ final case class ErgoSyncTracker(system: ActorSystem,
     // todo: we should also send NoBetterNeighbour signal when all the peers around are not seniors initially
     if (seniorsBefore > 0 && seniorsAfter == 0) {
       log.info("Syncing is done, switching to stable regime")
-      system.eventStream.publish(NoBetterNeighbour)
+      // todo: update neighbours status ?
     }
     if (seniorsBefore == 0 && seniorsAfter > 0) {
-      system.eventStream.publish(BetterNeighbourAppeared)
+      // todo: update neighbours status?
     }
 
     heights += (peer -> height.getOrElse(ErgoHistory.EmptyHistoryHeight))
+    NeighboursStatusUnknown
   }
 
   /**
@@ -154,4 +153,10 @@ final case class ErgoSyncTracker(system: ActorSystem,
       s"$address, height: ${status.map(_.height)}, status: ${status.map(_.status)}, lastSync: $millisSinceLastSync ms ago"
     }.mkString("\n")
   }
+
+}
+
+object ErgoSyncTracker {
+  sealed trait NeighboursStatus
+  case object NeighboursStatusUnknown extends NeighboursStatus
 }

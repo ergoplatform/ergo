@@ -4,9 +4,9 @@ import java.io.File
 
 import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
+import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.settings.Algos.HF
@@ -36,7 +36,7 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
     case Failure(e) => Failure(e)
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height] = None)
+  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height] = None)
                             (generate: LocallyGeneratedModifier => Unit): Try[WrappedUtxoState] =
     super.applyModifier(mod, estimatedTip)(generate) match {
       case Success(us) =>

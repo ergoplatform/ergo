@@ -4,7 +4,7 @@ import java.io.{InputStream, OutputStream}
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.Utils._
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import scorex.core.serialization.ScorexSerializer
@@ -12,7 +12,7 @@ import scorex.core.{ModifierTypeId, NodeViewModifier}
 
 object ModifierWriter {
 
-  val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: ErgoPersistentModifier]] =
+  val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: BlockSection]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofsSerializer)
@@ -27,7 +27,7 @@ object ModifierWriter {
     fos.flush()
   }
 
-  def read(implicit fis: InputStream): Option[ErgoPersistentModifier] = for {
+  def read(implicit fis: InputStream): Option[BlockSection] = for {
     typeId <- readModId
     length <- readLength
     bytes <- readBytes(length)

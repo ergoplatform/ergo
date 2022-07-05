@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.state
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
@@ -12,7 +12,7 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.Try
 
-case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: ModifierId) extends ErgoPersistentModifier {
+case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: ModifierId) extends BlockSection {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotManifest.modifierTypeId
 
   override def serializedId: Array[Byte] = Algos.hash(concatBytes(chunkRootHashes :+ idToBytes(blockId)))

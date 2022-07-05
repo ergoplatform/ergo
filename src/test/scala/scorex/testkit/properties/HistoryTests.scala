@@ -1,6 +1,6 @@
 package scorex.testkit.properties
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
@@ -22,11 +22,11 @@ trait HistoryTests
 
   val historyGen: Gen[ErgoHistory]
 
-  lazy val generatorWithValidModifier: Gen[(ErgoHistory, ErgoPersistentModifier)] = {
+  lazy val generatorWithValidModifier: Gen[(ErgoHistory, BlockSection)] = {
     historyGen.map { h => (h, syntacticallyValidModifier(h))}
   }
 
-  lazy val generatorWithInvalidModifier: Gen[(ErgoHistory, ErgoPersistentModifier)] = {
+  lazy val generatorWithInvalidModifier: Gen[(ErgoHistory, BlockSection)] = {
     historyGen.map { h => (h, syntacticallyInvalidModifier(h))}
   }
 

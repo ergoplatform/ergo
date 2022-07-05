@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.DefaultModifiersCache
@@ -12,7 +12,7 @@ class ErgoModifiersCache(override val maxSize: Int)
   extends DefaultModifiersCache(maxSize) {
 
   override def findCandidateKey(history: ErgoHistory): Option[K] = {
-    def tryToApply(k: K, v: ErgoPersistentModifier): Boolean = {
+    def tryToApply(k: K, v: BlockSection): Boolean = {
       history.applicableTry(v) match {
         case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
           log.warn(s"Modifier ${v.encodedId} is permanently invalid and will be removed from cache", e)

@@ -1,6 +1,6 @@
 package scorex.core
 
-import org.ergoplatform.modifiers.{ErgoNodeViewModifier, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.consensus.ContainsModifiers
 import scorex.core.validation.RecoverableModifierError
@@ -21,7 +21,7 @@ trait ModifiersCache extends ContainsModifiers[ErgoNodeViewModifier] {
   require(maxSize >= 1)
 
   type K = scorex.util.ModifierId
-  type V = ErgoPersistentModifier
+  type V = BlockSection
 
   protected val cache: mutable.Map[K, V] = mutable.LinkedHashMap[K, V]()
 

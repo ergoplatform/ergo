@@ -91,9 +91,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
 
   // It could be the case that adversarial peers are sending sync messages to the node to cause
-  // resource exhaustion. To prevent it, we do not answer on sync message, if previous one was sent
-  // no more than `GlobalSyncLockTime` milliseconds ago. There's also per-peer limit `PerPeerSyncLockTime`
-  private val GlobalSyncLockTime = 50
+  // resource exhaustion. To prevent it, we do not answer to a peer on sync message, if previous one was sent
+  // no more than `PerPeerSyncLockTime` milliseconds ago.
   private val PerPeerSyncLockTime = 100
 
   /**
@@ -217,30 +216,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         networkControllerRef ! SendToNetwork(Message(invSpec, Right(InvData(mid, mods)), None), SendToPeer(remote))
     }
 
-  var globalSyncGot = 0L
   /**
     * Process sync message `syncInfo` got from neighbour peer `remote`
     */
   protected def processSync(hr: ErgoHistory, syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
-    val newGlobal = timeProvider.time()
-    val globalDiff = newGlobal - globalSyncGot
-
-    if(globalDiff > GlobalSyncLockTime) {
-      globalSyncGot = newGlobal
-
-      val diff = syncTracker.updateLastSyncGetTime(remote)
-      if (diff > PerPeerSyncLockTime) {
-        // process sync if sent in more than 200 ms after previous sync
-        log.debug(s"Processing sync from $remote")
-        syncInfo match {
-          case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
-          case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
-        }
-      } else {
-        log.debug(s"Spammy sync detected from $remote")
+    val diff = syncTracker.updateLastSyncGetTime(remote)
+    if (diff > PerPeerSyncLockTime) {
+      // process sync if sent in more than 200 ms after previous sync
+      log.debug(s"Processing sync from $remote")
+      syncInfo match {
+        case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
+        case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
       }
     } else {
-      log.debug("Global sync violation")
+      log.debug(s"Spammy sync detected from $remote")
     }
   }
 
@@ -415,7 +404,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Set modifiers of particular type as Requested and download them from given peer and periodically check for delivery
     */
-  private def downloadModifiers(modifierIds: Seq[ModifierId], modifierTypeId: ModifierTypeId, peer: ConnectedPeer): Unit = {
+  private def downloadModifiers(modifierIds: Seq[ModifierId],
+                                modifierTypeId: ModifierTypeId,
+                                peer: ConnectedPeer): Unit = {
     deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer)) { deliveryCheck =>
       context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
     }

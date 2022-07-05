@@ -8,7 +8,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scorex.core.app.Version
 import scorex.core.network.message.{InvData, ModifiersData}
 import scorex.core.network._
-import scorex.core.network.peer.PeerInfo
+import scorex.core.network.peer.{PeerInfo, RestApiUrlPeerFeature}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.{ModifierTypeId, NodeViewModifier}
 import scorex.util.serialization._
@@ -120,7 +120,7 @@ trait ObjectGenerators {
   def peerSpecGen: Gen[PeerSpec] = for {
     declaredAddress <- Gen.frequency(5 -> const(None), 5 -> some(inetSocketAddressGen))
     restApiUrl <- Gen.frequency(5 -> const(None), 5 -> some(urlGen))
-    features <- Gen.frequency(5 -> const(None), 5 -> some(Gen.oneOf(Seq(FullNodePeerFeature))))
+    features <- Gen.frequency(5 -> const(None), 5 -> some(Gen.oneOf(Seq(FullNodePeerFeature, RestApiUrlPeerFeature(restApiUrl)))))
     version <- appVersionGen
   } yield PeerSpec("ergoref", version, "ergo-node", declaredAddress, features.toSeq)
 }

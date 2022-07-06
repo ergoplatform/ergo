@@ -14,6 +14,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
+import scorex.core.network.peer.RestApiUrlPeerFeature
 import scorex.core.settings.RESTApiSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.TimeProvider.Time
@@ -56,10 +57,9 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
         peer.peerInfo.get.peerSpec.address.foreach { address =>
           c.downField("address").as[String] shouldEqual Right(address.toString)
         }
-        restApiSettings.publicUrl.foreach { address =>
-          c.downField("restApiUrl").as[String] shouldEqual Right(address.toString)
+        peer.peerInfo.get.peerSpec.publicUrlOpt.foreach { restApiUrl =>
+          c.downField("restApiUrl").as[String] shouldEqual Right(restApiUrl.toString)
         }
-
         c.downField("lastMessage").as[Long] shouldEqual Right(0L)
         c.downField("lastHandshake").as[Long] shouldEqual Right(0L)
         c.downField("name").as[String] shouldEqual Right(peer.peerInfo.get.peerSpec.nodeName)

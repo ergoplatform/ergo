@@ -60,7 +60,7 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
             lastHandshake = peerInfo.lastHandshake,
             name = peerInfo.peerSpec.nodeName,
             connectionType = peerInfo.connectionType.map(_.toString),
-            restApiUrl = settings.publicUrl.map(_.toString)
+            restApiUrl = peerInfo.peerSpec.publicUrlOpt.map(_.toString)
           )
         }
       }

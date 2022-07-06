@@ -20,9 +20,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   private val MinSyncInterval: FiniteDuration = 20.seconds
   private val SyncThreshold: FiniteDuration = 1.minute
 
-  private val heights = mutable.Map[ConnectedPeer, Height]()
-
-  private val statuses = mutable.Map[ConnectedPeer, ErgoPeerStatus]()
+  private[network] val statuses = mutable.Map[ConnectedPeer, ErgoPeerStatus]()
 
   def fullInfo(): Iterable[ErgoPeerStatus] = statuses.values
 
@@ -68,7 +66,6 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
       // todo: update neighbours status?
     }
 
-    heights += (peer -> height.getOrElse(ErgoHistory.EmptyHistoryHeight))
     NeighboursStatusUnknown
   }
 
@@ -83,7 +80,6 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     statuses.find(_._1.connectionId.remoteAddress == remote) match {
       case Some((peer, _)) =>
         statuses -= peer
-        heights -= peer
       case None =>
         log.warn(s"Trying to clear status for $remote, but it is not found")
     }
@@ -109,8 +105,8 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   protected def numOfSeniors(): Int = statuses.count(_._2.status == Older)
 
   def maxHeight(): Option[Int] = {
-    if (heights.nonEmpty) {
-      Some(heights.maxBy(_._2)._2)
+    if (statuses.nonEmpty) {
+      Some(statuses.maxBy(_._2.height)._2.height)
     } else {
       None
     }

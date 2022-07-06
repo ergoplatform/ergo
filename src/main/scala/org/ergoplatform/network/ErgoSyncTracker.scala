@@ -20,10 +20,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   private val MinSyncInterval: FiniteDuration = 20.seconds
   private val SyncThreshold: FiniteDuration = 1.minute
 
-  val heights: mutable.Map[ConnectedPeer, Height] = mutable.Map[ConnectedPeer, Height]()
+  private val heights = mutable.Map[ConnectedPeer, Height]()
 
-  protected[network] val statuses: mutable.Map[ConnectedPeer, ErgoPeerStatus] =
-    mutable.Map[ConnectedPeer, ErgoPeerStatus]()
+  private val statuses = mutable.Map[ConnectedPeer, ErgoPeerStatus]()
 
   def fullInfo(): Iterable[ErgoPeerStatus] = statuses.values
 

@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import java.net.InetSocketAddress
 
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.consensus.{Fork, HistoryComparisonResult, Older, Unknown}
 import scorex.core.network.ConnectedPeer
@@ -41,6 +41,23 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
         .flatMap(_.lastSyncSentTime)
         .exists(syncTime => (timeProvider.time() - syncTime).millis > SyncThreshold)
     notSyncedOrMissing || outdated
+  }
+
+  def updateStatus(peer: ConnectedPeer,
+                   syncInfo: ErgoSyncInfo,
+                   hr: ErgoHistoryReader): (HistoryComparisonResult, Boolean) = {
+    val oldStatus = getStatus(peer).getOrElse(Unknown)
+    val status = hr.compare(syncInfo)
+
+    val height = syncInfo match {
+      case _: ErgoSyncInfoV1 => None
+      case sv2: ErgoSyncInfoV2 => sv2.height
+    }
+    updateStatus(peer, status, height)
+
+    val syncSendNeeded = (oldStatus != status) || notSyncedOrOutdated(peer) || status == Older || status == Fork
+
+    (status, syncSendNeeded)
   }
 
   def updateStatus(peer: ConnectedPeer,

@@ -28,7 +28,6 @@ import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, Request
 import scorex.core.network._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.Transaction
@@ -237,13 +236,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Processing sync V1 message `syncInfo` got from neighbour peer `remote`
     */
   protected def processSyncV1(hr: ErgoHistory, syncInfo: ErgoSyncInfoV1, remote: ConnectedPeer): Unit = {
-    val comparison = hr.compare(syncInfo)
-    log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaderIds}. " +
-      s"Comparison result is $comparison.")
-
-    val oldStatus = syncTracker.getStatus(remote).getOrElse(Unknown)
-    val status = comparison
-    syncTracker.updateStatus(remote, status, height = None)
+    val (status, syncSendNeeded) = syncTracker.updateStatus(remote, syncInfo, hr)
 
     status match {
       case Unknown =>
@@ -284,7 +277,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"$remote has equal header-chain")
     }
 
-    if ((oldStatus != status) || syncTracker.notSyncedOrOutdated(remote) || status == Older || status == Fork) {
+    if (syncSendNeeded) {
       val ownSyncInfo = getV1SyncInfo(hr)
       sendSyncToPeer(remote, ownSyncInfo)
     }
@@ -294,12 +287,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Processing sync V2 message `syncInfo` got from neighbour peer `remote` (supporting sync v2)
     */
   protected def processSyncV2(hr: ErgoHistory, syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
-    val oldStatus = syncTracker.getStatus(remote).getOrElse(Unknown)
-    val status = hr.compare(syncInfo)
-    syncTracker.updateStatus(remote, status, syncInfo.height)
-
-    log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaders}. " +
-      s"Comparison result is $status.")
+    val (status, syncSendNeeded) = syncTracker.updateStatus(remote, syncInfo, hr)
 
     status match {
       case Unknown =>
@@ -335,7 +323,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"$remote has equal header-chain")
     }
 
-    if ((oldStatus != status) || syncTracker.notSyncedOrOutdated(remote) || status == Older || status == Fork) {
+    if (syncSendNeeded) {
       val ownSyncInfo = getV2SyncInfo(hr, full = true)
       sendSyncToPeer(remote, ownSyncInfo)
     }

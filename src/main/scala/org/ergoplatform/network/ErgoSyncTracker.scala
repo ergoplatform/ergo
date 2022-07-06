@@ -2,7 +2,6 @@ package org.ergoplatform.network
 
 import java.net.InetSocketAddress
 
-import org.ergoplatform.network.ErgoSyncTracker.{NeighboursStatus, NeighboursStatusUnknown}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.consensus.{Fork, HistoryComparisonResult, Older, Unknown}

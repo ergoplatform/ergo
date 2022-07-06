@@ -46,7 +46,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
 
   def updateStatus(peer: ConnectedPeer,
                    status: HistoryComparisonResult,
-                   height: Option[Height]): NeighboursStatus = {
+                   height: Option[Height]): Unit = {
     val seniorsBefore = numOfSeniors()
     statuses.adjust(peer){
       case None =>
@@ -65,8 +65,6 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     if (seniorsBefore == 0 && seniorsAfter > 0) {
       // todo: update neighbours status?
     }
-
-    NeighboursStatusUnknown
   }
 
   /**
@@ -149,9 +147,4 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     }.mkString("\n")
   }
 
-}
-
-object ErgoSyncTracker {
-  sealed trait NeighboursStatus
-  case object NeighboursStatusUnknown extends NeighboursStatus
 }

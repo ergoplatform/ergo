@@ -14,7 +14,6 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
-import scorex.core.network.peer.RestApiUrlPeerFeature
 import scorex.core.settings.RESTApiSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.TimeProvider.Time

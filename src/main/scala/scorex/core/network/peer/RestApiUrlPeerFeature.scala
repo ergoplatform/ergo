@@ -8,6 +8,10 @@ import scorex.util.serialization._
 
 import java.net.URL
 
+/**
+  * Peer may have rest-api URL enabled in which case it needs to be passed to/from other peers
+  * @param restApiUrl publicly accessible url of node which exposes restApi in firewall
+  */
 case class RestApiUrlPeerFeature(restApiUrl: Option[URL]) extends PeerFeature {
   override type M = RestApiUrlPeerFeature
   override val featureId: Id = RestApiUrlPeerFeature.featureId
@@ -16,7 +20,7 @@ case class RestApiUrlPeerFeature(restApiUrl: Option[URL]) extends PeerFeature {
 }
 
 object RestApiUrlPeerFeature {
-  val featureId: Id = 4: Byte // ???
+  val featureId: Id = 4: Byte
 }
 
 object RestApiUrlPeerFeatureSerializer extends ScorexSerializer[RestApiUrlPeerFeature] {

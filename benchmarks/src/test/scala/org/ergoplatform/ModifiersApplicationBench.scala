@@ -1,7 +1,7 @@
 package org.ergoplatform
 
 import org.ergoplatform.Utils.BenchReport
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
@@ -25,17 +25,17 @@ object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark {
     val extensions: Seq[Extension] = readExtensions
 
     def bench(benchCase: String)
-             (applicator: (Seq[ErgoPersistentModifier], ErgoHistory) => Any,
-              mods: Seq[ErgoPersistentModifier]): (String, Long) = {
+             (applicator: (Seq[BlockSection], ErgoHistory) => Any,
+              mods: Seq[BlockSection]): (String, Long) = {
       val preparedHistory = applyModifiers(headers.take(mods.size / 2), unlockedHistory())._1
       val et = Utils.time(applicator(mods, preparedHistory)).toLong
       assert(preparedHistory.fullBlockHeight == mods.size / 2)
       s"Performance of `$benchCase`: $et ms" -> et
     }
 
-    def applyModifiersWithCache(mods: Seq[ErgoPersistentModifier], his: ErgoHistory): (ErgoHistory, Int) = {
+    def applyModifiersWithCache(mods: Seq[BlockSection], his: ErgoHistory): (ErgoHistory, Int) = {
       mods.foreach(m => cache.put(m.id, m))
-      @tailrec def applyLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
+      @tailrec def applyLoop(applied: Seq[BlockSection]): Seq[BlockSection] = {
         cache.popCandidate(his) match {
           case Some(mod) =>
             his.append(mod).get
@@ -49,9 +49,9 @@ object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark {
       his -> appliedModsQty
     }
 
-    def applyModifiers(mods: Seq[ErgoPersistentModifier], his: ErgoHistory): (ErgoHistory, Int) = {
-      @tailrec def applyLoop(rem: Seq[ErgoPersistentModifier],
-                             applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
+    def applyModifiers(mods: Seq[BlockSection], his: ErgoHistory): (ErgoHistory, Int) = {
+      @tailrec def applyLoop(rem: Seq[BlockSection],
+                             applied: Seq[BlockSection]): Seq[BlockSection] = {
         rem match {
           case m :: tail =>
             his.applicableTry(m)

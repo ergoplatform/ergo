@@ -49,7 +49,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
-  private val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
+  private val syncTracker = ErgoSyncTracker(settings.network, timeProvider)
 
   val statsCollectorRef: ActorRef =
     ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider)

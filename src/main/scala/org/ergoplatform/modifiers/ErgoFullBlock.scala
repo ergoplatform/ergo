@@ -15,7 +15,7 @@ case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
                          extension: Extension,
                          adProofs: Option[ADProofs])
-  extends ErgoPersistentModifier
+  extends BlockSection
     with TransactionsCarryingPersistentNodeViewModifier {
 
   override type M = ErgoFullBlock
@@ -28,11 +28,11 @@ case class ErgoFullBlock(header: Header,
 
   override def parentId: ModifierId = header.parentId
 
-  lazy val mandatoryBlockSections: Seq[BlockSection] = Seq(blockTransactions, extension)
+  lazy val mandatoryBlockSections: Seq[NonHeaderBlockSection] = Seq(blockTransactions, extension)
 
-  lazy val blockSections: Seq[BlockSection] = adProofs.toSeq ++ mandatoryBlockSections
+  lazy val blockSections: Seq[NonHeaderBlockSection] = adProofs.toSeq ++ mandatoryBlockSections
 
-  lazy val toSeq: Seq[ErgoPersistentModifier] = header +: blockSections
+  lazy val toSeq: Seq[BlockSection] = header +: blockSections
 
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
 

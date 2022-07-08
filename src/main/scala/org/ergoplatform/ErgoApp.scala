@@ -104,7 +104,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     }
 
 
-  private val syncTracker = ErgoSyncTracker(actorSystem, scorexSettings.network, timeProvider)
+  private val syncTracker = ErgoSyncTracker(scorexSettings.network, timeProvider)
   private val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider)
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 

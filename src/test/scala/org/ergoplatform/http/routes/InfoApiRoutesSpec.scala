@@ -59,7 +59,6 @@ class InfoApiRoutesSpec extends AnyFlatSpec
       c.downField("isMining").as[Boolean] shouldEqual Right(settings.nodeSettings.mining)
       c.downField("launchTime").as[Long] shouldEqual Right(fakeTimeProvider.time())
       c.downField("eip27Supported").as[Boolean] shouldEqual Right(true)
-      c.downField("restApiUrl").as[String] shouldEqual Right("https://example.com:80")
     }
   }
 

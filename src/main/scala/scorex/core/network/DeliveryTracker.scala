@@ -106,8 +106,11 @@ class DeliveryTracker(maxDeliveryChecks: Int,
     else if (modifierKeepers.exists(_.contains(modifierId))) Held
     else Unknown
 
-  def requireStatus(oldStatus: ModifiersStatus, expectedStatues: ModifiersStatus): Unit = {
-    require(isCorrectTransition(oldStatus, expectedStatues), s"Illegal status transition: $oldStatus -> $expectedStatues")
+  // Write ERR message about incorrect transition into the log, so devs will find it eventually
+  def checkStatusTransition(oldStatus: ModifiersStatus, expectedStatues: ModifiersStatus): Unit = {
+    if (!isCorrectTransition(oldStatus, expectedStatues)) {
+      log.error(s"Illegal status transition: $oldStatus -> $expectedStatues")
+    }
   }
 
   /**
@@ -131,7 +134,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
   private def setRequested(id: ModifierId, typeId: ModifierTypeId, supplierOpt: Option[ConnectedPeer], checksDone: Int = 0)
                   (schedule: CheckDelivery => Cancellable): Unit =
     tryWithLogging {
-      requireStatus(status(id, typeId, Seq.empty), Requested)
+      checkStatusTransition(status(id, typeId, Seq.empty), Requested)
       val cancellable = schedule(CheckDelivery(supplierOpt, typeId, id))
       val requestedInfo = RequestedInfo(supplierOpt, cancellable, checksDone)
       requested.adjust(typeId)(_.fold(Map(id -> requestedInfo))(_.updated(id, requestedInfo)))
@@ -160,7 +163,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
   def setInvalid(id: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
     val oldStatus: ModifiersStatus = status(id, modifierTypeId, Seq.empty)
     val transitionCheck = tryWithLogging {
-      requireStatus(oldStatus, Invalid)
+      checkStatusTransition(oldStatus, Invalid)
     }
     transitionCheck
       .toOption
@@ -203,7 +206,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
   def setHeld(id: ModifierId, modifierTypeId: ModifierTypeId): Unit =
     tryWithLogging {
       val oldStatus = status(id, modifierTypeId, Seq.empty)
-      requireStatus(oldStatus, Held)
+      checkStatusTransition(oldStatus, Held)
       clearStatusForModifier(id, modifierTypeId, oldStatus) // clear old status
     }
 
@@ -218,7 +221,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
   def setUnknown(id: ModifierId, modifierTypeId: ModifierTypeId): Unit =
     tryWithLogging {
       val oldStatus = status(id, modifierTypeId, Seq.empty)
-      requireStatus(oldStatus, Unknown)
+      checkStatusTransition(oldStatus, Unknown)
       clearStatusForModifier(id, modifierTypeId, oldStatus) // clear old status
     }
 
@@ -228,7 +231,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
   def setReceived(id: ModifierId, modifierTypeId: ModifierTypeId, sender: ConnectedPeer): Unit =
     tryWithLogging {
       val oldStatus = status(id, modifierTypeId, Seq.empty)
-      requireStatus(oldStatus, Received)
+      checkStatusTransition(oldStatus, Received)
       if (oldStatus != Received) {
         requested.flatAdjust(modifierTypeId)(_.map { infoById =>
           infoById.get(id) match {

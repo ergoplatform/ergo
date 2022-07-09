@@ -1,7 +1,7 @@
 package scorex.core.settings
 
 import java.io.File
-import java.net.{InetSocketAddress, URL}
+import java.net.InetSocketAddress
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
@@ -16,8 +16,7 @@ case class LoggingSettings(level: String)
 case class RESTApiSettings(bindAddress: InetSocketAddress,
                            apiKeyHash: Option[String],
                            corsAllowedOrigin: Option[String],
-                           timeout: FiniteDuration,
-                           publicUrl: Option[URL])
+                           timeout: FiniteDuration)
 
 case class NetworkSettings(nodeName: String,
                            addedMaxDelay: Option[FiniteDuration],

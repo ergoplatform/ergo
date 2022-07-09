@@ -7,7 +7,6 @@ import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.transaction.box.Box.Amount
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
 
@@ -24,7 +23,7 @@ import sigmastate.Values.EvaluatedValue
   */
 case class AssetIssueRequest(addressOpt: Option[ErgoAddress],
                              valueOpt: Option[Long],
-                             amount: Amount,
+                             amount: Long,
                              name: String,
                              description: String,
                              decimals: Int,
@@ -35,7 +34,7 @@ object AssetIssueRequest {
 
   def apply(address: ErgoAddress,
             valueOpt: Option[Long],
-            amount: Amount,
+            amount: Long,
             name: String,
             description: String,
             decimals: Int,
@@ -71,7 +70,7 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
     for {
       address <- cursor.downField("address").as[Option[ErgoAddress]]
       value <- cursor.downField("ergValue").as[Option[Long]]
-      amount <- cursor.downField("amount").as[Amount]
+      amount <- cursor.downField("amount").as[Long]
       name <- cursor.downField("name").as[String]
       description <- cursor.downField("description").as[String]
       decimals <- cursor.downField("decimals").as[Int]

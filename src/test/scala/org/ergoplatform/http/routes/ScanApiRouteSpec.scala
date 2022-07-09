@@ -101,7 +101,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "list unspent boxes for a scan" in {
+  it should "list unspent boxes for a scan with lower constraint" in {
     val minConfirmations = 15
     val minInclusionHeight = 20
 
@@ -111,7 +111,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[List[Json]])
       response shouldBe 'success
-      response.get.nonEmpty shouldBe true
+      response.get.nonEmpty shouldBe true // there are boxes that has confirmations > 15 and inclusionHeight > 20
       response.get.foreach { json =>
         json.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
         json.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
@@ -123,7 +123,44 @@ class ScanApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "list unspent and unconfirmed boxes for a scan" in {
+
+  it should "list unspent boxes for a scan with upper constraint" in {
+    val maxConfirmations = 15
+    val maxInclusionHeight = 20
+
+    val suffix = s"/unspentBoxes/101?maxConfirmations=$maxConfirmations&maxInclusionHeight=$maxInclusionHeight"
+
+    Get(prefix + suffix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[List[Json]])
+      response shouldBe 'success
+      response.get.nonEmpty shouldBe true // there are boxes that has confirmations < 15 and inclusionHeight < 20
+      response.get.foreach { json =>
+        json.hcursor.downField("confirmationsNum").as[Int].forall(_ <= maxConfirmations) shouldBe true
+        json.hcursor.downField("inclusionHeight").as[Int].forall(_ <= maxInclusionHeight) shouldBe true
+      }
+      // unconfirmed box not returned
+      response.get.flatMap(_.hcursor.downField("confirmationsNum").as[Option[Int]].toOption)
+        .exists(_.isDefined == false) shouldBe false
+    }
+  }
+
+
+  it should "list unspent boxes for a scan with upper and lower constraints" in {
+    val confirmations = 15
+    val inclusionHeight = 20
+
+    val suffix = s"/unspentBoxes/101?minConfirmations=$confirmations&minInclusionHeight=$inclusionHeight&maxConfirmations=$confirmations&maxInclusionHeight=$inclusionHeight"
+
+    Get(prefix + suffix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[List[Json]])
+      response shouldBe 'success
+      response.get.nonEmpty shouldBe false // there are no boxes with confirmations and inclusionHeight within range
+    }
+  }
+
+  it should "list unspent and unconfirmed boxes for a scan with lower constraint" in {
     val minConfirmations = -1
     val minInclusionHeight = 0
 
@@ -141,10 +178,11 @@ class ScanApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "list spent boxes for a scan" in {
-    val minInclusionHeight = 10
+  it should "list spent boxes for a scan with lower constraint" in {
+    val minConfirmations = 15
+    val minInclusionHeight = 20
 
-    val suffix = s"/spentBoxes/101"
+    val suffix = s"/spentBoxes/101?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
 
     Get(prefix + suffix) ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -154,10 +192,52 @@ class ScanApiRouteSpec extends AnyFlatSpec
       response.get.foreach { json =>
         json.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
       }
+      response.get.foreach { json =>
+        json.hcursor.downField("spent").as[Boolean].forall(_ == true) shouldBe true
+      }
 
       // unconfirmed box not returned
       response.get.flatMap(_.hcursor.downField("confirmationsNum").as[Option[Int]].toOption)
         .exists(_.isDefined == false) shouldBe false
+    }
+  }
+
+  it should "list spent boxes for a scan with upper constraint" in {
+    val maxConfirmations = 15
+    val maxInclusionHeight = 20
+
+    val suffix = s"/spentBoxes/101?maxConfirmations=$maxConfirmations&maxInclusionHeight=$maxInclusionHeight"
+
+    Get(prefix + suffix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[List[Json]])
+      response shouldBe 'success
+      response.get.nonEmpty shouldBe true
+      response.get.foreach { json =>
+        json.hcursor.downField("confirmationsNum").as[Int].forall(_ <= maxConfirmations) shouldBe true
+        json.hcursor.downField("inclusionHeight").as[Int].forall(_ <= maxInclusionHeight) shouldBe true
+      }
+      response.get.foreach { json =>
+        json.hcursor.downField("spent").as[Boolean].forall(_ == true) shouldBe true
+      }
+
+      // unconfirmed box not returned
+      response.get.flatMap(_.hcursor.downField("confirmationsNum").as[Option[Int]].toOption)
+        .exists(_.isDefined == false) shouldBe false
+    }
+  }
+
+  it should "list spent boxes boxes for a scan with upper and lower constraints" in {
+    val confirmations = 15
+    val inclusionHeight = 20
+
+    val suffix = s"/spentBoxes/101?minConfirmations=$confirmations&minInclusionHeight=$inclusionHeight&maxConfirmations=$confirmations&maxInclusionHeight=$inclusionHeight"
+
+    Get(prefix + suffix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[List[Json]])
+      response shouldBe 'success
+      response.get.nonEmpty shouldBe false // there are no spent boxes with confirmations and inclusionHeight within range
     }
   }
 

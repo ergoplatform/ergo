@@ -385,7 +385,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     def peerWithStatus(status: HistoryComparisonResult): Option[ConnectedPeer] = {
       syncTracker.peersByStatus.get(Older).flatMap{ peers =>
-        val randomPeer = peers(Random.nextInt())
+        val randomPeer = peers(Random.nextInt(peers.size))
         if(peerFilterFn(randomPeer)) {
           Some(randomPeer)
         } else {

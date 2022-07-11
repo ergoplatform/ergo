@@ -237,7 +237,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     withFixture { ctx =>
       import ctx._
       deliveryTracker.reset()
-      deliveryTracker.setRequested(Seq(chain.take(1001).last.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+      deliveryTracker.setRequested(Header.modifierTypeId, chain.take(1001).last.id, Some(peer))(_ => Cancellable.alreadyCancelled)
       val olderChain = chain.take(1001)
       val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
       val modSpec = new ModifiersSpec(100)
@@ -304,7 +304,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
 
       def sendHeader(header: Header): Unit = {
-        deliveryTracker.setRequested(Seq(header.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+        deliveryTracker.setRequested(Header.modifierTypeId, header.id, Some(peer))(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
         val modSpec = new ModifiersSpec(100)
         synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
@@ -336,14 +336,14 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       import ctx._
 
       def sendHeader(block: ErgoFullBlock): Unit = {
-        deliveryTracker.setRequested(Seq(block.header.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+        deliveryTracker.setRequested(Header.modifierTypeId, block.header.id, Some(peer))(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
         val modSpec = new ModifiersSpec(100)
         synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
       }
 
       def sendBlockSection(block: BlockSection): Unit = {
-        deliveryTracker.setRequested(Seq(block.id), block.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+        deliveryTracker.setRequested(block.modifierTypeId, block.id, Some(peer))(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(block.modifierTypeId, Map(block.id -> block.bytes))
         val modSpec = new ModifiersSpec(10000)
         synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))

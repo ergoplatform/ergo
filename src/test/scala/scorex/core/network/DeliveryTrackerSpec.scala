@@ -16,7 +16,7 @@ class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {
       val tracker = DeliveryTracker.empty(settings)
       val mid: ModifierId = ModifierId @@ "foo"
       val mTypeId: ModifierTypeId = ModifierTypeId @@ (104: Byte)
-      tracker.setRequested(Seq(mid), mTypeId, Some(peer)) { _ => Cancellable.alreadyCancelled}
+      tracker.setRequested(mTypeId, mid, Some(peer)) { _ => Cancellable.alreadyCancelled}
       val infoFields =
         Seq(
           "address" -> peer.connectionId.remoteAddress.toString.asJson,

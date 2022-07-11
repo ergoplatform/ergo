@@ -4,20 +4,19 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
-import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
-import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
+import scorex.core.consensus.{Equal, Fork, HistoryComparisonResult, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs}
@@ -39,12 +38,11 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Random, Success}
 
 /**
   * Tweaks on top of Scorex' NodeViewSynchronizer made to optimize Ergo network
@@ -370,7 +368,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             case (modifierTypeId, modifierId) =>
               if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
                 log.info(s"Downloading block section for header ${continuationHeader.encodedId} : ($modifierId, $modifierTypeId)")
-                downloadModifiers(Seq(modifierId), modifierTypeId, peer)
+                requestDownload(modifierTypeId, Seq(modifierId), peer)
               }
           }
       }
@@ -381,46 +379,92 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @param callingPeer that can be used to download headers, it must be Older
     * @return available peers to download headers from together with the state/origin of the peer
     */
-  private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): (PeerSyncState, Iterable[ConnectedPeer]) = {
+  private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): Iterable[ConnectedPeer] = {
     syncTracker.peersByStatus
       .get(Older)
-      .map(PeerSyncState.Older -> _)
-      .getOrElse(PeerSyncState.OlderCalling -> Array(callingPeer))
+      .getOrElse(Array(callingPeer))
+  }
+
+  private def getPeerForDownloadingBlocks: Option[ConnectedPeer] = {
+    def peerFilterFn(peer: ConnectedPeer): Boolean = {
+      if (settings.nodeSettings.stateType == StateType.Digest) {
+        DigestModeFilter.condition(peer)
+      } else {
+        BrokenModifiersFilter.condition(peer)
+      }
+    }
+
+    def peerWithStatus(status: HistoryComparisonResult): Option[ConnectedPeer] = {
+      syncTracker.peersByStatus.get(Older).flatMap{ peers =>
+        val randomPeer = peers(Random.nextInt())
+        if(peerFilterFn(randomPeer)) {
+          Some(randomPeer)
+        } else {
+          peers.find(peerFilterFn)
+        }
+      }
+    }
+
+    //todo: log warn if status is Unknown or Fork ?
+    peerWithStatus(Older).orElse(peerWithStatus(Equal)).orElse(peerWithStatus(Unknown)).orElse(peerWithStatus(Fork))
   }
 
   /**
     * Other persistent modifiers besides headers should be downloaded from either Older or Equal node, with fallback to Unknown or Fork
     * @return available peers to download persistent modifiers from together with the state/origin of the peer
     */
-  private def getPeersForDownloadingBlocks: Option[(PeerSyncState, Iterable[ConnectedPeer])] = {
+  private def getPeersForDownloadingBlocks: Option[Iterable[ConnectedPeer]] = {
     val peersByStatus = syncTracker.peersByStatus
     Option(peersByStatus.getOrElse(Older, mutable.WrappedArray.empty) ++ peersByStatus.getOrElse(Equal, mutable.WrappedArray.empty))
       .filter(_.nonEmpty)
-      .map(PeerSyncState.OlderOrEqual -> _)
       .orElse {
         Option(peersByStatus.getOrElse(Unknown, mutable.WrappedArray.empty) ++ peersByStatus.getOrElse(Fork, mutable.WrappedArray.empty))
           .filter(_.nonEmpty)
-          .map(PeerSyncState.UnknownOrFork -> _)
-      }.map { case (syncState, peers) =>
-        val peersFiltered =
-          if (settings.nodeSettings.stateType == StateType.Digest) {
-            DigestModeFilter.filter(peers)
-          } else {
-            BrokenModifiersFilter.filter(peers)
-          }
-        syncState -> peersFiltered
+      }.map { peers =>
+        if (settings.nodeSettings.stateType == StateType.Digest) {
+          DigestModeFilter.filter(peers)
+        } else {
+          BrokenModifiersFilter.filter(peers)
+        }
       }
   }
 
-  /**
-    * Set modifiers of particular type as Requested and download them from given peer and periodically check for delivery
-    */
-  private def downloadModifiers(modifierIds: Seq[ModifierId], modifierTypeId: ModifierTypeId, peer: ConnectedPeer): Unit = {
-    deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer)) { deliveryCheck =>
-      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
-    }
+  def requestDownload(modifierTypeId: ModifierTypeId,
+                      modifierIds: Seq[ModifierId],
+                      peer: ConnectedPeer,
+                      checksDone: Int = 0) = {
+    //todo : check that if checksDone > 0, modifierIds.size == 0
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+
+    modifierIds.foreach { modifierId =>
+      deliveryTracker.setRequested(modifierTypeId, modifierId, Some(peer), checksDone) { deliveryCheck =>
+        context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+      }
+    }
+  }
+
+  /**
+    * Our node needs modifiers of type `modifierTypeId` with ids `modifierIds`
+    * but peer that can deliver it is unknown.
+    * Request this modifier from random peer.
+    */
+  def requestDownload(modifierTypeId: ModifierTypeId,
+                      modifierId: ModifierId,
+                      checksDone: Int): Unit = {
+    getPeerForDownloadingBlocks match {
+      case Some(peerToAsk) =>
+        requestDownload(modifierTypeId, Seq(modifierId), peerToAsk, checksDone)
+      case None =>
+        log.error("No peer found to download a block section from. DeliveryTracker state: " + deliveryTracker)
+    }
+  }
+
+  def onDownloadRequest(historyReader: ErgoHistory): Receive = {
+    case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
+      if (deliveryTracker.status(modifierId, modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
+        requestDownload(modifierTypeId, modifierId, checksDone = 0)
+      }
   }
 
   /**
@@ -433,10 +477,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @param fetchMax function that fetches modifiers, it is passed how many of them tops
     */
   protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
-                               (getPeersOpt: => Option[(PeerSyncState, Iterable[ConnectedPeer])])
+                               (getPeersOpt: => Option[Iterable[ConnectedPeer]])
                                (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit =
     getPeersOpt
-      .foreach { case (peerStatus, peers) =>
+      .foreach { peers =>
         val modifiersByBucket = ElementPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
         // collect and log useful downloading progress information, don't worry it does not run frequently
         modifiersByBucket.headOption.foreach { _ =>
@@ -444,12 +488,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             .groupBy(_._1._2)
             .mapValues(_.map(_._2.size))
             .map { case (modType, batchSizes) =>
-              s"Downloading from $peerStatus peers : type[$modType] of ${batchSizes.size} batches each of ~ size: ${batchSizes.take(2).max}"
+              s"Downloading from peers : type[$modType] of ${batchSizes.size} batches each of ~ size: ${batchSizes.take(2).max}"
             }.foreach(log.info(_))
         }
         // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
         modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
-          downloadModifiers(modifierIds, modifierTypeId, peer)
+          requestDownload(modifierTypeId, modifierIds, peer)
         }
       }
 
@@ -602,11 +646,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (newModifierIds.nonEmpty) {
       log.debug(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
-      val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
-      peer.handlerRef ! msg
-      deliveryTracker.setRequested(newModifierIds, modifierTypeId, Some(peer)) { deliveryCheck =>
-        context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
-      }
+      requestDownload(modifierTypeId, newModifierIds, peer)
     }
   }
 
@@ -695,54 +735,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (modifierTypeId == Transaction.ModifierTypeId) {
           deliveryTracker.clearStatusForModifier(modifierId, modifierTypeId, ModifiersStatus.Requested)
         } else {
-          // A persistent modifier is not delivered on time.
+          // A block section is not delivered on time.
           peerOpt match {
             case Some(peer) =>
               log.info(s"Peer ${peer.toString} has not delivered asked modifier $modifierTypeId : ${encoder.encodeId(modifierId)} on time")
               penalizeNonDeliveringPeer(peer)
-              deliveryTracker.onStillWaiting(peer, modifierTypeId, modifierId) { deliveryCheck =>
-                context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
-              }
+
             case None =>
               // Random peer has not delivered modifier we need, ask another peer
               // We need this modifier - no limit for number of attempts
               log.info(s"Modifier $modifierTypeId : ${encoder.encodeId(modifierId)} has not delivered on time")
-              deliveryTracker.setUnknown(modifierId, modifierTypeId)
-
-              val sendingStrategy =
-                if (modifierTypeId == ADProofs.modifierTypeId) {
-                  getPeersForDownloadingBlocks
-                    .map { case (_, peers) => SendToRandomFromChosen(peers.toSeq) }
-                    .getOrElse(SendToRandom)
-                } else {
-                  SendToRandom
-                }
-              requestDownload(modifierTypeId, Seq(modifierId), sendingStrategy)
+          }
+          val checksDone = deliveryTracker.requestsMade(modifierTypeId, modifierId) + 1
+          if(checksDone <= networkSettings.maxDeliveryChecks) {
+            deliveryTracker.setUnknown(modifierId, modifierTypeId)
+            requestDownload(modifierTypeId, modifierId, checksDone)
+          } else {
+            deliveryTracker.setInvalid(modifierId, modifierTypeId)
           }
         }
       }
   }
 
-
-  /**
-    * Our node needs modifiers of type `modifierTypeId` with ids `modifierIds`
-    * but peer that can deliver it is unknown.
-    * Request this modifier from random peer.
-    */
-  def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId], strategy: SendingStrategy = SendToRandom): Unit = {
-    deliveryTracker.setRequested(modifierIds, modifierTypeId, None) { deliveryCheck =>
-      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
-    }
-    val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
-    networkControllerRef ! SendToNetwork(msg, strategy)
-  }
-
-  def onDownloadRequest(historyReader: ErgoHistory): Receive = {
-    case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
-      if (deliveryTracker.status(modifierId, modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
-        requestDownload(modifierTypeId, Seq(modifierId))
-      }
-  }
 
   protected def penalizeNonDeliveringPeer(peer: ConnectedPeer): Unit = {
     networkControllerRef ! PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.NonDeliveryPenalty)
@@ -1015,19 +1029,6 @@ object ErgoNodeViewSynchronizer {
 
     case class SemanticallySuccessfulModifier(modifier: ErgoPersistentModifier) extends ModificationOutcome
 
-  }
-
-  /** Alternative Peer Status dedicated only for peer syncing */
-  sealed trait PeerSyncState
-  object PeerSyncState {
-    /** Peer for downloading headers must be older */
-    case object Older extends PeerSyncState
-    /** Peer downloading blocks can be older or equal */
-    case object OlderOrEqual extends PeerSyncState
-    /** Calling peer is always older */
-    case object OlderCalling extends PeerSyncState
-    /** Better Unknown or Fork than no peers */
-    case object UnknownOrFork extends PeerSyncState
   }
 
 }

@@ -105,10 +105,13 @@ final case class ErgoSyncTracker(system: ActorSystem,
     }.keys.toVector
   }
 
-  def peersByStatus: Map[HistoryComparisonResult, Iterable[ConnectedPeer]] =
-    statuses.groupBy(_._2.status).mapValues(_.keys).view.force
+  def peersByStatus: Map[HistoryComparisonResult, Seq[ConnectedPeer]] = {
+    statuses.groupBy(_._2.status).mapValues(_.keys.toVector).view.force
+  }
 
-  protected def numOfSeniors(): Int = statuses.count(_._2.status == Older)
+  protected def numOfSeniors(): Int = {
+    statuses.count(_._2.status == Older)
+  }
 
   def maxHeight(): Option[Int] = {
     if (heights.nonEmpty) {

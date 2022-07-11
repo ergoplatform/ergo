@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
@@ -154,7 +154,10 @@ trait ErgoHistoryReader
             // Last headers are the same => chains are equal
             Equal
           } else {
-            if (commonPoint(otherHeaders.tail).isDefined) {
+            if (otherLastHeader.nBits == myLastHeader.nBits &&
+              chainSettings.powScheme.validate(otherLastHeader).isSuccess &&
+              commonPoint(otherHeaders.tail).isDefined
+            ) {
               Fork
             } else {
               Unknown

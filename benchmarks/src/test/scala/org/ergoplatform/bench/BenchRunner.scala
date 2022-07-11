@@ -2,7 +2,7 @@ package org.ergoplatform.bench
 
 import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.bench.misc.TempDir
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
@@ -71,7 +71,7 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
     ()
   }
 
-  private def runBench(benchRef: ActorRef, nodeRef: ActorRef, modifiers: Vector[ErgoPersistentModifier]): Unit = {
+  private def runBench(benchRef: ActorRef, nodeRef: ActorRef, modifiers: Vector[BlockSection]): Unit = {
     benchRef ! BenchActor.Start
     modifiers.foreach { m => nodeRef ! LocallyGeneratedModifier(m) }
   }

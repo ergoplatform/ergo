@@ -1,6 +1,5 @@
 package org.ergoplatform.network
 
-import akka.actor.ActorSystem
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.consensus.{Older, Younger}
 import scorex.core.network.{ConnectedPeer, ConnectionId, Incoming}
@@ -12,7 +11,7 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     val peerInfo = PeerInfo(defaultPeerSpec, time, Some(Incoming))
     val cid = ConnectionId(inetAddr1, inetAddr2, Incoming)
     val connectedPeer = ConnectedPeer(cid, handlerRef = null, lastMessage = 5L, Some(peerInfo))
-    val syncTracker = ErgoSyncTracker(ActorSystem(), settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
 
     val height = 1000
     // add peer to sync

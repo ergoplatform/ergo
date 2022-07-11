@@ -7,7 +7,7 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
@@ -71,13 +71,13 @@ trait ErgoHistory
   /**
     * Append ErgoPersistentModifier to History if valid
     */
-  def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
+  def append(modifier: BlockSection): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {
     log.debug(s"Trying to append modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} to history")
     applicableTry(modifier).flatMap { _ =>
       modifier match {
         case header: Header =>
           process(header)
-        case section: BlockSection =>
+        case section: NonHeaderBlockSection =>
           process(section)
         case poPoWProof: NipopowProofModifier =>
           process(poPoWProof)
@@ -96,7 +96,7 @@ trait ErgoHistory
   /**
     * Mark modifier as valid
     */
-  def reportModifierIsValid(modifier: ErgoPersistentModifier): Try[ErgoHistory] = synchronized {
+  def reportModifierIsValid(modifier: BlockSection): Try[ErgoHistory] = synchronized {
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
     modifier match {
       case fb: ErgoFullBlock =>
@@ -124,9 +124,9 @@ trait ErgoHistory
     * @return ProgressInfo with next modifier to try to apply
     */
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
-  def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
-                                       progressInfo: ProgressInfo[ErgoPersistentModifier]
-                                      ): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
+  def reportModifierIsInvalid(modifier: BlockSection,
+                              progressInfo: ProgressInfo[BlockSection]
+                             ): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {
     log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
@@ -141,7 +141,7 @@ trait ErgoHistory
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
             historyStorage.insert(validityRow, Nil).map { _ =>
-              this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+              this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
             }
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
@@ -153,7 +153,7 @@ trait ErgoHistory
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq,
                 Seq.empty
               ).map { _ =>
-                this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+                this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
               }
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
@@ -189,7 +189,7 @@ trait ErgoHistory
         //No headers become invalid. Just mark this modifier as invalid
         log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
         historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), Nil).map { _ =>
-          this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+          this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
         }
     }
   }
@@ -197,7 +197,7 @@ trait ErgoHistory
   /**
     * @return header, that corresponds to modifier
     */
-  protected def correspondingHeader(modifier: ErgoPersistentModifier): Option[Header] = modifier match {
+  protected def correspondingHeader(modifier: BlockSection): Option[Header] = modifier match {
     case h: Header => Some(h)
     case full: ErgoFullBlock => Some(full.header)
     case proof: ADProofs => typedModifierById[Header](proof.headerId)

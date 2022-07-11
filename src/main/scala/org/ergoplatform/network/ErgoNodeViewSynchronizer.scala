@@ -438,7 +438,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
 
     modifierIds.foreach { modifierId =>
-      deliveryTracker.setRequested(modifierTypeId, modifierId, Some(peer), checksDone) { deliveryCheck =>
+      deliveryTracker.setRequested(modifierTypeId, modifierId, peer, checksDone) { deliveryCheck =>
         context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
       }
     }
@@ -728,7 +728,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * re-request modifier from a different random peer, if our node does not know a peer who have it
     */
   protected def checkDelivery: Receive = {
-    case CheckDelivery(peerOpt, modifierTypeId, modifierId) =>
+    case CheckDelivery(peer, modifierTypeId, modifierId) =>
       if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
         // If transaction not delivered on time, we just forget about it.
         // It could be removed from other peer's mempool, so no reason to penalize the peer.
@@ -736,16 +736,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           deliveryTracker.clearStatusForModifier(modifierId, modifierTypeId, ModifiersStatus.Requested)
         } else {
           // A block section is not delivered on time.
-          peerOpt match {
-            case Some(peer) =>
-              log.info(s"Peer ${peer.toString} has not delivered asked modifier $modifierTypeId : ${encoder.encodeId(modifierId)} on time")
-              penalizeNonDeliveringPeer(peer)
+          log.info(s"Peer ${peer.toString} has not delivered asked modifier $modifierTypeId : ${encoder.encodeId(modifierId)} on time")
+          penalizeNonDeliveringPeer(peer)
 
-            case None =>
-              // Random peer has not delivered modifier we need, ask another peer
-              // We need this modifier - no limit for number of attempts
-              log.info(s"Modifier $modifierTypeId : ${encoder.encodeId(modifierId)} has not delivered on time")
-          }
           val checksDone = deliveryTracker.requestsMade(modifierTypeId, modifierId) + 1
           if(checksDone <= networkSettings.maxDeliveryChecks) {
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
@@ -975,7 +968,7 @@ object ErgoNodeViewSynchronizer {
       * we just need some modifier, but don't know who have it
       *
       */
-    case class CheckDelivery(source: Option[ConnectedPeer],
+    case class CheckDelivery(source: ConnectedPeer,
                              modifierTypeId: ModifierTypeId,
                              modifierId: ModifierId)
 

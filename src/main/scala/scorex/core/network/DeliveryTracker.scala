@@ -120,20 +120,20 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     */
   def setRequested(typeId: ModifierTypeId,
                    id: ModifierId,
-                   supplierOpt: Option[ConnectedPeer],
+                   supplier: ConnectedPeer,
                    checksDone: Int = 0)
                   (schedule: CheckDelivery => Cancellable): Unit =
     tryWithLogging {
       checkStatusTransition(status(id, typeId, Seq.empty), Requested)
-      val cancellable = schedule(CheckDelivery(supplierOpt, typeId, id))
-      val requestedInfo = RequestedInfo(supplierOpt, cancellable, checksDone)
+      val cancellable = schedule(CheckDelivery(supplier, typeId, id))
+      val requestedInfo = RequestedInfo(supplier, cancellable, checksDone)
       requested.adjust(typeId)(_.fold(Map(id -> requestedInfo))(_.updated(id, requestedInfo)))
     }
 
   /** Get peer we're communicating with in regards with modifier `id` **/
   def getSource(id: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
     status(id, modifierTypeId, Seq.empty) match {
-      case Requested => requested.get(modifierTypeId).flatMap(_.get(id)).flatMap(_.peer)
+      case Requested => requested.get(modifierTypeId).flatMap(_.get(id)).map(_.peer)
       case Received => received.get(modifierTypeId).flatMap(_.get(id))
       case _ => None
     }
@@ -161,7 +161,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
                 case Some(info) =>
                   info.cancellable.cancel()
                   requested.flatAdjust(modifierTypeId)(_.map(_ - id))
-                  info.peer
+                  Some(info.peer)
               }
             }
           case Received =>
@@ -289,7 +289,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
       requested.map { case (mType, infoByMid) =>
         val peersCheckTimes =
           infoByMid.toSeq.sortBy(_._2.checks).reverse.map { case (_, info) =>
-            s"${info.peer.map(_.connectionId.remoteAddress)} checked ${info.checks} times"
+            s"${info.peer.connectionId.remoteAddress} checked ${info.checks} times"
           }.mkString(", ")
         s"$mType : $peersCheckTimes"
       }.mkString("\n")
@@ -305,19 +305,19 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
 
 object DeliveryTracker {
 
-  case class RequestedInfo(peer: Option[ConnectedPeer], cancellable: Cancellable, checks: Int)
+  case class RequestedInfo(peer: ConnectedPeer, cancellable: Cancellable, checks: Int)
 
   object RequestedInfo {
     import io.circe.syntax._
 
     implicit val jsonEncoder: Encoder[RequestedInfo] = { info: RequestedInfo =>
+      val addressField = "address" -> info.peer.connectionId.remoteAddress.toString.asJson
       val checksField = "checks" -> info.checks.asJson
       val optionalFields =
         List(
-          info.peer.map(_.connectionId.remoteAddress.toString).map("address" -> _.asJson),
-          info.peer.flatMap(_.peerInfo.map(_.peerSpec.protocolVersion.toString)).map("version" -> _.asJson)
+          info.peer.peerInfo.map(_.peerSpec.protocolVersion.toString).map("version" -> _.asJson)
         ).flatten
-      val fields = checksField :: optionalFields
+      val fields = addressField :: checksField :: optionalFields
       Json.obj(fields:_*)
     }
   }

@@ -149,19 +149,19 @@ trait ErgoHistoryReader
         val otherHeight = otherLastHeader.height
         // todo: check PoW of otherLastHeader
 
-        if (otherHeight == myHeight) {
+        if (otherHeight == myHeight && otherLastHeader.nBits == myLastHeader.nBits) {
           if (otherLastHeader.id == myLastHeader.id) {
             // Last headers are the same => chains are equal
             Equal
-          } else {
-            if (otherLastHeader.nBits == myLastHeader.nBits &&
-              chainSettings.powScheme.validate(otherLastHeader).isSuccess &&
-              commonPoint(otherHeaders.tail).isDefined
-            ) {
+          } else if (chainSettings.powScheme.validate(otherLastHeader).isSuccess) {
+            if (commonPoint(otherHeaders.tail).isDefined) {
               Fork
             } else {
               Unknown
             }
+          } else {
+            log.warn(s"Invalid PoW detected for header ${otherLastHeader.id}")
+            Unknown
           }
         } else if (otherHeight > myHeight) {
           Older // todo: check difficulty ?

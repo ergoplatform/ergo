@@ -6,7 +6,7 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
@@ -19,13 +19,12 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.{Equal, Fork, HistoryComparisonResult, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
-import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs}
+import scorex.core.network.NetworkController.ReceivableMessages.{DisconnectFrom, PenalizePeer, RegisterMessageSpecs, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
-import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.message.{InvData, Message, ModifiersData}
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import scorex.core.serialization.ScorexSerializer
@@ -727,6 +726,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // A block section is not delivered on time.
           log.info(s"Peer ${peer.toString} has not delivered asked modifier $modifierTypeId : ${encoder.encodeId(modifierId)} on time")
           penalizeNonDeliveringPeer(peer)
+          networkControllerRef ! DisconnectFrom(peer)
 
           val checksDone = deliveryTracker.requestsMade(modifierTypeId, modifierId) + 1
           if(checksDone <= networkSettings.maxDeliveryChecks) {

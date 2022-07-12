@@ -377,13 +377,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-   *
-    * @return
+    * @return a peer to download block sections from.
     */
   private def getPeerForDownloadingBlocks: Option[ConnectedPeer] = {
 
+    // helper function to take a peer from a group of peers of the same status (e.g. older than us)
     def peerWithStatus(status: HistoryComparisonResult): Option[ConnectedPeer] = {
       syncTracker.peersByStatus.get(status).flatMap{ peers =>
+        // first, we are choosing random peer
+        // if the peer is not ok (e.g. of some old version having problems)
+        // choose first peer which is okay
+        // so usually returns randomized peer, with fallback to deterministic one
         val randomPeer = peers(Random.nextInt(peers.size))
         if(blockSectionsDownloadFilter.condition(randomPeer)) {
           Some(randomPeer)
@@ -428,7 +432,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Our node needs modifiers of type `modifierTypeId` with ids `modifierIds`
+    * Our node needs modifiers of type `modifierTypeId` with id `modifierId`
     * but peer that can deliver it is unknown.
     * Request this modifier from random peer.
     */
@@ -437,6 +441,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                       checksDone: Int): Unit = {
     getPeerForDownloadingBlocks match {
       case Some(peerToAsk) =>
+        log.debug(s"Going to download $modifierId from $peerToAsk")
         requestDownload(modifierTypeId, Seq(modifierId), peerToAsk, checksDone)
       case None =>
         log.error("No peer found to download a block section from. " +
@@ -722,13 +727,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // A block section is not delivered on time.
           log.info(s"Peer ${peer.toString} has not delivered asked modifier $modifierTypeId : ${encoder.encodeId(modifierId)} on time")
           penalizeNonDeliveringPeer(peer)
+          // For now, we drop connection to the peer, as we do not ban it, connection will be likely established
+          // again after some time (but not soon if connections limit reached)
           networkControllerRef ! DisconnectFrom(peer)
 
           val checksDone = deliveryTracker.requestsMade(modifierTypeId, modifierId) + 1
           if(checksDone <= networkSettings.maxDeliveryChecks) {
+            log.info(s"Rescheduling request for $modifierId")
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
             requestDownload(modifierTypeId, modifierId, checksDone)
           } else {
+            log.error(s"Exceeded max delivery attempts limit for $modifierId")
             deliveryTracker.setInvalid(modifierId, modifierTypeId)
           }
         }

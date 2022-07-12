@@ -142,9 +142,9 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       val modifiers = Seq(mod.id)
       val msgBytes = spec.toBytes(InvData(mod.modifierTypeId, modifiers))
       node ! Message(spec, Left(msgBytes), Some(peer))
-      pchProbe.fishForMessage(5 seconds) {
-        case _: Message[_] => true
-        case _ => false
+      ncProbe.fishForMessage(5 seconds) {
+        case SendToNetwork(_, _) => true
+        case a: Any => println("any: " + a); false
       }
     }
   }

@@ -414,10 +414,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def requestDownload(modifierTypeId: ModifierTypeId,
                       modifierIds: Seq[ModifierId],
                       peer: ConnectedPeer,
-                      checksDone: Int = 0) = {
+                      checksDone: Int = 0): Unit = {
     //todo : check that if checksDone > 0, modifierIds.size == 0
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
-    networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+    val stn = SendToNetwork(msg, SendToPeer(peer))
+    networkControllerRef ! stn
 
     modifierIds.foreach { modifierId =>
       deliveryTracker.setRequested(modifierTypeId, modifierId, peer, checksDone) { deliveryCheck =>

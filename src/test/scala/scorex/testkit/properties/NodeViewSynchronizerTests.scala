@@ -143,8 +143,10 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       val msgBytes = spec.toBytes(InvData(mod.modifierTypeId, modifiers))
       node ! Message(spec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(5 seconds) {
-        case SendToNetwork(_, _) => true
-        case a: Any => println("any: " + a); false
+        case SendToNetwork(msg, _)
+          if msg.spec.messageCode == RequestModifierSpec.MessageCode &&
+            msg.data.get.asInstanceOf[InvData].ids.head == mod.id => true
+        case _ => false
       }
     }
   }

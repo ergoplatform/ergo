@@ -4,7 +4,7 @@ import akka.actor._
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
@@ -134,6 +134,10 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: Message: InvSpec") {
     withFixture { ctx =>
       import ctx._
+
+      val syncMsgBytes = ErgoSyncInfoMessageSpec.toBytes(syncInfo)
+      node ! Message(ErgoSyncInfoMessageSpec, Left(syncMsgBytes), Some(peer))
+
       val spec = new InvSpec(3)
       val modifiers = Seq(mod.id)
       val msgBytes = spec.toBytes(InvData(mod.modifierTypeId, modifiers))

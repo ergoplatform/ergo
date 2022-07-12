@@ -209,11 +209,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // Send history extension to the (less developed) peer 'remote' which does not have it.
   def sendExtension(remote: ConnectedPeer,
-                    ext: Seq[(ModifierTypeId, ModifierId)]): Unit =
+                    ext: Seq[(ModifierTypeId, ModifierId)]): Unit = {
     ext.groupBy(_._1).mapValues(_.map(_._2)).foreach {
       case (mid, mods) =>
         networkControllerRef ! SendToNetwork(Message(invSpec, Right(InvData(mid, mods)), None), SendToPeer(remote))
     }
+  }
 
   /**
     * Process sync message `syncInfo` got from neighbour peer `remote`
@@ -382,7 +383,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def getPeerForDownloadingBlocks: Option[ConnectedPeer] = {
 
     def peerWithStatus(status: HistoryComparisonResult): Option[ConnectedPeer] = {
-      syncTracker.peersByStatus.get(Older).flatMap{ peers =>
+      syncTracker.peersByStatus.get(status).flatMap{ peers =>
         val randomPeer = peers(Random.nextInt(peers.size))
         if(blockSectionsDownloadFilter.condition(randomPeer)) {
           Some(randomPeer)
@@ -437,7 +438,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Some(peerToAsk) =>
         requestDownload(modifierTypeId, Seq(modifierId), peerToAsk, checksDone)
       case None =>
-        log.error("No peer found to download a block section from. DeliveryTracker state: " + deliveryTracker)
+        log.error("No peer found to download a block section from. " +
+                  "DeliveryTracker: " + deliveryTracker + " SyncTracker: " + syncTracker)
     }
   }
 

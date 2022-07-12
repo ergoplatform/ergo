@@ -21,7 +21,7 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{DisconnectFrom, PenalizePeer, RegisterMessageSpecs, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
@@ -68,6 +68,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.warn(s"Restarting actor due to : $e")
       Restart
   }
+
+  private val blockSectionsDownloadFilter = BlockSectionsDownloadFilter(settings.nodeSettings.stateType)
 
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
@@ -373,22 +375,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       .getOrElse(Array(callingPeer))
   }
 
+  /**
+   *
+    * @return
+    */
   private def getPeerForDownloadingBlocks: Option[ConnectedPeer] = {
-    def peerFilterFn(peer: ConnectedPeer): Boolean = {
-      if (settings.nodeSettings.stateType == StateType.Digest) {
-        DigestModeFilter.condition(peer)
-      } else {
-        BrokenModifiersFilter.condition(peer)
-      }
-    }
 
     def peerWithStatus(status: HistoryComparisonResult): Option[ConnectedPeer] = {
       syncTracker.peersByStatus.get(Older).flatMap{ peers =>
         val randomPeer = peers(Random.nextInt(peers.size))
-        if(peerFilterFn(randomPeer)) {
+        if(blockSectionsDownloadFilter.condition(randomPeer)) {
           Some(randomPeer)
         } else {
-          peers.find(peerFilterFn)
+          peers.find(blockSectionsDownloadFilter.condition)
         }
       }
     }
@@ -408,13 +407,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       .orElse {
         Option(peersByStatus.getOrElse(Unknown, mutable.WrappedArray.empty) ++ peersByStatus.getOrElse(Fork, mutable.WrappedArray.empty))
           .filter(_.nonEmpty)
-      }.map { peers =>
-        if (settings.nodeSettings.stateType == StateType.Digest) {
-          DigestModeFilter.filter(peers)
-        } else {
-          BrokenModifiersFilter.filter(peers)
-        }
-      }
+      }.map(blockSectionsDownloadFilter.filter)
   }
 
   def requestDownload(modifierTypeId: ModifierTypeId,

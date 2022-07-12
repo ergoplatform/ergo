@@ -96,6 +96,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     }.keys.toVector
   }
 
+  /**
+    * @return status -> peers index
+    */
   def peersByStatus: Map[HistoryComparisonResult, Seq[ConnectedPeer]] = {
     statuses.groupBy(_._2.status).mapValues(_.keys.toVector).view.force
   }

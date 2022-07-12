@@ -111,6 +111,9 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     }
   }
 
+  /**
+    * @return how many times modifier was requested before
+    */
   def requestsMade(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Int = {
     requested.get(modifierTypeId).flatMap(_.get(modifierId)).map(_.checks).getOrElse(0)
   }

@@ -403,7 +403,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val olderOrEqual = peersByStatus.getOrElse(Older, Seq.empty) ++ peersByStatus.getOrElse(Equal, Seq.empty)
 
     peerFrom(olderOrEqual).orElse {
-      //todo: log warn if status is Unknown or Fork ?
+      log.warn("No peers which are equal or older are found when trying to download a block section")
       val unknownOrFork = peersByStatus.getOrElse(Unknown, Seq.empty) ++ peersByStatus.getOrElse(Fork, Seq.empty)
       peerFrom(unknownOrFork)
     }
@@ -427,7 +427,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                       modifierIds: Seq[ModifierId],
                       peer: ConnectedPeer,
                       checksDone: Int = 0): Unit = {
-    //todo : check that if checksDone > 0, modifierIds.size == 0
+    if(checksDone > 0 && modifierIds.length > 1) {
+      log.warn(s"Incorrect state, checksDone > 0 && modifierIds.length > 1 , for $modifierIds of type $modifierTypeId")
+    }
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     val stn = SendToNetwork(msg, SendToPeer(peer))
     networkControllerRef ! stn

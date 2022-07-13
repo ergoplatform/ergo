@@ -358,7 +358,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             case (modifierTypeId, modifierId) =>
               if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
                 log.info(s"Downloading block section for header ${continuationHeader.encodedId} : ($modifierId, $modifierTypeId)")
-                requestDownload(modifierTypeId, Seq(modifierId), peer)
+                requestBlockSection(modifierTypeId, Seq(modifierId), peer)
               }
           }
       }
@@ -423,10 +423,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }.map(blockSectionsDownloadFilter.filter)
   }
 
-  def requestDownload(modifierTypeId: ModifierTypeId,
-                      modifierIds: Seq[ModifierId],
-                      peer: ConnectedPeer,
-                      checksDone: Int = 0): Unit = {
+  def requestBlockSection(modifierTypeId: ModifierTypeId,
+                          modifierIds: Seq[ModifierId],
+                          peer: ConnectedPeer,
+                          checksDone: Int = 0): Unit = {
     if(checksDone > 0 && modifierIds.length > 1) {
       log.warn(s"Incorrect state, checksDone > 0 && modifierIds.length > 1 , for $modifierIds of type $modifierTypeId")
     }
@@ -442,18 +442,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Our node needs modifiers of type `modifierTypeId` with id `modifierId`
-    * but peer that can deliver it is unknown.
+    * Our node needs block sections of type `modifierTypeId` with id `modifierId`.
     * Request this modifier from random peer.
     */
-  def requestDownload(modifierTypeId: ModifierTypeId,
-                      modifierId: ModifierId,
-                      checksDone: Int,
-                      previousPeer: Option[ConnectedPeer]): Unit = {
+  def requestBlockSection(modifierTypeId: ModifierTypeId,
+                          modifierId: ModifierId,
+                          checksDone: Int,
+                          previousPeer: Option[ConnectedPeer]): Unit = {
     getPeerForDownloadingBlocks(previousPeer) match {
       case Some(peerToAsk) =>
         log.debug(s"Going to download $modifierId from $peerToAsk , previous attempts: $checksDone")
-        requestDownload(modifierTypeId, Seq(modifierId), peerToAsk, checksDone)
+        requestBlockSection(modifierTypeId, Seq(modifierId), peerToAsk, checksDone)
       case None =>
         log.error("No peer found to download a block section from. " +
                   "DeliveryTracker: " + deliveryTracker + " SyncTracker: " + syncTracker)
@@ -463,7 +462,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
       if (deliveryTracker.status(modifierId, modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
-        requestDownload(modifierTypeId, modifierId, checksDone = 0, None)
+        requestBlockSection(modifierTypeId, modifierId, checksDone = 0, None)
       }
   }
 
@@ -493,7 +492,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
         // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
         modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
-          requestDownload(modifierTypeId, modifierIds, peer)
+          requestBlockSection(modifierTypeId, modifierIds, peer)
         }
       }
 
@@ -646,7 +645,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (newModifierIds.nonEmpty) {
       log.debug(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
-      requestDownload(modifierTypeId, newModifierIds, peer)
+      requestBlockSection(modifierTypeId, newModifierIds, peer)
     }
   }
 
@@ -748,7 +747,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           if(checksDone <= networkSettings.maxDeliveryChecks) {
             log.info(s"Rescheduling request for $modifierId")
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
-            requestDownload(modifierTypeId, modifierId, checksDone, Some(peer))
+            requestBlockSection(modifierTypeId, modifierId, checksDone, Some(peer))
           } else {
             log.error(s"Exceeded max delivery attempts limit for $modifierId")
             deliveryTracker.setInvalid(modifierId, modifierTypeId)

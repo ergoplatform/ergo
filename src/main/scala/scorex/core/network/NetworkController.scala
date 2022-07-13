@@ -199,11 +199,15 @@ class NetworkController(scorexSettings: ScorexSettings,
       }
 
     case Terminated(ref) =>
-      connectionForHandler(ref).foreach { connectedPeer =>
-        val remoteAddress = connectedPeer.connectionId.remoteAddress
-        connections -= remoteAddress
-        unconfirmedConnections -= remoteAddress
-        context.system.eventStream.publish(DisconnectedPeer(connectedPeer))
+      connectionForHandler(ref) match {
+        case Some(connectedPeer) =>
+          log.info(s"Terminating connection to $connectedPeer")
+          val remoteAddress = connectedPeer.connectionId.remoteAddress
+          connections -= remoteAddress
+          unconfirmedConnections -= remoteAddress
+          context.system.eventStream.publish(DisconnectedPeer(connectedPeer))
+        case None =>
+          log.warn(s"No connection found for $ref during termination")
       }
 
     case _: ConnectionClosed =>

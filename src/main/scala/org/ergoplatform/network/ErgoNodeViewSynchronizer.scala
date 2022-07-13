@@ -378,7 +378,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * @return a peer to download block sections from.
     */
-  private def getPeerForDownloadingBlocks: Option[ConnectedPeer] = {
+  private def getPeerForDownloadingBlocks(peerToAvoid: Option[ConnectedPeer]): Option[ConnectedPeer] = {
+
+    def filterOutFn(cp: ConnectedPeer) = {
+      blockSectionsDownloadFilter.condition(cp) && !peerToAvoid.contains(cp)
+    }
 
     // helper function to take a peer from a group of peers of the same status (e.g. older than us)
     def peerWithStatus(status: HistoryComparisonResult): Option[ConnectedPeer] = {
@@ -388,10 +392,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // choose first peer which is okay
         // so usually returns randomized peer, with fallback to deterministic one
         val randomPeer = peers(Random.nextInt(peers.size))
-        if(blockSectionsDownloadFilter.condition(randomPeer)) {
+        if(filterOutFn(randomPeer)) {
           Some(randomPeer)
         } else {
-          peers.find(blockSectionsDownloadFilter.condition)
+          peers.find(filterOutFn)
         }
       }
     }
@@ -437,10 +441,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   def requestDownload(modifierTypeId: ModifierTypeId,
                       modifierId: ModifierId,
-                      checksDone: Int): Unit = {
-    getPeerForDownloadingBlocks match {
+                      checksDone: Int,
+                      previousPeer: Option[ConnectedPeer]): Unit = {
+    getPeerForDownloadingBlocks(previousPeer) match {
       case Some(peerToAsk) =>
-        log.debug(s"Going to download $modifierId from $peerToAsk")
+        log.debug(s"Going to download $modifierId from $peerToAsk , previous attempts: $checksDone")
         requestDownload(modifierTypeId, Seq(modifierId), peerToAsk, checksDone)
       case None =>
         log.error("No peer found to download a block section from. " +
@@ -451,7 +456,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
       if (deliveryTracker.status(modifierId, modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
-        requestDownload(modifierTypeId, modifierId, checksDone = 0)
+        requestDownload(modifierTypeId, modifierId, checksDone = 0, None)
       }
   }
 
@@ -724,7 +729,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           deliveryTracker.clearStatusForModifier(modifierId, modifierTypeId, ModifiersStatus.Requested)
         } else {
           // A block section is not delivered on time.
-          log.info(s"Peer ${peer.toString} has not delivered asked modifier $modifierTypeId : ${encoder.encodeId(modifierId)} on time")
+          log.info(s"Peer ${peer.toString} has not delivered modifier $modifierTypeId : ${encoder.encodeId(modifierId)} on time")
           penalizeNonDeliveringPeer(peer)
           // For now, we drop connection to the peer, as we do not ban it, connection will be likely established
           // again after some time (but not soon if connections limit reached)
@@ -734,7 +739,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           if(checksDone <= networkSettings.maxDeliveryChecks) {
             log.info(s"Rescheduling request for $modifierId")
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
-            requestDownload(modifierTypeId, modifierId, checksDone)
+            requestDownload(modifierTypeId, modifierId, checksDone, Some(peer))
           } else {
             log.error(s"Exceeded max delivery attempts limit for $modifierId")
             deliveryTracker.setInvalid(modifierId, modifierTypeId)

@@ -3,7 +3,7 @@ package org.ergoplatform.network
 
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.consensus.{Fork, HistoryComparisonResult, Older, Unknown}
+import scorex.core.consensus.{Fork, PeerChainStatus, Older, Unknown}
 import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.TimeProvider
@@ -43,7 +43,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   }
 
   def updateStatus(peer: ConnectedPeer,
-                   status: HistoryComparisonResult,
+                   status: PeerChainStatus,
                    height: Option[Height]): Unit = {
     val seniorsBefore = numOfSeniors()
     statuses.adjust(peer){
@@ -68,7 +68,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   /**
     * Get synchronization status for given connected peer
     */
-  def getStatus(peer: ConnectedPeer): Option[HistoryComparisonResult] = {
+  def getStatus(peer: ConnectedPeer): Option[PeerChainStatus] = {
     statuses.get(peer).map(_.status)
   }
 
@@ -98,7 +98,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   /**
     * @return status -> peers index
     */
-  def peersByStatus: Map[HistoryComparisonResult, Seq[ConnectedPeer]] = {
+  def peersByStatus: Map[PeerChainStatus, Seq[ConnectedPeer]] = {
     statuses.groupBy(_._2.status).mapValues(_.keys.toVector).view.force
   }
 

@@ -3,7 +3,7 @@ package org.ergoplatform.network
 import io.circe.{Encoder, Json}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.app.Version
-import scorex.core.consensus.HistoryComparisonResult
+import scorex.core.consensus.PeerChainStatus
 import scorex.core.network.ConnectedPeer
 import scorex.core.utils.TimeProvider.Time
 
@@ -17,7 +17,7 @@ import scorex.core.utils.TimeProvider.Time
   * @param lastSyncGetTime - last time peer received sync, None if never
   */
 case class ErgoPeerStatus(peer: ConnectedPeer,
-                          status: HistoryComparisonResult,
+                          status: PeerChainStatus,
                           height: Height,
                           lastSyncSentTime: Option[Time],
                           lastSyncGetTime: Option[Time]) {

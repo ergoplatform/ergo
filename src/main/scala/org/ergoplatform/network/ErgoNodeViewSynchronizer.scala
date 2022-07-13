@@ -1,7 +1,6 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
@@ -772,8 +771,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case HandshakedPeer(remote) =>
       syncTracker.updateStatus(remote, status = Unknown, height = None)
 
-    case DisconnectedPeer(remote) =>
-      syncTracker.clearStatus(remote)
+    case DisconnectedPeer(connectedPeer) =>
+      syncTracker.clearStatus(connectedPeer)
   }
 
   protected def getLocalSyncInfo(historyReader: ErgoHistory): Receive = {
@@ -960,7 +959,7 @@ object ErgoNodeViewSynchronizer {
 
     case class HandshakedPeer(remote: ConnectedPeer) extends PeerManagerEvent
 
-    case class DisconnectedPeer(remote: InetSocketAddress) extends PeerManagerEvent
+    case class DisconnectedPeer(peer: ConnectedPeer) extends PeerManagerEvent
 
     trait NodeViewHolderEvent
 

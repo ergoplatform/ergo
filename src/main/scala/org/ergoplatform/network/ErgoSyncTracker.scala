@@ -1,6 +1,5 @@
 package org.ergoplatform.network
 
-import java.net.InetSocketAddress
 
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -73,12 +72,12 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     statuses.get(peer).map(_.status)
   }
 
-  def clearStatus(remote: InetSocketAddress): Unit = {
-    statuses.find(_._1.connectionId.remoteAddress == remote) match {
+  def clearStatus(connectedPeer: ConnectedPeer): Unit = {
+    statuses.find(_._1 == connectedPeer) match {
       case Some((peer, _)) =>
         statuses -= peer
       case None =>
-        log.warn(s"Trying to clear status for $remote, but it is not found")
+        log.warn(s"Trying to clear status for $connectedPeer, but it is not found")
     }
   }
 

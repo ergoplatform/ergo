@@ -729,7 +729,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           deliveryTracker.clearStatusForModifier(modifierId, modifierTypeId, ModifiersStatus.Requested)
         } else {
           // A block section is not delivered on time.
-          log.info(s"Peer ${peer.toString} has not delivered modifier $modifierTypeId : ${encoder.encodeId(modifierId)} on time")
+          log.info(s"Peer ${peer.toString} has not delivered modifier " +
+                   s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time, status tracker: $syncTracker")
+
           penalizeNonDeliveringPeer(peer)
           // For now, we drop connection to the peer, as we do not ban it, connection will be likely established
           // again after some time (but not soon if connections limit reached)

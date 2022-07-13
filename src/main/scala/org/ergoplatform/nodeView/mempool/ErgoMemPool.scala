@@ -6,7 +6,6 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSeria
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
-import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
@@ -27,7 +26,7 @@ import scala.util.Try
   */
 class ErgoMemPool private[mempool](pool: OrderedTxPool,
                                    private[mempool] val stats : MemPoolStatistics)(implicit settings: ErgoSettings)
-  extends MemoryPool[UnconfirmedTransaction, ErgoMemPool] with ErgoMemPoolReader with ScorexLogging {
+  extends ErgoMemPoolReader with ScorexLogging {
 
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
@@ -71,6 +70,13 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
     */
   override def getAllPrioritized: Seq[UnconfirmedTransaction] = pool.orderedTransactions.values.toSeq
 
+  /**
+    * Method to put a transaction into the memory pool. Validation of tha transactions against
+    * the state is done in NodeVieHolder. This put() method can check whether a transaction is valid
+    * @param tx
+    * @return Success(updatedPool), if transaction successfully added to the pool, Failure(_) otherwise
+    */
+  def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
   override def put(unconfirmedTx: UnconfirmedTransaction): Try[ErgoMemPool] = put(Seq(unconfirmedTx))
 
   override def put(unconfirmedTxs: Iterable[UnconfirmedTransaction]): Try[ErgoMemPool] = Try {
@@ -93,6 +99,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
   override def filter(condition: UnconfirmedTransaction => Boolean): ErgoMemPool = {
     new ErgoMemPool(pool.filter(condition), stats)
   }
+
+  def filter(txs: Seq[ErgoTransaction]): ErgoMemPool = filter(t => !txs.exists(_.id == t.id))
 
   /**
     * Invalidate transaction and delete it from pool
@@ -233,6 +241,11 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
       0
     }
   }
+
+  /**
+    * @return read-only copy of this history
+    */
+  def getReader: ErgoMemPoolReader = this
 }
 
 object ErgoMemPool {

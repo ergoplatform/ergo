@@ -126,14 +126,17 @@ object ErgoPeersApiRoute {
       peerInfo.peerSpec.nodeName,
       peerInfo.connectionType.map(_.toString)
     )
+
+    @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
+    implicit val encodePeerInfoResponse: Encoder[PeerInfoResponse] =
+      deriveEncoder[PeerInfoResponse].mapJsonObject { jsonObj =>
+        jsonObj.filter { case (_, v) => !v.isNull }
+      }
   }
 
   case class PeersStatusResponse(lastIncomingMessage: Long, currentSystemTime: Long)
 
   case class BlacklistedPeers(addresses: Seq[String])
-
-  @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
-  implicit val encodePeerInfoResponse: Encoder[PeerInfoResponse] = deriveEncoder
 
   @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
   implicit val encodeBlackListedPeers: Encoder[BlacklistedPeers] = deriveEncoder

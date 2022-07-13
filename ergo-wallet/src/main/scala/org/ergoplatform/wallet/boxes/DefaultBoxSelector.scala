@@ -7,7 +7,7 @@ import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 import scala.annotation.tailrec
 import scala.collection.mutable
-import org.ergoplatform.wallet.Utils._
+import org.ergoplatform.wallet.transactions.TransactionBuilder._
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 
 /**

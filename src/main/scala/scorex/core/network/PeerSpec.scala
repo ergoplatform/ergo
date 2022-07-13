@@ -1,7 +1,6 @@
 package scorex.core.network
 
 import java.net.{InetAddress, InetSocketAddress}
-
 import scorex.core.app.{ApplicationVersionSerializer, Version}
 import scorex.core.network.peer.LocalAddressPeerFeature
 import scorex.core.serialization.ScorexSerializer

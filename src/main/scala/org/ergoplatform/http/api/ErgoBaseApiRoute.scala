@@ -50,8 +50,9 @@ trait ErgoBaseApiRoute extends ApiRoute {
       .map {
         case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
           val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
-          utxo.withMempool(mp).validateWithCost(unconfirmedTx, maxTxCost)
-            .map(txCost => unconfirmedTx.updateCost(txCost))
+          utxo.withMempool(mp)
+            .validateWithCost(unconfirmedTx, maxTxCost)
+            .map(_ => unconfirmedTx)
         case _ =>
           unconfirmedTx.transaction.statelessValidity().map(_ => unconfirmedTx)
       }

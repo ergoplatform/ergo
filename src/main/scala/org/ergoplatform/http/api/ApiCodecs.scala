@@ -1,14 +1,13 @@
 package org.ergoplatform.http.api
 
 import java.math.BigInteger
-
 import io.circe._
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.ErgoAlgos
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
@@ -190,6 +189,18 @@ trait ApiCodecs extends JsonCodecs {
   }
 
   implicit val transactionDecoder: Decoder[ErgoTransaction] = { cursor =>
+    for {
+      ergoLikeTx <- cursor.as[ErgoLikeTransaction]
+    } yield ErgoTransaction(ergoLikeTx)
+  }
+
+  //TODO
+  implicit val unconfirmedTxEncoder: Encoder[UnconfirmedTransaction] = { tx =>
+    tx.asInstanceOf[ErgoLikeTransaction].asJson
+      .mapObject(_.add("size", tx.size.asJson))
+  }
+
+  implicit val unconfirmedTxDecoder: Decoder[UnconfirmedTransaction] = { cursor =>
     for {
       ergoLikeTx <- cursor.as[ErgoLikeTransaction]
     } yield ErgoTransaction(ergoLikeTx)

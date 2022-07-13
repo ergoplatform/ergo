@@ -5,7 +5,7 @@ import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
@@ -41,17 +41,18 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     p.getAll.slice(offset, offset + limit).map(_.asJson).asJson
   }
 
-  private def validateTransactionAndProcess(tx: ErgoTransaction)(processFn: ErgoTransaction => Any): Route = {
+  private def validateTransactionAndProcess(unconfirmedTx: UnconfirmedTransaction)(processFn: UnconfirmedTransaction => Any): Route = {
+    val tx = unconfirmedTx.transaction
     if (tx.size > ergoSettings.nodeSettings.maxTransactionSize) {
       BadRequest(s"Transaction $tx has too large size ${tx.size}")
     } else {
       onSuccess {
-        verifyTransaction(tx, readersHolder, ergoSettings)
+        verifyTransaction(unconfirmedTx, readersHolder, ergoSettings)
       } {
         _.fold(
           e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
           _ => {
-            processFn(tx)
+            processFn(_)
             ApiResponse(tx.id)
           }
         )
@@ -61,13 +62,15 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
-    validateTransactionAndProcess(tx) { tx =>
+    val unconfirmedTx = UnconfirmedTransaction.apply(tx)
+    validateTransactionAndProcess(unconfirmedTx) { tx =>
       nodeViewActorRef ! LocallyGeneratedTransaction(tx)
     }
   }
 
   def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) { tx =>
-    validateTransactionAndProcess(tx) { tx => tx }
+    val unconfirmedTx = UnconfirmedTransaction.apply(tx)
+    validateTransactionAndProcess(unconfirmedTx) { tx => tx }
   }
 
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & txPaging) { (offset, limit) =>

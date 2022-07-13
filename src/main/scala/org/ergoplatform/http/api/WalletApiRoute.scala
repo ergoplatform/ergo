@@ -7,7 +7,7 @@ import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.http.api.requests.HintExtractionRequest
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
@@ -156,11 +156,11 @@ case class WalletApiRoute(readersHolder: ActorRef,
   private def generateTransactionAndProcess(requests: Seq[TransactionGenerationRequest],
                                             inputsRaw: Seq[String],
                                             dataInputsRaw: Seq[String],
-                                            verifyFn: ErgoTransaction => Future[Try[ErgoTransaction]],
-                                            processFn: ErgoTransaction => Route): Route = {
+                                            verifyFn: UnconfirmedTransaction => Future[Try[UnconfirmedTransaction]],
+                                            processFn: UnconfirmedTransaction => Route): Route = {
     withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap(txTry => txTry match {
       case Success(tx) => verifyFn(tx)
-      case f: Failure[ErgoTransaction] => Future(f)
+      case f: Failure[UnconfirmedTransaction] => Future(f)
     })) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => processFn(tx)
@@ -186,7 +186,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
                               inputsRaw: Seq[String],
                               dataInputsRaw: Seq[String]): Route = {
     generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw,
-      tx => verifyTransaction(tx, readersHolder, ergoSettings),
+      tx => verifyTransaction(UnconfirmedTransaction.apply(tx), readersHolder, ergoSettings),
       { tx =>
         nodeViewActorRef ! LocallyGeneratedTransaction(tx)
         ApiResponse(tx.id)

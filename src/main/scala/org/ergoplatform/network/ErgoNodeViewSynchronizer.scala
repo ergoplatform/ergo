@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
-import scorex.core.consensus.{Equal, Fork, HistoryComparisonResult, Nonsense, Older, Unknown, Younger}
+import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{DisconnectFrom, PenalizePeer, RegisterMessageSpecs, SendToNetwork}
@@ -385,23 +385,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
 
     // helper function to take a peer from a group of peers of the same status (e.g. older than us)
-    def peerWithStatus(status: HistoryComparisonResult): Option[ConnectedPeer] = {
-      syncTracker.peersByStatus.get(status).flatMap{ peers =>
-        // first, we are choosing random peer
-        // if the peer is not ok (e.g. of some old version having problems)
-        // choose first peer which is okay
-        // so usually returns randomized peer, with fallback to deterministic one
-        val randomPeer = peers(Random.nextInt(peers.size))
-        if(filterOutFn(randomPeer)) {
-          Some(randomPeer)
-        } else {
-          peers.find(filterOutFn)
-        }
+    def peerFrom(peers: Seq[ConnectedPeer]): Option[ConnectedPeer] = {
+      // first, we are choosing random peer
+      // if the peer is not ok (e.g. of some old version having problems)
+      // choose first peer which is okay
+      // so usually returns randomized peer, with fallback to deterministic one
+      val randomPeer = peers(Random.nextInt(peers.size))
+      if (filterOutFn(randomPeer)) {
+        Some(randomPeer)
+      } else {
+        peers.find(filterOutFn)
       }
     }
 
-    //todo: log warn if status is Unknown or Fork ?
-    peerWithStatus(Older).orElse(peerWithStatus(Equal)).orElse(peerWithStatus(Unknown)).orElse(peerWithStatus(Fork))
+    val peersByStatus = syncTracker.peersByStatus
+
+    val olderOrEqual = peersByStatus.getOrElse(Older, Seq.empty) ++ peersByStatus.getOrElse(Equal, Seq.empty)
+
+    peerFrom(olderOrEqual).orElse {
+      //todo: log warn if status is Unknown or Fork ?
+      val unknownOrFork = peersByStatus.getOrElse(Unknown, Seq.empty) ++ peersByStatus.getOrElse(Fork, Seq.empty)
+      peerFrom(unknownOrFork)
+    }
   }
 
   /**

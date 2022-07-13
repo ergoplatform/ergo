@@ -1,6 +1,5 @@
 package org.ergoplatform.network
 
-import java.net.InetSocketAddress
 
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -90,12 +89,12 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     statuses.get(peer).map(_.status)
   }
 
-  def clearStatus(remote: InetSocketAddress): Unit = {
-    statuses.find(_._1.connectionId.remoteAddress == remote) match {
+  def clearStatus(connectedPeer: ConnectedPeer): Unit = {
+    statuses.find(_._1 == connectedPeer) match {
       case Some((peer, _)) =>
         statuses -= peer
       case None =>
-        log.warn(s"Trying to clear status for $remote, but it is not found")
+        log.warn(s"Trying to clear status for $connectedPeer, but it is not found")
     }
   }
 
@@ -113,10 +112,16 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     }.keys.toVector
   }
 
-  def peersByStatus: Map[HistoryComparisonResult, Iterable[ConnectedPeer]] =
-    statuses.groupBy(_._2.status).mapValues(_.keys).view.force
+  /**
+    * @return status -> peers index
+    */
+  def peersByStatus: Map[HistoryComparisonResult, Seq[ConnectedPeer]] = {
+    statuses.groupBy(_._2.status).mapValues(_.keys.toVector).view.force
+  }
 
-  protected def numOfSeniors(): Int = statuses.count(_._2.status == Older)
+  protected def numOfSeniors(): Int = {
+    statuses.count(_._2.status == Older)
+  }
 
   def maxHeight(): Option[Int] = {
     if (statuses.nonEmpty) {

@@ -144,11 +144,17 @@ class NetworkController(scorexSettings: ScorexSettings,
       log.info(s"Disconnected from ${peer.connectionId}")
       peer.handlerRef ! CloseConnection
 
+    // Register a new penalty for given peer address
     case PenalizePeer(peerAddress, penaltyType) =>
-      penalize(peerAddress, penaltyType)
+      peerManagerRef ! PeerManager.ReceivableMessages.Penalize(peerAddress, penaltyType)
 
     case Blacklisted(peerAddress) =>
-      closeConnection(peerAddress)
+      connections.get(peerAddress).foreach { peer =>
+        connections = connections.filterNot { case (address, _) => // clear all connections related to banned peer ip
+          Option(peer.connectionId.remoteAddress.getAddress).exists(Option(address.getAddress).contains(_))
+        }
+        peer.handlerRef ! CloseConnection
+      }
   }
 
   private def connectionEvents: Receive = {
@@ -193,11 +199,15 @@ class NetworkController(scorexSettings: ScorexSettings,
       }
 
     case Terminated(ref) =>
-      connectionForHandler(ref).foreach { connectedPeer =>
-        val remoteAddress = connectedPeer.connectionId.remoteAddress
-        connections -= remoteAddress
-        unconfirmedConnections -= remoteAddress
-        context.system.eventStream.publish(DisconnectedPeer(remoteAddress))
+      connectionForHandler(ref) match {
+        case Some(connectedPeer) =>
+          log.info(s"Terminating connection to $connectedPeer")
+          val remoteAddress = connectedPeer.connectionId.remoteAddress
+          connections -= remoteAddress
+          unconfirmedConnections -= remoteAddress
+          context.system.eventStream.publish(DisconnectedPeer(connectedPeer))
+        case None =>
+          log.warn(s"No connection found for $ref during termination")
       }
 
     case _: ConnectionClosed =>
@@ -402,7 +412,7 @@ class NetworkController(scorexSettings: ScorexSettings,
     * @param handler ActorRef on PeerConnectionHandler actor
     * @return Some(ConnectedPeer) when the connection exists for this handler, and None otherwise
     */
-  private def connectionForHandler(handler: ActorRef) = {
+  private def connectionForHandler(handler: ActorRef): Option[ConnectedPeer] = {
     connections.values.find { connectedPeer =>
       connectedPeer.handlerRef == handler
     }
@@ -499,20 +509,6 @@ class NetworkController(scorexSettings: ScorexSettings,
       }
     }
   }
-
-  private def closeConnection(peerAddress: InetSocketAddress): Unit =
-    connections.get(peerAddress).foreach { peer =>
-      connections = connections.filterNot { case (address, _) => // clear all connections related to banned peer ip
-        Option(peer.connectionId.remoteAddress.getAddress).exists(Option(address.getAddress).contains(_))
-      }
-      peer.handlerRef ! CloseConnection
-    }
-
-  /**
-    * Register a new penalty for given peer address.
-    */
-  private def penalize(peerAddress: InetSocketAddress, penaltyType: PenaltyType): Unit =
-    peerManagerRef ! PeerManager.ReceivableMessages.Penalize(peerAddress, penaltyType)
 
 }
 

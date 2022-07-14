@@ -423,6 +423,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }.map(blockSectionsDownloadFilter.filter)
   }
 
+  /**
+    * A helper method to ask for block sectiona from given peer
+    *
+    * @param modifierTypeId - block section type id
+    * @param modifierIds - ids of block section to download
+    * @param peer - peer to download from
+    * @param checksDone - how many times the block section was requested before
+    *                    (non-zero if we're re-requesting the block section, in this case, there should be only
+    *                     one id to request in `modifierIds`
+    */
   def requestBlockSection(modifierTypeId: ModifierTypeId,
                           modifierIds: Seq[ModifierId],
                           peer: ConnectedPeer,

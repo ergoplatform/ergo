@@ -96,7 +96,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   }
 
   /**
-    * @return status -> peers index
+    * @return status -> peers dynamic index, so it calculates from stored peer -> status dictionary a reverse index
     */
   def peersByStatus: Map[PeerChainStatus, Seq[ConnectedPeer]] = {
     statuses.groupBy(_._2.status).mapValues(_.keys.toVector).view.force

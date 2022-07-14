@@ -760,7 +760,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             requestBlockSection(modifierTypeId, modifierId, checksDone, Some(peer))
           } else {
             log.error(s"Exceeded max delivery attempts limit for $modifierId")
-            deliveryTracker.setInvalid(modifierId, modifierTypeId)
+            deliveryTracker.setUnknown(modifierId, modifierTypeId)
           }
         }
       }
@@ -785,7 +785,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
     mod match {
-      case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) => fb.toSeq.foreach(s => broadcastModifierInv(s))
+      case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) =>
+        fb.toSeq.foreach(s => broadcastModifierInv(s))
       case _ =>
     }
   }

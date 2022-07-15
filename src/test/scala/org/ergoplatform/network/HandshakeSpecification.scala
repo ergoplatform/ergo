@@ -6,11 +6,10 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.PeerFeatureIds
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.app.Version
-import scorex.core.network.message.HandshakeSpec
+import scorex.core.network.message.HandshakeSerializer
 import scorex.util.encode.Base16
 
 class HandshakeSpecification extends ErgoPropertyTest with DecodingUtils {
-  private val maxHandshakeSize = 10000
 
   property("handshake test vectors") {
     // bytes got from a real node
@@ -21,14 +20,14 @@ class HandshakeSpecification extends ErgoPropertyTest with DecodingUtils {
 
     val peerName = "ergo-mainnet-3.3.6"
 
-    val handshakeSerializer0 = new HandshakeSpec(Map.empty, maxHandshakeSize)
+    val handshakeSerializer0 = new HandshakeSerializer(Map.empty)
     val hs0 = handshakeSerializer0.parseBytes(hsBytes)
     hs0.time shouldBe 1610134874428L // Friday, 8 January 2021, 19:41:14
     hs0.peerSpec.protocolVersion shouldBe Version(3, 3, 6)
     hs0.peerSpec.agentName shouldBe agentName
     hs0.peerSpec.nodeName shouldBe peerName
 
-    val handshakeSerializer1 = new HandshakeSpec(Map(PeerFeatureIds.ModeFeatureId -> ModeFeatureSerializer), maxHandshakeSize)
+    val handshakeSerializer1 = new HandshakeSerializer(Map(PeerFeatureIds.ModeFeatureId -> ModeFeatureSerializer))
     val hs1 = handshakeSerializer1.parseBytes(hsBytes)
     hs1.time shouldBe 1610134874428L
     val mf = hs1.peerSpec.features.find(_.isInstanceOf[ModeFeature]).head.asInstanceOf[ModeFeature]

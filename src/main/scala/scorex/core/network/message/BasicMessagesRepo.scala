@@ -205,8 +205,6 @@ object GetPeersSpec extends MessageSpecV1[Unit] {
 
 object PeersSpec {
 
-  val MaxPeersInMessage: Int = 100
-
   val messageCode: Message.MessageCode = 2: Byte
 
   val messageName: String = "Peers message"

@@ -31,7 +31,7 @@ class HandshakeSpecification extends ErgoPropertyTest with DecodingUtils {
     val handshakeSerializer1 = new HandshakeSpec(Map(PeerFeatureIds.ModeFeatureId -> ModeFeatureSerializer), maxHandshakeSize)
     val hs1 = handshakeSerializer1.parseBytes(hsBytes)
     hs1.time shouldBe 1610134874428L
-    val mf = hs1.peerSpec.features.find(_.isInstanceOf[ModeFeature]).head.asInstanceOf[ModeFeature]
+    val mf = hs1.peerSpec.features.find(_.isInstanceOf[ModePeerFeature]).head.asInstanceOf[ModePeerFeature]
     mf.stateType shouldBe StateType.Utxo
 
     // Byte-by-byte parsing below, according to the spec https://github.com/ergoplatform/ergo/wiki/P2P-Handshaking

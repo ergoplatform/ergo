@@ -16,19 +16,20 @@ case class UnconfirmedTransaction(
   lastCost: Option[Int],
   createdTime: Long,
   lastCheckedTime: Long,
-  transactionBytes: Option[Seq[Byte]]
-) extends Transaction
-  with ScorexLogging {
+  transactionBytes: Option[Seq[Byte]])
+//) extends Transaction
+  extends ScorexLogging {
 //  with ContainsModifiers[UnconfirmedTransaction] {
 
   def updateCost(cost: Int): UnconfirmedTransaction = {
     copy(lastCost = Some(cost), lastCheckedTime = System.currentTimeMillis())
   }
 
-  override val messageToSign: Array[Byte] = _
-  override type M = UnconfirmedTransaction
-
-  override def serializer: ScorexSerializer[UnconfirmedTransaction] = UnconfirmedTransactionSerializer
+//  override type M = UnconfirmedTransaction
+//
+//  override def serializer: ScorexSerializer[UnconfirmedTransaction] = UnconfirmedTransactionSerializer
+//
+//  override val messageToSign: Array[Byte] = _
 }
 
 object UnconfirmedTransaction {

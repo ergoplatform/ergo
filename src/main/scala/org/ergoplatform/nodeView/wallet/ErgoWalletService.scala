@@ -225,7 +225,7 @@ trait ErgoWalletService {
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
-                          sign: Boolean): Try[ErgoLikeTransactionTemplate[_]]
+                          sign: Boolean): Try[UnconfirmedTransaction]
 
   /**
     * Generate commitments to be used then to sign a transaction.
@@ -449,7 +449,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
-                          sign: Boolean): Try[ErgoLikeTransactionTemplate[_]] = {
+                          sign: Boolean): Try[UnconfirmedTransaction] = {
     val tx = generateUnsignedTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw)
     if (sign) {
       tx.flatMap { case (unsignedTx, inputs, dataInputs) =>

@@ -76,19 +76,18 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
     * @param tx
     * @return Success(updatedPool), if transaction successfully added to the pool, Failure(_) otherwise
     */
-  def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
-  override def put(unconfirmedTx: UnconfirmedTransaction): Try[ErgoMemPool] = put(Seq(unconfirmedTx))
+  def put(unconfirmedTx: UnconfirmedTransaction): Try[ErgoMemPool] = put(Seq(unconfirmedTx))
 
-  override def put(unconfirmedTxs: Iterable[UnconfirmedTransaction]): Try[ErgoMemPool] = Try {
+  def put(unconfirmedTxs: Iterable[UnconfirmedTransaction]): Try[ErgoMemPool] = Try {
     putWithoutCheck(unconfirmedTxs.filterNot(unconfirmedTx => pool.contains(unconfirmedTx.transaction.id)))
   }
 
-  override def putWithoutCheck(txs: Iterable[UnconfirmedTransaction]): ErgoMemPool = {
+  def putWithoutCheck(txs: Iterable[UnconfirmedTransaction]): ErgoMemPool = {
     val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx) }
     new ErgoMemPool(updatedPool, stats)
   }
 
-  override def remove(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
+  def remove(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
     val tx = unconfirmedTransaction.transaction
     val wtx = pool.transactionsRegistry.get(tx.id)
     val updStats = wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
@@ -96,11 +95,11 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
     new ErgoMemPool(pool.remove(unconfirmedTransaction), updStats)
   }
 
-  override def filter(condition: UnconfirmedTransaction => Boolean): ErgoMemPool = {
+  def filter(condition: UnconfirmedTransaction => Boolean): ErgoMemPool = {
     new ErgoMemPool(pool.filter(condition), stats)
   }
 
-  def filter(txs: Seq[ErgoTransaction]): ErgoMemPool = filter(t => !txs.exists(_.id == t.id))
+  def filter(txs: Seq[UnconfirmedTransaction]): ErgoMemPool = filter(t => !txs.exists(_.id == t.id))
 
   /**
     * Invalidate transaction and delete it from pool

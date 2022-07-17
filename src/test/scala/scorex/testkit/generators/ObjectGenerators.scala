@@ -119,8 +119,7 @@ trait ObjectGenerators {
 
   def peerSpecGen: Gen[PeerSpec] = for {
     declaredAddress <- Gen.frequency(5 -> const(None), 5 -> some(inetSocketAddressGen))
-    restApiUrl <- Gen.frequency(5 -> const(None), 5 -> some(urlGen))
-    features <- Gen.someOf(Seq(FullNodePeerFeature, RestApiUrlPeerFeature(restApiUrl)))
+    features <- urlGen.flatMap(url => Gen.someOf(Seq(FullNodePeerFeature, RestApiUrlPeerFeature(url))))
     version <- appVersionGen
   } yield PeerSpec("ergoref", version, "ergo-node", declaredAddress, features)
 }

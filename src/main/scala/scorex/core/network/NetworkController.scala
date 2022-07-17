@@ -334,7 +334,7 @@ class NetworkController(scorexSettings: ScorexSettings,
     val mandatoryFeatures = scorexContext.features ++ Seq(mySessionIdFeature)
 
     val remoteAddress = connectionId.remoteAddress.getAddress
-    val isLocal = remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress
+    val isLocal = (remoteAddress != null) && (remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress)
     val maybeWithLocal = if (isLocal) {
       val la = new InetSocketAddress(connectionId.localAddress.getAddress, networkSettings.bindAddress.getPort)
       val localAddrFeature = LocalAddressPeerFeature(la)
@@ -342,12 +342,13 @@ class NetworkController(scorexSettings: ScorexSettings,
     } else {
       mandatoryFeatures
     }
-    val publicApiUrl = scorexSettings.restApi.publicUrl
-    val peerFeatures = if(publicApiUrl.isDefined) {
-      val restApiUrlPeerFeature = RestApiUrlPeerFeature(scorexSettings.restApi.publicUrl)
-      maybeWithLocal :+ restApiUrlPeerFeature
-    } else {
-      maybeWithLocal
+
+    val peerFeatures = scorexSettings.restApi.publicUrl match {
+      case Some(publicUrl) =>
+        val restApiUrlPeerFeature = RestApiUrlPeerFeature(publicUrl)
+        maybeWithLocal :+ restApiUrlPeerFeature
+      case None =>
+        maybeWithLocal
     }
 
     val selfAddressOpt = getNodeAddressForPeer(connectionId.localAddress)

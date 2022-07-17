@@ -330,21 +330,30 @@ class NetworkController(scorexSettings: ScorexSettings,
           s"New outgoing connection to ${connectionId.remoteAddress} established (bound to local ${connectionId.localAddress})"
       }
     }
-    val isLocal = connectionId.remoteAddress.getAddress.isSiteLocalAddress ||
-      connectionId.remoteAddress.getAddress.isLoopbackAddress
-    val restApiUrlPeerFeature = RestApiUrlPeerFeature(scorexSettings.restApi.publicUrl)
-    val mandatoryFeatures = scorexContext.features ++ Seq(mySessionIdFeature, restApiUrlPeerFeature)
-    val peerFeatures = if (isLocal) {
+
+    val mandatoryFeatures = scorexContext.features ++ Seq(mySessionIdFeature)
+
+    val remoteAddress = connectionId.remoteAddress.getAddress
+    val isLocal = remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress
+    val maybeWithLocal = if (isLocal) {
       val la = new InetSocketAddress(connectionId.localAddress.getAddress, networkSettings.bindAddress.getPort)
       val localAddrFeature = LocalAddressPeerFeature(la)
       mandatoryFeatures :+ localAddrFeature
     } else {
       mandatoryFeatures
     }
-    val selfAddressOpt = getNodeAddressForPeer(connectionId.localAddress)
+    val publicApiUrl = scorexSettings.restApi.publicUrl
+    val peerFeatures = if(publicApiUrl.isDefined) {
+      val restApiUrlPeerFeature = RestApiUrlPeerFeature(scorexSettings.restApi.publicUrl)
+      maybeWithLocal :+ restApiUrlPeerFeature
+    } else {
+      maybeWithLocal
+    }
 
-    if (selfAddressOpt.isEmpty)
+    val selfAddressOpt = getNodeAddressForPeer(connectionId.localAddress)
+    if (selfAddressOpt.isEmpty) {
       log.warn("Unable to define external address. Specify it manually in `scorex.network.declaredAddress`.")
+    }
 
     val connectionDescription = ConnectionDescription(connection, connectionId, selfAddressOpt, peerFeatures)
 

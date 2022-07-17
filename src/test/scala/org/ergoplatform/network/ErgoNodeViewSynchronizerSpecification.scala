@@ -213,6 +213,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       // Neighbour is sending
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(emptySync)
 
+      val invSpec = new InvSpec(0)
+
       // we check that in case of neighbour with empty history (it has no any blocks),
       // inv message with our block ids will be sent
       node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
@@ -220,7 +222,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
-            msg.spec.messageCode == InvSpec.MessageCode &&
+            msg.spec.messageCode == invSpec.messageCode &&
             msg.data.get.asInstanceOf[InvData].ids.head == chain.head.id
           case _ => false
         }
@@ -333,7 +335,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // Neighbour is sending
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
-
+      val invSpec = new InvSpec(0)
       // we check that in case of neighbour with older history (it has more blocks),
       // invs (extension for the forked peer) will be sent to the peer
       node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
@@ -341,7 +343,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
-            msg.spec.messageCode == InvSpec.MessageCode
+            msg.spec.messageCode == invSpec.messageCode
           case _ => false
         }
       }

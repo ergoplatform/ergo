@@ -1,10 +1,9 @@
 package org.ergoplatform.network
 
-import java.net.InetSocketAddress
 
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.consensus.{Fork, HistoryComparisonResult, Older, Unknown}
+import scorex.core.consensus.{Fork, PeerChainStatus, Older, Unknown}
 import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.TimeProvider
@@ -44,7 +43,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   }
 
   def updateStatus(peer: ConnectedPeer,
-                   status: HistoryComparisonResult,
+                   status: PeerChainStatus,
                    height: Option[Height]): Unit = {
     val seniorsBefore = numOfSeniors()
     statuses.adjust(peer){
@@ -69,16 +68,16 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   /**
     * Get synchronization status for given connected peer
     */
-  def getStatus(peer: ConnectedPeer): Option[HistoryComparisonResult] = {
+  def getStatus(peer: ConnectedPeer): Option[PeerChainStatus] = {
     statuses.get(peer).map(_.status)
   }
 
-  def clearStatus(remote: InetSocketAddress): Unit = {
-    statuses.find(_._1.connectionId.remoteAddress == remote) match {
+  def clearStatus(connectedPeer: ConnectedPeer): Unit = {
+    statuses.find(_._1 == connectedPeer) match {
       case Some((peer, _)) =>
         statuses -= peer
       case None =>
-        log.warn(s"Trying to clear status for $remote, but it is not found")
+        log.warn(s"Trying to clear status for $connectedPeer, but it is not found")
     }
   }
 
@@ -96,10 +95,16 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     }.keys.toVector
   }
 
-  def peersByStatus: Map[HistoryComparisonResult, Iterable[ConnectedPeer]] =
-    statuses.groupBy(_._2.status).mapValues(_.keys).view.force
+  /**
+    * @return status -> peers dynamic index, so it calculates from stored peer -> status dictionary a reverse index
+    */
+  def peersByStatus: Map[PeerChainStatus, Seq[ConnectedPeer]] = {
+    statuses.groupBy(_._2.status).mapValues(_.keys.toVector).view.force
+  }
 
-  protected def numOfSeniors(): Int = statuses.count(_._2.status == Older)
+  protected def numOfSeniors(): Int = {
+    statuses.count(_._2.status == Older)
+  }
 
   def maxHeight(): Option[Int] = {
     if (statuses.nonEmpty) {

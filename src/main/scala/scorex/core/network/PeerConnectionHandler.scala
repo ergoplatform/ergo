@@ -8,10 +8,10 @@ import scorex.core.app.{ScorexContext, Version}
 import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
 import scorex.core.network.PeerConnectionHandler.ReceivableMessages
 import scorex.core.network.PeerFeature.Serializers
-import scorex.core.network.message.{HandshakeSpec, MessageSerializer}
+import scorex.core.network.message.{HandshakeSerializer, MessageSerializer}
 import scorex.core.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.settings.NetworkSettings
+import scorex.core.settings.ScorexSettings
 import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
@@ -19,7 +19,7 @@ import scala.collection.immutable.TreeMap
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
-class PeerConnectionHandler(val settings: NetworkSettings,
+class PeerConnectionHandler(scorexSettings: ScorexSettings,
                             networkControllerRef: ActorRef,
                             scorexContext: ScorexContext,
                             connectionDescription: ConnectionDescription
@@ -28,6 +28,7 @@ class PeerConnectionHandler(val settings: NetworkSettings,
 
   import PeerConnectionHandler.ReceivableMessages._
 
+  private val networkSettings = scorexSettings.network
   private val connection = connectionDescription.connection
   private val connectionId = connectionDescription.connectionId
   private val direction = connectionDescription.connectionId.direction
@@ -37,8 +38,8 @@ class PeerConnectionHandler(val settings: NetworkSettings,
   private val featureSerializers: Serializers =
     localFeatures.map(f => f.featureId -> (f.serializer: ScorexSerializer[_ <: PeerFeature])).toMap
 
-  private val handshakeSerializer = new HandshakeSpec(featureSerializers, settings.maxHandshakeSize)
-  private val messageSerializer = new MessageSerializer(scorexContext.messageSpecs, settings.magicBytes)
+  private val handshakeSerializer = new HandshakeSerializer(featureSerializers)
+  private val messageSerializer = new MessageSerializer(scorexContext.messageSpecs, networkSettings.magicBytes)
 
   // there is no recovery for broken connections
   override val supervisorStrategy: SupervisorStrategy = SupervisorStrategy.stoppingStrategy
@@ -66,7 +67,7 @@ class PeerConnectionHandler(val settings: NetworkSettings,
   override def postStop(): Unit = log.info(s"Peer handler to $connectionId destroyed")
 
   private def handshaking: Receive = {
-    handshakeTimeoutCancellableOpt = Some(context.system.scheduler.scheduleOnce(settings.handshakeTimeout)
+    handshakeTimeoutCancellableOpt = Some(context.system.scheduler.scheduleOnce(networkSettings.handshakeTimeout)
     (self ! HandshakeTimeout))
     val hb = handshakeSerializer.toBytes(createHandshakeMessage())
     connection ! Tcp.Write(ByteString(hb))
@@ -240,9 +241,9 @@ class PeerConnectionHandler(val settings: NetworkSettings,
   private def createHandshakeMessage() = {
     Handshake(
       PeerSpec(
-        settings.agentName,
-        Version(settings.appVersion),
-        settings.nodeName,
+        networkSettings.agentName,
+        Version(networkSettings.appVersion),
+        networkSettings.nodeName,
         ownSocketAddress,
         localFeatures
       ),
@@ -271,14 +272,14 @@ object PeerConnectionHandler {
 }
 
 object PeerConnectionHandlerRef {
-  def props(settings: NetworkSettings,
+  def props(settings: ScorexSettings,
             networkControllerRef: ActorRef,
             scorexContext: ScorexContext,
             connectionDescription: ConnectionDescription
            )(implicit ec: ExecutionContext): Props =
     Props(new PeerConnectionHandler(settings, networkControllerRef, scorexContext, connectionDescription))
 
-  def apply(settings: NetworkSettings,
+  def apply(settings: ScorexSettings,
             networkControllerRef: ActorRef,
             scorexContext: ScorexContext,
             connectionDescription: ConnectionDescription)
@@ -286,7 +287,7 @@ object PeerConnectionHandlerRef {
     system.actorOf(props(settings, networkControllerRef, scorexContext, connectionDescription))
 
   def apply(name: String,
-            settings: NetworkSettings,
+            settings: ScorexSettings,
             networkControllerRef: ActorRef,
             scorexContext: ScorexContext,
             connectionDescription: ConnectionDescription)

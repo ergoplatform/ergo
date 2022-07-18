@@ -2,9 +2,9 @@ package scorex.testkit.properties
 
 import akka.actor._
 import akka.testkit.TestProbe
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
@@ -39,7 +39,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   val memPool: ErgoMemPool
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
-    (ActorRef, ErgoSyncInfo, ErgoPersistentModifier, ErgoTransaction, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[ErgoPersistentModifier])
+    (ActorRef, ErgoSyncInfo, BlockSection, ErgoTransaction, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[BlockSection])
 
   class SynchronizerFixture extends AkkaFixture {
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
@@ -134,12 +134,17 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: Message: InvSpec") {
     withFixture { ctx =>
       import ctx._
+      val syncMsgBytes = ErgoSyncInfoMessageSpec.toBytes(syncInfo)
+      node ! Message(ErgoSyncInfoMessageSpec, Left(syncMsgBytes), Some(peer))
+
       val spec = InvSpec
       val modifiers = Seq(mod.id)
       val msgBytes = spec.toBytes(InvData(mod.modifierTypeId, modifiers))
       node ! Message(spec, Left(msgBytes), Some(peer))
-      pchProbe.fishForMessage(5 seconds) {
-        case _: Message[_] => true
+      ncProbe.fishForMessage(5 seconds) {
+        case SendToNetwork(msg, _)
+          if msg.spec.messageCode == RequestModifierSpec.MessageCode &&
+            msg.data.get.asInstanceOf[InvData].ids.head == mod.id => true
         case _ => false
       }
     }

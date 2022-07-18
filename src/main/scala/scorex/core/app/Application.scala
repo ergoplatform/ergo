@@ -79,7 +79,7 @@ trait Application extends ScorexLogging {
   val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
   val networkControllerRef: ActorRef = NetworkControllerRef(
-    "networkController", settings.network, peerManagerRef, scorexContext)
+    "networkController", settings, peerManagerRef, scorexContext)
 
   val peerSynchronizer: ActorRef = PeerSynchronizerRef("PeerSynchronizer",
     networkControllerRef, peerManagerRef, settings.network, featureSerializers)

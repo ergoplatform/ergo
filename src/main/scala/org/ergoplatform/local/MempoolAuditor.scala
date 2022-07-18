@@ -35,7 +35,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   }
 
   override def postStop(): Unit = {
-    logger.info("Mempool auditor stopped")
+    log.info("Mempool auditor stopped")
     super.postStop()
   }
 

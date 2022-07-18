@@ -7,7 +7,7 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -69,13 +69,13 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       history.typedModifierById[Header](headerId).flatMap(history.getFullBlock)
     }
 
-  private def getModifierById(modifierId: ModifierId): Future[Option[ErgoPersistentModifier]] =
+  private def getModifierById(modifierId: ModifierId): Future[Option[BlockSection]] =
     getHistory.map(_.modifierById(modifierId))
 
   private def getProofForTx(headerId: ModifierId, txId: ModifierId): Future[Option[MerkleProof[Digest32]]] =
     getModifierById(headerId).flatMap {
       case Some(header: Header) =>
-        val blockTxsId = BlockSection.computeId(
+        val blockTxsId = NonHeaderBlockSection.computeId(
           BlockTransactions.modifierTypeId,
           headerId,
           header.transactionsRoot.asInstanceOf[Array[Byte]]

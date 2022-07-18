@@ -3,7 +3,7 @@ package org.ergoplatform.network
 import io.circe.{Encoder, Json}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.app.Version
-import scorex.core.consensus.History.HistoryComparisonResult
+import scorex.core.consensus.PeerChainStatus
 import scorex.core.network.ConnectedPeer
 import scorex.core.utils.TimeProvider.Time
 
@@ -17,11 +17,11 @@ import scorex.core.utils.TimeProvider.Time
   * @param lastSyncGetTime - last time peer received sync, None if never
   */
 case class ErgoPeerStatus(peer: ConnectedPeer,
-                          status: HistoryComparisonResult,
+                          status: PeerChainStatus,
                           height: Height,
                           lastSyncSentTime: Option[Time],
                           lastSyncGetTime: Option[Time]) {
-  val mode: Option[ModeFeature] = ErgoPeerStatus.mode(peer)
+  val mode: Option[ModePeerFeature] = ErgoPeerStatus.mode(peer)
 
   def version: Option[Version] = peer.peerInfo.map(_.peerSpec.protocolVersion)
 }
@@ -33,12 +33,12 @@ object ErgoPeerStatus {
   /**
     * Helper method to get operating mode of the peer
     */
-  def mode(peer: ConnectedPeer): Option[ModeFeature] = {
-    peer.peerInfo.flatMap(_.peerSpec.features.collectFirst[ModeFeature]({ case mf: ModeFeature => mf}))
+  def mode(peer: ConnectedPeer): Option[ModePeerFeature] = {
+    peer.peerInfo.flatMap(_.peerSpec.features.collectFirst[ModePeerFeature]({ case mf: ModePeerFeature => mf}))
   }
 
   implicit val jsonEncoder: Encoder[ErgoPeerStatus] = { status: ErgoPeerStatus =>
-    implicit val mfEnc: Encoder[ModeFeature] = ModeFeature.jsonEncoder
+    implicit val mfEnc: Encoder[ModePeerFeature] = ModePeerFeature.jsonEncoder
 
     Json.obj(
       "address" -> status.peer.peerInfo.get.peerSpec.address.map(_.toString).getOrElse("N/A").asJson,

@@ -38,9 +38,9 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     val ec: ExecutionContextExecutor = context.dispatcher
 
     readersHolder ! GetReaders
-    context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedHistory])
     context.system.eventStream.subscribe(self, classOf[ChangedState])
-    context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedMempool])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
@@ -198,7 +198,7 @@ object ErgoStatsCollector {
   object NodeInfo extends ApiCodecs {
     implicit val paramsEncoder: Encoder[Parameters] = org.ergoplatform.settings.ParametersSerializer.jsonEncoder
 
-    implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) =>
+    implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) => {
       Map(
         "name" -> ni.nodeName.asJson,
         "appVersion" -> Version.VersionString.asJson,
@@ -224,6 +224,7 @@ object ErgoStatsCollector {
         "parameters" -> ni.parameters.asJson,
         "eip27Supported" -> ni.eip27Supported.asJson
       ).asJson
+    }
   }
 
 }

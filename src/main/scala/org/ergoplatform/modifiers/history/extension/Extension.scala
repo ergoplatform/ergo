@@ -4,7 +4,7 @@ import com.google.common.primitives.Bytes
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.NonHeaderBlockSection
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
@@ -23,7 +23,7 @@ import scorex.util.ModifierId
 case class Extension(headerId: ModifierId,
                      override val fields: Seq[(Array[Byte], Array[Byte])],
                      override val sizeOpt: Option[Int] = None)
-  extends ExtensionCandidate(fields) with BlockSection {
+  extends ExtensionCandidate(fields) with NonHeaderBlockSection {
 
   override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 

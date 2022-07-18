@@ -18,25 +18,25 @@ import scorex.util.serialization.{Reader, Writer}
   * @param popowSuffix - whether the peer has has bootstrapped via PoPoW suffix, and its length
   * @param blocksToKeep - how many last full blocks the peer is storing
   */
-case class ModeFeature(stateType: StateType,
-                       verifyingTransactions: Boolean,
-                       popowSuffix: Option[Int],
-                       blocksToKeep: Int) extends PeerFeature {
-  override type M = ModeFeature
+case class ModePeerFeature(stateType: StateType,
+                           verifyingTransactions: Boolean,
+                           popowSuffix: Option[Int],
+                           blocksToKeep: Int) extends PeerFeature {
+  override type M = ModePeerFeature
 
   override val featureId: Id = PeerFeatureIds.ModeFeatureId
 
-  override def serializer: ScorexSerializer[ModeFeature] = ModeFeatureSerializer
+  override def serializer: ScorexSerializer[ModePeerFeature] = ModeFeatureSerializer
 }
 
-object ModeFeature {
+object ModePeerFeature {
 
   import io.circe.syntax._
 
-  def apply(nodeSettings: NodeConfigurationSettings): ModeFeature = {
+  def apply(nodeSettings: NodeConfigurationSettings): ModePeerFeature = {
     val popowSuffix = if (nodeSettings.poPoWBootstrap) Some(nodeSettings.minimalSuffix) else None
 
-    new ModeFeature(
+    new ModePeerFeature(
       nodeSettings.stateType,
       nodeSettings.verifyTransactions,
       popowSuffix,
@@ -44,7 +44,7 @@ object ModeFeature {
     )
   }
 
-  implicit val jsonEncoder: Encoder[ModeFeature] = { mf: ModeFeature =>
+  implicit val jsonEncoder: Encoder[ModePeerFeature] = { mf: ModePeerFeature =>
     Json.obj(
       "state" -> mf.stateType.toString.asJson,
       "verifyingTransactions" -> mf.verifyingTransactions.asJson,
@@ -60,7 +60,7 @@ object ModeFeature {
   * handshake which contains mode information (along with other features supported by the peer) has separate length
   * limit provided in settings ("maxHandshakeSize" field in network settings).
   */
-object ModeFeatureSerializer extends ScorexSerializer[ModeFeature] {
+object ModeFeatureSerializer extends ScorexSerializer[ModePeerFeature] {
 
   val MaxSize = 512
 
@@ -69,14 +69,14 @@ object ModeFeatureSerializer extends ScorexSerializer[ModeFeature] {
 
   private def byteToBoolean(byte: Byte): Boolean = if (byte > 0) true else false
 
-  override def serialize(mf: ModeFeature, w: Writer): Unit = {
+  override def serialize(mf: ModePeerFeature, w: Writer): Unit = {
     w.put(mf.stateType.stateTypeCode)
     w.put(booleanToByte(mf.verifyingTransactions))
     w.putOption(mf.popowSuffix)(_.putInt(_))
     w.putInt(mf.blocksToKeep)
   }
 
-  override def parse(r: Reader): ModeFeature = {
+  override def parse(r: Reader): ModePeerFeature = {
     require(r.remaining < MaxSize)
 
     val stateType = StateType.fromCode(r.getByte())
@@ -84,7 +84,7 @@ object ModeFeatureSerializer extends ScorexSerializer[ModeFeature] {
     val popowSuffix = r.getOption(r.getInt())
     val blocksToKeep = r.getInt()
 
-    new ModeFeature(
+    new ModePeerFeature(
       stateType,
       verifyingTransactions,
       popowSuffix,

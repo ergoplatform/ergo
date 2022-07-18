@@ -26,7 +26,6 @@ case class InvData(typeId: ModifierTypeId, ids: Seq[ModifierId])
   */
 class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ScorexSerializer[SI]) extends MessageSpecV1[SI] {
 
-
   override val messageCode: MessageCode = 65: Byte
   override val messageName: String = "Sync"
 
@@ -42,7 +41,10 @@ class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ScorexSerializer[SI]) exte
   * or it can be sent in reply to a `SyncInfo` message (or application-specific messages like `GetMempool`).
   *
   */
-class InvSpec(maxInvObjects: Int) extends MessageSpecV1[InvData] {
+object InvSpec extends MessageSpecV1[InvData] {
+
+  val maxInvObjects: Int = 400
+
   override val messageCode: MessageCode = 55: Byte
   override val messageName: String = "Inv"
 
@@ -86,27 +88,25 @@ class InvSpec(maxInvObjects: Int) extends MessageSpecV1[InvData] {
   * data from a node which previously advertised it had that data by sending an `Inv` message.
   *
   */
-class RequestModifierSpec(maxInvObjects: Int) extends MessageSpecV1[InvData] {
-
+object RequestModifierSpec extends MessageSpecV1[InvData] {
   override val messageCode: MessageCode = 22: Byte
   override val messageName: String = "RequsetModifier"
 
-  private val invSpec = new InvSpec(maxInvObjects)
-
-
   override def serialize(data: InvData, w: Writer): Unit = {
-    invSpec.serialize(data, w)
+    InvSpec.serialize(data, w)
   }
 
   override def parse(r: Reader): InvData = {
-    invSpec.parse(r)
+    InvSpec.parse(r)
   }
 }
 
 /**
   * The `Modifier` message is a reply to a `RequestModifier` message which requested these modifiers.
   */
-class ModifiersSpec(maxMessageSize: Int) extends MessageSpecV1[ModifiersData] with ScorexLogging {
+object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
+
+  val maxMessageSize: Int = 2048576
 
   private val maxMsgSizeWithReserve = maxMessageSize * 4 // due to big ADProofs
 

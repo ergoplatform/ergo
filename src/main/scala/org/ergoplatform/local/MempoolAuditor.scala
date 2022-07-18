@@ -102,7 +102,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
 
   private def broadcastTx(tx: ErgoTransaction): Unit = {
     val msg = Message(
-      new InvSpec(settings.scorexSettings.network.maxInvObjects),
+      InvSpec,
       Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
       None
     )

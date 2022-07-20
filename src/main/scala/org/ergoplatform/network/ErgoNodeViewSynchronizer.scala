@@ -78,10 +78,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected val deliveryTimeout: FiniteDuration = networkSettings.deliveryTimeout
 
-  protected val invSpec = new InvSpec(networkSettings.maxInvObjects)
-  protected val requestModifierSpec = new RequestModifierSpec(networkSettings.maxInvObjects)
-  protected val modifiersSpec = new ModifiersSpec(networkSettings.maxPacketSize)
-
   private val minModifiersPerBucket = 8 // minimum of persistent modifiers (excl. headers) to download by single peer
   private val maxModifiersPerBucket = 12 // maximum of persistent modifiers (excl. headers) to download by single peer
 
@@ -103,7 +99,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val toDownloadCheckInterval = networkSettings.syncInterval
 
     // register as a handler for synchronization-specific types of messages
-    val messageSpecs: Seq[MessageSpec[_]] = Seq(invSpec, requestModifierSpec, modifiersSpec, syncInfoSpec)
+    val messageSpecs: Seq[MessageSpec[_]] = Seq(InvSpec, RequestModifierSpec, ModifiersSpec, syncInfoSpec)
     networkControllerRef ! RegisterMessageSpecs(messageSpecs, self)
 
     // register as a listener for peers got connected (handshaked) or disconnected
@@ -129,7 +125,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
-    val msg = Message(invSpec, Right(InvData(m.modifierTypeId, Seq(m.id))), None)
+    val msg = Message(InvSpec, Right(InvData(m.modifierTypeId, Seq(m.id))), None)
     networkControllerRef ! SendToNetwork(msg, Broadcast)
   }
 
@@ -211,7 +207,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                     ext: Seq[(ModifierTypeId, ModifierId)]): Unit = {
     ext.groupBy(_._1).mapValues(_.map(_._2)).foreach {
       case (mid, mods) =>
-        networkControllerRef ! SendToNetwork(Message(invSpec, Right(InvData(mid, mods)), None), SendToPeer(remote))
+        networkControllerRef ! SendToNetwork(Message(InvSpec, Right(InvData(mid, mods)), None), SendToPeer(remote))
     }
   }
 
@@ -693,7 +689,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       var size = 5 //message type id + message size
       var batch = mods.takeWhile { case (_, modBytes) =>
         size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
-        size < networkSettings.maxPacketSize
+        size < ModifiersSpec.maxMessageSize
       }
       if (batch.isEmpty) {
         // send modifier anyway
@@ -701,7 +697,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         batch = ho.toSeq
         log.warn(s"Sending too big modifier ${ho.map(_._1)}, its size ${ho.map(_._2.length)}")
       }
-      remote.handlerRef ! Message(modifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
+      remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
       val remaining = mods.drop(batch.length)
       if (remaining.nonEmpty) {
         sendByParts(remaining)
@@ -766,7 +762,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
   }
-
 
   protected def penalizeNonDeliveringPeer(peer: ConnectedPeer): Unit = {
     networkControllerRef ! PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.NonDeliveryPenalty)
@@ -894,11 +889,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                          ): PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: ErgoSyncInfoMessageSpec.type @unchecked, data: ErgoSyncInfo @unchecked, remote) =>
       processSync(hr, data, remote)
-    case (_: InvSpec, data: InvData, remote) =>
+    case (_: InvSpec.type, data: InvData, remote) =>
       processInv(hr, mp, data, remote, blockAppliedTxsCache)
-    case (_: RequestModifierSpec, data: InvData, remote) =>
+    case (_: RequestModifierSpec.type, data: InvData, remote) =>
       modifiersReq(hr, mp, data, remote)
-    case (_: ModifiersSpec, data: ModifiersData, remote) =>
+    case (_: ModifiersSpec.type, data: ModifiersData, remote) =>
       modifiersFromRemote(hr, data, remote, blockAppliedTxsCache)
   }
 

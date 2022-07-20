@@ -18,7 +18,7 @@ class ModifiersSpecification extends ErgoPropertyTest with DecodingUtils {
     val header = HeaderSerializer.parseBytes(hBytes)
 
     val magic = Array(1: Byte, 0: Byte, 2: Byte, 4: Byte) // mainnet magic
-    val mSpec = new ModifiersSpec(maxMessageSize = 10000)
+    val mSpec = ModifiersSpec
 
     val mData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
 

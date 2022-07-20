@@ -64,15 +64,12 @@ class ErgoApp(args: Args) extends ScorexLogging {
     }
 
   private val basicSpecs = {
-    val invSpec = new InvSpec(scorexSettings.network.maxInvObjects)
-    val requestModifierSpec = new RequestModifierSpec(scorexSettings.network.maxInvObjects)
-    val modifiersSpec = new ModifiersSpec(scorexSettings.network.maxPacketSize)
     Seq(
       GetPeersSpec,
       new PeersSpec(featureSerializers, scorexSettings.network.maxPeerSpecObjects),
-      invSpec,
-      requestModifierSpec,
-      modifiersSpec
+      InvSpec,
+      RequestModifierSpec,
+      ModifiersSpec
     )
   }
 

@@ -224,7 +224,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
-            msg.spec.messageCode == InvSpec.MessageCode &&
+            msg.spec.messageCode == InvSpec.messageCode &&
             msg.data.get.asInstanceOf[InvData].ids.head == chain.head.id
           case _ => false
         }
@@ -239,7 +239,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       deliveryTracker.setRequested(Header.modifierTypeId, chain.take(1001).last.id, peer)(_ => Cancellable.alreadyCancelled)
       val olderChain = chain.take(1001)
       val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
-      val modSpec = new ModifiersSpec(100)
+      val modSpec = ModifiersSpec
       synchronizer ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
       // desired state of submitting valid headers is Received
       eventually {
@@ -305,7 +305,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       def sendHeader(header: Header): Unit = {
         deliveryTracker.setRequested(Header.modifierTypeId, header.id, peer)(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
-        val modSpec = new ModifiersSpec(100)
+        val modSpec = ModifiersSpec
         synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
       }
 
@@ -444,7 +444,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // Neighbour is sending
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
-
+      val invSpec = InvSpec
       // we check that in case of neighbour with older history (it has more blocks),
       // invs (extension for the forked peer) will be sent to the peer
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
@@ -452,7 +452,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
-            msg.spec.messageCode == InvSpec.MessageCode
+            msg.spec.messageCode == invSpec.messageCode
           case _ => false
         }
       }

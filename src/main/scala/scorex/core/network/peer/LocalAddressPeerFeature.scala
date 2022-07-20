@@ -9,6 +9,10 @@ import scorex.util.serialization._
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.Extensions._
 
+/**
+  * Peer feature required for handling connections from/to local or loopback address
+  * @param address local or loopback address
+  */
 case class LocalAddressPeerFeature(address: InetSocketAddress) extends PeerFeature {
   override type M = LocalAddressPeerFeature
   override val featureId: Id = PeerFeatureIds.LocalAddressPeerFeatureId

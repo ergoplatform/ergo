@@ -23,9 +23,11 @@ case class RestApiUrlPeerFeature(restApiUrl: URL) extends PeerFeature {
 object RestApiUrlPeerFeatureSerializer extends ScorexSerializer[RestApiUrlPeerFeature] {
 
   override def serialize(obj: RestApiUrlPeerFeature, w: Writer): Unit = {
-    val addr = obj.restApiUrl.toString.getBytes("UTF-8")
-    w.put(addr.size.toByteExact)
-    w.putBytes(addr)
+    val restApiUrl = obj.restApiUrl.toString
+    val restApiUrlBytes = restApiUrl.getBytes("UTF-8")
+    require(restApiUrlBytes.size <= 0xFF, s"$restApiUrl size is out of unsigned byte range")
+    w.putUByte(restApiUrlBytes.size)
+    w.putBytes(restApiUrlBytes)
   }
 
   override def parse(r: Reader): RestApiUrlPeerFeature = {

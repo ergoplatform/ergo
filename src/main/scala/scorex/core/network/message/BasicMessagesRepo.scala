@@ -218,6 +218,7 @@ object HandshakeSerializer {
 
   val messageCode: MessageCode = 75: Byte
   val messageName: String = "Handshake"
+  val maxHandshakeSize: Int = 8096
 }
 
 /**
@@ -226,8 +227,7 @@ object HandshakeSerializer {
   * have exchanged `Handshake` messages, no other messages will be accepted.
   */
 class HandshakeSerializer(featureSerializers: PeerFeature.Serializers) extends MessageSpecV1[Handshake] {
-
-  private val maxHandshakeSize = 8096
+  import HandshakeSerializer.maxHandshakeSize
 
   private val peersDataSerializer = new PeerSpecSerializer(featureSerializers)
 

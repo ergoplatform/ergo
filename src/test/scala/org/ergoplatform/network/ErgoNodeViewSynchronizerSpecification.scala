@@ -274,7 +274,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       while (remainingSectionIds.nonEmpty) {
         ncProbe.fishForMessage(3 seconds) { case m =>
           m match {
-            case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.MessageCode =>
+            case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
               val invData = stn.message.data.get.asInstanceOf[InvData]
               remainingSectionIds.exists { case (sectionTypeId, sectionId) =>
                 val sectionFound = invData.typeId == sectionTypeId && invData.ids.head == sectionId
@@ -337,15 +337,13 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       def sendHeader(block: ErgoFullBlock): Unit = {
         deliveryTracker.setRequested(Header.modifierTypeId, block.header.id, peer)(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
-        val modSpec = new ModifiersSpec(100)
-        synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
       }
 
       def sendBlockSection(block: BlockSection): Unit = {
         deliveryTracker.setRequested(block.modifierTypeId, block.id, peer)(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(block.modifierTypeId, Map(block.id -> block.bytes))
-        val modSpec = new ModifiersSpec(10000)
-        synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
       }
 
       def sendBlock(block: ErgoFullBlock): Unit = {

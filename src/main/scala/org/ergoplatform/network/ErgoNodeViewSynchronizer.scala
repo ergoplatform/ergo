@@ -436,7 +436,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if(checksDone > 0 && modifierIds.length > 1) {
       log.warn(s"Incorrect state, checksDone > 0 && modifierIds.length > 1 , for $modifierIds of type $modifierTypeId")
     }
-    val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
+    val msg = Message(RequestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     val stn = SendToNetwork(msg, SendToPeer(peer))
     networkControllerRef ! stn
 

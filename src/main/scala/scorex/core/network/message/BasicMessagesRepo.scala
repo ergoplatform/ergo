@@ -90,7 +90,7 @@ object InvSpec extends MessageSpecV1[InvData] {
   */
 object RequestModifierSpec extends MessageSpecV1[InvData] {
   override val messageCode: MessageCode = 22: Byte
-  override val messageName: String = "RequsetModifier"
+  override val messageName: String = "RequestModifier"
 
   override def serialize(data: InvData, w: Writer): Unit = {
     InvSpec.serialize(data, w)

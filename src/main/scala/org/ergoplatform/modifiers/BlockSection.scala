@@ -6,6 +6,10 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import scorex.core.PersistentNodeViewModifier
 
+
+/**
+  * Block section, so a header, or block transactions, or extension, or ADProofs.
+  */
 trait BlockSection extends PersistentNodeViewModifier with ErgoNodeViewModifier
 
 object BlockSection {

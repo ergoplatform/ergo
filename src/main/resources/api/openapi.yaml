@@ -1981,6 +1981,14 @@ components:
           type: object
           description: current parameters
           $ref: '#/components/schemas/Parameters'
+        eip27Supported:
+          type: boolean
+          example: true
+          description: Whether EIP-27 locked in
+        restApiUrl:
+          type: string
+          example: 'https://example.com'
+          description: Publicly accessible url of node which exposes restApi in firewall
 
     Parameters:
       type: object

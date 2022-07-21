@@ -19,7 +19,7 @@ object BlockSection {
     case bt: BlockTransactions => BlockTransactions.jsonEncoder(bt)
     case adp: ADProofs => ADProofs.jsonEncoder(adp)
     case ext: Extension => Extension.jsonEncoder(ext)
-    case other => throw new Exception(s"Unknown persistent modifier type: $other")
+    case other => throw new Exception(s"Unknown block section type: $other")
   }
 
 }

@@ -17,6 +17,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
 
   private val MinSyncInterval: FiniteDuration = 20.seconds
   private val SyncThreshold: FiniteDuration = 1.minute
+  private val ClearThreshold: FiniteDuration = 3.minutes
 
   private[network] val statuses = mutable.Map[ConnectedPeer, ErgoPeerStatus]()
 
@@ -104,7 +105,19 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     }
   }
 
-  protected[network] def outdatedPeers: IndexedSeq[ConnectedPeer] = {
+  private[network] def clearOldStatuses(): Unit = {
+    val currentTime = timeProvider.time()
+    val peersToClear = statuses.filter { case (_, status) =>
+      status.lastSyncSentTime.exists(syncTime => (currentTime - syncTime).millis > ClearThreshold)
+    }.keys
+    if (peersToClear.nonEmpty) {
+      val keysToRemove = peersToClear.toVector
+      log.debug(s"Clearing stalled statuses for $keysToRemove")
+      keysToRemove.foreach(p => statuses.remove(p))
+    }
+  }
+
+  private[network] def outdatedPeers: IndexedSeq[ConnectedPeer] = {
     val currentTime = timeProvider.time()
     statuses.filter { case (_, status) =>
       status.lastSyncSentTime.exists(syncTime => (currentTime - syncTime).millis > SyncThreshold)
@@ -137,6 +150,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     * Updates lastSyncSentTime for all returned peers as a side effect
     */
   def peersToSyncWith(): IndexedSeq[ConnectedPeer] = {
+    clearOldStatuses()
     val outdated = outdatedPeers
     val peers =
       if (outdated.nonEmpty) {

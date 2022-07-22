@@ -1,7 +1,7 @@
 package scorex.core.network.peer
 
 import java.net.InetSocketAddress
-import org.ergoplatform.network.ModeFeature
+import org.ergoplatform.network.ModePeerFeature
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.app.Version
 import scorex.core.network.{ConnectionDirection, Incoming, Outgoing, PeerFeature, PeerSpec, PeerSpecSerializer}
@@ -64,7 +64,7 @@ class PeerInfoSerializer(peerSpecSerializer: PeerSpecSerializer) extends ScorexS
 
 object PeerInfoSerializer {
   def apply(ergoSettings: ErgoSettings): PeerInfoSerializer = {
-    val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
+    val features: Seq[PeerFeature] = Seq(ModePeerFeature(ergoSettings.nodeSettings))
     val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
     new PeerInfoSerializer(new PeerSpecSerializer(featureSerializers))
   }

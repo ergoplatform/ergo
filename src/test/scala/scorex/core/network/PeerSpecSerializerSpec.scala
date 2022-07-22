@@ -9,11 +9,9 @@ import java.nio.ByteBuffer
 
 class PeerSpecSerializerSpec extends ErgoPropertyTest with ObjectGenerators {
 
-  private val peerSpecSerializer =
-    new PeerSpecSerializer(Map(FullNodePeerFeature.featureId -> FullNodePeerFeature.serializer))
-
   property("All variants of peer spec should be serialized and deserialized successfully") {
     forAll(peerSpecGen) { peerSpec =>
+      val peerSpecSerializer = new PeerSpecSerializer(peerSpec.features.map(f => f.featureId -> f.serializer).toMap)
       val writer = new VLQByteBufferWriter(new ByteArrayBuilder())
       peerSpecSerializer.serialize(peerSpec, writer)
       val reader = new VLQByteBufferReader(ByteBuffer.wrap(writer.result().toBytes))

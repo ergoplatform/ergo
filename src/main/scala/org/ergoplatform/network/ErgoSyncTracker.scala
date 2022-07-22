@@ -3,7 +3,7 @@ package org.ergoplatform.network
 
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.consensus.{Fork, HistoryComparisonResult, Older, Unknown}
+import scorex.core.consensus.{Fork, PeerChainStatus, Older, Unknown}
 import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.TimeProvider
@@ -44,7 +44,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
 
   def updateStatus(peer: ConnectedPeer,
                    syncInfo: ErgoSyncInfo,
-                   hr: ErgoHistoryReader): (HistoryComparisonResult, Boolean) = {
+                   hr: ErgoHistoryReader): (PeerChainStatus, Boolean) = {
     val oldStatus = getStatus(peer).getOrElse(Unknown)
     val status = hr.compare(syncInfo)
 
@@ -60,7 +60,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   }
 
   def updateStatus(peer: ConnectedPeer,
-                   status: HistoryComparisonResult,
+                   status: PeerChainStatus,
                    height: Option[Height]): Unit = {
     val seniorsBefore = numOfSeniors()
     statuses.adjust(peer){
@@ -85,7 +85,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   /**
     * Get synchronization status for given connected peer
     */
-  def getStatus(peer: ConnectedPeer): Option[HistoryComparisonResult] = {
+  def getStatus(peer: ConnectedPeer): Option[PeerChainStatus] = {
     statuses.get(peer).map(_.status)
   }
 
@@ -113,9 +113,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
   }
 
   /**
-    * @return status -> peers index
+    * @return status -> peers dynamic index, so it calculates from stored peer -> status dictionary a reverse index
     */
-  def peersByStatus: Map[HistoryComparisonResult, Seq[ConnectedPeer]] = {
+  def peersByStatus: Map[PeerChainStatus, Seq[ConnectedPeer]] = {
     statuses.groupBy(_._2.status).mapValues(_.keys.toVector).view.force
   }
 

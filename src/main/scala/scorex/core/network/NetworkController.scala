@@ -11,7 +11,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{Dis
 import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message.{Message, MessageSpec}
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
-import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, SessionIdPeerFeature}
+import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.{NetworkUtils, TimeProvider}
@@ -340,20 +340,31 @@ class NetworkController(scorexSettings: ScorexSettings,
           s"New outgoing connection to ${connectionId.remoteAddress} established (bound to local ${connectionId.localAddress})"
       }
     }
-    val isLocal = connectionId.remoteAddress.getAddress.isSiteLocalAddress ||
-      connectionId.remoteAddress.getAddress.isLoopbackAddress
-    val mandatoryFeatures = scorexContext.features :+ mySessionIdFeature
-    val peerFeatures = if (isLocal) {
+
+    val mandatoryFeatures = scorexContext.features ++ Seq(mySessionIdFeature)
+
+    val remoteAddress = connectionId.remoteAddress.getAddress
+    val isLocal = (remoteAddress != null) && (remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress)
+    val maybeWithLocal = if (isLocal) {
       val la = new InetSocketAddress(connectionId.localAddress.getAddress, networkSettings.bindAddress.getPort)
       val localAddrFeature = LocalAddressPeerFeature(la)
       mandatoryFeatures :+ localAddrFeature
     } else {
       mandatoryFeatures
     }
-    val selfAddressOpt = getNodeAddressForPeer(connectionId.localAddress)
 
-    if (selfAddressOpt.isEmpty)
+    val peerFeatures = scorexSettings.restApi.publicUrl match {
+      case Some(publicUrl) =>
+        val restApiUrlPeerFeature = RestApiUrlPeerFeature(publicUrl)
+        maybeWithLocal :+ restApiUrlPeerFeature
+      case None =>
+        maybeWithLocal
+    }
+
+    val selfAddressOpt = getNodeAddressForPeer(connectionId.localAddress)
+    if (selfAddressOpt.isEmpty) {
       log.warn("Unable to define external address. Specify it manually in `scorex.network.declaredAddress`.")
+    }
 
     val connectionDescription = ConnectionDescription(connection, connectionId, selfAddressOpt, peerFeatures)
 

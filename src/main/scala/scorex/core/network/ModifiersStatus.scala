@@ -21,8 +21,8 @@ object ModifiersStatus {
   case object Received extends ModifiersStatus
 
   /**
-    * This modifier is already on NodeViewHoder - applied to History if it is PersistentModifier or
-    * in MemPool if it is Ephemereal modifier.
+    * This modifier is already on NodeViewHoder - applied to History if it is block section or
+    * in MemPool if it is transaction.
     */
   case object Held extends ModifiersStatus
 

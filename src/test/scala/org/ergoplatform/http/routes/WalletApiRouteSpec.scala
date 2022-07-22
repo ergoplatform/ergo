@@ -35,6 +35,8 @@ class WalletApiRouteSpec extends AnyFlatSpec
   val ergoSettings: ErgoSettings = ErgoSettings.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = WalletApiRoute(digestReadersRef, nodeViewRef, settings).route
+  val failingNodeViewRef = system.actorOf(NodeViewStub.failingProps())
+  val failingRoute: Route = WalletApiRoute(digestReadersRef, failingNodeViewRef, settings).route
 
   val utxoRoute: Route = WalletApiRoute(utxoReadersRef, nodeViewRef, settings).route
 
@@ -88,6 +90,12 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "fail when sent transaction is invalid" in {
+    Post(prefix + "/transaction/send", requestsHolder.asJson) ~> failingRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "sign a transaction" in {
     val digest = Random.nextBoolean()
     val (tsr, r) = if (digest) {
@@ -105,6 +113,12 @@ class WalletApiRouteSpec extends AnyFlatSpec
     Post(prefix + "/payment/send", Seq(paymentRequest).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
+    }
+  }
+
+  it should "fail when payment is invalid" in {
+    Post(prefix + "/payment/send", Seq(paymentRequest).asJson) ~> failingRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

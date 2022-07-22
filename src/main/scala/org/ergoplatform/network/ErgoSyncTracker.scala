@@ -30,7 +30,6 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     statuses.get(peer).foreach { status =>
       statuses.update(peer, status.copy(lastSyncGetTime = Option(currentTime)))
     }
-    currentTime - prevSyncGetTime
   }
 
   def notSyncedOrOutdated(peer: ConnectedPeer): Boolean = {
@@ -113,7 +112,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     if (peersToClear.nonEmpty) {
       val keysToRemove = peersToClear.toVector
       log.debug(s"Clearing stalled statuses for $keysToRemove")
-      keysToRemove.foreach(p => statuses.remove(p))
+      keysToRemove.foreach(p => updateStatus(p, Unknown, None))
     }
   }
 

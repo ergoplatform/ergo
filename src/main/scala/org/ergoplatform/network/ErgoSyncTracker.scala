@@ -30,6 +30,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     statuses.get(peer).foreach { status =>
       statuses.update(peer, status.copy(lastSyncGetTime = Option(currentTime)))
     }
+    currentTime - prevSyncGetTime
   }
 
   def notSyncedOrOutdated(peer: ConnectedPeer): Boolean = {

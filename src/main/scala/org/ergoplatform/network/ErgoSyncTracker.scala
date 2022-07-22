@@ -72,7 +72,6 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
 
     val seniorsAfter = numOfSeniors()
 
-    // todo: we should also send NoBetterNeighbour signal when all the peers around are not seniors initially
     if (seniorsBefore > 0 && seniorsAfter == 0) {
       log.info("Syncing is done, switching to stable regime")
       // todo: update neighbours status ?
@@ -147,8 +146,13 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
         val unknowns = statuses.filter(_._2.status == Unknown).toVector
         val forks = statuses.filter(_._2.status == Fork).toVector
         val elders = statuses.filter(_._2.status == Older).toVector
-        val nonOutdated =
-          (if (elders.nonEmpty) elders(scala.util.Random.nextInt(elders.size)) +: unknowns else unknowns) ++ forks
+
+        val eldersAndUnknown = if (elders.nonEmpty) {
+          elders(scala.util.Random.nextInt(elders.size)) +: unknowns
+        } else {
+          unknowns
+        }
+        val nonOutdated = eldersAndUnknown ++ forks
         nonOutdated.filter { case (_, status) =>
           (currentTime - status.lastSyncSentTime.getOrElse(0L)).millis >= MinSyncInterval
         }.map(_._1)

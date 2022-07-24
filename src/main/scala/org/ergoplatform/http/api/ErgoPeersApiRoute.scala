@@ -1,6 +1,6 @@
 package org.ergoplatform.http.api
 
-import java.net.{InetAddress, InetSocketAddress}
+import java.net.{InetAddress, InetSocketAddress, URL}
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.util.Timeout
@@ -44,7 +44,7 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
   def allPeers: Route = (path("all") & get) {
     val result = askActor[Map[InetSocketAddress, PeerInfo]](peerManager, GetAllPeers).map {
       _.map { case (address, peerInfo) =>
-        PeerInfoResponse.fromAddressAndInfo(address, peerInfo)
+        PeerInfoResponse.fromAddressAndInfo(address, settings.publicUrl, peerInfo)
       }
     }
     ApiResponse(result)
@@ -59,7 +59,8 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
             lastMessage = con.lastMessage,
             lastHandshake = peerInfo.lastHandshake,
             name = peerInfo.peerSpec.nodeName,
-            connectionType = peerInfo.connectionType.map(_.toString)
+            connectionType = peerInfo.connectionType.map(_.toString),
+            restApiUrl = peerInfo.peerSpec.publicUrlOpt.map(_.toString)
           )
         }
       }
@@ -116,24 +117,29 @@ object ErgoPeersApiRoute {
                               lastMessage: Long,
                               lastHandshake: Long,
                               name: String,
-                              connectionType: Option[String])
+                              connectionType: Option[String],
+                              restApiUrl: Option[String])
 
   object PeerInfoResponse {
-    def fromAddressAndInfo(address: InetSocketAddress, peerInfo: PeerInfo): PeerInfoResponse = PeerInfoResponse(
+    def fromAddressAndInfo(address: InetSocketAddress, restApiUrl: Option[URL], peerInfo: PeerInfo): PeerInfoResponse = PeerInfoResponse(
       address.toString,
       0,
       peerInfo.lastHandshake,
       peerInfo.peerSpec.nodeName,
-      peerInfo.connectionType.map(_.toString)
+      peerInfo.connectionType.map(_.toString),
+      restApiUrl.map(_.toString)
     )
+
+    @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
+    implicit val encodePeerInfoResponse: Encoder[PeerInfoResponse] =
+      deriveEncoder[PeerInfoResponse].mapJsonObject { jsonObj =>
+        jsonObj.filter { case (_, v) => !v.isNull }
+      }
   }
 
   case class PeersStatusResponse(lastIncomingMessage: Long, currentSystemTime: Long)
 
   case class BlacklistedPeers(addresses: Seq[String])
-
-  @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
-  implicit val encodePeerInfoResponse: Encoder[PeerInfoResponse] = deriveEncoder
 
   @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
   implicit val encodeBlackListedPeers: Encoder[BlacklistedPeers] = deriveEncoder

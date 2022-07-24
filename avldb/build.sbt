@@ -20,9 +20,7 @@ libraryDependencies ++= Seq(
 )
 
 testOptions in Test := Seq(Tests.Filter(t => !t.matches(".*Benchmark$")))
-javaOptions in run += "-Xmx12G"
-
-//scalacOptions ++= Seq("-Xdisable-assertions")
+javaOptions in run += "-Xmx6G"
 
 publishMavenStyle := true
 

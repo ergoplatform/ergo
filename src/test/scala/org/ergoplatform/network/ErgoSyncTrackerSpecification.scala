@@ -1,8 +1,7 @@
 package org.ergoplatform.network
 
-import akka.actor.ActorSystem
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.consensus.History.{Older, Younger}
+import scorex.core.consensus.{Older, Younger}
 import scorex.core.network.{ConnectedPeer, ConnectionId, Incoming}
 import scorex.core.network.peer.PeerInfo
 
@@ -12,7 +11,7 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     val peerInfo = PeerInfo(defaultPeerSpec, time, Some(Incoming))
     val cid = ConnectionId(inetAddr1, inetAddr2, Incoming)
     val connectedPeer = ConnectedPeer(cid, handlerRef = null, lastMessage = 5L, Some(peerInfo))
-    val syncTracker = ErgoSyncTracker(ActorSystem(), settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
 
     val height = 1000
     // add peer to sync
@@ -35,7 +34,7 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     // peer should be synced now
     syncTracker.notSyncedOrOutdated(connectedPeer) shouldBe false
 
-    syncTracker.clearStatus(connectedPeer.connectionId.remoteAddress)
+    syncTracker.clearStatus(connectedPeer)
     // peer should not be tracked anymore
     syncTracker.getStatus(connectedPeer) shouldBe None
     syncTracker.peersByStatus.isEmpty shouldBe true
@@ -44,7 +43,7 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     syncTracker.maxHeight() shouldBe None
 
     // clearStatus() is ok when there's no peer
-    syncTracker.clearStatus(connectedPeer.connectionId.remoteAddress)
+    syncTracker.clearStatus(connectedPeer)
     syncTracker.getStatus(connectedPeer) shouldBe None
     syncTracker.maxHeight() shouldBe None
   }

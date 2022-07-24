@@ -1,6 +1,6 @@
 package scorex.testkit.generators
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.ErgoState
 
@@ -13,5 +13,5 @@ trait CustomModifierProducer[ST <: ErgoState[ST]] {
 
   def customModifiers(history: ErgoHistory,
                       state: ST,
-                      template: Seq[ModifierProducerTemplateItem]): Seq[ErgoPersistentModifier]
+                      template: Seq[ModifierProducerTemplateItem]): Seq[BlockSection]
 }

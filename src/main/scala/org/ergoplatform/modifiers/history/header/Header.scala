@@ -7,7 +7,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, PreHeader}
-import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{NonHeaderBlockSection, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
@@ -54,7 +54,7 @@ case class Header(override val version: Header.Version,
                   powSolution: AutolykosSolution,
                   override val votes: Array[Byte], //3 bytes
                   override val sizeOpt: Option[Int] = None) extends HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-  nBits, height, extensionRoot, votes) with PreHeader with ErgoPersistentModifier {
+  nBits, height, extensionRoot, votes) with PreHeader with BlockSection {
 
   override def serializedId: Array[Header.Version] = Algos.hash(bytes)
 
@@ -64,11 +64,11 @@ case class Header(override val version: Header.Version,
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
-  lazy val ADProofsId: ModifierId = BlockSection.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
+  lazy val ADProofsId: ModifierId = NonHeaderBlockSection.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
 
-  lazy val transactionsId: ModifierId = BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
+  lazy val transactionsId: ModifierId = NonHeaderBlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
 
-  lazy val extensionId: ModifierId = BlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
+  lazy val extensionId: ModifierId = NonHeaderBlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
 
   override def minerPk: EcPointType = powSolution.pk
 
@@ -89,7 +89,7 @@ case class Header(override val version: Header.Version,
   /**
     * Checks that modifier m corresponds to this header
     */
-  def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = sectionIds.exists(_._2 == m.id)
+  def isCorrespondingModifier(m: BlockSection): Boolean = sectionIds.exists(_._2 == m.id)
 
   /**
     * Estimate that this header is recent enough to possibly be the best header

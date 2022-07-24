@@ -298,24 +298,26 @@ case class WalletApiRoute(readersHolder: ActorRef,
     withWallet(_.publicKeys(0, Int.MaxValue): Future[Seq[ErgoAddress]])
   }
 
-  def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) { (minConfNum, minHeight) =>
-    val considerUnconfirmed = minConfNum == -1
-    withWallet {
-      _.walletBoxes(unspentOnly = true, considerUnconfirmed)
-        .map {
-          _.filter(boxFilterPredicate(_, minConfNum, minHeight))
-        }
-    }
+  def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) {
+    (minConfNum, maxConfNum, minHeight, maxHeight) =>
+      val considerUnconfirmed = minConfNum == -1
+      withWallet {
+        _.walletBoxes(unspentOnly = true, considerUnconfirmed)
+          .map {
+            _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
+          }
+      }
   }
 
-  def boxesR: Route = (path("boxes") & get & boxParams) { (minConfNum, minHeight) =>
-    val considerUnconfirmed = minConfNum == -1
-    withWallet {
-      _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
-        .map {
-          _.filter(boxFilterPredicate(_, minConfNum, minHeight))
-        }
-    }
+  def boxesR: Route = (path("boxes") & get & boxParams) {
+    (minConfNum, maxConfNum, minHeight, maxHeight) =>
+      val considerUnconfirmed = minConfNum == -1
+      withWallet {
+        _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
+          .map {
+            _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
+          }
+      }
   }
 
   def transactionsR: Route = (path("transactions") & get & txParams) {

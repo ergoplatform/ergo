@@ -127,7 +127,6 @@ val opts = Seq(
   "-XX:+UseStringDeduplication"
 )
 
-// -J prefix is required by the bash script
 javaOptions in run ++= opts
 scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 

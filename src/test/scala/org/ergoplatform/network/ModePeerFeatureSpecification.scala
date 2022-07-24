@@ -4,7 +4,7 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import scala.util.Try
 
 
-class ModeFeatureSpecification extends ErgoPropertyTest {
+class ModePeerFeatureSpecification extends ErgoPropertyTest {
 
   //roundtrip test is provided in SerializationTests
 

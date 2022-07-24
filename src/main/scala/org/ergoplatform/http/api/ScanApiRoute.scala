@@ -61,19 +61,21 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     withWallet(_.readScans().map(_.apps))
   }
 
-  def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) { (scanIdInt, minConfNum, minHeight) =>
-    val scanId = ScanId @@ scanIdInt.toShort
-    val considerUnconfirmed = minConfNum == -1
-    withWallet(_.scanUnspentBoxes(scanId, considerUnconfirmed).map {
-      _.filter(boxFilterPredicate(_, minConfNum, minHeight))
-    })
+  def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) {
+    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight) =>
+      val scanId = ScanId @@ scanIdInt.toShort
+      val considerUnconfirmed = minConfNum == -1
+      withWallet(_.scanUnspentBoxes(scanId, considerUnconfirmed).map {
+        _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
+      })
   }
 
-  def spentR: Route = (path("spentBoxes" / IntNumber) & get & boxParams) { (scanIdInt, minConfNum, minHeight) =>
-    val scanId = ScanId @@ scanIdInt.toShort
-    withWallet(_.scanSpentBoxes(scanId).map {
-      _.filter(boxFilterPredicate(_, minConfNum, minHeight))
-    })
+  def spentR: Route = (path("spentBoxes" / IntNumber) & get & boxParams) {
+    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight) =>
+      val scanId = ScanId @@ scanIdInt.toShort
+      withWallet(_.scanSpentBoxes(scanId).map {
+        _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
+      })
   }
 
   def stopTrackingR: Route = (path("stopTracking") & post & entity(as[ScanIdBoxId])) { scanIdBoxId =>

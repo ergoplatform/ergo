@@ -2,7 +2,6 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
@@ -137,9 +136,11 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     val ncProbe = TestProbe("NetworkControllerProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
-    val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
+    // each test should always start with empty history
+    deleteRecursive(ErgoHistory.historyDir(settings))
     val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
 
     val synchronizerMockRef = system.actorOf(Props(
@@ -179,7 +180,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
-    val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
     // each test should always start with empty history
@@ -223,7 +224,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
-            msg.spec.messageCode == InvSpec.MessageCode &&
+            msg.spec.messageCode == InvSpec.messageCode &&
             msg.data.get.asInstanceOf[InvData].ids.head == chain.head.id
           case _ => false
         }
@@ -235,10 +236,10 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     withFixture { ctx =>
       import ctx._
       deliveryTracker.reset()
-      deliveryTracker.setRequested(Seq(chain.take(1001).last.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+      deliveryTracker.setRequested(Header.modifierTypeId, chain.take(1001).last.id, peer)(_ => Cancellable.alreadyCancelled)
       val olderChain = chain.take(1001)
       val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
-      val modSpec = new ModifiersSpec(100)
+      val modSpec = ModifiersSpec
       synchronizer ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
       // desired state of submitting valid headers is Received
       eventually {
@@ -273,7 +274,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       while (remainingSectionIds.nonEmpty) {
         ncProbe.fishForMessage(3 seconds) { case m =>
           m match {
-            case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.MessageCode =>
+            case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
               val invData = stn.message.data.get.asInstanceOf[InvData]
               remainingSectionIds.exists { case (sectionTypeId, sectionId) =>
                 val sectionFound = invData.typeId == sectionTypeId && invData.ids.head == sectionId
@@ -302,9 +303,9 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
 
       def sendHeader(header: Header): Unit = {
-        deliveryTracker.setRequested(Seq(header.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+        deliveryTracker.setRequested(Header.modifierTypeId, header.id, peer)(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
-        val modSpec = new ModifiersSpec(100)
+        val modSpec = ModifiersSpec
         synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
       }
 
@@ -334,17 +335,15 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       import ctx._
 
       def sendHeader(block: ErgoFullBlock): Unit = {
-        deliveryTracker.setRequested(Seq(block.header.id), Header.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+        deliveryTracker.setRequested(Header.modifierTypeId, block.header.id, peer)(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
-        val modSpec = new ModifiersSpec(100)
-        synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
       }
 
       def sendBlockSection(block: BlockSection): Unit = {
-        deliveryTracker.setRequested(Seq(block.id), block.modifierTypeId, Some(peer))(_ => Cancellable.alreadyCancelled)
+        deliveryTracker.setRequested(block.modifierTypeId, block.id, peer)(_ => Cancellable.alreadyCancelled)
         val modData = ModifiersData(block.modifierTypeId, Map(block.id -> block.bytes))
-        val modSpec = new ModifiersSpec(10000)
-        synchronizerMockRef ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
       }
 
       def sendBlock(block: ErgoFullBlock): Unit = {
@@ -443,7 +442,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // Neighbour is sending
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
-
+      val invSpec = InvSpec
       // we check that in case of neighbour with older history (it has more blocks),
       // invs (extension for the forked peer) will be sent to the peer
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
@@ -451,7 +450,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
-            msg.spec.messageCode == InvSpec.MessageCode
+            msg.spec.messageCode == invSpec.messageCode
           case _ => false
         }
       }

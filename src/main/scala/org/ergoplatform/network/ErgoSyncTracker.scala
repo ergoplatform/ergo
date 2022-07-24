@@ -17,6 +17,10 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
 
   private val MinSyncInterval: FiniteDuration = 20.seconds
   private val SyncThreshold: FiniteDuration = 1.minute
+
+  /**
+    * After this timeout we clear peer's status
+    */
   private val ClearThreshold: FiniteDuration = 3.minutes
 
   private[network] val statuses = mutable.Map[ConnectedPeer, ErgoPeerStatus]()
@@ -43,6 +47,11 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     notSyncedOrMissing || outdated
   }
 
+  /**
+    * Obtains peer sync status from `syncInfo` network message and updates statuses table with it
+    *
+    * @return (new peer status, should our node send sync message to the peer)
+    */
   def updateStatus(peer: ConnectedPeer,
                    syncInfo: ErgoSyncInfo,
                    hr: ErgoHistoryReader): (PeerChainStatus, Boolean) = {
@@ -105,6 +114,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     }
   }
 
+  /**
+    * Helper method to clear statuses of peers not updated for long enough
+    */
   private[network] def clearOldStatuses(): Unit = {
     val currentTime = timeProvider.time()
     val peersToClear = statuses.filter { case (_, status) =>
@@ -113,6 +125,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     if (peersToClear.nonEmpty) {
       val keysToRemove = peersToClear.toVector
       log.debug(s"Clearing stalled statuses for $keysToRemove")
+      // we set status to `Unknown` and reset peer's height
       keysToRemove.foreach(p => updateStatus(p, Unknown, None))
     }
   }

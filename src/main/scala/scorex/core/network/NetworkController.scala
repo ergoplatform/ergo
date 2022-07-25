@@ -11,7 +11,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{Dis
 import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message.{Message, MessageSpec}
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
-import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, SessionIdPeerFeature}
+import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.{NetworkUtils, TimeProvider}
@@ -144,11 +144,17 @@ class NetworkController(scorexSettings: ScorexSettings,
       log.info(s"Disconnected from ${peer.connectionId}")
       peer.handlerRef ! CloseConnection
 
+    // Register a new penalty for given peer address
     case PenalizePeer(peerAddress, penaltyType) =>
-      penalize(peerAddress, penaltyType)
+      peerManagerRef ! PeerManager.ReceivableMessages.Penalize(peerAddress, penaltyType)
 
     case Blacklisted(peerAddress) =>
-      closeConnection(peerAddress)
+      connections.get(peerAddress).foreach { peer =>
+        connections = connections.filterNot { case (address, _) => // clear all connections related to banned peer ip
+          Option(peer.connectionId.remoteAddress.getAddress).exists(Option(address.getAddress).contains(_))
+        }
+        peer.handlerRef ! CloseConnection
+      }
   }
 
   private def connectionEvents: Receive = {
@@ -193,11 +199,15 @@ class NetworkController(scorexSettings: ScorexSettings,
       }
 
     case Terminated(ref) =>
-      connectionForHandler(ref).foreach { connectedPeer =>
-        val remoteAddress = connectedPeer.connectionId.remoteAddress
-        connections -= remoteAddress
-        unconfirmedConnections -= remoteAddress
-        context.system.eventStream.publish(DisconnectedPeer(remoteAddress))
+      connectionForHandler(ref) match {
+        case Some(connectedPeer) =>
+          log.info(s"Terminating connection to $connectedPeer")
+          val remoteAddress = connectedPeer.connectionId.remoteAddress
+          connections -= remoteAddress
+          unconfirmedConnections -= remoteAddress
+          context.system.eventStream.publish(DisconnectedPeer(connectedPeer))
+        case None =>
+          log.warn(s"No connection found for $ref during termination")
       }
 
     case _: ConnectionClosed =>
@@ -330,20 +340,31 @@ class NetworkController(scorexSettings: ScorexSettings,
           s"New outgoing connection to ${connectionId.remoteAddress} established (bound to local ${connectionId.localAddress})"
       }
     }
-    val isLocal = connectionId.remoteAddress.getAddress.isSiteLocalAddress ||
-      connectionId.remoteAddress.getAddress.isLoopbackAddress
-    val mandatoryFeatures = scorexContext.features :+ mySessionIdFeature
-    val peerFeatures = if (isLocal) {
+
+    val mandatoryFeatures = scorexContext.features ++ Seq(mySessionIdFeature)
+
+    val remoteAddress = connectionId.remoteAddress.getAddress
+    val isLocal = (remoteAddress != null) && (remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress)
+    val maybeWithLocal = if (isLocal) {
       val la = new InetSocketAddress(connectionId.localAddress.getAddress, networkSettings.bindAddress.getPort)
       val localAddrFeature = LocalAddressPeerFeature(la)
       mandatoryFeatures :+ localAddrFeature
     } else {
       mandatoryFeatures
     }
-    val selfAddressOpt = getNodeAddressForPeer(connectionId.localAddress)
 
-    if (selfAddressOpt.isEmpty)
+    val peerFeatures = scorexSettings.restApi.publicUrl match {
+      case Some(publicUrl) =>
+        val restApiUrlPeerFeature = RestApiUrlPeerFeature(publicUrl)
+        maybeWithLocal :+ restApiUrlPeerFeature
+      case None =>
+        maybeWithLocal
+    }
+
+    val selfAddressOpt = getNodeAddressForPeer(connectionId.localAddress)
+    if (selfAddressOpt.isEmpty) {
       log.warn("Unable to define external address. Specify it manually in `scorex.network.declaredAddress`.")
+    }
 
     val connectionDescription = ConnectionDescription(connection, connectionId, selfAddressOpt, peerFeatures)
 
@@ -402,7 +423,7 @@ class NetworkController(scorexSettings: ScorexSettings,
     * @param handler ActorRef on PeerConnectionHandler actor
     * @return Some(ConnectedPeer) when the connection exists for this handler, and None otherwise
     */
-  private def connectionForHandler(handler: ActorRef) = {
+  private def connectionForHandler(handler: ActorRef): Option[ConnectedPeer] = {
     connections.values.find { connectedPeer =>
       connectedPeer.handlerRef == handler
     }
@@ -499,20 +520,6 @@ class NetworkController(scorexSettings: ScorexSettings,
       }
     }
   }
-
-  private def closeConnection(peerAddress: InetSocketAddress): Unit =
-    connections.get(peerAddress).foreach { peer =>
-      connections = connections.filterNot { case (address, _) => // clear all connections related to banned peer ip
-        Option(peer.connectionId.remoteAddress.getAddress).exists(Option(address.getAddress).contains(_))
-      }
-      peer.handlerRef ! CloseConnection
-    }
-
-  /**
-    * Register a new penalty for given peer address.
-    */
-  private def penalize(peerAddress: InetSocketAddress, penaltyType: PenaltyType): Unit =
-    peerManagerRef ! PeerManager.ReceivableMessages.Penalize(peerAddress, penaltyType)
 
 }
 

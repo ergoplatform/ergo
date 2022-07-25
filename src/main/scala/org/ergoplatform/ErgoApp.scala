@@ -11,7 +11,7 @@ import org.ergoplatform.http.api._
 import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
-import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModeFeature}
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModePeerFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.slf4j.{Logger, LoggerFactory}
@@ -48,7 +48,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   implicit private val actorSystem: ActorSystem = ActorSystem(scorexSettings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
 
-  private val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
+  private val features: Seq[PeerFeature] = Seq(ModePeerFeature(ergoSettings.nodeSettings))
   private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
 
   private val timeProvider = new NetworkTimeProvider(scorexSettings.ntp)
@@ -64,15 +64,12 @@ class ErgoApp(args: Args) extends ScorexLogging {
     }
 
   private val basicSpecs = {
-    val invSpec = new InvSpec(scorexSettings.network.maxInvObjects)
-    val requestModifierSpec = new RequestModifierSpec(scorexSettings.network.maxInvObjects)
-    val modifiersSpec = new ModifiersSpec(scorexSettings.network.maxPacketSize)
     Seq(
       GetPeersSpec,
       new PeersSpec(featureSerializers, scorexSettings.network.maxPeerSpecObjects),
-      invSpec,
-      requestModifierSpec,
-      modifiersSpec
+      InvSpec,
+      RequestModifierSpec,
+      ModifiersSpec
     )
   }
 
@@ -104,7 +101,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     }
 
 
-  private val syncTracker = ErgoSyncTracker(actorSystem, scorexSettings.network, timeProvider)
+  private val syncTracker = ErgoSyncTracker(scorexSettings.network, timeProvider)
   private val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider)
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 

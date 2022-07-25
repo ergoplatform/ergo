@@ -102,9 +102,6 @@ object PeerSynchronizerRef {
             featureSerializers: PeerFeature.Serializers)(implicit ec: ExecutionContext): Props =
     Props(new PeerSynchronizer(networkControllerRef, peerManager, settings, featureSerializers))
 
-  def apply(networkControllerRef: ActorRef, peerManager: ActorRef, settings: NetworkSettings,
-            featureSerializers: PeerFeature.Serializers)(implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props(networkControllerRef, peerManager, settings, featureSerializers))
 
   def apply(name: String, networkControllerRef: ActorRef, peerManager: ActorRef, settings: NetworkSettings,
             featureSerializers: PeerFeature.Serializers)(implicit system: ActorSystem, ec: ExecutionContext): ActorRef =

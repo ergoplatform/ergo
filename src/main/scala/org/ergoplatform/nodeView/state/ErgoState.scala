@@ -7,7 +7,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
@@ -54,7 +54,7 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
     * @param generate function that handles newly created modifier as a result of application the current one
     * @return new State
     */
-  def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[IState]
+  def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[IState]
 
   def rollbackTo(version: VersionTag): Try[IState]
 
@@ -69,7 +69,7 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
 object ErgoState extends ScorexLogging {
 
-  type ModifierProcessing[T <: ErgoState[T]] = PartialFunction[ErgoPersistentModifier, Try[T]]
+  type ModifierProcessing[T <: ErgoState[T]] = PartialFunction[BlockSection, Try[T]]
 
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 

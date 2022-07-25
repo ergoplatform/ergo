@@ -5,14 +5,14 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.{ModifierTypeId, NodeViewComponent}
-import scorex.core.consensus.{ContainsModifiers, Equal, Fork, HistoryComparisonResult, ModifierSemanticValidity, Older, Unknown, Younger}
+import scorex.core.consensus.{ContainsModifiers, Equal, Fork, PeerChainStatus, ModifierSemanticValidity, Older, Unknown, Younger}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
@@ -26,7 +26,7 @@ import scala.util.{Failure, Try}
   */
 trait ErgoHistoryReader
   extends NodeViewComponent
-    with ContainsModifiers[ErgoPersistentModifier]
+    with ContainsModifiers[BlockSection]
     with HeadersProcessor
     with PoPoWProofsProcessor
     with UTXOSnapshotChunkProcessor
@@ -77,7 +77,7 @@ trait ErgoHistoryReader
     * @param id - modifier id
     * @return semantically valid ErgoPersistentModifier with the given id it is in history
     */
-  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
+  override def modifierById(id: ModifierId): Option[BlockSection] =
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
       historyStorage.modifierById(id)
     } else {
@@ -90,7 +90,7 @@ trait ErgoHistoryReader
     * @tparam T - expected Type
     * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
     */
-  def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
+  def typedModifierById[T <: BlockSection : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
     case Some(m: T) => Some(m)
     case _ => None
   }
@@ -100,7 +100,7 @@ trait ErgoHistoryReader
   /**
     * Check, that it's possible to apply modifier to history
     */
-  def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
+  def applicable(modifier: BlockSection): Boolean = applicableTry(modifier).isSuccess
 
   /**
     * For given headers (sorted in reverse chronological order), find first one (most recent one) which is known
@@ -119,7 +119,7 @@ trait ErgoHistoryReader
     * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead,
     *         Fork if other peer is on another chain, Unknown if we can't deduct neighbour's status
     */
-  def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
+  def compare(info: ErgoSyncInfo): PeerChainStatus = {
     info match {
       case syncV1: ErgoSyncInfoV1 =>
         compareV1(syncV1)
@@ -137,7 +137,7 @@ trait ErgoHistoryReader
     *         Older if the neighbour is ahead,
     *         Fork if the neighbour is on a fork
     */
-  def compareV2(info: ErgoSyncInfoV2): HistoryComparisonResult = {
+  def compareV2(info: ErgoSyncInfoV2): PeerChainStatus = {
     bestHeaderOpt.map { myLastHeader =>
       if (info.lastHeaders.isEmpty) {
         Younger
@@ -184,7 +184,7 @@ trait ErgoHistoryReader
     *         Older if the neighbour is ahead,
     *         Fork if the neighbour is on a fork
     */
-  def compareV1(info: ErgoSyncInfoV1): HistoryComparisonResult = {
+  def compareV1(info: ErgoSyncInfoV1): PeerChainStatus = {
     bestHeaderIdOpt match {
       case Some(id) if info.lastHeaderIds.lastOption.contains(id) =>
         //Our best header is the same as other node best header
@@ -389,8 +389,11 @@ trait ErgoHistoryReader
   /**
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
-  def lastHeaders(count: Int, offset: Int = 0): HeaderChain = bestHeaderOpt
-    .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset)).getOrElse(HeaderChain.empty)
+  def lastHeaders(count: Int, offset: Int = 0): HeaderChain = {
+    bestHeaderOpt
+      .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset))
+      .getOrElse(HeaderChain.empty)
+  }
 
   /**
     * @return ids of headers (max. limit) starting from offset
@@ -405,11 +408,11 @@ trait ErgoHistoryReader
     * @param modifier  - modifier to apply
     * @return `Success` if modifier can be applied, `Failure(ModifierError)` if can not
     */
-  def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
+  def applicableTry(modifier: BlockSection): Try[Unit] = {
     modifier match {
       case header: Header =>
         validate(header)
-      case m: BlockSection =>
+      case m: NonHeaderBlockSection =>
         validate(m)
       case m: NipopowProofModifier =>
         validate(m)

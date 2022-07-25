@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.NonHeaderBlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -65,7 +65,7 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     (history, chain.last)
   }
 
-  private def commonChecks(history: ErgoHistory, section: BlockSection, header: Header) = {
+  private def commonChecks(history: ErgoHistory, section: NonHeaderBlockSection, header: Header) = {
     history.applicableTry(section) shouldBe 'success
     // header should contain correct digest
     history.applicableTry(withUpdatedHeaderId(section, section.id)) shouldBe 'failure
@@ -93,7 +93,7 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
 
-  private def withUpdatedHeaderId[T <: BlockSection](section: T, newId: ModifierId): T = section match {
+  private def withUpdatedHeaderId[T <: NonHeaderBlockSection](section: T, newId: ModifierId): T = section match {
     case s: Extension => s.copy(headerId = newId).asInstanceOf[T]
     case s: BlockTransactions => s.copy(headerId = newId).asInstanceOf[T]
     case s: ADProofs => s.copy(headerId = newId).asInstanceOf[T]

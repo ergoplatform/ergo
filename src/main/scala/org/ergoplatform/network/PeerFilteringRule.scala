@@ -1,5 +1,6 @@
 package org.ergoplatform.network
 
+import org.ergoplatform.nodeView.state.StateType
 import scorex.core.app.Version
 import scorex.core.network.ConnectedPeer
 
@@ -49,7 +50,7 @@ object DigestModeFilter extends PeerFilteringRule {
 }
 
 /**
-  * Filter out peers of 4.0.17 or 4.0.18 version as they are delivering broken modifiers
+  * Filter out peers of 4.0.17 or 4.0.18 version as they are delivering broken block sections
   */
 object BrokenModifiersFilter extends PeerFilteringRule {
 
@@ -57,6 +58,20 @@ object BrokenModifiersFilter extends PeerFilteringRule {
     version != Version.v4017 && version != Version.v4018
   }
 
+}
+
+/**
+  * Filter to download block sections, combining `DigestModeFilter` and `BrokenModifiersFilter`
+  * @param stateType - own (node's) state type
+  */
+final case class BlockSectionsDownloadFilter(stateType: StateType) extends PeerFilteringRule {
+  override def condition(version: Version): Boolean = {
+    if (stateType == StateType.Digest) {
+      DigestModeFilter.condition(version)
+    } else {
+      BrokenModifiersFilter.condition(version)
+    }
+  }
 }
 
 /**

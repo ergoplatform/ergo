@@ -1,5 +1,6 @@
 package scorex.core.network.peer
 
+import org.ergoplatform.settings.PeerFeatureIds
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
 import scorex.core.network.message.Message
@@ -16,17 +17,12 @@ case class SessionIdPeerFeature(networkMagic: Array[Byte],
                                 sessionId: Long = scala.util.Random.nextLong()) extends PeerFeature {
 
   override type M = SessionIdPeerFeature
-  override val featureId: Id = SessionIdPeerFeature.featureId
+  override val featureId: Id = PeerFeatureIds.SessionIdPeerFeatureId
 
   override def serializer: SessionIdPeerFeatureSerializer.type = SessionIdPeerFeatureSerializer
 
 }
 
-object SessionIdPeerFeature {
-
-  val featureId: Id = 3: Byte
-
-}
 
 object SessionIdPeerFeatureSerializer extends ScorexSerializer[SessionIdPeerFeature] {
 

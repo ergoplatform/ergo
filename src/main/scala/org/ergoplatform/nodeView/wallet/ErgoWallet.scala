@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
@@ -46,7 +46,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
     this
   }
 
-  def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = {
+  def scanPersistent(modifier: BlockSection): ErgoWallet = {
     modifier match {
       case fb: ErgoFullBlock =>
         walletActor ! ScanOnChain(fb)
@@ -57,7 +57,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
     this
   }
 
-  def scanPersistent(modifiers: Option[ErgoPersistentModifier]): ErgoWallet = {
+  def scanPersistent(modifiers: Option[BlockSection]): ErgoWallet = {
     modifiers.foldLeft(this) { case (v, mod) =>
       v.scanPersistent(mod)
     }

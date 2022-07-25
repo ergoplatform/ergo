@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.state
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk.StateElement
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
@@ -12,7 +12,7 @@ import scorex.util.{ModifierId, bytesToId}
 import scorex.utils.Random
 
 case class UTXOSnapshotChunk(stateElements: Seq[StateElement],
-                             index: Short) extends ErgoPersistentModifier {
+                             index: Short) extends BlockSection {
   override val modifierTypeId: ModifierTypeId = UTXOSnapshotChunk.modifierTypeId
 
   //TODO implement correctly

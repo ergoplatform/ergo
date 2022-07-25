@@ -1,12 +1,9 @@
 package org.ergoplatform.network
 
-import java.net.InetSocketAddress
 
-import akka.actor.ActorSystem
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.consensus.{Fork, HistoryComparisonResult, Older, Unknown}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.Events.{BetterNeighbourAppeared, NoBetterNeighbour}
+import scorex.core.consensus.{Fork, PeerChainStatus, Older, Unknown}
 import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.TimeProvider
@@ -16,18 +13,12 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scorex.core.utils.MapPimp
 
-final case class ErgoSyncTracker(system: ActorSystem,
-                                 networkSettings: NetworkSettings,
-                                 timeProvider: TimeProvider)
- extends ScorexLogging {
+final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider: TimeProvider) extends ScorexLogging {
 
   private val MinSyncInterval: FiniteDuration = 20.seconds
   private val SyncThreshold: FiniteDuration = 1.minute
 
-  val heights: mutable.Map[ConnectedPeer, Height] = mutable.Map[ConnectedPeer, Height]()
-
-  protected[network] val statuses: mutable.Map[ConnectedPeer, ErgoPeerStatus] =
-    mutable.Map[ConnectedPeer, ErgoPeerStatus]()
+  private[network] val statuses = mutable.Map[ConnectedPeer, ErgoPeerStatus]()
 
   def fullInfo(): Iterable[ErgoPeerStatus] = statuses.values
 
@@ -51,7 +42,9 @@ final case class ErgoSyncTracker(system: ActorSystem,
     notSyncedOrMissing || outdated
   }
 
-  def updateStatus(peer: ConnectedPeer, status: HistoryComparisonResult, height: Option[Height]): Unit = {
+  def updateStatus(peer: ConnectedPeer,
+                   status: PeerChainStatus,
+                   height: Option[Height]): Unit = {
     val seniorsBefore = numOfSeniors()
     statuses.adjust(peer){
       case None =>
@@ -65,29 +58,26 @@ final case class ErgoSyncTracker(system: ActorSystem,
     // todo: we should also send NoBetterNeighbour signal when all the peers around are not seniors initially
     if (seniorsBefore > 0 && seniorsAfter == 0) {
       log.info("Syncing is done, switching to stable regime")
-      system.eventStream.publish(NoBetterNeighbour)
+      // todo: update neighbours status ?
     }
     if (seniorsBefore == 0 && seniorsAfter > 0) {
-      system.eventStream.publish(BetterNeighbourAppeared)
+      // todo: update neighbours status?
     }
-
-    heights += (peer -> height.getOrElse(ErgoHistory.EmptyHistoryHeight))
   }
 
   /**
     * Get synchronization status for given connected peer
     */
-  def getStatus(peer: ConnectedPeer): Option[HistoryComparisonResult] = {
+  def getStatus(peer: ConnectedPeer): Option[PeerChainStatus] = {
     statuses.get(peer).map(_.status)
   }
 
-  def clearStatus(remote: InetSocketAddress): Unit = {
-    statuses.find(_._1.connectionId.remoteAddress == remote) match {
+  def clearStatus(connectedPeer: ConnectedPeer): Unit = {
+    statuses.find(_._1 == connectedPeer) match {
       case Some((peer, _)) =>
         statuses -= peer
-        heights -= peer
       case None =>
-        log.warn(s"Trying to clear status for $remote, but it is not found")
+        log.warn(s"Trying to clear status for $connectedPeer, but it is not found")
     }
   }
 
@@ -105,14 +95,20 @@ final case class ErgoSyncTracker(system: ActorSystem,
     }.keys.toVector
   }
 
-  def peersByStatus: Map[HistoryComparisonResult, Iterable[ConnectedPeer]] =
-    statuses.groupBy(_._2.status).mapValues(_.keys).view.force
+  /**
+    * @return status -> peers dynamic index, so it calculates from stored peer -> status dictionary a reverse index
+    */
+  def peersByStatus: Map[PeerChainStatus, Seq[ConnectedPeer]] = {
+    statuses.groupBy(_._2.status).mapValues(_.keys.toVector).view.force
+  }
 
-  protected def numOfSeniors(): Int = statuses.count(_._2.status == Older)
+  protected def numOfSeniors(): Int = {
+    statuses.count(_._2.status == Older)
+  }
 
   def maxHeight(): Option[Int] = {
-    if (heights.nonEmpty) {
-      Some(heights.maxBy(_._2)._2)
+    if (statuses.nonEmpty) {
+      Some(statuses.maxBy(_._2.height)._2.height)
     } else {
       None
     }
@@ -154,4 +150,5 @@ final case class ErgoSyncTracker(system: ActorSystem,
       s"$address, height: ${status.map(_.height)}, status: ${status.map(_.status)}, lastSync: $millisSinceLastSync ms ago"
     }.mkString("\n")
   }
+
 }

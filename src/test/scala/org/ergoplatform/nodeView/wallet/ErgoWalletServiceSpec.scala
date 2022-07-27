@@ -34,6 +34,7 @@ import scala.util.Random
 
 class ErgoWalletServiceSpec
   extends ErgoPropertyTest
+    with WalletGenerators
     with MempoolTestHelpers
     with WalletTestOps
     with ErgoWalletSupport

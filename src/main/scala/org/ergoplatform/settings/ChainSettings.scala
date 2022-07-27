@@ -30,6 +30,8 @@ case class ChainSettings(protocolVersion: Byte,
                          initialDifficultyHex: String,
                          genesisId: Option[ModifierId] = None) {
 
+  val isMainnet: Boolean = addressPrefix == ErgoAddressEncoder.MainnetNetworkPrefix
+
   val genesisStateDigest: ADDigest = Base16.decode(genesisStateDigestHex)
     .fold(_ => throw new Error(s"Failed to parse genesisStateDigestHex = $genesisStateDigestHex"), ADDigest @@ _)
 

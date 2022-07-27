@@ -209,115 +209,129 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   /**
     * Helper method to validate reemission rules according to EIP-27
+    *
+    * @param boxesToSpend     - inputs of transaction
+    * @param outputCandidates - outputs of the transaction
+    * @param stateContext     - validation context
     */
-  def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
-                               outputCandidates: Seq[ErgoBoxCandidate],
-                               stateContext: ErgoStateContext): Try[Unit] = {
-    Try {
-      // we check that we're in utxo mode, as eip27Supported flag available only in this mode
-      // if we're in digest mode, skip validation
-      // todo: this check could be removed after EIP-27 activation
-      if (stateContext.ergoSettings.nodeSettings.stateType.holdsUtxoSet) {
-        lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
-        lazy val reemissionRules = reemissionSettings.reemissionRules
+  private def verifyReemissionSpending(boxesToSpend: IndexedSeq[ErgoBox],
+                                       outputCandidates: Seq[ErgoBoxCandidate],
+                                       stateContext: ErgoStateContext): Try[Unit] = {
+    val res: Try[Unit] = Try {
 
-        lazy val reemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
-        lazy val reemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
+      lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
+      lazy val reemissionRules = reemissionSettings.reemissionRules
 
-        lazy val emissionNftId = ModifierId @@ reemissionSettings.emissionNftId
-        lazy val emissionNftIdBytes = reemissionSettings.emissionNftIdBytes
+      lazy val reemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
+      lazy val reemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
 
-        lazy val chainSettings = stateContext.ergoSettings.chainSettings
-        lazy val emissionRules = chainSettings.emissionRules
+      lazy val emissionNftId = ModifierId @@ reemissionSettings.emissionNftId
+      lazy val emissionNftIdBytes = reemissionSettings.emissionNftIdBytes
 
-        lazy val height = stateContext.currentHeight
-        lazy val eip27Supported = stateContext.eip27Supported
+      lazy val chainSettings = stateContext.ergoSettings.chainSettings
+      lazy val emissionRules = chainSettings.emissionRules
 
-        // considering voting for eip27 done, via eip27Supported flag
-        val activationHeight = if (eip27Supported) {
-          reemissionSettings.activationHeight
-        } else {
-          Int.MaxValue
+      lazy val height = stateContext.currentHeight
+
+      val activationHeight = reemissionSettings.activationHeight
+
+      if (height >= activationHeight) { // we check EIP-27 rules only since activation height
+        // reemission check logic below
+        var reemissionSpending = false // flag indicating that inputs have re-emission tokens
+        boxesToSpend.foreach { box =>
+          // checking EIP-27 rules for emission box
+          // for efficiency, skip boxes with less than 100K ERG
+          // secure, as charging emission box will be stopped
+          // before 100K ERG left in the emission box
+          // todo: for efficiency, we can raise the bar probably
+          if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
+            // on activation height, emissionNft is not in emission box yet, but in injection box
+            // injection box index (1) is enforced by injection box contract
+            if (box.tokens.contains(emissionNftId) ||
+              (height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId))) {
+
+              // in this branch, we are checking spending of re-emission tokens from the emission boxes
+
+              // if emission contract NFT is in the input, remission tokens should be there also
+              val reemissionTokensIn = if (height == activationHeight) {
+                boxesToSpend(1).tokens.getOrElse(reemissionTokenId, 0L)
+              } else {
+                box.tokens.getOrElse(reemissionTokenId, 0L)
+              }
+              require(reemissionTokensIn > 0, "No re-emission tokens in the emission or injection box")
+
+              // output positions guaranteed by emission contract
+              val emissionOut = outputCandidates(0)
+              val rewardsOut = outputCandidates(1)
+
+              // check positions of emission NFT and reemission token
+              val firstEmissionBoxTokenId = emissionOut.additionalTokens.apply(0)._1
+              val secondEmissionBoxTokenId = emissionOut.additionalTokens.apply(1)._1
+              require(
+                firstEmissionBoxTokenId.sameElements(emissionNftIdBytes),
+                "No emission box NFT in the emission box"
+              )
+              require(
+                secondEmissionBoxTokenId.sameElements(reemissionTokenIdBytes),
+                "No re-emission token in the emission box"
+              )
+
+              //we're checking how emission box is paying reemission tokens below
+              val emissionTokensOut = emissionOut.tokens.getOrElse(reemissionTokenId, 0L)
+              val rewardsTokensOut = rewardsOut.tokens.getOrElse(reemissionTokenId, 0L)
+              // it is prohibited to burn re-emission tokens on spending the emission box
+              require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission tokens not preserved")
+
+              val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
+              require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
+            } else {
+              // this path can be removed after EIP-27 activation in 5.0
+              // that is not so easy though, see https://github.com/ergoplatform/ergo/issues/1736
+              if (height >= activationHeight && box.ergoTree == chainSettings.monetary.emissionBoxProposition) {
+                //we require emission contract NFT and reemission token to be presented in emission output
+                val emissionOutTokens = outputCandidates(0).tokens
+                require(emissionOutTokens.contains(emissionNftId))
+                require(emissionOutTokens.contains(reemissionTokenId))
+              }
+            }
+          } else if (box.tokens.contains(reemissionTokenId) && height > activationHeight) {
+            // reemission tokens spent after EIP-27 activation
+            reemissionSpending = true
+          }
         }
 
-        if (stateContext.currentHeight >= activationHeight) {
-          // reemission check logic below
-          var reemissionSpending = false
-          boxesToSpend.foreach { box =>
-            // checking EIP-27 rules for emission box
-            // for efficiency, skip boxes with less than 100K ERG
-            if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
-              // on activation height, emissionNft is not in emission box yet, but in injection box
-              if (box.tokens.contains(emissionNftId) ||
-                (height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId))) {
-
-                // if emission contract NFT is in the input, remission tokens should be there also
-                val reemissionTokensIn = if (height == activationHeight) {
-                  boxesToSpend(1).tokens.getOrElse(reemissionTokenId, 0L)
-                } else {
-                  box.tokens.getOrElse(reemissionTokenId, 0L)
-                }
-                require(reemissionTokensIn > 0, "No re-emission tokens in the emission or injection box")
-
-                // output positions guaranteed by emission contract
-                val emissionOut = outputCandidates(0)
-                val rewardsOut = outputCandidates(1)
-
-                // check positions of emission NFT and reemission token
-                val firstEmissionBoxTokenId = emissionOut.additionalTokens.apply(0)._1
-                val secondEmissionBoxTokenId = emissionOut.additionalTokens.apply(1)._1
-                require(
-                  firstEmissionBoxTokenId.sameElements(emissionNftIdBytes),
-                  "No emission box NFT in the emission box"
-                )
-                require(
-                  secondEmissionBoxTokenId.sameElements(reemissionTokenIdBytes),
-                  "No re-emission token in the emission box"
-                )
-
-                //we're checking how emission box is paying reemission tokens below
-                val emissionTokensOut = emissionOut.tokens.getOrElse(reemissionTokenId, 0L)
-                val rewardsTokensOut = rewardsOut.tokens.getOrElse(reemissionTokenId, 0L)
-                require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut, "Reemission tokens not preserved")
-
-                val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
-                require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
-              } else {
-                //this path can be removed after EIP-27 activation
-                if (height >= activationHeight && box.ergoTree == chainSettings.monetary.emissionBoxProposition) {
-                  //we require emission contract NFT and reemission token to be presented in emission output
-                  val emissionOutTokens = outputCandidates(0).tokens
-                  require(emissionOutTokens.contains(emissionNftId))
-                  require(emissionOutTokens.contains(reemissionTokenId))
-                }
-              }
-            } else if (box.tokens.contains(reemissionTokenId) && height > activationHeight) {
-              // reemission tokens spent after EIP-27 activation
-              reemissionSpending = true
-            }
-          }
-
-          // if box with reemission tokens spent
-          if (reemissionSpending) {
-            val payToReemissionContract = reemissionRules.payToReemission
-            val toBurn = boxesToSpend.map { box =>
-              box.tokens.getOrElse(reemissionTokenId, 0L)
-            }.sum
-            log.debug(s"Reemission tokens to burn: $toBurn")
-            val reemissionOutputs = outputCandidates.filter { out =>
-              require(!out.tokens.contains(reemissionTokenId), "outputs contain reemission token")
+        // if box with reemission tokens spent
+        if (reemissionSpending) {
+          val payToReemissionContract = reemissionRules.payToReemission
+          val toBurn = boxesToSpend.map { box =>
+            box.tokens.getOrElse(reemissionTokenId, 0L)
+          }.sum
+          log.debug(s"Reemission tokens to burn: $toBurn")
+          val reemissionOutputs = outputCandidates.filter { out =>
+            require(!out.tokens.contains(reemissionTokenId), "outputs contain reemission token")
+            // we compare by trees in the mainnet (to avoid disagreement with versions 4.0.29-31 doing that),
+            // and by propositions in the testnet (as there are v0 & v1 transactions paying to pay-to-reemission there)
+            // see https://github.com/ergoplatform/ergo/pull/1728 for details.
+            if (chainSettings.isMainnet) {
               out.ergoTree == payToReemissionContract
+            } else {
+              out.ergoTree.toProposition(true) == payToReemissionContract.toProposition(true)
             }
-            val sentToReemission = reemissionOutputs.map(_.value).sum
-            require(sentToReemission == toBurn, "Burning condition violated")
           }
-        } else {
-          Success(())
+          val sentToReemission = reemissionOutputs.map(_.value).sum
+          require(sentToReemission == toBurn, "Burning condition violated")
         }
       } else {
-        log.warn("Checking EIP-27 in digest mode")
+        Success(())
       }
     }
+
+    res match {
+      case Failure(e) => log.error(s"EIP-27 check failed due to ${e.getMessage} : ", e)
+      case _ =>
+    }
+
+    res
   }
 
   /**

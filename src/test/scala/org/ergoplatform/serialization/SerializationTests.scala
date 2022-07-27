@@ -15,7 +15,6 @@ import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
 import org.scalatest.Assertion
 import scorex.core.serialization.ScorexSerializer
-import org.ergoplatform.nodeView.state.ErgoStateContext
 
 class SerializationTests extends ErgoPropertyTest with WalletGenerators with scorex.testkit.SerializationTests {
 
@@ -46,17 +45,6 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
       recovered shouldBe b
       recovered.size shouldBe serializer.toBytes(b).length
     }
-  }
-
-  property("ErgoStateContext serialization w. and w/out EIP-27 flag") {
-    val serializer = ErgoStateContextSerializer(settings)
-    val esc0 = ergoStateContextGen.sample.get
-    serializer.parseBytes(serializer.toBytes(esc0)).eip27Supported shouldBe false
-
-    val esc = new ErgoStateContext(esc0.lastHeaders, esc0.lastExtensionOpt, esc0.genesisStateDigest,
-      esc0.currentParameters, esc0.validationSettings, esc0.votingData, true)(esc0.ergoSettings)
-    val recovered = serializer.parseBytes(serializer.toBytes(esc))
-    recovered.eip27Supported shouldBe true
   }
 
   property("ErgoStateContext serialization") {

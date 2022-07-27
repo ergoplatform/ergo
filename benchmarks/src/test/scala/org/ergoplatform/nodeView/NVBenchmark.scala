@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView
 import org.ergoplatform.Utils
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.modifiers.history.BlockTransactions
 
 trait NVBenchmark {
@@ -16,7 +16,7 @@ trait NVBenchmark {
   def readBlocks: Seq[ErgoFullBlock] = readHeaders.zip(readPayloads).zip(readExtensions)
     .map { case ((h, txs), ext) => ErgoFullBlock(h, txs, ext, None) }
 
-  def readModifiers[M <: ErgoPersistentModifier](path: String): Seq[M] = {
+  def readModifiers[M <: BlockSection](path: String): Seq[M] = {
     val is = Utils.getUrlInputStream(path)
     Stream
       .continually {

@@ -15,11 +15,13 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Paramet
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoSyncTracker
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
 import scorex.core.network.peer.PeersStatus
 
+import java.net.URL
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
@@ -28,6 +30,7 @@ import scala.concurrent.duration._
   */
 class ErgoStatsCollector(readersHolder: ActorRef,
                          networkController: ActorRef,
+                         syncTracker: ErgoSyncTracker,
                          settings: ErgoSettings,
                          timeProvider: NetworkTimeProvider)
   extends Actor with ScorexLogging {
@@ -36,9 +39,9 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     val ec: ExecutionContextExecutor = context.dispatcher
 
     readersHolder ! GetReaders
-    context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedHistory])
     context.system.eventStream.subscribe(self, classOf[ChangedState])
-    context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedMempool])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
@@ -60,11 +63,13 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None,
     None,
     None,
+    None,
     launchTime = networkTime(),
     lastIncomingMessageTime = networkTime(),
     None,
     LaunchParameters,
-    eip27Supported = false)
+    eip27Supported = true,
+    settings.scorexSettings.restApi.publicUrl)
 
   override def receive: Receive =
     onConnectedPeers orElse
@@ -88,8 +93,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption,
         stateRoot = Some(Algos.encode(s.rootHash)),
         stateVersion = Some(s.version),
-        parameters = s.stateContext.currentParameters,
-        eip27Supported = s.stateContext.eip27Supported
+        parameters = s.stateContext.currentParameters
       )
   }
 
@@ -105,7 +109,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
       val sc = s.stateContext
-      nodeInfo = nodeInfo.copy(parameters = sc.currentParameters, eip27Supported = sc.eip27Supported)
+      nodeInfo = nodeInfo.copy(parameters = sc.currentParameters)
   }
 
   private def onHistoryChanged: Receive = {
@@ -124,12 +128,18 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
   private def onConnectedPeers: Receive = {
     case peers: Seq[ConnectedPeer@unchecked] if peers.headOption.forall(_.isInstanceOf[ConnectedPeer]) =>
-      nodeInfo = nodeInfo.copy(peersCount = peers.length)
+      nodeInfo = nodeInfo.copy(
+        peersCount = peers.length,
+        maxPeerHeight = syncTracker.maxHeight()
+      )
   }
 
   private def onPeersStatus: Receive = {
     case p2pStatus: PeersStatus =>
-      nodeInfo = nodeInfo.copy(lastIncomingMessageTime = p2pStatus.lastIncomingMessage)
+      nodeInfo = nodeInfo.copy(
+        lastIncomingMessageTime = p2pStatus.lastIncomingMessage,
+        maxPeerHeight = syncTracker.maxHeight()
+      )
   }
 
   def onSemanticallySuccessfulModification: Receive = {
@@ -166,6 +176,7 @@ object ErgoStatsCollector {
     * @param genesisBlockIdOpt - header id of genesis block
     * @param parameters - array with network parameters at the moment
     * @param eip27Supported - whether EIP-27 locked in
+    * @param restApiUrl publicly accessible url of node which exposes restApi in firewall
     */
   case class NodeInfo(nodeName: String,
                       appVersion: String,
@@ -180,22 +191,27 @@ object ErgoStatsCollector {
                       headersScore: Option[BigInt],
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       fullBlocksScore: Option[BigInt],
+                      maxPeerHeight : Option[Int], // Maximum block height of connected peers
                       launchTime: Long,
                       lastIncomingMessageTime: Long,
                       genesisBlockIdOpt: Option[String],
                       parameters: Parameters,
-                      eip27Supported: Boolean)
+                      eip27Supported: Boolean,
+                      restApiUrl: Option[URL])
 
   object NodeInfo extends ApiCodecs {
     implicit val paramsEncoder: Encoder[Parameters] = org.ergoplatform.settings.ParametersSerializer.jsonEncoder
 
-    implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) =>
-      Map(
+    implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) => {
+      val optionalFields =
+        ni.restApiUrl.map(_.toString).map(restApiUrl => Map("restApiUrl" -> restApiUrl.asJson)).getOrElse(Map.empty)
+      (Map(
         "name" -> ni.nodeName.asJson,
         "appVersion" -> Version.VersionString.asJson,
         "network" -> ni.network.asJson,
         "headersHeight" -> ni.bestHeaderOpt.map(_.height).asJson,
         "fullHeight" -> ni.bestFullBlockOpt.map(_.header.height).asJson,
+        "maxPeerHeight" -> ni.maxPeerHeight.asJson,
         "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,
         "bestFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.encodedId).asJson,
         "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Algos.encode).asJson,
@@ -213,7 +229,8 @@ object ErgoStatsCollector {
         "genesisBlockId" -> ni.genesisBlockIdOpt.asJson,
         "parameters" -> ni.parameters.asJson,
         "eip27Supported" -> ni.eip27Supported.asJson
-      ).asJson
+      ) ++ optionalFields).asJson
+    }
   }
 
 }
@@ -222,16 +239,17 @@ object ErgoStatsCollectorRef {
 
   def props(readersHolder: ActorRef,
             networkController: ActorRef,
+            syncTracker : ErgoSyncTracker,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider): Props = {
-    Props(new ErgoStatsCollector(readersHolder, networkController, settings, timeProvider))
-  }
+            timeProvider: NetworkTimeProvider): Props =
+    Props(new ErgoStatsCollector(readersHolder, networkController, syncTracker, settings, timeProvider))
+
 
   def apply(readersHolder: ActorRef,
             networkController: ActorRef,
+            syncTracker : ErgoSyncTracker,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef = {
-    system.actorOf(props(readersHolder, networkController, settings, timeProvider))
-  }
+            timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(readersHolder, networkController, syncTracker, settings, timeProvider))
 
 }

@@ -303,8 +303,6 @@ class ErgoWalletServiceSpec
         val pass = Random.nextString(10)
         val initializedState = walletService.initWallet(walletState, settings, SecretString.create(pass), Option.empty).get._2
 
-        initializedState.getWalletHeight shouldBe 0
-
         // Wallet unlocked after init, so we're locking it
         val initLockedWalletState = walletService.lockWallet(initializedState)
         initLockedWalletState.secretStorageOpt.get.isLocked shouldBe true

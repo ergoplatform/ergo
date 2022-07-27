@@ -8,11 +8,6 @@ sealed trait ModifierSemanticValidity {
 }
 
 object ModifierSemanticValidity {
-  def restoreFromCode(code: Byte): ModifierSemanticValidity =
-    if (code == Valid.code) Valid
-    else if (code == Unknown.code) Unknown
-    else if (code == Invalid.code) Invalid
-    else Absent
 
   case object Absent extends ModifierSemanticValidity {
     override val code: Byte = 0

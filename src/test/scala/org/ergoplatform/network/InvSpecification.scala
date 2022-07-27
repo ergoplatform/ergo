@@ -17,7 +17,7 @@ class InvSpecification extends ErgoPropertyTest with DecodingUtils {
 
   property("inv reference parser") {
     val magic = Array(1: Byte, 0: Byte, 2: Byte, 4: Byte) // mainnet magic
-    val invSpec = new InvSpec(maxInvObjects = 100)
+    val invSpec = InvSpec
 
     val headerId = Array.fill(16)(1: Byte) ++ Array.fill(16)(2: Byte)
 

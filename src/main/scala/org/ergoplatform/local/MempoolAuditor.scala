@@ -35,7 +35,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   }
 
   override def postStop(): Unit = {
-    logger.info("Mempool auditor stopped")
+    log.info("Mempool auditor stopped")
     super.postStop()
   }
 
@@ -102,7 +102,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
 
   private def broadcastTx(tx: ErgoTransaction): Unit = {
     val msg = Message(
-      new InvSpec(settings.scorexSettings.network.maxInvObjects),
+      InvSpec,
       Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
       None
     )

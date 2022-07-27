@@ -2,10 +2,10 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
-import scorex.core.consensus.History.ProgressInfo
+import scorex.core.consensus.ProgressInfo
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
@@ -47,7 +47,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     * @return ProgressInfo required for State to process to be consistent with the history
     */
   protected def processFullBlock(fullBlock: ErgoFullBlock,
-                                 newMod: ErgoPersistentModifier): Try[ProgressInfo[ErgoPersistentModifier]] = {
+                                 newMod: BlockSection): Try[ProgressInfo[BlockSection]] = {
     val bestFullChainAfter = calculateBestChain(fullBlock.header)
     val newBestBlockHeader = typedModifierById[Header](bestFullChainAfter.last).ensuring(_.isDefined)
     processing(ToProcess(fullBlock, newMod, newBestBlockHeader, bestFullChainAfter))
@@ -236,7 +236,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     historyStorage.remove(mutable.WrappedArray.empty, toRemove)
   }
 
-  private def updateStorage(newModRow: ErgoPersistentModifier,
+  private def updateStorage(newModRow: BlockSection,
                             bestFullHeaderId: ModifierId,
                             additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])]): Try[Unit] = {
     val indicesToInsert = Seq(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
@@ -253,10 +253,10 @@ trait FullBlockProcessor extends HeadersProcessor {
 
 object FullBlockProcessor {
 
-  type BlockProcessing = PartialFunction[ToProcess, Try[ProgressInfo[ErgoPersistentModifier]]]
+  type BlockProcessing = PartialFunction[ToProcess, Try[ProgressInfo[BlockSection]]]
 
   case class ToProcess(fullBlock: ErgoFullBlock,
-                       newModRow: ErgoPersistentModifier,
+                       newModRow: BlockSection,
                        newBestBlockHeaderOpt: Option[Header],
                        newBestChain: Seq[ModifierId])
 
@@ -281,9 +281,9 @@ object FullBlockProcessor {
   val BestChainMarker: Array[Byte] = Array(1: Byte)
   val NonBestChainMarker: Array[Byte] = Array(0: Byte)
 
-  private implicit val ord: Ordering[CacheBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))
+  private val ord: Ordering[CacheBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))
 
-  def emptyCache: IncompleteFullChainCache = IncompleteFullChainCache(TreeMap.empty)
+  def emptyCache: IncompleteFullChainCache = IncompleteFullChainCache(TreeMap.empty(ord))
 
   def chainStatusKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("main_chain".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))

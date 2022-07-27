@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.31"
+  version: "4.0.36"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1697,6 +1697,10 @@ components:
         address:
           type: string
           example: '127.0.0.1:5673'
+        restApiUrl:
+          type: string
+          example: 'https://example.com'
+          nullable: true
         name:
           type: string
           example: mynode
@@ -1977,6 +1981,14 @@ components:
           type: object
           description: current parameters
           $ref: '#/components/schemas/Parameters'
+        eip27Supported:
+          type: boolean
+          example: true
+          description: Whether EIP-27 locked in
+        restApiUrl:
+          type: string
+          example: 'https://example.com'
+          description: Publicly accessible url of node which exposes restApi in firewall
 
     Parameters:
       type: object
@@ -3779,12 +3791,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -3794,6 +3814,14 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -3854,12 +3882,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -3869,6 +3905,14 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -4705,12 +4749,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -4720,6 +4772,14 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -4756,12 +4816,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -4771,6 +4839,14 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]

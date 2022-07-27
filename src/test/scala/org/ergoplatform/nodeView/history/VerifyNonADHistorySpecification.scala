@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.ModifierTypeId
-import scorex.core.consensus.History.ProgressInfo
+import scorex.core.consensus.ProgressInfo
 
 class VerifyNonADHistorySpecification extends HistoryTestHelpers {
   import ToDownloadProcessor._

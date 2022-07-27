@@ -1,6 +1,6 @@
 package scorex.core.network
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Cancellable, Props, SupervisorStrategy}
+import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
@@ -137,7 +137,9 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
         "closed by the peer"
       } else if (cc.isAborted) {
         "aborted locally"
-      } else ""
+      } else {
+        ""
+      }
       log.info(s"Connection closed to $connectionId, reason: " + reason)
       context stop self
   }
@@ -272,6 +274,7 @@ object PeerConnectionHandler {
 }
 
 object PeerConnectionHandlerRef {
+
   def props(settings: ScorexSettings,
             networkControllerRef: ActorRef,
             scorexContext: ScorexContext,
@@ -279,18 +282,4 @@ object PeerConnectionHandlerRef {
            )(implicit ec: ExecutionContext): Props =
     Props(new PeerConnectionHandler(settings, networkControllerRef, scorexContext, connectionDescription))
 
-  def apply(settings: ScorexSettings,
-            networkControllerRef: ActorRef,
-            scorexContext: ScorexContext,
-            connectionDescription: ConnectionDescription)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props(settings, networkControllerRef, scorexContext, connectionDescription))
-
-  def apply(name: String,
-            settings: ScorexSettings,
-            networkControllerRef: ActorRef,
-            scorexContext: ScorexContext,
-            connectionDescription: ConnectionDescription)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props(settings, networkControllerRef, scorexContext, connectionDescription), name)
 }

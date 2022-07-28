@@ -73,7 +73,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     ErgoWalletState.initial(settings, parameters) match {
       case Success(state) =>
         val appVersion = Version(settings.scorexSettings.network.appVersion)
-        if (appVersion.compare(Version(4, 0, 26)) >= 0) {
+        if (appVersion.compare(Version(4, 0, 36)) >= 0) {
           state.migrateScans(settings) match {
             case Success((migrationResults, newState)) =>
               if (migrationResults.nonEmpty) {

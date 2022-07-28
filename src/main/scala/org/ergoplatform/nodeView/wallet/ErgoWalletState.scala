@@ -129,7 +129,7 @@ case class ErgoWalletState(
   }
 
   /**
-    * Compatibility bridge to version 4.0.26 where ScanId changed from Short to Int, let's migrate them
+    * Compatibility bridge to version 4.0.36 where ScanId changed from Short to Int, let's migrate them
     * @return migration status
     */
   def migrateScans(settings: ErgoSettings): Try[(Vector[Scan], ErgoWalletState)] =

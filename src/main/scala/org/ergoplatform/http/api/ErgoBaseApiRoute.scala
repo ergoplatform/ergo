@@ -41,7 +41,7 @@ trait ErgoBaseApiRoute extends ApiRoute {
 
   /**
     * Send local transaction to ErgoNodeViewHolder
-    * @return 200 OK or 400 BadRequest
+    * @return Transaction Id with status OK(200) or BadRequest(400)
     */
   protected def sendLocalTransactionRoute(nodeViewActorRef: ActorRef, tx: ErgoTransaction): Route = {
     val resultFuture =

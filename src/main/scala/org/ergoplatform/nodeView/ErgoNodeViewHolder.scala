@@ -258,25 +258,23 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def txModify(tx: ErgoTransaction): ProcessingOutcome = {
-    memoryPool().process(tx, minimalState()) match {
-      case (newPool, ProcessingOutcome.Accepted) =>
+    val (newPool, processingOutcome) = memoryPool().process(tx, minimalState())
+    processingOutcome match {
+      case ProcessingOutcome.Accepted =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
         val newVault = vault().scanOffchain(tx)
         updateNodeView(updatedVault = Some(newVault), updatedMempool = Some(newPool))
         context.system.eventStream.publish(SuccessfulTransaction(tx))
-        ProcessingOutcome.Accepted
-      case (newPool, ProcessingOutcome.Invalidated(e)) =>
+      case ProcessingOutcome.Invalidated(e) =>
         log.debug(s"Transaction $tx invalidated. Cause: ${e.getMessage}")
         updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(FailedTransaction(tx.id, e, immediateFailure = true))
-        ProcessingOutcome.Invalidated(e)
-      case (_, ProcessingOutcome.DoubleSpendingLoser(winnerTxs)) => // do nothing
+      case ProcessingOutcome.DoubleSpendingLoser(winnerTxs) => // do nothing
         log.debug(s"Transaction $tx declined, as other transactions $winnerTxs are paying more")
-        ProcessingOutcome.DoubleSpendingLoser(winnerTxs)
-      case (_, ProcessingOutcome.Declined(e)) => // do nothing
+      case ProcessingOutcome.Declined(e) => // do nothing
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
-        ProcessingOutcome.Declined(e)
     }
+    processingOutcome
   }
 
   /**

@@ -16,11 +16,8 @@ import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome.{Accepted, Declined, DoubleSpendingLoser, Invalidated}
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
-import scorex.core.api.http.{ApiError, ApiResponse}
+import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 
@@ -189,21 +186,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
                               dataInputsRaw: Seq[String]): Route = {
     generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw,
       tx => verifyTransaction(tx, readersHolder, ergoSettings),
-      { tx =>
-        val result =
-          (nodeViewActorRef ? LocallyGeneratedTransaction(tx))
-            .mapTo[ProcessingOutcome]
-            .flatMap {
-              case Accepted => Future.successful(tx.id)
-              case DoubleSpendingLoser(_) => Future.failed(new IllegalArgumentException("Double spending attempt"))
-              case Declined(ex) => Future.failed(ex)
-              case Invalidated(ex) => Future.failed(ex)
-            }
-
-        completeOrRecoverWith(result) { ex =>
-          ApiError.BadRequest(ex.getMessage)
-        }
-      })
+      validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx)
+    )
   }
 
   def sendTransactionR: Route =

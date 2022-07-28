@@ -9,12 +9,9 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome.{Accepted, Declined, DoubleSpendingLoser, Invalidated}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
-import scorex.core.api.http.{ApiError, ApiResponse}
+import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
@@ -43,7 +40,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     p.getAll.slice(offset, offset + limit).map(_.asJson).asJson
   }
 
-  private def validateTransactionAndProcess[R](tx: ErgoTransaction)(processFn: ErgoTransaction => Future[R]): Route = {
+  private def validateTransactionAndProcess(tx: ErgoTransaction)(processFn: ErgoTransaction => Route): Route = {
     if (tx.size > ergoSettings.nodeSettings.maxTransactionSize) {
       BadRequest(s"Transaction $tx has too large size ${tx.size}")
     } else {
@@ -52,11 +49,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
       } {
         _.fold(
           e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
-          _ => {
-            completeOrRecoverWith(processFn(tx).map(_ => tx.id)) { ex =>
-              ApiError.BadRequest(ex.getMessage)
-            }
-          }
+          _ => processFn(tx)
         )
       }
     }
@@ -64,20 +57,11 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
-    validateTransactionAndProcess(tx) { tx =>
-      (nodeViewActorRef ? LocallyGeneratedTransaction(tx))
-        .mapTo[ProcessingOutcome]
-        .flatMap {
-          case Accepted => Future.successful(())
-          case DoubleSpendingLoser(_) => Future.failed(new IllegalArgumentException("Double spending attempt"))
-          case Declined(ex) => Future.failed(ex)
-          case Invalidated(ex) => Future.failed(ex)
-        }
+      validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
     }
-  }
 
   def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) { tx =>
-    validateTransactionAndProcess(tx) { tx => Future.successful(()) }
+    validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.id))
   }
 
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & txPaging) { (offset, limit) =>

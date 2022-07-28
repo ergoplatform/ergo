@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome._
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Success, Try}
 
-trait ErgoBaseApiRoute extends ApiRoute {
+trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
 
   implicit val ec: ExecutionContextExecutor = context.dispatcher
 

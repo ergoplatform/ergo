@@ -162,7 +162,7 @@ object ErgoWalletState {
         utxoStateReaderOpt = None,
         parameters,
         maxInputsToUse,
-        walletState = WalletPhase.Default,
+        walletState = WalletPhase.Expecting,
         rescanInProgress = false
       )
     }

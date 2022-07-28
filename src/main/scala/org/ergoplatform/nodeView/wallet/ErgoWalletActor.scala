@@ -80,7 +80,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     }
   }
 
-  private def emptyWallet: Receive = {
+  private def expectWalletReading: Receive = {
     case ReadWallet(state) =>
       val ws = settings.walletSettings
       // Try to read wallet from json file or test mnemonic provided in a config file
@@ -489,7 +489,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     sender() ! txsToSend
   }
 
-  override def receive: Receive = emptyWallet
+  override def receive: Receive = expectWalletReading
 
   private def wrapLegalExc[T](e: Throwable): Failure[T] =
     if (e.getMessage.startsWith("Illegal key size")) {
@@ -521,11 +521,11 @@ object ErgoWalletActor extends ScorexLogging {
     walletActorRef
   }
 
-  /** Wallet transitions either from Empty -> Initialized or Empty -> Restored */
+  /** Wallet transitions either from Default -> Initialized or Default -> Restored */
   trait WalletPhase
   object WalletPhase {
-    /** Stage of a wallet that is either empty or initialized/restored in previous runs */
-    case object Default extends WalletPhase
+    /** Wallet is expecting either Initialization or Restoration */
+    case object Expecting extends WalletPhase
     /** New wallet initialized with generated mnemonic in this runtime */
     case object Initialized extends WalletPhase
     /** Wallet restored from existing mnemonic in this runtime */

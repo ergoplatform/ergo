@@ -2,7 +2,7 @@ package org.ergoplatform.http.api
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.server.{Directive1, ValidationRejection}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}

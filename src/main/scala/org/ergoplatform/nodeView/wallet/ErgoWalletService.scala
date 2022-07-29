@@ -4,7 +4,7 @@ import cats.implicits._
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
@@ -225,7 +225,7 @@ trait ErgoWalletService {
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
-                          sign: Boolean): Try[UnconfirmedTransaction]
+                          sign: Boolean): Try[ErgoLikeTransactionTemplate[_]]
 
   /**
     * Generate commitments to be used then to sign a transaction.
@@ -449,7 +449,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
-                          sign: Boolean): Try[UnconfirmedTransaction] = {
+                          sign: Boolean): Try[ErgoLikeTransactionTemplate[_]] = {
     val tx = generateUnsignedTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw)
     if (sign) {
       tx.flatMap { case (unsignedTx, inputs, dataInputs) =>
@@ -457,7 +457,6 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
           case Some(prover) =>
               prover.sign(unsignedTx, inputs, dataInputs, state.stateContext, TransactionHintsBag.empty)
                 .map(ErgoTransaction.apply)
-                .map(UnconfirmedTransaction.apply)
                 .fold(
                   e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)),
                   tx => Success(tx))
@@ -587,11 +586,11 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   override def getUnconfirmedTransactions(state: ErgoWalletState, scanId: ScanId): Seq[AugWalletTransaction] = {
     state.mempoolReaderOpt.flatMap { mempool =>
       state.storage.getScan(scanId).map { scan =>
-        mempool.getAllPrioritized.filter { tx =>
-          tx.outputs.exists(scan.trackingRule.filter)
-        }.map { tx =>
+        mempool.getAllPrioritized.filter { unconfirmedTx =>
+          unconfirmedTx.transaction.outputs.exists(scan.trackingRule.filter)
+        }.map { unconfirmedTx =>
           // unconfirmed transaction has 0 confirmations
-          AugWalletTransaction(WalletTransaction(tx, state.fullHeight, Seq(scanId)), 0)
+          AugWalletTransaction(WalletTransaction(unconfirmedTx.transaction, state.fullHeight, Seq(scanId)), 0)
         }
       }
     }.getOrElse(Nil)

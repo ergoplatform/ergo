@@ -38,16 +38,15 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Validate transaction against provided state context, if specified,
     * or state context from the previous block if not
     */
-  def validateWithCost(ut: UnconfirmedTransaction,
+  def validateWithCost(tx: ErgoTransaction,
                        stateContextOpt: Option[ErgoStateContext],
                        costLimit: Int,
                        interpreterOpt: Option[ErgoInterpreter]): Try[Int] = {
-    val tx = ut.transaction
     val context = stateContextOpt.getOrElse(stateContext)
     val parameters = context.currentParameters.withBlockCost(costLimit)
     val verifier = interpreterOpt.getOrElse(ErgoInterpreter(parameters))
 
-    ut.transaction.statelessValidity().flatMap { _ =>
+    tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
       tx.statefulValidity(
         boxesToSpend,
@@ -57,7 +56,6 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
         case Success(txCost) if txCost > costLimit =>
           Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
         case Success(txCost) =>
-          ut.updateCost(txCost)
           Success(txCost)
         case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
           Failure(TooHighCostError(s"Transaction $tx has too high cost"))
@@ -74,7 +72,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Used in mempool.
     */
   override def validateWithCost(unconfirmedTx: UnconfirmedTransaction, maxTxCost: Int): Try[Int] = {
-    validateWithCost(unconfirmedTx, None, maxTxCost, None)
+    validateWithCost(unconfirmedTx.transaction, None, maxTxCost, None)
   }
 
   /**
@@ -162,6 +160,20 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
   def withTransactions(unconfirmedTransactions: Seq[UnconfirmedTransaction]): UtxoState = {
     new UtxoState(persistentProver, version, store, constants) {
       lazy val createdBoxes: Seq[ErgoBox] = unconfirmedTransactions.map(_.transaction).flatMap(_.outputs)
+
+      override def boxById(id: ADKey): Option[ErgoBox] = {
+        super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
+      }
+    }
+  }
+
+  /**
+   * Producing a copy of the state which takes into account outputs of given transactions.
+   * Useful when checking mempool transactions.
+   */
+  def withTransactions(transactions: Seq[ErgoTransaction]): UtxoState = {
+    new UtxoState(persistentProver, version, store, constants) {
+      lazy val createdBoxes: Seq[ErgoBox] = transactions.flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {
         super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))

@@ -6,7 +6,7 @@ import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
@@ -100,10 +100,10 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     context become working // ignore other triggers until work is done
   }
 
-  private def broadcastTx(tx: ErgoTransaction): Unit = {
+  private def broadcastTx(unconfirmedTx: UnconfirmedTransaction): Unit = {
     val msg = Message(
       new InvSpec(settings.scorexSettings.network.maxInvObjects),
-      Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
+      Right(InvData(Transaction.ModifierTypeId, Seq(unconfirmedTx.transaction.id))),
       None
     )
     networkControllerRef ! SendToNetwork(msg, Broadcast)
@@ -117,7 +117,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
         case Some(utxoState: UtxoStateReader) =>
           val stateToCheck = utxoState.withTransactions(toBroadcast)
           toBroadcast.foreach { tx =>
-            if (tx.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
+            if (tx.transaction.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
               log.info(s"Rebroadcasting $tx")
               broadcastTx(tx)
             } else {

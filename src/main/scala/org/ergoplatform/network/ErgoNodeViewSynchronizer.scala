@@ -1,13 +1,13 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import java.net.InetSocketAddress
 
+import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
@@ -38,7 +38,6 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
-
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -466,7 +465,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Some(serializer: ScorexSerializer[ErgoTransaction]@unchecked) if typeId == Transaction.ModifierTypeId =>
         // parse all transactions and send them to node view holder
         val parsed: Iterable[ErgoTransaction] = parseModifiers(requestedModifiers, typeId, serializer, remote)
-        viewHolderRef ! TransactionsFromRemote(parsed)
+        viewHolderRef ! TransactionsFromRemote(parsed.map(UnconfirmedTransaction.apply))
 
       case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
         // parse all modifiers and put them to modifiers cache
@@ -620,7 +619,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def modifiersReq(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, remote: ConnectedPeer): Unit = {
       val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
         case typeId: ModifierTypeId if typeId == Transaction.ModifierTypeId =>
-          mp.getAll(invData.ids).map(tx => tx.id -> tx.bytes)
+          mp.getAll(invData.ids).map(tx => tx.transaction.id -> tx.transactionBytes.map(d => d.toArray).getOrElse(tx.transaction.bytes))
         case _: ModifierTypeId =>
           invData.ids.flatMap(id => hr.modifierBytesById(id).map(bytes => (id, bytes)))
       }

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
@@ -99,7 +99,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
     new ErgoMemPool(pool.filter(condition), stats)
   }
 
-  def filter(txs: Seq[UnconfirmedTransaction]): ErgoMemPool = filter(t => !txs.exists(_.id == t.id))
+  def filter(txs: Seq[UnconfirmedTransaction]): ErgoMemPool = filter(t => !txs.exists(_.transaction.id == t.transaction.id))
 
   /**
     * Invalidate transaction and delete it from pool
@@ -156,7 +156,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
               // Allow proceeded transaction to spend outputs of pooled transactions.
               val utxoWithPool = utxo.withTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
-                utxoWithPool.validateWithCost(unconfirmedTx, Some(utxo.stateContext), nodeSettings.maxTransactionCost, None).fold(
+                utxoWithPool.validateWithCost(unconfirmedTx.transaction, Some(utxo.stateContext), nodeSettings.maxTransactionCost, None).fold(
                   ex => new ErgoMemPool(pool.invalidate(unconfirmedTx), stats) -> ProcessingOutcome.Invalidated(ex),
                   _ => acceptIfNoDoubleSpend(unconfirmedTx)
                 )

@@ -186,10 +186,10 @@ case class WalletApiRoute(readersHolder: ActorRef,
                               inputsRaw: Seq[String],
                               dataInputsRaw: Seq[String]): Route = {
     generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw,
-      tx => verifyTransaction(UnconfirmedTransaction.apply(tx), readersHolder, ergoSettings),
+      tx => verifyTransaction(tx, readersHolder, ergoSettings),
       { tx =>
         nodeViewActorRef ! LocallyGeneratedTransaction(tx)
-        ApiResponse(tx.id)
+        ApiResponse(tx.transaction.id)
       })
   }
 

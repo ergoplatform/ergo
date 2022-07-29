@@ -6,7 +6,7 @@ import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -344,10 +344,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                               blocksApplied: Seq[BlockSection],
                               memPool: ErgoMemPool,
                               state: State): ErgoMemPool = {
-    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions)
+    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions).map(UnconfirmedTransaction.apply)
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
-    memPool.putWithoutCheck(rolledBackTxs).filter(tx => !appliedTxs.exists(_.id == tx.id))
+    memPool.putWithoutCheck(rolledBackTxs).filter(tx => !appliedTxs.exists(_.id == tx.transaction.id))
   }
 
   /**
@@ -579,7 +579,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     case newTxs: NewTransactions =>
       newTxs.txs.foreach(txModify)
     case EliminateTransactions(ids) =>
-      val updatedPool = memoryPool().filter(tx => !ids.contains(tx.id))
+      val updatedPool = memoryPool().filter(unconfirmedTx => !ids.contains(unconfirmedTx.transaction.id))
       updateNodeView(updatedMempool = Some(updatedPool))
       ids.foreach { id =>
         val e = new Exception("Became invalid")

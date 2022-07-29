@@ -1,14 +1,8 @@
 package org.ergoplatform.modifiers.mempool
 
-import org.ergoplatform.{ErgoLikeTransaction, ErgoLikeTransactionSerializer}
-import scorex.core.consensus.ContainsModifiers
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.transaction.Transaction
-import scorex.core.utils.{NetworkTime, NetworkTimeProvider, TimeProvider}
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.serialization.ConstantStore
-import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 
 
 case class UnconfirmedTransaction(
@@ -16,7 +10,7 @@ case class UnconfirmedTransaction(
   lastCost: Option[Int],
   createdTime: Long,
   lastCheckedTime: Long,
-  transactionBytes: Option[Seq[Byte]])
+  transactionBytes: Option[Array[Byte]])
 //) extends Transaction
   extends ScorexLogging {
 //  with ContainsModifiers[UnconfirmedTransaction] {
@@ -61,7 +55,7 @@ object UnconfirmedTransactionSerializer extends ScorexSerializer[UnconfirmedTran
     val lastCostOpt = r.getOption(r.getUInt().toInt)
     val createdTime = r.getULong()
     val lastCheckedTime = r.getULong()
-    val transactionBytesOpt = r.getOption(r.getBytes(256).toSeq) //TODO transaction bytes size?
+    val transactionBytesOpt = r.getOption(r.getBytes(256)) //TODO transaction bytes size?
 
     UnconfirmedTransaction(ergoTransaction, lastCostOpt, createdTime, lastCheckedTime, transactionBytesOpt)
   }

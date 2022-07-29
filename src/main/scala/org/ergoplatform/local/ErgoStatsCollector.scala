@@ -147,6 +147,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
       nodeInfo = nodeInfo.copy(
         stateRoot = Some(Algos.encode(fb.header.stateRoot)),
         stateVersion = Some(fb.encodedId))
+    case SemanticallySuccessfulModifier(_) =>
+      // Ignore other modifiers
   }
 
 }

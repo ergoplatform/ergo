@@ -52,7 +52,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
         _.fold(
           e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
           _ => {
-            processFn(_)
+            processFn(unconfirmedTx)
             ApiResponse(tx.id)
           }
         )

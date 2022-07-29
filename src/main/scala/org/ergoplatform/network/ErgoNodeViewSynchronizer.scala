@@ -619,7 +619,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def modifiersReq(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, remote: ConnectedPeer): Unit = {
       val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
         case typeId: ModifierTypeId if typeId == Transaction.ModifierTypeId =>
-          mp.getAll(invData.ids).map(tx => tx.transaction.id -> tx.transactionBytes.map(d => d.toArray).getOrElse(tx.transaction.bytes))
+          mp.getAll(invData.ids).map(unconfirmedTx =>
+            unconfirmedTx.transaction.id -> unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes))
         case _: ModifierTypeId =>
           invData.ids.flatMap(id => hr.modifierBytesById(id).map(bytes => (id, bytes)))
       }

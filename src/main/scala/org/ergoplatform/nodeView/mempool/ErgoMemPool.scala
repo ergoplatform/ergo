@@ -154,7 +154,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
           state match {
             case utxo: UtxoState =>
               // Allow proceeded transaction to spend outputs of pooled transactions.
-              val utxoWithPool = utxo.withTransactions(getAll)
+              val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
                 utxoWithPool.validateWithCost(unconfirmedTx.transaction, Some(utxo.stateContext), nodeSettings.maxTransactionCost, None).fold(
                   ex => new ErgoMemPool(pool.invalidate(unconfirmedTx), stats) -> ProcessingOutcome.Invalidated(ex),

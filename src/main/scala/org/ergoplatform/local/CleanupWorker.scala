@@ -72,7 +72,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
           // Take into account previously validated transactions from the pool.
           // This provides possibility to validate transactions which are spending off-chain outputs.
           val state = validator match {
-            case u: UtxoStateReader => u.withTransactions(txsToValidate)
+            case u: UtxoStateReader => u.withUnconfirmedTransactions(txsToValidate)
             case _ => validator
           }
 

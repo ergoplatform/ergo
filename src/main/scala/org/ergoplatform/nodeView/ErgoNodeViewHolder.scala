@@ -347,7 +347,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val rolledBackTxs = blocksRemoved.flatMap(extractTransactions).map(UnconfirmedTransaction.apply)
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
-    memPool.putWithoutCheck(rolledBackTxs).filter(tx => !appliedTxs.exists(_.id == tx.transaction.id))
+    memPool.putWithoutCheck(rolledBackTxs)
+      .filter(unconfirmedTx => !appliedTxs.exists(_.id == unconfirmedTx.transaction.id))
   }
 
   /**
@@ -577,7 +578,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def transactionsProcessing: Receive = {
     case newTxs: NewTransactions =>
-      newTxs.txs.foreach(txModify)
+      newTxs.unconfirmedTxs.foreach(txModify)
     case EliminateTransactions(ids) =>
       val updatedPool = memoryPool().filter(unconfirmedTx => !ids.contains(unconfirmedTx.transaction.id))
       updateNodeView(updatedMempool = Some(updatedPool))
@@ -643,14 +644,14 @@ object ErgoNodeViewHolder {
     case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
 
     sealed trait NewTransactions{
-      val txs: Iterable[UnconfirmedTransaction]
+      val unconfirmedTxs: Iterable[UnconfirmedTransaction]
     }
 
     case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction) extends NewTransactions {
-      override val txs: Iterable[UnconfirmedTransaction] = Iterable(tx)
+      override val unconfirmedTxs: Iterable[UnconfirmedTransaction] = Iterable(tx)
     }
 
-    case class TransactionsFromRemote(override val txs: Iterable[UnconfirmedTransaction]) extends NewTransactions
+    case class TransactionsFromRemote(override val unconfirmedTxs: Iterable[UnconfirmedTransaction]) extends NewTransactions
 
     case class LocallyGeneratedModifier(pmod: BlockSection)
 

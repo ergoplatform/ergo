@@ -48,16 +48,16 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     * @param tx - transaction to add
     * @return - modified pool
     */
-  def put(ut: UnconfirmedTransaction): OrderedTxPool = {
-    val tx = ut.transaction
+  def put(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
+    val tx = unconfirmedTx.transaction
     val wtx = weighted(tx)
     val newPool = OrderedTxPool(
-      orderedTransactions.updated(wtx, ut),
+      orderedTransactions.updated(wtx, unconfirmedTx),
       transactionsRegistry.updated(wtx.id, wtx),
       invalidatedTxIds,
       outputs ++ tx.outputs.map(_.id -> wtx),
       inputs ++ tx.inputs.map(_.boxId -> wtx)
-    ).updateFamily(ut, wtx.weight)
+    ).updateFamily(unconfirmedTx, wtx.weight)
     if (newPool.orderedTransactions.size > mempoolCapacity) {
       val victim = newPool.orderedTransactions.last._2
       newPool.remove(victim)
@@ -75,8 +75,8 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     *
     * @param tx - Transaction to remove
     */
-  def remove(ut: UnconfirmedTransaction): OrderedTxPool = {
-    val tx = ut.transaction
+  def remove(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
+    val tx = unconfirmedTx.transaction
     transactionsRegistry.get(tx.id) match {
       case Some(wtx) =>
         OrderedTxPool(
@@ -85,13 +85,13 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
           invalidatedTxIds,
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(ut, -wtx.weight)
+        ).updateFamily(unconfirmedTx, -wtx.weight)
       case None => this
     }
   }
 
-  def invalidate(ut: UnconfirmedTransaction): OrderedTxPool = {
-    val tx = ut.transaction
+  def invalidate(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
+    val tx = unconfirmedTx.transaction
     transactionsRegistry.get(tx.id) match {
       case Some(wtx) =>
         OrderedTxPool(
@@ -100,7 +100,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
           invalidatedTxIds.put(tx.id),
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(ut, -wtx.weight)
+        ).updateFamily(unconfirmedTx, -wtx.weight)
       case None =>
         OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
     }
@@ -123,12 +123,12 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     * @param tx
     * @return
     */
-  def canAccept(ut: UnconfirmedTransaction): Boolean = {
-    val tx = ut.transaction
-    val weight = weighted(ut).weight
+  def canAccept(unconfirmedTx: UnconfirmedTransaction): Boolean = {
+    val tx = unconfirmedTx.transaction
+    val weight = weighted(unconfirmedTx).weight
     !isInvalidated(tx.id) && !contains(tx.id) &&
       (size < mempoolCapacity ||
-        weight > updateFamily(ut, weight).orderedTransactions.firstKey.weight)
+        weight > updateFamily(unconfirmedTx, weight).orderedTransactions.firstKey.weight)
   }
 
   def contains(id: ModifierId): Boolean = transactionsRegistry.contains(id)
@@ -148,8 +148,8 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     * @param weight
     * @return
     */
-  private def updateFamily(ut: UnconfirmedTransaction, weight: Long): OrderedTxPool = {
-    val tx = ut.transaction
+  private def updateFamily(unconfirmedTx: UnconfirmedTransaction, weight: Long): OrderedTxPool = {
+    val tx = unconfirmedTx.transaction
     tx.inputs.foldLeft(this)((pool, input) =>
       pool.outputs.get(input.boxId).fold(pool)(wtx => {
         pool.orderedTransactions.get(wtx) match {
@@ -209,8 +209,8 @@ object OrderedTxPool {
       TreeMap.empty[BoxId, WeightedTxId])(settings)
   }
 
-  def weighted(ut: UnconfirmedTransaction)(implicit ms: MonetarySettings): WeightedTxId = {
-    weighted(ut.transaction)
+  def weighted(unconfirmedTx: UnconfirmedTransaction)(implicit ms: MonetarySettings): WeightedTxId = {
+    weighted(unconfirmedTx.transaction)
   }
 
   def weighted(tx: ErgoTransaction)(implicit ms: MonetarySettings): WeightedTxId = {

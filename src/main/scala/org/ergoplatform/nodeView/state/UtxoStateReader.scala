@@ -157,9 +157,9 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Producing a copy of the state which takes into account outputs of given transactions.
     * Useful when checking mempool transactions.
     */
-  def withTransactions(unconfirmedTransactions: Seq[UnconfirmedTransaction]): UtxoState = {
+  def withUnconfirmedTransactions(unconfirmedTxs: Seq[UnconfirmedTransaction]): UtxoState = {
     new UtxoState(persistentProver, version, store, constants) {
-      lazy val createdBoxes: Seq[ErgoBox] = unconfirmedTransactions.map(_.transaction).flatMap(_.outputs)
+      lazy val createdBoxes: Seq[ErgoBox] = unconfirmedTxs.map(_.transaction).flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {
         super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
@@ -185,6 +185,6 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Producing a copy of the state which takes into account pool of unconfirmed transactions.
     * Useful when checking mempool transactions.
     */
-  def withMempool(mp: ErgoMemPoolReader): UtxoState = withTransactions(mp.getAll)
+  def withMempool(mp: ErgoMemPoolReader): UtxoState = withUnconfirmedTransactions(mp.getAll)
 
 }

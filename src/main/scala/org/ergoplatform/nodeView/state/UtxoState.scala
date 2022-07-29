@@ -184,7 +184,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         }
         stateTry.recoverWith[UtxoState] { case e =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
+            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ", e)
           persistentProver.rollback(inRoot)
             .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
           Failure(e)

@@ -16,7 +16,6 @@ import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -158,10 +157,10 @@ case class WalletApiRoute(readersHolder: ActorRef,
                                             dataInputsRaw: Seq[String],
                                             verifyFn: ErgoTransaction => Future[Try[ErgoTransaction]],
                                             processFn: ErgoTransaction => Route): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap(txTry => txTry match {
+    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap {
       case Success(tx) => verifyFn(tx)
       case f: Failure[ErgoTransaction] => Future(f)
-    })) {
+    }) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => processFn(tx)
     }
@@ -187,10 +186,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
                               dataInputsRaw: Seq[String]): Route = {
     generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw,
       tx => verifyTransaction(tx, readersHolder, ergoSettings),
-      { tx =>
-        nodeViewActorRef ! LocallyGeneratedTransaction(tx)
-        ApiResponse(tx.id)
-      })
+      validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx)
+    )
   }
 
   def sendTransactionR: Route =

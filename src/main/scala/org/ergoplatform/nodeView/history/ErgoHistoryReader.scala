@@ -147,13 +147,13 @@ trait ErgoHistoryReader
         val otherHeaders = info.lastHeaders
         val otherLastHeader = otherHeaders.head // always available
         val otherHeight = otherLastHeader.height
-        // todo: check PoW of otherLastHeader
 
         if (otherHeight == myHeight) {
           if (otherLastHeader.id == myLastHeader.id) {
             // Last headers are the same => chains are equal
             Equal
           } else {
+            // todo: check PoW of otherLastHeader
             if (commonPoint(otherHeaders.tail).isDefined) {
               Fork
             } else {

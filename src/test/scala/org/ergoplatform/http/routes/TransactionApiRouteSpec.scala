@@ -61,6 +61,15 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "fail when posting invalid transaction" in {
+    val failingNodeViewRef = system.actorOf(NodeViewStub.failingProps())
+    val failingRoute: Route = TransactionsApiRoute(digestReadersRef, failingNodeViewRef, settings).route
+
+    Post(prefix, tx.asJson) ~> failingRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "post chained transactions" in {
     Post(prefix, chainedTx.asJson) ~> route ~> check {
       status shouldBe StatusCodes.BadRequest

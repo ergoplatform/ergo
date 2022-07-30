@@ -258,11 +258,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 object PeerConnectionHandler {
 
   object ReceivableMessages {
-
-    private[PeerConnectionHandler] object HandshakeDone
-
-    case object StartInteraction
-
+    
     case object HandshakeTimeout
 
     case object CloseConnection

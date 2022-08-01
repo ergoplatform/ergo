@@ -257,21 +257,23 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def txModify(unconfirmedTx: UnconfirmedTransaction): Unit = {
     val tx = unconfirmedTx.transaction
-    memoryPool().process(unconfirmedTx, minimalState()) match {
-      case (newPool, ProcessingOutcome.Accepted) =>
+    val (newPool, processingOutcome) = memoryPool().process(tx, minimalState())
+    processingOutcome match {
+      case ProcessingOutcome.Accepted =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
         val newVault = vault().scanOffchain(tx)
         updateNodeView(updatedVault = Some(newVault), updatedMempool = Some(newPool))
         context.system.eventStream.publish(SuccessfulTransaction(tx))
-      case (newPool, ProcessingOutcome.Invalidated(e)) =>
+      case ProcessingOutcome.Invalidated(e) =>
         log.debug(s"Transaction $tx invalidated. Cause: ${e.getMessage}")
         updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(FailedTransaction(tx.id, e, immediateFailure = true))
-      case (_, ProcessingOutcome.DoubleSpendingLoser(winnerTxs)) => // do nothing
+      case ProcessingOutcome.DoubleSpendingLoser(winnerTxs) => // do nothing
         log.debug(s"Transaction $tx declined, as other transactions $winnerTxs are paying more")
-      case (_, ProcessingOutcome.Declined(e)) => // do nothing
+      case ProcessingOutcome.Declined(e) => // do nothing
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
     }
+    processingOutcome
   }
 
   /**
@@ -577,8 +579,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def transactionsProcessing: Receive = {
-    case newTxs: NewTransactions =>
-      newTxs.unconfirmedTxs.foreach(txModify)
+    case TransactionsFromRemote(txs) =>
+      txs.foreach(txModify)
+    case LocallyGeneratedTransaction(tx) =>
+      sender() ! txModify(tx)
     case EliminateTransactions(ids) =>
       val updatedPool = memoryPool().filter(unconfirmedTx => !ids.contains(unconfirmedTx.transaction.id))
       updateNodeView(updatedMempool = Some(updatedPool))

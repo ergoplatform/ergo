@@ -4,7 +4,7 @@ import akka.actor._
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
@@ -134,12 +134,17 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: Message: InvSpec") {
     withFixture { ctx =>
       import ctx._
-      val spec = new InvSpec(3)
+      val syncMsgBytes = ErgoSyncInfoMessageSpec.toBytes(syncInfo)
+      node ! Message(ErgoSyncInfoMessageSpec, Left(syncMsgBytes), Some(peer))
+
+      val spec = InvSpec
       val modifiers = Seq(mod.id)
       val msgBytes = spec.toBytes(InvData(mod.modifierTypeId, modifiers))
       node ! Message(spec, Left(msgBytes), Some(peer))
-      pchProbe.fishForMessage(5 seconds) {
-        case _: Message[_] => true
+      ncProbe.fishForMessage(5 seconds) {
+        case SendToNetwork(msg, _)
+          if msg.spec.messageCode == RequestModifierSpec.messageCode &&
+            msg.data.get.asInstanceOf[InvData].ids.head == mod.id => true
         case _ => false
       }
     }
@@ -153,7 +158,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       val mod = syntacticallyValidModifier(h)
       val (newH, _) = h.append(mod).get
       val m = memPool
-      val spec = new RequestModifierSpec(3)
+      val spec = RequestModifierSpec
       val modifiers = Seq(mod.id)
       val msgBytes = spec.toBytes(InvData(mod.modifierTypeId, modifiers))
       node ! ChangedHistory(newH)
@@ -171,7 +176,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
     withFixture { ctx =>
       import ctx._
 
-      val modifiersSpec = new ModifiersSpec(1024 * 1024)
+      val modifiersSpec = ModifiersSpec
       val msgBytes = modifiersSpec.toBytes(ModifiersData(mod.modifierTypeId, Map(mod.id -> mod.bytes)))
 
       node ! Message(modifiersSpec, Left(msgBytes), Option(peer))
@@ -185,10 +190,10 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       import ctx._
       vhProbe.expectMsgType[GetNodeViewChanges]
 
-      val invSpec = new InvSpec(3)
+      val invSpec = InvSpec
       val invMsgBytes = invSpec.toBytes(InvData(mod.modifierTypeId, Seq(mod.id)))
 
-      val modifiersSpec = new ModifiersSpec(1024 * 1024)
+      val modifiersSpec = ModifiersSpec
       val modMsgBytes = modifiersSpec.toBytes(ModifiersData(mod.modifierTypeId, Map(mod.id -> mod.bytes)))
 
       node ! Message(invSpec, Left(invMsgBytes), Option(peer))
@@ -204,10 +209,10 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
     withFixture { ctx =>
       import ctx._
 
-      val invSpec = new InvSpec(3)
+      val invSpec = InvSpec
       val invMsgBytes = invSpec.toBytes(InvData(mod.modifierTypeId, Seq(mod.id)))
 
-      val modifiersSpec = new ModifiersSpec(1024 * 1024)
+      val modifiersSpec = ModifiersSpec
       val modMsgBytes = modifiersSpec.toBytes(ModifiersData(mod.modifierTypeId, Map(mod.id -> mod.bytes)))
 
       node ! Message(invSpec, Left(invMsgBytes), Option(peer))

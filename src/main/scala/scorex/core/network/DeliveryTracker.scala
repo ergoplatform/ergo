@@ -37,13 +37,11 @@ import scala.util.{Failure, Try}
   * This class is not thread-save so it should be used only as a local field of an actor
   * and its methods should not be called from lambdas, Future, Future.map, etc.
 
-  * @param maxDeliveryChecks how many times to check whether modifier was delivered in given timeout
   * @param cacheSettings network cache settings
   * @param desiredSizeOfExpectingModifierQueue Approximate number of modifiers to be downloaded simultaneously,
   *                                            headers are much faster to process
   */
-class DeliveryTracker(maxDeliveryChecks: Int,
-                      cacheSettings: NetworkCacheSettings,
+class DeliveryTracker(cacheSettings: NetworkCacheSettings,
                       desiredSizeOfExpectingModifierQueue: Int) extends ScorexLogging with ScorexEncoding {
 
   // when a remote peer is asked for a modifier we add the requested data to `requested`
@@ -114,43 +112,31 @@ class DeliveryTracker(maxDeliveryChecks: Int,
   }
 
   /**
-    * Our node have requested a modifier, but did not received it yet.
-    * Stops processing and if the number of checks did not exceed the maximum continue to waiting.
-    * @param schedule that schedules a delivery check message
-    * @return `true` if number of checks was not exceed, `false` otherwise
+    * @return how many times modifier was requested before
     */
-  def onStillWaiting(cp: ConnectedPeer, modifierTypeId: ModifierTypeId, modifierId: ModifierId)
-                    (schedule: CheckDelivery => Cancellable): Try[Unit] =
-    tryWithLogging {
-      val checks = requested(modifierTypeId)(modifierId).checks + 1
-      setUnknown(modifierId, modifierTypeId)
-      if (checks < maxDeliveryChecks) setRequested(modifierId, modifierTypeId,  Some(cp), checks)(schedule)
-      else throw new StopExpectingError(modifierId, modifierTypeId, checks)
-    }
+  def requestsMade(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Int = {
+    requested.get(modifierTypeId).flatMap(_.get(modifierId)).map(_.checks).getOrElse(0)
+  }
 
   /**
     * Set status of modifier with id `id` to `Requested`
     */
-  private def setRequested(id: ModifierId, typeId: ModifierTypeId, supplierOpt: Option[ConnectedPeer], checksDone: Int = 0)
+  def setRequested(typeId: ModifierTypeId,
+                   id: ModifierId,
+                   supplier: ConnectedPeer,
+                   checksDone: Int = 0)
                   (schedule: CheckDelivery => Cancellable): Unit =
     tryWithLogging {
       checkStatusTransition(status(id, typeId, Seq.empty), Requested)
-      val cancellable = schedule(CheckDelivery(supplierOpt, typeId, id))
-      val requestedInfo = RequestedInfo(supplierOpt, cancellable, checksDone)
+      val cancellable = schedule(CheckDelivery(supplier, typeId, id))
+      val requestedInfo = RequestedInfo(supplier, cancellable, checksDone)
       requested.adjust(typeId)(_.fold(Map(id -> requestedInfo))(_.updated(id, requestedInfo)))
     }
-
-  /**
-    * Set status of multiple modifiers to `Requested`
-    * @param schedule function that schedules a delivery check message
-    */
-  def setRequested(ids: Seq[ModifierId], typeId: ModifierTypeId, cp: Option[ConnectedPeer])
-                  (schedule: CheckDelivery => Cancellable): Unit = ids.foreach(setRequested(_, typeId, cp)(schedule))
 
   /** Get peer we're communicating with in regards with modifier `id` **/
   def getSource(id: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
     status(id, modifierTypeId, Seq.empty) match {
-      case Requested => requested.get(modifierTypeId).flatMap(_.get(id)).flatMap(_.peer)
+      case Requested => requested.get(modifierTypeId).flatMap(_.get(id)).map(_.peer)
       case Received => received.get(modifierTypeId).flatMap(_.get(id))
       case _ => None
     }
@@ -178,7 +164,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
                 case Some(info) =>
                   info.cancellable.cancel()
                   requested.flatAdjust(modifierTypeId)(_.map(_ - id))
-                  info.peer
+                  Some(info.peer)
               }
             }
           case Received =>
@@ -293,14 +279,8 @@ class DeliveryTracker(maxDeliveryChecks: Int,
         ()
     }
 
-  class StopExpectingError(mid: ModifierId, mType: ModifierTypeId, checks: Int)
-    extends Error(s"Stop expecting ${encoder.encodeId(mid)} of type $mType due to exceeded number of retries $checks")
-
   private def tryWithLogging[T](fn: => T): Try[T] =
     Try(fn).recoverWith {
-      case e: StopExpectingError =>
-        log.warn(e.getMessage)
-        Failure(e)
       case e =>
         log.warn("Unexpected error", e)
         Failure(e)
@@ -312,7 +292,7 @@ class DeliveryTracker(maxDeliveryChecks: Int,
       requested.map { case (mType, infoByMid) =>
         val peersCheckTimes =
           infoByMid.toSeq.sortBy(_._2.checks).reverse.map { case (_, info) =>
-            s"${info.peer.map(_.connectionId.remoteAddress)} checked ${info.checks} times"
+            s"${info.peer.connectionId.remoteAddress} checked ${info.checks} times"
           }.mkString(", ")
         s"$mType : $peersCheckTimes"
       }.mkString("\n")
@@ -328,19 +308,19 @@ class DeliveryTracker(maxDeliveryChecks: Int,
 
 object DeliveryTracker {
 
-  case class RequestedInfo(peer: Option[ConnectedPeer], cancellable: Cancellable, checks: Int)
+  case class RequestedInfo(peer: ConnectedPeer, cancellable: Cancellable, checks: Int)
 
   object RequestedInfo {
     import io.circe.syntax._
 
     implicit val jsonEncoder: Encoder[RequestedInfo] = { info: RequestedInfo =>
+      val addressField = "address" -> info.peer.connectionId.remoteAddress.toString.asJson
       val checksField = "checks" -> info.checks.asJson
       val optionalFields =
         List(
-          info.peer.map(_.connectionId.remoteAddress.toString).map("address" -> _.asJson),
-          info.peer.flatMap(_.peerInfo.map(_.peerSpec.protocolVersion.toString)).map("version" -> _.asJson)
+          info.peer.peerInfo.map(_.peerSpec.protocolVersion.toString).map("version" -> _.asJson)
         ).flatten
-      val fields = checksField :: optionalFields
+      val fields = addressField :: checksField :: optionalFields
       Json.obj(fields:_*)
     }
   }
@@ -372,7 +352,6 @@ object DeliveryTracker {
 
   def empty(settings: ErgoSettings): DeliveryTracker = {
     new DeliveryTracker(
-      settings.scorexSettings.network.maxDeliveryChecks,
       settings.cacheSettings.network,
       settings.scorexSettings.network.desiredInvObjects
     )

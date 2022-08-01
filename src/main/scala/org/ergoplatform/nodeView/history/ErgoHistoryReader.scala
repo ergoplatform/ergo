@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.{ModifierTypeId, NodeViewComponent}
-import scorex.core.consensus.{ContainsModifiers, Equal, Fork, HistoryComparisonResult, ModifierSemanticValidity, Older, Unknown, Younger}
+import scorex.core.consensus.{ContainsModifiers, Equal, Fork, PeerChainStatus, ModifierSemanticValidity, Older, Unknown, Younger}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
@@ -119,7 +119,7 @@ trait ErgoHistoryReader
     * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead,
     *         Fork if other peer is on another chain, Unknown if we can't deduct neighbour's status
     */
-  def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
+  def compare(info: ErgoSyncInfo): PeerChainStatus = {
     info match {
       case syncV1: ErgoSyncInfoV1 =>
         compareV1(syncV1)
@@ -137,7 +137,7 @@ trait ErgoHistoryReader
     *         Older if the neighbour is ahead,
     *         Fork if the neighbour is on a fork
     */
-  def compareV2(info: ErgoSyncInfoV2): HistoryComparisonResult = {
+  def compareV2(info: ErgoSyncInfoV2): PeerChainStatus = {
     bestHeaderOpt.map { myLastHeader =>
       if (info.lastHeaders.isEmpty) {
         Younger
@@ -147,13 +147,13 @@ trait ErgoHistoryReader
         val otherHeaders = info.lastHeaders
         val otherLastHeader = otherHeaders.head // always available
         val otherHeight = otherLastHeader.height
-        // todo: check PoW of otherLastHeader
 
         if (otherHeight == myHeight) {
           if (otherLastHeader.id == myLastHeader.id) {
             // Last headers are the same => chains are equal
             Equal
           } else {
+            // todo: check PoW of otherLastHeader
             if (commonPoint(otherHeaders.tail).isDefined) {
               Fork
             } else {
@@ -184,7 +184,7 @@ trait ErgoHistoryReader
     *         Older if the neighbour is ahead,
     *         Fork if the neighbour is on a fork
     */
-  def compareV1(info: ErgoSyncInfoV1): HistoryComparisonResult = {
+  def compareV1(info: ErgoSyncInfoV1): PeerChainStatus = {
     bestHeaderIdOpt match {
       case Some(id) if info.lastHeaderIds.lastOption.contains(id) =>
         //Our best header is the same as other node best header

@@ -9,7 +9,6 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransacti
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -51,10 +50,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
       } {
         _.fold(
           e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
-          _ => {
-            processFn(unconfirmedTx)
-            ApiResponse(tx.id)
-          }
+          _ => processFn(unconfirmedTx)
         )
       }
     }
@@ -63,14 +59,12 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
     val unconfirmedTx = UnconfirmedTransaction.apply(tx)
-    validateTransactionAndProcess(unconfirmedTx) { tx =>
-      nodeViewActorRef ! LocallyGeneratedTransaction(tx)
+    validateTransactionAndProcess(unconfirmedTx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
     }
-  }
 
   def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) { tx =>
     val unconfirmedTx = UnconfirmedTransaction.apply(tx)
-    validateTransactionAndProcess(unconfirmedTx) { tx => tx }
+    validateTransactionAndProcess(unconfirmedTx)(validTx => ApiResponse(validTx.transaction.id))
   }
 
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & txPaging) { (offset, limit) =>

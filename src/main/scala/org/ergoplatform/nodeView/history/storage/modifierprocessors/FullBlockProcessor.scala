@@ -281,9 +281,9 @@ object FullBlockProcessor {
   val BestChainMarker: Array[Byte] = Array(1: Byte)
   val NonBestChainMarker: Array[Byte] = Array(0: Byte)
 
-  private implicit val ord: Ordering[CacheBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))
+  private val ord: Ordering[CacheBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))
 
-  def emptyCache: IncompleteFullChainCache = IncompleteFullChainCache(TreeMap.empty)
+  def emptyCache: IncompleteFullChainCache = IncompleteFullChainCache(TreeMap.empty(ord))
 
   def chainStatusKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("main_chain".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))

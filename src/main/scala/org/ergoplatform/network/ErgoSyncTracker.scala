@@ -123,10 +123,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
       status.lastSyncSentTime.exists(syncTime => (currentTime - syncTime).millis > ClearThreshold)
     }.keys
     if (peersToClear.nonEmpty) {
-      val keysToRemove = peersToClear.toVector
-      log.debug(s"Clearing stalled statuses for $keysToRemove")
+      log.debug(s"Clearing stalled statuses for $peersToClear")
       // we set status to `Unknown` and reset peer's height
-      keysToRemove.foreach(p => updateStatus(p, Unknown, None))
+      peersToClear.foreach(p => updateStatus(p, Unknown, None))
     }
   }
 

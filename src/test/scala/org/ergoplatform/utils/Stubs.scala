@@ -9,9 +9,11 @@ import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome.{Accepted, Invalidated}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
@@ -117,12 +119,23 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class NodeViewStub extends Actor {
     def receive: Receive = {
+      case LocallyGeneratedTransaction(_) =>
+        sender() ! Accepted
+      case _ =>
+    }
+  }
+
+  class FailingNodeViewStub extends Actor {
+    def receive: Receive = {
+      case LocallyGeneratedTransaction(_) =>
+        sender() ! Invalidated(new Error("Transaction invalid"))
       case _ =>
     }
   }
 
   object NodeViewStub {
     def props(): Props = Props(new NodeViewStub)
+    def failingProps(): Props = Props(new FailingNodeViewStub)
   }
 
   class NetworkControllerStub extends Actor {

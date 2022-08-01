@@ -12,6 +12,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FailedTransaction, SuccessfulTransaction}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
@@ -66,8 +67,12 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     subscribeEvents(classOf[FailedTransaction])
     nodeViewHolderRef ! LocallyGeneratedTransaction(validTx)
     testProbe.expectMsgClass(cleanupDuration, newTx)
+    expectMsgType[ProcessingOutcome.Accepted.type]
+
     nodeViewHolderRef ! LocallyGeneratedTransaction(temporarilyValidTx)
     testProbe.expectMsgClass(cleanupDuration, newTx)
+    expectMsgType[ProcessingOutcome.Accepted.type]
+
     getPoolSize shouldBe 2
 
     val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, nodeViewHolderRef, settingsToTest)

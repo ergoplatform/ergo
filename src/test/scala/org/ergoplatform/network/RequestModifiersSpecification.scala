@@ -18,7 +18,7 @@ class RequestModifiersSpecification extends ErgoPropertyTest with DecodingUtils 
   property("requestModifiers reference parser") {
 
     val magic = Array(1: Byte, 0: Byte, 2: Byte, 4: Byte) // mainnet magic
-    val rmSpec = new RequestModifierSpec(maxInvObjects = 100)
+    val rmSpec = RequestModifierSpec
 
     val headerId = Array.fill(16)(1: Byte) ++ Array.fill(16)(2: Byte)
 

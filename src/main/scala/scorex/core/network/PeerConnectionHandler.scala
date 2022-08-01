@@ -1,6 +1,6 @@
 package scorex.core.network
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Cancellable, Props, SupervisorStrategy}
+import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
@@ -8,7 +8,7 @@ import scorex.core.app.{ScorexContext, Version}
 import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
 import scorex.core.network.PeerConnectionHandler.ReceivableMessages
 import scorex.core.network.PeerFeature.Serializers
-import scorex.core.network.message.{HandshakeSpec, MessageSerializer}
+import scorex.core.network.message.{HandshakeSerializer, MessageSerializer}
 import scorex.core.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.ScorexSettings
@@ -38,7 +38,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   private val featureSerializers: Serializers =
     localFeatures.map(f => f.featureId -> (f.serializer: ScorexSerializer[_ <: PeerFeature])).toMap
 
-  private val handshakeSerializer = new HandshakeSpec(featureSerializers, networkSettings.maxHandshakeSize)
+  private val handshakeSerializer = new HandshakeSerializer(featureSerializers)
   private val messageSerializer = new MessageSerializer(scorexContext.messageSpecs, networkSettings.magicBytes)
 
   // there is no recovery for broken connections
@@ -137,7 +137,9 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
         "closed by the peer"
       } else if (cc.isAborted) {
         "aborted locally"
-      } else ""
+      } else {
+        ""
+      }
       log.info(s"Connection closed to $connectionId, reason: " + reason)
       context stop self
   }
@@ -256,11 +258,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 object PeerConnectionHandler {
 
   object ReceivableMessages {
-
-    private[PeerConnectionHandler] object HandshakeDone
-
-    case object StartInteraction
-
+    
     case object HandshakeTimeout
 
     case object CloseConnection
@@ -272,6 +270,7 @@ object PeerConnectionHandler {
 }
 
 object PeerConnectionHandlerRef {
+
   def props(settings: ScorexSettings,
             networkControllerRef: ActorRef,
             scorexContext: ScorexContext,
@@ -279,18 +278,4 @@ object PeerConnectionHandlerRef {
            )(implicit ec: ExecutionContext): Props =
     Props(new PeerConnectionHandler(settings, networkControllerRef, scorexContext, connectionDescription))
 
-  def apply(settings: ScorexSettings,
-            networkControllerRef: ActorRef,
-            scorexContext: ScorexContext,
-            connectionDescription: ConnectionDescription)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props(settings, networkControllerRef, scorexContext, connectionDescription))
-
-  def apply(name: String,
-            settings: ScorexSettings,
-            networkControllerRef: ActorRef,
-            scorexContext: ScorexContext,
-            connectionDescription: ConnectionDescription)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props(settings, networkControllerRef, scorexContext, connectionDescription), name)
 }

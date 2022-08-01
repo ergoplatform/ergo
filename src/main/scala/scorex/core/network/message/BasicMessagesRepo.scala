@@ -26,18 +26,12 @@ case class InvData(typeId: ModifierTypeId, ids: Seq[ModifierId])
   */
 class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ScorexSerializer[SI]) extends MessageSpecV1[SI] {
 
-
   override val messageCode: MessageCode = 65: Byte
   override val messageName: String = "Sync"
 
   override def serialize(data: SI, w: Writer): Unit = serializer.serialize(data, w)
 
   override def parse(r: Reader): SI = serializer.parse(r)
-}
-
-object InvSpec {
-  val MessageCode: Byte = 55
-  val MessageName: String = "Inv"
 }
 
 /**
@@ -47,12 +41,12 @@ object InvSpec {
   * or it can be sent in reply to a `SyncInfo` message (or application-specific messages like `GetMempool`).
   *
   */
-class InvSpec(maxInvObjects: Int) extends MessageSpecV1[InvData] {
+object InvSpec extends MessageSpecV1[InvData] {
 
-  import InvSpec._
+  val maxInvObjects: Int = 400
 
-  override val messageCode: MessageCode = MessageCode
-  override val messageName: String = MessageName
+  override val messageCode: MessageCode = 55: Byte
+  override val messageName: String = "Inv"
 
   override def serialize(data: InvData, w: Writer): Unit = {
     val typeId = data.typeId
@@ -82,11 +76,6 @@ class InvSpec(maxInvObjects: Int) extends MessageSpecV1[InvData] {
 
 }
 
-object RequestModifierSpec {
-  val MessageCode: MessageCode = 22: Byte
-  val MessageName: String = "RequestModifier"
-}
-
 /**
   * The `RequestModifier` message requests one or more modifiers from another node.
   * The objects are requested by an inventory, which the requesting node
@@ -99,41 +88,30 @@ object RequestModifierSpec {
   * data from a node which previously advertised it had that data by sending an `Inv` message.
   *
   */
-class RequestModifierSpec(maxInvObjects: Int) extends MessageSpecV1[InvData] {
-
-  import RequestModifierSpec._
-
-  override val messageCode: MessageCode = MessageCode
-  override val messageName: String = MessageName
-
-  private val invSpec = new InvSpec(maxInvObjects)
-
+object RequestModifierSpec extends MessageSpecV1[InvData] {
+  override val messageCode: MessageCode = 22: Byte
+  override val messageName: String = "RequestModifier"
 
   override def serialize(data: InvData, w: Writer): Unit = {
-    invSpec.serialize(data, w)
+    InvSpec.serialize(data, w)
   }
 
   override def parse(r: Reader): InvData = {
-    invSpec.parse(r)
+    InvSpec.parse(r)
   }
-}
-
-object ModifiersSpec {
-  val MessageCode: MessageCode = 33: Byte
-  val MessageName: String = "Modifier"
 }
 
 /**
   * The `Modifier` message is a reply to a `RequestModifier` message which requested these modifiers.
   */
-class ModifiersSpec(maxMessageSize: Int) extends MessageSpecV1[ModifiersData] with ScorexLogging {
+object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
 
-  import ModifiersSpec._
+  val maxMessageSize: Int = 2048576
 
   private val maxMsgSizeWithReserve = maxMessageSize * 4 // due to big ADProofs
 
-  override val messageCode: MessageCode = MessageCode
-  override val messageName: String = MessageName
+  override val messageCode: MessageCode = 33: Byte
+  override val messageName: String = "Modifier"
 
   private val HeaderLength = 5 // msg type Id + modifiersCount
 
@@ -205,8 +183,6 @@ object GetPeersSpec extends MessageSpecV1[Unit] {
 
 object PeersSpec {
 
-  val MaxPeersInMessage: Int = 100
-
   val messageCode: Message.MessageCode = 2: Byte
 
   val messageName: String = "Peers message"
@@ -238,10 +214,11 @@ class PeersSpec(featureSerializers: PeerFeature.Serializers, peersLimit: Int) ex
   }
 }
 
-object HandshakeSpec {
+object HandshakeSerializer {
 
   val messageCode: MessageCode = 75: Byte
   val messageName: String = "Handshake"
+  val maxHandshakeSize: Int = 8096
 }
 
 /**
@@ -249,17 +226,19 @@ object HandshakeSpec {
   * to the receiving node at the beginning of a connection. Until both peers
   * have exchanged `Handshake` messages, no other messages will be accepted.
   */
-class HandshakeSpec(featureSerializers: PeerFeature.Serializers, sizeLimit: Int) extends MessageSpecV1[Handshake] {
+class HandshakeSerializer(featureSerializers: PeerFeature.Serializers) extends MessageSpecV1[Handshake] {
+  import HandshakeSerializer.maxHandshakeSize
 
   private val peersDataSerializer = new PeerSpecSerializer(featureSerializers)
 
-  override val messageCode: MessageCode = HandshakeSpec.messageCode
-  override val messageName: String = HandshakeSpec.messageName
+  override val messageCode: MessageCode = HandshakeSerializer.messageCode
+  override val messageName: String = HandshakeSerializer.messageName
 
   /**
     * Serializing handshake into a byte writer.
+    *
     * @param hs - handshake instance
-    * @param w - writer to write bytes to
+    * @param w  - writer to write bytes to
     */
   override def serialize(hs: Handshake, w: Writer): Unit = {
     // first writes down handshake time, then peer specification of our node
@@ -268,10 +247,10 @@ class HandshakeSpec(featureSerializers: PeerFeature.Serializers, sizeLimit: Int)
   }
 
   override def parse(r: Reader): Handshake = {
-    require(r.remaining <= sizeLimit, s"Too big handshake. Size ${r.remaining} exceeds $sizeLimit limit")
-    val t = r.getULong()
+    require(r.remaining <= maxHandshakeSize, s"Too big handshake. Size ${r.remaining} exceeds $maxHandshakeSize limit")
+    val time = r.getULong()
     val data = peersDataSerializer.parse(r)
-    Handshake(data, t)
+    Handshake(data, time)
   }
 
 }

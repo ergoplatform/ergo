@@ -11,7 +11,7 @@ import scorex.util.encode.Base16
 object UtxoSnapshotExample extends App {
   import Algos.HF
 
-  val stateConstants = StateConstants(None, ErgoSettings.read(Args(Some("/home/kushti/ergo/mainnet/mainnet.conf"), Some(NetworkType.MainNet))))
+  val stateConstants = StateConstants(ErgoSettings.read(Args(Some("/home/kushti/ergo/mainnet/mainnet.conf"), Some(NetworkType.MainNet))))
 
   println("Init started")
   val ims0 = System.currentTimeMillis()

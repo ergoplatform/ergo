@@ -1,6 +1,8 @@
 package scorex.core
 
-import scorex.core.consensus.{ContainsModifiers, HistoryReader}
+import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier}
+import org.ergoplatform.nodeView.history.ErgoHistory
+import scorex.core.consensus.ContainsModifiers
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 
@@ -14,17 +16,18 @@ import scala.util.{Failure, Success}
   * This trait is not thread-save so it should be used only as a local field of an actor
   * and its methods should not be called from lambdas, Future, Future.map, etc.
   *
-  * @tparam PMOD - type of a persistent node view modifier (or a family of modifiers).
   */
-trait ModifiersCache[PMOD <: PersistentNodeViewModifier, H <: HistoryReader[PMOD, _]] extends ContainsModifiers[PMOD] {
+trait ModifiersCache extends ContainsModifiers[ErgoNodeViewModifier] {
   require(maxSize >= 1)
 
   type K = scorex.util.ModifierId
-  type V = PMOD
+  type V = BlockSection
 
-  protected val cache: mutable.Map[K, V] = mutable.Map[K, V]()
+  protected val cache: mutable.Map[K, V] = mutable.LinkedHashMap[K, V]()
 
-  override def modifierById(modifierId: scorex.util.ModifierId): Option[PMOD] = cache.get(modifierId)
+  override def modifierById(modifierId: scorex.util.ModifierId): Option[ErgoNodeViewModifier] = {
+    cache.get(modifierId)
+  }
 
   def size: Int = cache.size
 
@@ -39,7 +42,7 @@ trait ModifiersCache[PMOD <: PersistentNodeViewModifier, H <: HistoryReader[PMOD
     * @param history - an interface to history which could be needed to define a candidate
     * @return - candidate if it is found
     */
-  def findCandidateKey(history: H): Option[K]
+  def findCandidateKey(history: ErgoHistory): Option[K]
 
   protected def onPut(key: K): Unit = {
     assert(key != null)
@@ -76,12 +79,13 @@ trait ModifiersCache[PMOD <: PersistentNodeViewModifier, H <: HistoryReader[PMOD
     }
   }
 
-  def popCandidate(history: H): Option[V] = {
+  def popCandidate(history: ErgoHistory): Option[V] = {
     findCandidateKey(history).flatMap(k => remove(k))
   }
+
 }
 
-trait LRUCache[PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, _]] extends ModifiersCache[PMOD, HR] {
+trait LRUCache extends ModifiersCache {
 
   private val evictionQueue = mutable.Queue[K]()
 
@@ -111,8 +115,8 @@ trait LRUCache[PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, _]]
   }
 }
 
-class DefaultModifiersCache[PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, _]]
-(override val maxSize: Int) extends ModifiersCache[PMOD, HR] with LRUCache[PMOD, HR] with ScorexLogging {
+class DefaultModifiersCache(override val maxSize: Int)
+  extends ModifiersCache with LRUCache with ScorexLogging {
 
   /**
     * Default implementation is just about to scan. Not efficient at all and should be probably rewritten in a
@@ -122,7 +126,7 @@ class DefaultModifiersCache[PMOD <: PersistentNodeViewModifier, HR <: HistoryRea
     * @return - candidate if it is found
     */
   @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
-  override def findCandidateKey(history: HR): Option[K] = {
+  override def findCandidateKey(history: ErgoHistory): Option[K] = {
 
     cache.find { case (k, v) =>
       history.applicableTry(v) match {

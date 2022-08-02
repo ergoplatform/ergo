@@ -9,17 +9,19 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
-import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
 
-case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
+case class TransactionsApiRoute(readersHolder: ActorRef,
+                                nodeViewActorRef: ActorRef,
+                                ergoSettings: ErgoSettings)
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
+  override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   val txPaging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 50)
 
@@ -34,43 +36,32 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
-  private def getStateAndPool: Future[(ErgoStateReader, ErgoMemPoolReader)] =
-    (readersHolder ? GetReaders).mapTo[Readers].map { rs =>
-      (rs.s, rs.m)
-    }
-
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getMemPool.map { p =>
     p.getAll.slice(offset, offset + limit).map(_.asJson).asJson
   }
 
-  private def validateTransactionAndProcess(tx: ErgoTransaction)(processFn: ErgoTransaction => Any): Route = {
-    onSuccess {
-      getStateAndPool
-        .map {
-          case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
-            utxo.withMempool(mp).validate(tx)
-          case _ =>
-            tx.statelessValidity()
-        }
-    } {
-      _.fold(
-        e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
-        _ => {
-          processFn(tx)
-          ApiResponse(tx.id)
-        }
-      )
+  private def validateTransactionAndProcess(tx: ErgoTransaction)(processFn: ErgoTransaction => Route): Route = {
+    if (tx.size > ergoSettings.nodeSettings.maxTransactionSize) {
+      BadRequest(s"Transaction $tx has too large size ${tx.size}")
+    } else {
+      onSuccess {
+        verifyTransaction(tx, readersHolder, ergoSettings)
+      } {
+        _.fold(
+          e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
+          _ => processFn(tx)
+        )
+      }
     }
   }
+
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
-    validateTransactionAndProcess(tx) { tx =>
-      nodeViewActorRef ! LocallyGeneratedTransaction(tx)
+      validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
     }
-  }
 
   def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) { tx =>
-    validateTransactionAndProcess(tx) { tx => tx }
+    validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.id))
   }
 
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & txPaging) { (offset, limit) =>

@@ -8,8 +8,7 @@ import scorex.core.validation.MalformedModifierError
 
 import scala.util.Failure
 
-class ErgoModifiersCache(override val maxSize: Int)
-  extends DefaultModifiersCache[BlockSection, ErgoHistory](maxSize) {
+class ErgoModifiersCache(override val maxSize: Int) extends DefaultModifiersCache(maxSize) {
 
   override def findCandidateKey(history: ErgoHistory): Option[K] = {
     def tryToApply(k: K, v: BlockSection): Boolean = {
@@ -43,4 +42,5 @@ class ErgoModifiersCache(override val maxSize: Int)
       }.map(_._1)
     }
   }
+
 }

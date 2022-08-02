@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowParams}
-import org.ergoplatform.network.ModeFeature
+import org.ergoplatform.network.ModePeerFeature
 import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
@@ -168,11 +168,11 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
   lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
     Gen.resultOf({ _: Unit => ErgoMemPool.empty(settings) })(Arbitrary(Gen.const(())))
 
-  lazy val modeFeatureGen: Gen[ModeFeature] = for {
+  lazy val modeFeatureGen: Gen[ModePeerFeature] = for {
     stateTypeCode <- Gen.choose(StateType.Utxo.stateTypeCode, StateType.Utxo.stateTypeCode)
     popowSuffix <- Gen.choose(1, 10)
     blocksToKeep <- Gen.choose(1, 100000)
-  } yield ModeFeature(
+  } yield ModePeerFeature(
     StateType.fromCode(stateTypeCode),
     Random.nextBoolean(),
     if (Random.nextBoolean()) Some(popowSuffix) else None,
@@ -210,7 +210,7 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
     val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false)
     val popowChain = popowHeaderChain(chain)
     val params = PoPowParams(m, k)
-    popowAlgos.prove(popowChain)(params).get
+    nipopowAlgos.prove(popowChain)(params).get
   }
 
 }

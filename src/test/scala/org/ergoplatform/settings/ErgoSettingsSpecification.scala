@@ -2,12 +2,15 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoPropertyTest
+import scorex.core.settings.RESTApiSettings
 
+import java.net.{InetSocketAddress, URL}
 import scala.concurrent.duration._
 
 class ErgoSettingsSpecification extends ErgoPropertyTest {
 
-  private val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
+  private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
+  private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
 
   property("should keep data user home  by default") {
     val settings = ErgoSettings.read()
@@ -24,13 +27,15 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       poPoWBootstrap = false,
       10,
       mining = true,
-      complexityLimit,
+      txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
       miningPubKeyHex                           = None,
       offlineGeneration                         = false,
       keepVersions                              = 200,
+      acceptableChainUpdateDelay                = 30.minutes,
       mempoolCapacity                           = 100000,
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
@@ -39,7 +44,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        100, 1000
+        12, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -54,6 +59,13 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
         invalidModifiersCacheExpiration           = 6.hours,
       )
     )
+    settings.scorexSettings.restApi shouldBe RESTApiSettings(
+      bindAddress = new InetSocketAddress("0.0.0.0", 9052),
+      apiKeyHash = None,
+      corsAllowedOrigin = Some("*"),
+      timeout = 5.seconds,
+      publicUrl = Some(new URL("https://example.com:80"))
+    )
   }
 
   property("should read user settings from json file") {
@@ -66,13 +78,15 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       poPoWBootstrap = false,
       10,
       mining = true,
-      complexityLimit,
+      txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
       miningPubKeyHex                           = None,
       offlineGeneration                         = false,
       keepVersions                              = 200,
+      acceptableChainUpdateDelay                = 30.minutes,
       mempoolCapacity                           = 100000,
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
@@ -81,7 +95,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        100, 1000
+        12, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -108,13 +122,15 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       poPoWBootstrap = false,
       10,
       mining = true,
-      complexityLimit,
+      txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
       miningPubKeyHex                           = None,
       offlineGeneration                         = false,
       keepVersions                              = 200,
+      acceptableChainUpdateDelay                = 30.minutes,
       mempoolCapacity                           = 100000,
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
@@ -123,7 +139,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        100, 1000
+        12, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,

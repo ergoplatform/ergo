@@ -28,7 +28,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
 
   property("ErgoFullBlock should be encoded into JSON and decoded back correctly") {
 
-    val (st, bh) = createUtxoState()
+    val (st, bh) = createUtxoState(parameters)
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
 
     val blockJson: Json = block.asJson
@@ -59,11 +59,27 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       val json = request.asJson
       val parsingResult = json.as[PaymentRequest]
       parsingResult.isRight shouldBe true
-      val restored = parsingResult.right.value
+      val restored = parsingResult.value
       restored.address shouldEqual request.address
       restored.value shouldEqual request.value
       restored.registers shouldEqual request.registers
       Inspectors.forAll(restored.assets.zip(request.assets)) {
+        case ((restoredToken, restoredValue), (requestToken, requestValue)) =>
+          restoredToken shouldEqual requestToken
+          restoredValue shouldEqual requestValue
+      }
+    }
+  }
+
+  property("BurnTokensRequest should be serialized to json") {
+    implicit val requestEncoder: Encoder[BurnTokensRequest] = new BurnTokensRequestEncoder()
+    implicit val requestDecoder: Decoder[BurnTokensRequest] = new BurnTokensRequestDecoder()
+    forAll(burnTokensRequestGen) { request =>
+      val json = request.asJson
+      val parsingResult = json.as[BurnTokensRequest]
+      parsingResult.isRight shouldBe true
+      val restored = parsingResult.value
+      Inspectors.forAll(restored.assetsToBurn.zip(request.assetsToBurn)) {
         case ((restoredToken, restoredValue), (requestToken, requestValue)) =>
           restoredToken shouldEqual requestToken
           restoredValue shouldEqual requestValue
@@ -79,7 +95,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       val json = request.asJson
       val parsingResult = json.as[AssetIssueRequest]
       parsingResult.isRight shouldBe true
-      val restored = parsingResult.right.value
+      val restored = parsingResult.value
       restored.addressOpt shouldEqual request.addressOpt
       restored.amount shouldEqual request.amount
       restored.name shouldEqual request.name
@@ -133,9 +149,9 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   property("PopowProof roundtrip"){
     forAll(poPowProofGen){ pp =>
       val json = pp.asJson
-      implicit val decoder = NipopowProof.nipopowProofDecoder(popowAlgos)
+      implicit val decoder: Decoder[NipopowProof] = NipopowProof.nipopowProofDecoder(nipopowAlgos)
       val parsedProof = json.as[NipopowProof].toOption.get
-      parsedProof shouldBe pp
+      parsedProof shouldEqual pp
     }
   }
 

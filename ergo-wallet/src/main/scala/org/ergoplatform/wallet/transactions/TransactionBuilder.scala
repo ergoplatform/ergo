@@ -1,6 +1,5 @@
 package org.ergoplatform.wallet.transactions
 
-import scala.collection.IndexedSeq
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.DataInput
 import org.ergoplatform.ErgoBoxCandidate
@@ -19,14 +18,150 @@ import scorex.crypto.hash.Digest32
 import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
-
+import scorex.crypto.authds.ADKey
+import scorex.util.encode.Base16
+import scala.collection.JavaConverters._
 
 object TransactionBuilder {
 
-  def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap =
+  /**
+    * @param recipientAddress - payment recipient address
+    * @param transferAmt - amount of ERGs to transfer
+    */
+  case class Payment(
+    recipientAddress: ErgoAddress,
+    transferAmt: Long
+  )
+
+  /**
+    * Assembles unsigned payment transaction with multiple outputs
+    *
+    * @param inputIds - identifiers of inputs to be used in transaction
+    * @param feeAmt - fee amount
+    * @param currentHeight - current blockchain height
+    * @param payments - list of addresses and corresponding amounts to make outputs from
+    * @param changeAddress - change recipient address
+    * @param changeAmt - amount to return back to `changeAddress`
+    * @return unsigned transaction
+    */
+  def multiPaymentTransaction(inputIds: Array[String],
+                              feeAmt: Long,
+                              payments: java.util.List[Payment],
+                              changeAddress: ErgoAddress,
+                              changeAmt: Long,
+                              currentHeight: Int): UnsignedErgoLikeTransaction = {
+    val feeBox = new ErgoBoxCandidate(
+      feeAmt,
+      ErgoScriptPredef.feeProposition(),
+      currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val paymentBoxes =
+      payments.asScala.map { case Payment(recipientAddress, transferAmt) =>
+        new ErgoBoxCandidate(
+          transferAmt,
+          recipientAddress.script,
+          currentHeight,
+          Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+          Map.empty
+        )
+      }.toVector
+
+    val outputs =
+      if (changeAmt == 0) {
+        paymentBoxes :+ feeBox
+      } else {
+        val changeBox = new ErgoBoxCandidate(
+          changeAmt,
+          changeAddress.script,
+          currentHeight,
+          Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+          Map.empty
+        )
+        paymentBoxes ++ Vector(feeBox, changeBox)
+      }
+    val unsignedInputs = inputIds
+      .flatMap { id =>
+        Base16.decode(id)
+          .map(x => new UnsignedInput(ADKey @@ x))
+          .toOption
+      }.toIndexedSeq
+
+    new UnsignedErgoLikeTransaction(
+      unsignedInputs,
+      dataInputs = IndexedSeq.empty,
+      outputs
+    )
+  }
+
+  /**
+    * Assembles unsigned payment transaction.
+    *
+    * @param recipientAddress - payment recipient address
+    * @param changeAddress - change recipient address
+    * @param transferAmt - amount of ERGs to transfer
+    * @param feeAmt - fee amount
+    * @param changeAmt - amount to return back to `changeAddress`
+    * @param inputIds - identifiers of inputs to be used in transaction
+    * @param currentHeight - current blockchain height
+    * @return unsigned transaction
+    */
+  def paymentTransaction(recipientAddress: ErgoAddress,
+                         changeAddress: ErgoAddress,
+                         transferAmt: Long,
+                         feeAmt: Long,
+                         changeAmt: Long,
+                         inputIds: Array[String],
+                         currentHeight: Int): UnsignedErgoLikeTransaction = {
+    val payTo = new ErgoBoxCandidate(
+      transferAmt,
+      recipientAddress.script,
+      currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val fee = new ErgoBoxCandidate(
+      feeAmt,
+      ErgoScriptPredef.feeProposition(),
+      currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val change = new ErgoBoxCandidate(
+      changeAmt,
+      changeAddress.script,
+      currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val unsignedInputs = inputIds
+      .flatMap { id =>
+        Base16.decode(id)
+          .map(x => new UnsignedInput(ADKey @@ x))
+          .toOption
+      }
+      .toIndexedSeq
+
+    val dataInputs = IndexedSeq.empty
+    val outputs = if (changeAmt == 0) {
+      IndexedSeq(payTo, fee)
+    } else {
+      IndexedSeq(payTo, change, fee)
+    }
+
+    new UnsignedErgoLikeTransaction(
+      unsignedInputs,
+      dataInputs,
+      outputs
+    )
+  }
+
+  def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap = {
     AssetUtils.mergeAssets(
       initialMap = Map.empty[ModifierId, Long],
-      maps = outputCandidates.map(b => collTokensToMap(b.additionalTokens)):_*)
+      maps = outputCandidates.map(b => collTokensToMap(b.additionalTokens)): _*)
+  }
 
   def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
     tokens.toArray.map(t => bytesToId(t._1) -> t._2).toMap
@@ -73,7 +208,7 @@ object TransactionBuilder {
     minChangeValue: Long,
     minerRewardDelay: Int,
     burnTokens: TokensMap = Map.empty,
-    boxSelector: BoxSelector = DefaultBoxSelector
+    boxSelector: BoxSelector = new DefaultBoxSelector(None)
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
     validateStatelessChecks(inputs, dataInputs, outputCandidates)
@@ -144,6 +279,30 @@ object TransactionBuilder {
       dataInputs,
       finalOutputCandidates.toIndexedSeq
     )
+  }
+
+  implicit class EitherOpsFor211[+A, +B](val source: Either[A, B]) extends AnyVal {
+
+    /** The given function is applied if this is a `Right`.
+      *
+      *  {{{
+      *  Right(12).map(x => "flower") // Result: Right("flower")
+      *  Left(12).map(x => "flower")  // Result: Left(12)
+      *  }}}
+      */
+    def mapRight[B1](f: B => B1): Either[A, B1] = source match {
+      case Right(b) => Right(f(b))
+      case _        => source.asInstanceOf[Either[A, B1]]
+    }
+
+    /** Binds the given function across `Right`.
+      *
+      *  @param f The function to bind across `Right`.
+      */
+    def flatMapRight[A1 >: A, B1](f: B => Either[A1, B1]): Either[A1, B1] = source match {
+      case Right(b) => f(b)
+      case _        => source.asInstanceOf[Either[A1, B1]]
+    }
   }
 
 }

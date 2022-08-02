@@ -1,6 +1,5 @@
 package org.ergoplatform.utils.generators
 
-import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -10,42 +9,43 @@ import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
-import org.ergoplatform.utils.LoggingUtil
+import org.ergoplatform.settings.{Algos, Constants, Parameters}
+import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
 import scorex.core.VersionTag
-import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.authds.avltree.batch.Remove
+import scorex.crypto.authds.ADDigest
 import scorex.db.ByteArrayWrapper
 import scorex.testkit.TestkitHelpers
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Random, Success, Try}
+import scala.collection.mutable
+import scala.util.{Failure, Random, Success}
 
 trait ValidBlocksGenerators
   extends TestkitHelpers with TestFileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
-  def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
-    val constants = StateConstants(nodeViewHolderRef, settings)
-    createUtxoState(constants)
+  def createUtxoState(parameters: Parameters): (UtxoState, BoxHolder) = {
+    createUtxoState(StateConstants(settings), parameters)
   }
 
-  def createUtxoState(constants: StateConstants): (UtxoState, BoxHolder) = {
+  def createUtxoState(constants: StateConstants, parameters: Parameters): (UtxoState, BoxHolder) = {
     ErgoState.generateGenesisUtxoState(createTempDir, constants)
   }
 
-  def createUtxoState(bh: BoxHolder): UtxoState =
-    UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants)
+  def createUtxoState(bh: BoxHolder, parameters: Parameters): UtxoState =
+    UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants, parameters)
 
-  def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
+  def createDigestState(version: VersionTag, digest: ADDigest, parameters: Parameters): DigestState =
     DigestState.create(Some(version), Some(digest), createTempDir, stateConstants)
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
-    validTransactionsFromBoxHolder(boxHolder, new Random)
+    validTransactionsFromBoxHolder(boxHolder, new RandomWrapper)
 
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
-                                           rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+                                           rnd: RandomLike): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     validTransactionsFromBoxes(sizeLimit, stateBoxesIn, Seq(), rnd)
   }
 
@@ -53,7 +53,7 @@ trait ValidBlocksGenerators
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
                                            dataBoxesIn: Seq[ErgoBox],
-                                           rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+                                           rnd: RandomLike): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     var createdEmissionBox: Seq[ErgoBox] = Seq()
 
     @tailrec
@@ -61,10 +61,10 @@ trait ValidBlocksGenerators
              stateBoxes: Seq[ErgoBox],
              selfBoxes: Seq[ErgoBox],
              acc: Seq[ErgoTransaction],
-             rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+             rnd: RandomLike): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
 
       lazy val dataBoxesToUse: IndexedSeq[ErgoBox] = {
-        rnd.shuffle(dataBoxesIn ++ stateBoxesIn ++ selfBoxes).take(rnd.nextInt(10)).toIndexedSeq
+        Random.shuffle(dataBoxesIn ++ stateBoxesIn ++ selfBoxes).take(rnd.nextInt(10)).toIndexedSeq
       }
 
       val currentSize = acc.map(_.size).sum
@@ -77,7 +77,7 @@ trait ValidBlocksGenerators
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
           val currentHeight: Int = emissionBox.creationHeight.toInt
-          val rewards = CandidateGenerator.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, emission)
+          val rewards = CandidateGenerator.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, emptyStateContext)
           val outs = rewards.flatMap(_.outputs)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = outs.filter(b => isEmissionBox(b))
@@ -87,8 +87,8 @@ trait ValidBlocksGenerators
 
         case _ =>
           if (currentSize < sizeLimit - 2 * averageSize && remainingCost > 100000) {
-            val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(2) + 1).getOrElse(0))
-            val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(2) + 1).getOrElse(0))
+            val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(rnd.nextInt(2) + 1)
+            val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(rnd.nextInt(2) + 1)
             // disable tokens generation to avoid situation with too many tokens
             val boxesToSpend = (consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq
             val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxesToUse)
@@ -118,15 +118,15 @@ trait ValidBlocksGenerators
       }
     }
 
-    loop(emptyStateContext.currentParameters.maxBlockCost, stateBoxesIn, Seq.empty, Seq.empty, rnd)
+    loop(emptyStateContext.currentParameters.maxBlockCost, stateBoxesIn, mutable.WrappedArray.empty, mutable.WrappedArray.empty, rnd)
   }
 
-  protected def getTxCost(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxesToUse: Seq[ErgoBox]): Long = {
+  protected def getTxCost(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxesToUse: Seq[ErgoBox]): Int = {
     tx.statefulValidity(
       tx.inputs.flatMap(i => boxesToSpend.find(_.id == i.boxId)),
       tx.dataInputs.flatMap(i => dataBoxesToUse.find(_.id == i.boxId)),
       emptyStateContext,
-      -20000000)(emptyVerifier).getOrElse(0L)
+      -2000000)(emptyVerifier).getOrElse(0)
   }
 
   /**
@@ -136,7 +136,7 @@ trait ValidBlocksGenerators
 
   /** @param txSizeLimit maximum transactions size in bytes */
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder,
-                                     rnd: Random,
+                                     rnd: RandomLike,
                                      txSizeLimit: Int = 10 * 1024): (Seq[ErgoTransaction], BoxHolder) = {
     val (emissionBox, boxHolderWithoutEmission) = boxHolder.take(b => isEmissionBox(b))
     val (_, bhWithoutGenesis) = boxHolderWithoutEmission.take(b => genesisBoxes.contains(b))
@@ -152,7 +152,7 @@ trait ValidBlocksGenerators
   }
 
 
-  def validTransactionsFromUtxoState(wus: WrappedUtxoState, rnd: Random = new Random): Seq[ErgoTransaction] = {
+  def validTransactionsFromUtxoState(wus: WrappedUtxoState, rnd: RandomLike = new RandomWrapper): Seq[ErgoTransaction] = {
     val num = 1 + rnd.nextInt(3)
 
     val allBoxes = wus.takeBoxes(num + rnd.nextInt(100))
@@ -163,17 +163,17 @@ trait ValidBlocksGenerators
   }
 
   def validFullBlock(parentOpt: Option[ErgoFullBlock], utxoState: UtxoState, boxHolder: BoxHolder): ErgoFullBlock =
-    validFullBlock(parentOpt, utxoState, boxHolder, new Random)
+    validFullBlock(parentOpt, utxoState, boxHolder, new RandomWrapper)
 
 
-  def validFullBlock(parentOpt: Option[ErgoFullBlock], utxoState: UtxoState, boxHolder: BoxHolder, rnd: Random): ErgoFullBlock = {
+  def validFullBlock(parentOpt: Option[ErgoFullBlock], utxoState: UtxoState, boxHolder: BoxHolder, rnd: RandomLike): ErgoFullBlock = {
     validFullBlock(parentOpt, utxoState, validTransactionsFromBoxHolder(boxHolder, rnd)._1)
   }
 
   def validFullBlockWithBoxHolder(parentOpt: Option[ErgoFullBlock],
                                   utxoState: UtxoState,
                                   boxHolder: BoxHolder,
-                                  rnd: Random): (ErgoFullBlock, BoxHolder) = {
+                                  rnd: RandomLike): (ErgoFullBlock, BoxHolder) = {
     val txsBh = validTransactionsFromBoxHolder(boxHolder, rnd)
     validFullBlock(parentOpt, utxoState, txsBh._1) -> txsBh._2
   }
@@ -189,7 +189,7 @@ trait ValidBlocksGenerators
     validFullBlock(
       parentOpt,
       wrappedState,
-      validTransactionsFromBoxHolder(wrappedState.versionedBoxHolder, new Random())._1,
+      validTransactionsFromBoxHolder(wrappedState.versionedBoxHolder, new RandomWrapper)._1,
       Some(time)
     )
   }
@@ -204,11 +204,11 @@ trait ValidBlocksGenerators
 
     val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(timeProvider.time())
     val interlinks = parentOpt.toSeq.flatMap { block =>
-      popowAlgos.updateInterlinks(block.header, NipopowAlgos.unpackInterlinks(block.extension.fields).get)
+      nipopowAlgos.updateInterlinks(block.header, NipopowAlgos.unpackInterlinks(block.extension.fields).get)
     }
     val extension: ExtensionCandidate =
-      LaunchParameters.toExtensionCandidate ++
-        popowAlgos.interlinksToExtension(interlinks) ++
+      parameters.toExtensionCandidate ++
+        nipopowAlgos.interlinksToExtension(interlinks) ++
         utxoState.stateContext.validationSettings.toExtensionCandidate
     val votes = Array.fill(3)(0: Byte)
 
@@ -225,15 +225,15 @@ trait ValidBlocksGenerators
     val parentOpt: Option[Header] = wrappedState.stateContext.lastHeaderOpt
     val parentExtensionOpt: Option[Extension] = wrappedState.stateContext.lastExtensionOpt
     val bh = wrappedState.versionedBoxHolder
-    val transactions = validTransactionsFromBoxHolder(bh, new Random())._1
+    val transactions = validTransactionsFromBoxHolder(bh, new RandomWrapper)._1
 
     checkPayload(transactions, wrappedState)
 
     val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val interlinksExtension = popowAlgos.interlinksToExtension(popowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate ++ interlinksExtension
+    val interlinksExtension = nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
+    val extension: ExtensionCandidate = parameters.toExtensionCandidate ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt, Header.InitialVersion, settings.chainSettings.initialNBits, updStateDigest,
@@ -243,7 +243,7 @@ trait ValidBlocksGenerators
   private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {
     transactions.foreach(_.statelessValidity() shouldBe 'success)
     transactions.nonEmpty shouldBe true
-    ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
+    ErgoState.boxChanges(transactions).get._1.foreach { case Remove(boxId) =>
       assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
     }
   }

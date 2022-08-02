@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.ModifierTypeId
-import scorex.core.consensus.History.ProgressInfo
+import scorex.core.consensus.ProgressInfo
 
 class VerifyNonADHistorySpecification extends HistoryTestHelpers {
   import ToDownloadProcessor._
@@ -157,7 +157,7 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
   }
 
   property("append header to genesis - 2") {
-    val (us, bh) = createUtxoState()
+    val (us, bh) = createUtxoState(parameters)
 
     val block = validFullBlock(None, us, bh)
 

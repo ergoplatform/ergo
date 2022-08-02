@@ -3,14 +3,14 @@ package org.ergoplatform.nodeView.wallet.persistence
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
-import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
+import org.ergoplatform.P2PKAddress
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.db.{LDBFactory, LDBKVStore}
-import java.io.File
 
+import java.io.File
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
@@ -25,8 +25,7 @@ import scala.util.{Failure, Success, Try}
   * * ErgoStateContext (not version-agnostic, but state changes including rollbacks it is updated externally)
   * * external scans
   */
-final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
-                         (implicit val addressEncoder: ErgoAddressEncoder) extends ScorexLogging {
+final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends ScorexLogging {
 
   import WalletStorage._
 
@@ -106,17 +105,17 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     * Read state context from the database
     * @return state context read
     */
-  def readStateContext: ErgoStateContext = store
+  def readStateContext(parameters: Parameters): ErgoStateContext = store
     .get(StateContextKey)
     .flatMap(r => ErgoStateContextSerializer(settings).parseBytesTry(r).toOption)
-    .getOrElse(ErgoStateContext.empty(settings))
+    .getOrElse(ErgoStateContext.empty(settings, parameters))
 
   /**
     * Update address used by the wallet for change outputs
     * @param address - new changed address
     */
   def updateChangeAddress(address: P2PKAddress): Try[Unit] = {
-    val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
+    val bytes = settings.chainSettings.addressEncoder.toString(address).getBytes(Constants.StringEncoding)
     store.insert(Seq(ChangeAddressKey -> bytes))
   }
 
@@ -126,7 +125,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     */
   def readChangeAddress: Option[P2PKAddress] =
     store.get(ChangeAddressKey).flatMap { x =>
-      addressEncoder.fromString(new String(x, Constants.StringEncoding)) match {
+      settings.chainSettings.addressEncoder.fromString(new String(x, Constants.StringEncoding)) match {
         case Success(p2pk: P2PKAddress) => Some(p2pk)
         case _ => None
       }
@@ -243,8 +242,7 @@ object WalletStorage {
     */
   def storageFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/storage")
 
-  def readOrCreate(settings: ErgoSettings)
-                  (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {
+  def readOrCreate(settings: ErgoSettings): WalletStorage = {
     val db = LDBFactory.createKvDb(storageFolder(settings).getPath)
     new WalletStorage(db, settings)
   }

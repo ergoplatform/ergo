@@ -15,7 +15,7 @@ import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
-import scorex.core.network.ConnectedPeer
+import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.network.peer.PeerInfo
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
@@ -28,7 +28,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
 
   override val stateGen: Gen[WrappedUtxoState] =
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings))
 
   override def semanticallyValidModifier(state: UTXO_ST): PM = {
     statefulyValidFullBlock(state.asInstanceOf[WrappedUtxoState])
@@ -64,7 +64,8 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val vhProbe = TestProbe("ViewHolderProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
-    val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
+    val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
     val ref = system.actorOf(Props(
       new SyncronizerMock(
         ncProbe.ref,
@@ -72,7 +73,8 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
         ErgoSyncInfoMessageSpec,
         settings,
         tp,
-        syncTracker)
+        syncTracker,
+        deliveryTracker)
     ))
     val m = totallyValidModifier(h, s)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))

@@ -66,7 +66,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
     bestFullBlockOpt match {
       case _ if !isHeadersChainSynced || !nodeSettings.verifyTransactions =>
-        // do not download full blocks if no headers-chain synced yet or SPV mode
+        // do not download full blocks if no headers-chain synced yet and suffix enabled or SPV mode
         Map.empty
       case Some(fb) =>
         // download children blocks of last 100 full blocks applied to the best chain
@@ -92,15 +92,15 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
       // Headers chain is synced after this header. Start downloading full blocks
       pruningProcessor.updateBestFullBlock(header)
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
-      Seq.empty
+      Nil
     } else {
-      Seq.empty
+      Nil
     }
   }
 
   def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
-      Seq.empty
+      Nil
     } else if (nodeSettings.stateType.requireProofs) {
       h.sectionIds
     } else {

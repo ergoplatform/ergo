@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.NipopowProofModifier
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
-import scorex.core.consensus.History.ProgressInfo
+import scorex.core.consensus.ProgressInfo
 
 import scala.util.{Success, Try}
 

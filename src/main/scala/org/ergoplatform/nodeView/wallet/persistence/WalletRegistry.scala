@@ -84,9 +84,9 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param scanId - scan identifier
     * @return sequences of scan-related unspent boxes found in the database
     */
-  def unspentBoxes(scanId: ScanId): Seq[TrackedBox] = {
+  def unspentBoxes(scanId: ScanId, limit: Int = Int.MaxValue): Seq[TrackedBox] = {
     store
-      .getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId))
+      .getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId), limit)
       .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
   }
 
@@ -106,7 +106,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   /**
     * Unspent boxes belong to the wallet (payments scan)
     */
-  def walletUnspentBoxes(): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId)
+  def walletUnspentBoxes(limit: Int = Int.MaxValue): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId, limit)
 
   /**
     * Spent boxes belong to the wallet (payments scan)

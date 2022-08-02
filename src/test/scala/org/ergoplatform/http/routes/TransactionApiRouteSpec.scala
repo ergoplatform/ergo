@@ -28,8 +28,8 @@ class TransactionApiRouteSpec extends AnyFlatSpec
 
   val prefix = "/transactions"
 
-  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
-  val route: Route = TransactionsApiRoute(utxoReadersRef, nodeViewRef, restApiSettings).route
+  val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
+  val route: Route = TransactionsApiRoute(utxoReadersRef, nodeViewRef, settings).route
 
   val inputBox: ErgoBox = utxoState.takeBoxes(1).head
   val input = Input(inputBox.id, emptyProverResult)
@@ -51,13 +51,22 @@ class TransactionApiRouteSpec extends AnyFlatSpec
       }
     }
     val readers2 = system.actorOf(Props(new UtxoReadersStub2))
-    TransactionsApiRoute(readers2, nodeViewRef, restApiSettings).route
+    TransactionsApiRoute(readers2, nodeViewRef, settings).route
   }
 
   it should "post transaction" in {
     Post(prefix, tx.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] shouldEqual tx.id
+    }
+  }
+
+  it should "fail when posting invalid transaction" in {
+    val failingNodeViewRef = system.actorOf(NodeViewStub.failingProps())
+    val failingRoute: Route = TransactionsApiRoute(digestReadersRef, failingNodeViewRef, settings).route
+
+    Post(prefix, tx.asJson) ~> failingRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

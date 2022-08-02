@@ -3,16 +3,17 @@ package org.ergoplatform.nodeView.mempool
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
-import scorex.core.transaction.MempoolReader
+import scorex.core.NodeViewComponent
+import scorex.core.consensus.ContainsModifiers
 import scorex.util.ModifierId
 
-trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
+trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTransaction] {
 
-  override def contains(id: ModifierId): Boolean
+  def contains(id: ModifierId): Boolean
 
-  override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction]
+  def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction]
 
-  override def size: Int
+  def size: Int
 
   /**
     * @return inputs spent by the mempool transactions
@@ -31,6 +32,11 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
     * Returns given number of transactions resided in pool sorted by weight in descending order
     */
   def take(limit: Int): Iterable[ErgoTransaction]
+
+  /**
+    * Returns up to given number of transactions randomly
+    */
+  def random(limit: Int): Iterable[ErgoTransaction]
 
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 

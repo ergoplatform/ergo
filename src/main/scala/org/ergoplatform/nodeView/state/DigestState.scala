@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
@@ -35,7 +36,7 @@ class DigestState protected(override val version: VersionTag,
   store.lastVersionID
     .foreach(id => require(version == bytesToVersion(id), "version should always be equal to store.lastVersionID"))
 
-  override val constants: StateConstants = StateConstants(None, ergoSettings)
+  override val constants: StateConstants = StateConstants(ergoSettings)
 
   private lazy val nodeSettings = ergoSettings.nodeSettings
 
@@ -44,13 +45,19 @@ class DigestState protected(override val version: VersionTag,
                                           proofs: ADProofs,
                                           currentStateContext: ErgoStateContext): Try[Unit] = {
     // Check modifications, returning sequence of old values
-    val boxesFromProofs: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(transactions), rootHash, expectedHash)
-      .get.map(v => ErgoBoxSerializer.parseBytes(v))
-    val knownBoxes = (transactions.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+    val knownBoxesTry =
+      ErgoState.stateChanges(transactions).map { stateChanges =>
+        val boxesFromProofs: Seq[ErgoBox] =
+          proofs.verify(stateChanges, rootHash, expectedHash).get.map(v => ErgoBoxSerializer.parseBytes(v))
+        (transactions.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+      }
 
-    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = knownBoxes
-      .get(ByteArrayWrapper(id))
-      .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] =
+      knownBoxesTry.flatMap { knownBoxes =>
+        knownBoxes
+        .get(ByteArrayWrapper(id))
+        .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+      }
 
     ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
       .toTry
@@ -78,7 +85,7 @@ class DigestState protected(override val version: VersionTag,
       Failure(new Exception(s"Modifier not validated: $a"))
   }
 
-  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height]): Try[DigestState] =
+  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[DigestState] =
     (processFullBlock orElse processHeader orElse processOther) (mod)
 
   @SuppressWarnings(Array("OptionGet"))
@@ -156,8 +163,9 @@ object DigestState extends ScorexLogging with ScorexEncoding {
               rootHash: ADDigest,
               stateContext: ErgoStateContext,
               dir: File,
-              constants: StateConstants): Try[DigestState] = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+              constants: StateConstants,
+              parameters: Parameters): Try[DigestState] = {
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(scorex.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
@@ -169,7 +177,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              rootHashOpt: Option[ADDigest],
              dir: File,
              constants: StateConstants): DigestState = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     Try {
       val context = ErgoStateReader.storageStateContext(store, constants)
       (versionOpt, rootHashOpt) match {

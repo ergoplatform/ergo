@@ -10,12 +10,6 @@ package object core {
   //TODO implement ModifierTypeId as a trait
   object ModifierTypeId extends TaggedType[Byte]
 
-  @deprecated("use `scorex.util.ModifierId`", "")
-  type ModifierId = scorex.util.ModifierId.Type
-
-  @deprecated("use `scorex.util.ModifierId`", "")
-  val ModifierId: scorex.util.ModifierId.type = scorex.util.ModifierId
-
   object VersionTag extends TaggedType[String]
 
   type ModifierTypeId = ModifierTypeId.Type

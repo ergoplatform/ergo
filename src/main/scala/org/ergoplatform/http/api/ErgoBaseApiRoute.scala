@@ -1,8 +1,7 @@
 package org.ergoplatform.http.api
 
 import akka.actor.ActorRef
-import akka.http.scaladsl.server.{Directive1, Route, ValidationRejection}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.{Directive1, ValidationRejection}
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -45,12 +44,12 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
     * Send local transaction to ErgoNodeViewHolder
     * @return Transaction Id with status OK(200), or BadRequest(400)
     */
-  protected def sendLocalTransactionRoute(nodeViewActorRef: ActorRef, tx: ErgoTransaction): Route = {
+  protected def sendLocalTransactionRoute(nodeViewActorRef: ActorRef, unconfirmedTx: UnconfirmedTransaction): Route = {
     val resultFuture =
-      (nodeViewActorRef ? LocallyGeneratedTransaction(tx))
+      (nodeViewActorRef ? LocallyGeneratedTransaction(unconfirmedTx))
         .mapTo[ProcessingOutcome]
         .flatMap {
-          case Accepted => Future.successful(tx.id)
+          case Accepted => Future.successful(unconfirmedTx.transaction.id)
           case DoubleSpendingLoser(_) => Future.failed(new IllegalArgumentException("Double spending attempt"))
           case Declined(ex) => Future.failed(ex)
           case Invalidated(ex) => Future.failed(ex)

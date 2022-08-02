@@ -38,7 +38,7 @@ trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTra
     */
   def random(limit: Int): Iterable[UnconfirmedTransaction]
 
-  def modifierById(modifierId: ModifierId): Option[UnconfirmedTransaction]
+  def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 
   /**
     * Returns transaction ids with weights. Weight depends on a fee a transaction is paying.

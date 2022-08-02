@@ -10,7 +10,7 @@ trait MempoolTestHelpers {
   // mempool reader stub specifically for this test only take is defined as only this method is used in rebroadcasting
   class FakeMempool(txs: Seq[UnconfirmedTransaction]) extends ErgoMemPoolReader {
 
-    override def modifierById(modifierId: ModifierId): Option[UnconfirmedTransaction] = ???
+    override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = ???
 
     override def getAll(ids: Seq[ModifierId]): Seq[UnconfirmedTransaction] = ???
 

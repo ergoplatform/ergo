@@ -37,7 +37,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
 
   override def size: Int = pool.size
 
-  override def modifierById(modifierId: ModifierId): Option[UnconfirmedTransaction] = pool.get(modifierId)
+  override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] =
+    pool.get(modifierId).map(unconfirmedTx => unconfirmedTx.transaction)
 
   override def take(limit: Int): Iterable[UnconfirmedTransaction] = pool.orderedTransactions.values.take(limit)
 

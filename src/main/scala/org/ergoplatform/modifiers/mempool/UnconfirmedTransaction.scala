@@ -6,24 +6,21 @@ import scorex.util.serialization.{Reader, Writer}
 
 
 case class UnconfirmedTransaction(
-  transaction: ErgoTransaction,
-  lastCost: Option[Int],
-  createdTime: Long,
-  lastCheckedTime: Long,
-  transactionBytes: Option[Array[Byte]])
-//) extends Transaction
+                                   transaction: ErgoTransaction,
+                                   lastCost: Option[Int],
+                                   createdTime: Long,
+                                   lastCheckedTime: Long,
+                                   transactionBytes: Option[Array[Byte]])
   extends ScorexLogging {
-//  with ContainsModifiers[UnconfirmedTransaction] {
+//    with ErgoNodeViewModifier {
 
   def updateCost(cost: Int): UnconfirmedTransaction = {
     copy(lastCost = Some(cost), lastCheckedTime = System.currentTimeMillis())
   }
 
-//  override type M = UnconfirmedTransaction
+//  override def serializedId: Array[Byte] = ???
 //
-//  override def serializer: ScorexSerializer[UnconfirmedTransaction] = UnconfirmedTransactionSerializer
-//
-//  override val messageToSign: Array[Byte] = _
+//  override val sizeOpt: Option[Int] = _
 }
 
 object UnconfirmedTransaction {

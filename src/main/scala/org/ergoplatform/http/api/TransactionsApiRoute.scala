@@ -40,7 +40,8 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     p.getAll.slice(offset, offset + limit).map(_.asJson).asJson
   }
 
-  private def validateTransactionAndProcess(unconfirmedTx: UnconfirmedTransaction)(processFn: UnconfirmedTransaction => Any): Route = {
+  private def validateTransactionAndProcess(unconfirmedTx: UnconfirmedTransaction)
+                                           (processFn: UnconfirmedTransaction => Route): Route = {
     val tx = unconfirmedTx.transaction
     if (tx.size > ergoSettings.nodeSettings.maxTransactionSize) {
       BadRequest(s"Transaction $tx has too large size ${tx.size}")

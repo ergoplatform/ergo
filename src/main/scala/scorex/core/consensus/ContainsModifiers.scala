@@ -1,7 +1,6 @@
 package scorex.core.consensus
 
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
-import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import scorex.util.ModifierId
 
 /**
@@ -27,5 +26,5 @@ trait ContainsModifiers[MOD <: ErgoNodeViewModifier] {
     * @param modifierId - modifier id to get
     * @return modifier of type MOD with id == modifierId if exist
     */
-  def modifierById(modifierId: ModifierId): Option[UnconfirmedTransaction]
+  def modifierById(modifierId: ModifierId): Option[ErgoNodeViewModifier]
 }

@@ -257,7 +257,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def txModify(unconfirmedTx: UnconfirmedTransaction): Unit = {
     val tx = unconfirmedTx.transaction
-    val (newPool, processingOutcome) = memoryPool().process(tx, minimalState())
+    val (newPool, processingOutcome) = memoryPool().process(unconfirmedTx, minimalState())
     processingOutcome match {
       case ProcessingOutcome.Accepted =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
@@ -273,7 +273,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case ProcessingOutcome.Declined(e) => // do nothing
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
     }
-    processingOutcome
   }
 
   /**
@@ -579,10 +578,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def transactionsProcessing: Receive = {
-    case TransactionsFromRemote(txs) =>
-      txs.foreach(txModify)
-    case LocallyGeneratedTransaction(tx) =>
-      sender() ! txModify(tx)
+    case TransactionsFromRemote(unconfirmedTx) =>
+      unconfirmedTx.foreach(txModify)
+    case LocallyGeneratedTransaction(unconfirmedTx) =>
+      sender() ! txModify(unconfirmedTx)
     case EliminateTransactions(ids) =>
       val updatedPool = memoryPool().filter(unconfirmedTx => !ids.contains(unconfirmedTx.transaction.id))
       updateNodeView(updatedMempool = Some(updatedPool))

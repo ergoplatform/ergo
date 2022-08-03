@@ -91,12 +91,20 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     writeSnapshotsInfo(si)
   }
 
-  def readManifestBytes(id: ManifestId): Option[BatchAVLProverManifest[Digest32]] = {
-    store.get(id).flatMap(bs => serializer.manifestFromBytes(bs, Constants.ModifierIdLength).toOption)
+  def readManifest(id: ManifestId): Option[BatchAVLProverManifest[Digest32]] = {
+    readManifestBytes(id).flatMap(bs => serializer.manifestFromBytes(bs, Constants.ModifierIdLength).toOption)
   }
 
-  def readSubtreeBytes(id: SubtreeId): Option[BatchAVLProverSubtree[Digest32]] = {
-    store.get(id).flatMap(bs => serializer.subtreeFromBytes(bs, Constants.ModifierIdLength).toOption)
+  def readSubtree(id: SubtreeId): Option[BatchAVLProverSubtree[Digest32]] = {
+    readSubtreeBytes(id).flatMap(bs => serializer.subtreeFromBytes(bs, Constants.ModifierIdLength).toOption)
+  }
+
+  def readManifestBytes(id: ManifestId): Option[Array[Byte]] = {
+    store.get(id)
+  }
+
+  def readSubtreeBytes(id: SubtreeId): Option[Array[Byte]] = {
+    store.get(id)
   }
 }
 

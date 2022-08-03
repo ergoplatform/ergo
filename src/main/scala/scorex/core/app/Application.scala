@@ -49,7 +49,9 @@ trait Application extends ScorexLogging {
       InvSpec,
       RequestModifierSpec,
       ModifiersSpec,
-      GetSnapshotsInfoSpec
+      GetSnapshotsInfoSpec,
+      new GetManifestSpec,
+      new GetUtxoSnapshotChunkSpec
     )
   }
 

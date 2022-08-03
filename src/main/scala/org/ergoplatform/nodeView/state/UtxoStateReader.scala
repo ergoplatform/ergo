@@ -5,6 +5,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
@@ -13,6 +14,8 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.validation.MalformedModifierError
 import scorex.crypto.authds.avltree.batch.{Lookup, NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
+import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
@@ -32,6 +35,15 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
   def generateBatchProofForBoxes(boxes: Seq[ErgoBox.BoxId]): SerializedAdProof = persistentProver.synchronized {
     boxes.map { box => persistentProver.performOneOperation(Lookup(ADKey @@ box)) }
     persistentProver.prover().generateProof()
+  }
+
+  //todo: scaladoc
+  //todo: used in tests only, make private[] ?
+  def slicedTree(): (BatchAVLProverManifest[Digest32], Seq[BatchAVLProverSubtree[Digest32]]) = {
+    persistentProver.synchronized {
+      val serializer = new BatchAVLProverSerializer[Digest32, HF]
+      serializer.slice(persistentProver.avlProver, subtreeDepth = 12)
+    }
   }
 
   /**
@@ -83,7 +95,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
   protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
     def hasEmissionBox(tx: ErgoTransaction): Boolean =
       if(fb.height > constants.settings.chainSettings.reemission.activationHeight) // after EIP-27
-        tx.outputs.size == 2 && 
+        tx.outputs.size == 2 &&
         !tx.outputs.head.additionalTokens.isEmpty &&
         java.util.Arrays.equals(tx.outputs.head.additionalTokens(0)._1, constants.settings.chainSettings.reemission.emissionNftIdBytes)
       else
@@ -184,4 +196,15 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
     snapshotsDb.readSnapshotsInfo
   }
+
+  def getManifest(id: ManifestId): Option[Array[Byte]] = {
+    val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
+    snapshotsDb.readManifestBytes(id)
+  }
+
+  def getUtxoSnapshotChunk(id: SubtreeId): Option[Array[Byte]] = {
+    val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
+    snapshotsDb.readSubtreeBytes(id)
+  }
+
 }

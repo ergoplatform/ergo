@@ -1,6 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
+
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -11,6 +12,8 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownloa
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
@@ -20,6 +23,7 @@ import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier
 import scorex.core.network.NetworkController.ReceivableMessages.{DisconnectFrom, PenalizePeer, RegisterMessageSpecs, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.UtxoStateReader
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import scorex.core.network.message._
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
@@ -37,6 +41,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
+import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -617,7 +622,27 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val msg = Message(SnapshotsInfoSpec, Right(snapInfo), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
       }
-      case _ => log.warn(s"No snapshots avaialble")
+      case _ => log.warn(s"No snapshots available")
+    }
+  }
+
+  protected def sendManifest(id: ManifestId, usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
+    usr.getManifest(id) match {
+      case Some(manifest) => {
+        val msg = Message(ManifestSpec, Right(manifest), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      }
+      case _ => log.warn(s"No manifest ${Algos.encode(id)} available")
+    }
+  }
+
+  protected def sendUtxoSnapshotChunk(id: SubtreeId, usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
+    usr.getUtxoSnapshotChunk(id) match {
+      case Some(snapChunk) => {
+        val msg = Message(UtxoSnapshotChunkSpec, Right(snapChunk), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      }
+      case _ => log.warn(s"No chunk ${Algos.encode(id)} available")
     }
   }
 
@@ -914,6 +939,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case (spec: MessageSpec[_], _, remote) if spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
       usrOpt match {
         case Some(usr) => sendSnapshotsInfo(usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+    case (_: GetManifestSpec, id: Array[Byte], remote) =>
+      usrOpt match {
+        case Some(usr) => sendManifest(Digest32 @@ id, usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+    case (_: GetUtxoSnapshotChunkSpec,  id: Array[Byte], remote) =>
+      usrOpt match {
+        case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ id, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
   }

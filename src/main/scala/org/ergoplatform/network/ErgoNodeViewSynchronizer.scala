@@ -19,11 +19,10 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{DisconnectFrom, PenalizePeer, RegisterMessageSpecs, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.state.UtxoStateReader
 import scorex.core.network.message._
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
-import scorex.core.app.Version
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
@@ -969,13 +968,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
-
-  val UtxoSnapsnotActivationVersion = Version(4, 0, 20)
-
-  def utxoNetworkingSupported(remote: ConnectedPeer): Boolean = {
-    // If neighbour version is >= 4.0.20, the neighbour supports utxo snapshots exchange
-    remote.peerInfo.exists(_.peerSpec.protocolVersion >= UtxoSnapsnotActivationVersion)
-  }
 
   def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,

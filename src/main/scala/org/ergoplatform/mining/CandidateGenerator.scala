@@ -6,7 +6,6 @@ import com.google.common.primitives.Longs
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -339,14 +338,16 @@ object CandidateGenerator extends ScorexLogging {
       inputsNotSpent(tx, s)
     }
 
+    val stateContext = s.stateContext
+
     //only transactions valid from against the current utxo state we take from the mem pool
     lazy val poolTransactions = m.getAllPrioritized
 
     lazy val emissionTxOpt =
-      CandidateGenerator.collectEmission(s, pk, ergoSettings.chainSettings.emissionRules)
+      CandidateGenerator.collectEmission(s, pk, stateContext)
 
     def chainSynced =
-      h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)
+      h.bestFullBlockOpt.map(_.id) == stateContext.lastHeaderOpt.map(_.id)
 
     def hasAnyMemPoolOrMinerTx =
       poolTransactions.nonEmpty || unspentTxsToInclude.nonEmpty || emissionTxOpt.nonEmpty
@@ -484,8 +485,10 @@ object CandidateGenerator extends ScorexLogging {
       // differently due to bugs in AOT costing
       val safeGap = if(state.stateContext.currentParameters.maxBlockCost < 1000000) {
         0
-      } else {
+      } else if(state.stateContext.currentParameters.maxBlockCost < 5000000) {
         150000
+      } else {
+        1000000
       }
 
       val (txs, toEliminate) = collectTxs(
@@ -577,21 +580,21 @@ object CandidateGenerator extends ScorexLogging {
   /**
     * Transaction and its cost.
     */
-  type CostedTransaction = (ErgoTransaction, Long)
+  type CostedTransaction = (ErgoTransaction, Int)
 
   //TODO move ErgoMiner to mining package and make `collectTxs` and `fixTxsConflicts` private[mining]
 
   def collectEmission(
     state: UtxoStateReader,
     minerPk: ProveDlog,
-    emission: EmissionRules
+    stateContext: ErgoStateContext
   ): Option[ErgoTransaction] = {
     collectRewards(
       state.emissionBoxOpt,
       state.stateContext.currentHeight,
       Seq.empty,
       minerPk,
-      emission,
+      stateContext,
       Colls.emptyColl
     ).headOption
   }
@@ -600,9 +603,9 @@ object CandidateGenerator extends ScorexLogging {
     currentHeight: Int,
     txs: Seq[ErgoTransaction],
     minerPk: ProveDlog,
-    emission: EmissionRules
+    stateContext: ErgoStateContext
   ): Option[ErgoTransaction] = {
-    collectRewards(None, currentHeight, txs, minerPk, emission, Colls.emptyColl).headOption
+    collectRewards(None, currentHeight, txs, minerPk, stateContext, Colls.emptyColl).headOption
   }
 
   /**
@@ -614,15 +617,20 @@ object CandidateGenerator extends ScorexLogging {
     currentHeight: Int,
     txs: Seq[ErgoTransaction],
     minerPk: ProveDlog,
-    emission: EmissionRules,
+    stateContext: ErgoStateContext,
     assets: Coll[(TokenId, Long)] = Colls.emptyColl
   ): Seq[ErgoTransaction] = {
-    val propositionBytes = emission.settings.feePropositionBytes
+    val chainSettings = stateContext.ergoSettings.chainSettings
+    val propositionBytes = chainSettings.monetary.feePropositionBytes
+    val emission = chainSettings.emissionRules
 
-    val inputs = txs.flatMap(_.inputs)
-    val feeBoxes: Seq[ErgoBox] = ErgoState
-      .newBoxes(txs)
-      .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
+    // forming transaction collecting emission
+    val reemissionSettings = chainSettings.reemission
+    val reemissionRules = reemissionSettings.reemissionRules
+
+    val eip27ActivationHeight = reemissionSettings.activationHeight
+    val reemissionTokenId = Digest32 @@ reemissionSettings.reemissionTokenIdBytes
+
     val nextHeight = currentHeight + 1
     val minerProp =
       ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
@@ -630,18 +638,74 @@ object CandidateGenerator extends ScorexLogging {
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop           = emissionBox.ergoTree
       val emissionAmount = emission.minersRewardAtHeight(nextHeight)
+
+      // how many nanoERG should be re-emitted
+      lazy val reemissionAmount = reemissionRules.reemissionForHeight(nextHeight, emission)
+
+      val emissionBoxAssets: Coll[(TokenId, Long)] = if (nextHeight == eip27ActivationHeight) {
+        // we inject emission box NFT and reemission tokens on activation height
+        // see "Activation Details" section of EIP-27
+        val injTokens = reemissionSettings.injectionBox.additionalTokens
+
+        //swap tokens if emission NFT is going after reemission
+        if (injTokens.apply(1)._2 == 1) {
+          Colls.fromItems(injTokens.apply(1), injTokens.apply(0))
+        } else {
+          injTokens
+        }
+      } else {
+        emissionBox.additionalTokens
+      }
+
+      val updEmissionAssets = if (nextHeight >= eip27ActivationHeight) {
+        // deduct reemission from emission box
+        val reemissionTokens = emissionBoxAssets.apply(1)._2
+        val updAmount = reemissionTokens - reemissionAmount
+        emissionBoxAssets.updated(1, reemissionTokenId -> updAmount)
+      } else {
+        emissionBoxAssets
+      }
+
       val newEmissionBox: ErgoBoxCandidate =
-        new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, nextHeight)
-      val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
+        new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, nextHeight, updEmissionAssets)
+      val inputs = if (nextHeight == eip27ActivationHeight) {
+        // injection - second input is injection box
+        IndexedSeq(
+          new Input(emissionBox.id, ProverResult.empty),
+          new Input(reemissionSettings.injectionBox.id, ProverResult.empty)
+        )
+      } else {
+        IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
+      }
 
-      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, nextHeight, assets)
+      val minerAmt = if (nextHeight == eip27ActivationHeight) {
+        // injection - injection box value going to miner
+        emissionAmount + reemissionSettings.injectionBox.value
+      } else {
+        emissionAmount
+      }
+      val minersAssets = if (nextHeight >= eip27ActivationHeight) {
+        // miner is getting reemission tokens
+        assets.append(Colls.fromItems(reemissionTokenId -> reemissionAmount))
+      } else {
+        assets
+      }
+      val minerBox = new ErgoBoxCandidate(minerAmt, minerProp, nextHeight, minersAssets)
 
-      ErgoTransaction(
+      val emissionTx = ErgoTransaction(
         inputs,
-        IndexedSeq(),
+        dataInputs = IndexedSeq.empty,
         IndexedSeq(newEmissionBox, minerBox)
       )
+      log.info(s"Emission tx for nextHeight = $nextHeight: $emissionTx")
+      emissionTx
     }
+
+    // forming transaction collecting tx fees
+    val inputs = txs.flatMap(_.inputs)
+    val feeBoxes: Seq[ErgoBox] = ErgoState
+      .newBoxes(txs)
+      .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
       val feeAmount = feeBoxes.map(_.value).sum
       val feeAssets =
@@ -653,6 +717,7 @@ object CandidateGenerator extends ScorexLogging {
     } else {
       None
     }
+
     Seq(emissionTxOpt, feeTxOpt).flatten
   }
 
@@ -678,17 +743,18 @@ object CandidateGenerator extends ScorexLogging {
     */
   def collectTxs(
     minerPk: ProveDlog,
-    maxBlockCost: Long,
-    maxBlockSize: Long,
+    maxBlockCost: Int,
+    maxBlockSize: Int,
     us: UtxoStateReader,
     upcomingContext: ErgoStateContext,
     transactions: Seq[ErgoTransaction]
   ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
 
     val currentHeight = us.stateContext.currentHeight
+    val nextHeight = upcomingContext.currentHeight
 
     log.info(
-      s"Assembling a block candidate for block #$currentHeight from ${transactions.length} transactions available"
+      s"Assembling a block candidate for block #$nextHeight from ${transactions.length} transactions available"
     )
 
     val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
@@ -724,9 +790,7 @@ object CandidateGenerator extends ScorexLogging {
                 val newTxs   = acc :+ (tx -> costConsumed)
                 val newBoxes = newTxs.flatMap(_._1.outputs)
 
-                val emissionRules =
-                  stateWithTxs.constants.settings.chainSettings.emissionRules
-                collectFees(currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
+                collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
                   case Some(feeTx) =>
                     val boxesToSpend = feeTx.inputs.flatMap(i =>
                       newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
@@ -756,7 +820,7 @@ object CandidateGenerator extends ScorexLogging {
                     }
                 }
               case Failure(e) =>
-                log.debug(s"Not included transaction ${tx.id} due to ${e.getMessage}")
+                log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
                 loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
             }
           }
@@ -766,7 +830,7 @@ object CandidateGenerator extends ScorexLogging {
     }
 
     val res = loop(transactions, Seq.empty, None, Seq.empty)
-    log.info(
+    log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
       s"${res._2.length} transactions turned out to be invalid"
     )
@@ -815,8 +879,7 @@ object CandidateGenerator extends ScorexLogging {
   ): ErgoFullBlock = {
     val header   = deriveUnprovenHeader(candidate).toHeader(solution, None)
     val adProofs = ADProofs(header.id, candidate.adProofBytes)
-    val blockTransactions =
-      BlockTransactions(header.id, candidate.version, candidate.transactions)
+    val blockTransactions = BlockTransactions(header.id, candidate.version, candidate.transactions)
     val extension = Extension(header.id, candidate.extension.fields)
     new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
   }

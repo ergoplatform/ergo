@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome.Accepted
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.testkit.utils.NoShrink
 import scorex.util.{ModifierId, bytesToId}
@@ -65,6 +66,31 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     getHeightOf(block.header.id) shouldBe Some(ErgoHistory.GenesisHeight)
     getLastHeadersLength(10) shouldBe 1
     getBestHeaderOpt shouldBe Some(block.header)
+  }
+
+  private val t3a = TestCase("do not apply block headers in invalid order") { fixture =>
+    import fixture._
+    val (us, bh) = createUtxoState(parameters)
+    val parentBlock = validFullBlock(None, us, bh)
+    val block = validFullBlock(Some(parentBlock), us, bh)
+
+    getBestHeaderOpt shouldBe None
+    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
+
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier])
+
+    //sending child header without parent header
+    nodeViewHolderRef ! ModifiersFromRemote(List(block.header))
+    expectNoMsg()
+
+    // sende correct header sequence
+    nodeViewHolderRef ! ModifiersFromRemote(List(parentBlock.header))
+    expectMsgType[SyntacticallySuccessfulModifier]
+
+    nodeViewHolderRef ! ModifiersFromRemote(List(block.header))
+    expectMsgType[SyntacticallySuccessfulModifier]
+
+    getHistoryHeight shouldBe 2
   }
 
   private val t4 = TestCase("apply valid block as genesis") { fixture =>
@@ -121,7 +147,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       val tx = validTransactionFromBoxes(boxes.toIndexedSeq)
       subscribeEvents(classOf[FailedTransaction])
       nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
-      expectNoMsg()
+      expectMsg(Accepted)
       getPoolSize shouldBe 1
     }
   }
@@ -491,7 +517,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     }
   }
 
-  val cases: List[TestCase] = List(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9)
+  val cases: List[TestCase] = List(t0, t1, t2, t3, t3a, t4, t5, t6, t7, t8, t9)
 
   NodeViewTestConfig.allConfigs.foreach { c =>
     cases.foreach { t =>

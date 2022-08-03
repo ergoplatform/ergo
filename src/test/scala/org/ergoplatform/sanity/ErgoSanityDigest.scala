@@ -29,8 +29,8 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
 
   override val stateGen: Gen[WrappedDigestState] = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
-      val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants, parameters)
-      new WrappedDigestState(digestState, wus, settings, parameters)
+      val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
+      new WrappedDigestState(digestState, wus, settings)
     }
   }
 
@@ -69,7 +69,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val vhProbe = TestProbe("ViewHolderProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
-    val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
     val ref = system.actorOf(Props(
       new SyncronizerMock(

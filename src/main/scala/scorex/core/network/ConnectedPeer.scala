@@ -17,7 +17,7 @@ case class ConnectedPeer(connectionId: ConnectionId,
                          var lastMessage: Long,
                          peerInfo: Option[PeerInfo]) {
 
-  override def hashCode(): Int = connectionId.hashCode()
+  override def hashCode(): Int = connectionId.remoteAddress.hashCode()
 
   override def equals(obj: Any): Boolean = obj match {
     case that: ConnectedPeer => this.connectionId.remoteAddress == that.connectionId.remoteAddress

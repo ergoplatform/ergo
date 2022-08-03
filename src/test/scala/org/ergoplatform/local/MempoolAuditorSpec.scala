@@ -2,20 +2,17 @@ package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
-import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
-import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestOps, RandomWrapper}
+import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FailedTransaction, SuccessfulTransaction}
-import scorex.util.ModifierId
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
@@ -25,7 +22,7 @@ import scala.util.Random
 import sigmastate.lang.Terms.ValueOps
 import sigmastate.serialization.ErgoTreeSerializer
 
-class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers {
+class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers with MempoolTestHelpers {
   implicit lazy val context: IRContext = new RuntimeIRContext
 
   val cleanupDuration: FiniteDuration = 3.seconds
@@ -70,8 +67,12 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     subscribeEvents(classOf[FailedTransaction])
     nodeViewHolderRef ! LocallyGeneratedTransaction(validTx)
     testProbe.expectMsgClass(cleanupDuration, newTx)
+    expectMsgType[ProcessingOutcome.Accepted.type]
+
     nodeViewHolderRef ! LocallyGeneratedTransaction(temporarilyValidTx)
     testProbe.expectMsgClass(cleanupDuration, newTx)
+    expectMsgType[ProcessingOutcome.Accepted.type]
+
     getPoolSize shouldBe 2
 
     val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, nodeViewHolderRef, settingsToTest)
@@ -100,34 +101,6 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val bxs = bh1.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
     val txs = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1
 
-    // mempool reader stub specifically for this test
-    // only take is defined as only this method is used in rebroadcasting
-    object fakeMempool extends ErgoMemPoolReader {
-
-      override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = ???
-
-      override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ???
-
-      override def size: Int = ???
-
-      override def weightedTransactionIds(limit: Int): Seq[OrderedTxPool.WeightedTxId] = ???
-
-      override def getAll: Seq[ErgoTransaction] = ???
-
-      override def getAllPrioritized: Seq[ErgoTransaction] = txs
-
-      override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
-
-      override def random(limit: Int): Iterable[ErgoTransaction] = take(limit)
-
-      override def spentInputs: Iterator[BoxId] = txs.flatMap(_.inputs).map(_.boxId).toIterator
-
-      override def getRecommendedFee(expectedWaitTimeMinutes: Int, txSize: Int) : Long = 0
-
-      override def getExpectedWaitTime(txFee: Long, txSize: Int): Long = 0
-
-    }
-
     implicit val system = ActorSystem()
     val probe = TestProbe()
 
@@ -136,7 +109,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val coin = Random.nextBoolean()
 
     def sendState(): Unit = auditor ! ChangedState(us)
-    def sendPool(): Unit = auditor ! ChangedMempool(fakeMempool)
+    def sendPool(): Unit = auditor ! ChangedMempool(new FakeMempool(txs))
 
     if (coin) {
       sendPool()

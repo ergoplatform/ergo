@@ -8,7 +8,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
 import org.ergoplatform.settings.{Algos, Parameters}
@@ -36,8 +36,7 @@ import scala.util.{Failure, Success, Try}
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: LDBVersionedStore,
-                override val constants: StateConstants,
-                override val parameters: Parameters)
+                override val constants: StateConstants)
   extends ErgoState[UtxoState]
     with TransactionValidation
     with UtxoStateReader
@@ -56,7 +55,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
-          new UtxoState(p, version, store, constants, parameters)
+          new UtxoState(p, version, store, constants)
         }
         rollbackResult
       case None =>
@@ -92,14 +91,21 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
+  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height])
+                            (generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
 
-      // avoid storing versioned information in the
-      if(fb.height >= estimatedTip.getOrElse(Int.MaxValue) - constants.keepVersions){
-        if(store.getKeepVersions < constants.keepVersions) store.setKeepVersions(constants.keepVersions)
+      // avoid storing versioned information in the database when block being processed is behind
+      // blockchain tip by `keepVersions` blocks at least
+      // we store `keepVersions` diffs in the database if chain tip is not known yet
+      if (fb.height >= estimatedTip.getOrElse(0) - constants.keepVersions) {
+        if (store.getKeepVersions < constants.keepVersions) {
+          store.setKeepVersions(constants.keepVersions)
+        }
       } else {
-        if(store.getKeepVersions > 0) store.setKeepVersions(0)
+        if (store.getKeepVersions > 0) {
+          store.setKeepVersions(0)
+        }
       }
 
       persistentProver.synchronized {
@@ -175,12 +181,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
-            new UtxoState(persistentProver, idToVersion(fb.id), store, constants, parameters)
+            new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
         }
         stateTry.recoverWith[UtxoState] { case e =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
+            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ", e)
           persistentProver.rollback(inRoot)
             .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
           Failure(e)
@@ -193,7 +199,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       //todo: update state context with headers (when snapshot downloading is done), so
       //todo: application of the first full block after the snapshot should have correct state context
       //todo: (in particular, "lastHeaders" field of it)
-      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants, parameters))
+      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
 
     case a: Any =>
       log.error(s"Unhandled unknown modifier: $a")
@@ -229,7 +235,7 @@ object UtxoState {
     Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
-  def create(dir: File, constants: StateConstants, parameters: Parameters): UtxoState = {
+  def create(dir: File, constants: StateConstants): UtxoState = {
     val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
@@ -239,7 +245,7 @@ object UtxoState {
       val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
-    new UtxoState(persistentProver, version, store, constants, parameters)
+    new UtxoState(persistentProver, version, store, constants)
   }
 
   /**
@@ -268,7 +274,7 @@ object UtxoState {
       paranoidChecks = true
     ).get
 
-    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants, parameters)
+    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }
 
 }

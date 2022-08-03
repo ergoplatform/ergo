@@ -7,7 +7,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
@@ -28,7 +28,6 @@ import scala.util.{Failure, Success, Try}
 class DigestState protected(override val version: VersionTag,
                             override val rootHash: ADDigest,
                             override val store: LDBVersionedStore,
-                            override val parameters: Parameters,
                             ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
     with ScorexLogging
@@ -65,7 +64,7 @@ class DigestState protected(override val version: VersionTag,
       .map(_ => ())
   }
 
-  def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
+  def validate(mod: BlockSection): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       fb.adProofs match {
         case None =>
@@ -86,7 +85,7 @@ class DigestState protected(override val version: VersionTag,
       Failure(new Exception(s"Modifier not validated: $a"))
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[DigestState] =
+  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[DigestState] =
     (processFullBlock orElse processHeader orElse processOther) (mod)
 
   @SuppressWarnings(Array("OptionGet"))
@@ -97,7 +96,7 @@ class DigestState protected(override val version: VersionTag,
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(versionBytes).get
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
-      new DigestState(version, rootHash, store, parameters, ergoSettings)
+      new DigestState(version, rootHash, store, ergoSettings)
     }
   }
 
@@ -149,7 +148,7 @@ class DigestState protected(override val version: VersionTag,
     val toUpdate = DigestState.metadata(newVersion, newRootHash, newStateContext)
 
     store.update(scorex.core.versionToBytes(newVersion), Seq.empty, toUpdate).map { _ =>
-      new DigestState(newVersion, newRootHash, store, parameters, ergoSettings)
+      new DigestState(newVersion, newRootHash, store, ergoSettings)
     }
   }
 
@@ -170,41 +169,40 @@ object DigestState extends ScorexLogging with ScorexEncoding {
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(scorex.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
-      new DigestState(version, rootHash, store, parameters, constants.settings)
+      new DigestState(version, rootHash, store, constants.settings)
     }
   }
 
   def create(versionOpt: Option[VersionTag],
              rootHashOpt: Option[ADDigest],
              dir: File,
-             constants: StateConstants,
-             parameters: Parameters): DigestState = {
+             constants: StateConstants): DigestState = {
     val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     Try {
-      val context = ErgoStateReader.storageStateContext(store, constants, parameters)
+      val context = ErgoStateReader.storageStateContext(store, constants)
       (versionOpt, rootHashOpt) match {
         case (Some(version), Some(rootHash)) =>
           val state = if (store.lastVersionID.map(w => bytesToVersion(w)).contains(version)) {
-            new DigestState(version, rootHash, store, parameters, constants.settings)
+            new DigestState(version, rootHash, store, constants.settings)
           } else {
             val inVersion = store.lastVersionID.map(w => bytesToVersion(w)).getOrElse(version)
-            new DigestState(inVersion, rootHash, store, parameters, constants.settings)
+            new DigestState(inVersion, rootHash, store, constants.settings)
               .update(version, rootHash, context).get //sync store
           }
           state.ensuring(bytesToVersion(store.lastVersionID.get) == version)
         case (None, None) if store.lastVersionID.isEmpty =>
-          ErgoState.generateGenesisDigestState(dir, constants.settings, parameters)
+          ErgoState.generateGenesisDigestState(dir, constants.settings)
         case _ =>
           val version = store.lastVersionID.get
           val rootHash = store.get(version).get
-          new DigestState(bytesToVersion(version), ADDigest @@ rootHash, store, parameters, constants.settings)
+          new DigestState(bytesToVersion(version), ADDigest @@ rootHash, store, constants.settings)
       }
     } match {
       case Success(state) => state
       case Failure(e) =>
         store.close()
         log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
-        ErgoState.generateGenesisDigestState(dir, constants.settings, parameters)
+        ErgoState.generateGenesisDigestState(dir, constants.settings)
     }
   }
 

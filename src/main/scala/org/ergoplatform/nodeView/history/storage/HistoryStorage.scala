@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage
 
 import com.google.common.cache.CacheBuilder
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
@@ -26,22 +26,22 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
 
   private val headersCache = CacheBuilder.newBuilder()
     .maximumSize(config.history.headersCacheSize)
-    .build[String, ErgoPersistentModifier]
+    .build[String, BlockSection]
 
   private val blockSectionsCache = CacheBuilder.newBuilder()
     .maximumSize(config.history.blockSectionsCacheSize)
-    .build[String, ErgoPersistentModifier]
+    .build[String, BlockSection]
 
   private val indexCache = CacheBuilder.newBuilder()
     .maximumSize(config.history.indexesCacheSize)
     .build[ByteArrayWrapper, Array[Byte]]
 
-  private def cacheModifier(mod: ErgoPersistentModifier): Unit = mod.modifierTypeId match {
+  private def cacheModifier(mod: BlockSection): Unit = mod.modifierTypeId match {
     case Header.modifierTypeId => headersCache.put(mod.id, mod)
     case _ => blockSectionsCache.put(mod.id, mod)
   }
 
-  private def lookupModifier(id: ModifierId): Option[ErgoPersistentModifier] =
+  private def lookupModifier(id: ModifierId): Option[BlockSection] =
     Option(headersCache.getIfPresent(id)) orElse Option(blockSectionsCache.getIfPresent(id))
 
   private def removeModifier(id: ModifierId): Unit = {
@@ -53,7 +53,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
     objectsStore.get(idToBytes(id)).map(_.tail) // removing modifier type byte with .tail
   }
 
-  def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
+  def modifierById(id: ModifierId): Option[BlockSection] =
     lookupModifier(id) orElse
       objectsStore.get(idToBytes(id)).flatMap { bytes =>
         HistoryModifierSerializer.parseBytesTry(bytes) match {
@@ -80,7 +80,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
   def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
 
   def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
-             objectsToInsert: Seq[ErgoPersistentModifier]): Try[Unit] = {
+             objectsToInsert: Seq[BlockSection]): Try[Unit] = {
     objectsStore.insert(
       objectsToInsert.map(m => idToBytes(m.id) -> HistoryModifierSerializer.toBytes(m))
     ).flatMap { _ =>
@@ -94,6 +94,14 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
     }
   }
 
+  /**
+    * Insert single object to database. This version allows for efficient insert
+    * when identifier and bytes of object (i.e. modifier, a block section) are known.
+    *
+    * @param objectIdToInsert - object id to insert
+    * @param objectToInsert - object bytes to insert
+    * @return - Success if insertion was successful, Failure otherwise
+    */
   def insert(objectIdToInsert: Array[Byte],
              objectToInsert: Array[Byte]): Try[Unit] = {
     objectsStore.insert(objectIdToInsert, objectToInsert)

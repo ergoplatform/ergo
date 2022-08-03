@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.NonHeaderBlockSection
 import org.ergoplatform.modifiers.state._
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
@@ -20,7 +20,7 @@ import scala.util.{Failure, Success, Try}
 
 case class ADProofs(headerId: ModifierId,
                     proofBytes: SerializedAdProof,
-                    override val sizeOpt: Option[Int] = None) extends BlockSection {
+                    override val sizeOpt: Option[Int] = None) extends NonHeaderBlockSection {
 
   override def digest: Digest32 = ADProofs.proofDigest(proofBytes)
 
@@ -107,4 +107,5 @@ object ADProofsSerializer extends ScorexSerializer[ADProofs] {
     val proofBytes = SerializedAdProof @@ r.getBytes(size)
     ADProofs(headerId, proofBytes, Some(size + Constants.ModifierIdSize))
   }
+
 }

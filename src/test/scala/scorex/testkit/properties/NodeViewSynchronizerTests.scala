@@ -291,7 +291,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       }
     }
   }
-  
+
   property("NodeViewSynchronizer: GetSnapshotChunk") {
     withFixture { ctx =>
       import ctx._

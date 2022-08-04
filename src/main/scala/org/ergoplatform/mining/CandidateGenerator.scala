@@ -390,16 +390,28 @@ object CandidateGenerator extends ScorexLogging {
     val nextHeight = header.height + 1
 
     val protocolVersion = ergoSettings.chainSettings.protocolVersion
-    val betterVersion = protocolVersion > header.version
+
+    // if protocol version is 2 (node version 4.x, we still can vote for 5.0 soft-fork)
+    val betterVersion = if(ergoSettings.networkType.isMainNet && protocolVersion == 2) {
+      true
+    } else {
+      protocolVersion > header.version
+    }
 
     val votingSettings = ergoSettings.chainSettings.voting
     val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
       .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
     val forkVotingAllowed = votingFinishHeight.forall(fh => nextHeight < fh)
 
+    val nextHeightCondition = if(ergoSettings.networkType.isMainNet) {
+      nextHeight >= 819201 // mainnet voting start height
+    } else {
+      nextHeight >= 4096
+    }
+
     betterVersion &&
      forkVotingAllowed &&
-      (ergoSettings.votingTargets.softFork != 0 && nextHeight >= 4096)
+      (ergoSettings.votingTargets.softFork != 0 && nextHeightCondition)
   }
 
   /**

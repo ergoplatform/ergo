@@ -325,17 +325,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
+    * Variable which is caching height of last header which was extracted from sync info message
+    */
+  private var lastSyncHeaderApplied: Option[Int] = Option.empty
+
+  /**
     * Calculates new continuation header from syncInfo message if any, validates it and sends it
     * to nodeViewHolder as a remote modifier for it to be applied
     * @param syncInfo other's node sync info
     */
-  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2, history: ErgoHistory, peer: ConnectedPeer): Unit =
+  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2,
+                                             history: ErgoHistory,
+                                             peer: ConnectedPeer): Unit = {
     history.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
-      history.applicableTry(continuationHeader) match {
-        case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
-          log.warn(s"Header from syncInfoV2 ${continuationHeader.encodedId} is invalid", e)
-        case _ =>
+      if (deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
+        if (continuationHeader.height > lastSyncHeaderApplied.getOrElse(0)) {
           log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
+          lastSyncHeaderApplied = Some(continuationHeader.height)
           viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
           val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
           modifiersToDownload.foreach {
@@ -345,8 +351,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 requestBlockSection(modifierTypeId, Seq(modifierId), peer)
               }
           }
+        }
       }
     }
+  }
 
   /**
     * Headers should be downloaded from an Older node, it is triggered by received sync message from an older node

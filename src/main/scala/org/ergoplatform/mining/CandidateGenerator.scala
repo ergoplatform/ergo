@@ -19,7 +19,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate}
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
@@ -379,6 +379,42 @@ object CandidateGenerator extends ScorexLogging {
   }
 
   /**
+    * Private method which suggests to vote for soft-fork (or not)
+    *
+    * @param ergoSettings - constant settings
+    * @param currentParams - network parameters after last block mined
+    * @param header - last mined header
+    * @return `true` if the node should vote for soft-fork
+    */
+  private def forkOrdered(ergoSettings: ErgoSettings, currentParams: Parameters, header: Header): Boolean = {
+    val nextHeight = header.height + 1
+
+    val protocolVersion = ergoSettings.chainSettings.protocolVersion
+
+    // if protocol version is 2 (node version 4.x, we still can vote for 5.0 soft-fork)
+    val betterVersion = if(ergoSettings.networkType.isMainNet && protocolVersion == 2) {
+      true
+    } else {
+      protocolVersion > header.version
+    }
+
+    val votingSettings = ergoSettings.chainSettings.voting
+    val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
+      .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
+    val forkVotingAllowed = votingFinishHeight.forall(fh => nextHeight < fh)
+
+    val nextHeightCondition = if(ergoSettings.networkType.isMainNet) {
+      nextHeight >= 819201 // mainnet voting start height, first block of epoch #800
+    } else {
+      nextHeight >= 4096
+    }
+
+    betterVersion &&
+     forkVotingAllowed &&
+      (ergoSettings.votingTargets.softFork != 0 && nextHeightCondition)
+  }
+
+  /**
     * Assemble correct block candidate based on
     *
     * @param minerPk                 - public key of the miner
@@ -431,26 +467,20 @@ object CandidateGenerator extends ScorexLogging {
         .map { header =>
           val newHeight     = header.height + 1
           val currentParams = stateContext.currentParameters
-          val betterVersion = ergoSettings.chainSettings.protocolVersion > header.version
-          val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
-            .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
-          val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
-          val forkOrdered       = ergoSettings.votingTargets.softFork != 0
-          val voteForFork       = betterVersion && forkOrdered && forkVotingAllowed
+          val voteForSoftFork = forkOrdered(ergoSettings, currentParams, header)
 
           if (newHeight % votingSettings.votingLength == 0 && newHeight > 0) {
             val (newParams, activatedUpdate) = currentParams.update(
               newHeight,
-              voteForFork,
+              voteForSoftFork,
               stateContext.votingData.epochVotes,
               proposedUpdate,
               votingSettings
             )
-            val newValidationSettings =
-              stateContext.validationSettings.updated(activatedUpdate)
+            val newValidationSettings = stateContext.validationSettings.updated(activatedUpdate)
             (
               newParams.toExtensionCandidate ++ interlinksExtension ++ newValidationSettings.toExtensionCandidate,
-              newParams.suggestVotes(ergoSettings.votingTargets.targets, voteForFork),
+              newParams.suggestVotes(ergoSettings.votingTargets.targets, voteForSoftFork),
               newParams.blockVersion
             )
           } else {
@@ -459,7 +489,7 @@ object CandidateGenerator extends ScorexLogging {
               currentParams.vote(
                 ergoSettings.votingTargets.targets,
                 stateContext.votingData.epochVotes,
-                voteForFork
+                voteForSoftFork
               ),
               currentParams.blockVersion
             )

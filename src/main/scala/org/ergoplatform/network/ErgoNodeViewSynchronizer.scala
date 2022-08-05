@@ -338,7 +338,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                              history: ErgoHistory,
                                              peer: ConnectedPeer): Unit = {
     history.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
-      if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
+      if (deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
         if (continuationHeader.height > lastSyncHeaderApplied.getOrElse(0)) {
           log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
           lastSyncHeaderApplied = Some(continuationHeader.height)

@@ -80,11 +80,20 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * @param fb - ergo full block
     * @return emission box from this block transactions
     */
-  // todo: search by emission box NFT after EIP-27 activation height, https://github.com/ergoplatform/ergo/issues/1718
   protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
+    def hasEmissionBox(tx: ErgoTransaction): Boolean =
+      if(fb.height > constants.settings.chainSettings.reemission.activationHeight) {
+        // after EIP-27 we search for emission box NFT for efficiency's sake
+        tx.outputs.size == 2 &&
+          !tx.outputs.head.additionalTokens.isEmpty &&
+          java.util.Arrays.equals(tx.outputs.head.additionalTokens(0)._1, constants.settings.chainSettings.reemission.emissionNftIdBytes)
+      } else {
+        tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition
+      }
+
     def fullSearch(fb: ErgoFullBlock): Option[ErgoBox] = {
       fb.transactions
-        .find(_.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition)
+        .find(hasEmissionBox)
         .map(_.outputs.head)
         .filter(_.value > 100000 * EmissionRules.CoinsInOneErgo) // to filter out possible spam
     }
@@ -92,7 +101,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     emissionBoxIdOpt match {
       case Some(id) =>
         fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
-          case Some(tx) if tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition =>
+          case Some(tx) if hasEmissionBox(tx) =>
             tx.outputs.headOption
           case Some(_) =>
             log.info(s"Last possible emission box consumed")

@@ -11,7 +11,7 @@ import scorex.util.ScorexLogging
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scorex.core.utils.MapPimp
+import scorex.core.utils.MapPimpMutable
 
 final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider: TimeProvider) extends ScorexLogging {
 

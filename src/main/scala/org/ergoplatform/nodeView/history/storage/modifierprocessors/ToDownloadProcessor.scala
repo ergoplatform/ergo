@@ -13,7 +13,7 @@ import scala.annotation.tailrec
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
 trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
-  import ToDownloadProcessor._
+  import scorex.core.utils.MapPimp
 
   protected val timeProvider: NetworkTimeProvider
 
@@ -108,16 +108,4 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     }
   }
 
-}
-
-object ToDownloadProcessor {
-  implicit class MapPimp[K, V](underlying: Map[K, V]) {
-    /**
-      * One liner for updating a Map with the possibility to handle case of missing Key
-      * @param k map key
-      * @param f function that is passed Option depending on Key being present or missing, returning new Value
-      * @return new Map with value updated under given key
-      */
-    def adjust(k: K)(f: Option[V] => V): Map[K, V] = underlying.updated(k, f(underlying.get(k)))
-  }
 }

@@ -41,10 +41,10 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   /**
     * Get modifier ids to download to synchronize full blocks
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
-    * @param condition filter only ModifierIds that pass this condition
+    * @param filterFn only ModifierIds which pass filter are included into results
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
-  def nextModifiersToDownload(howManyPerType: Int, condition: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
+  def nextModifiersToDownload(howManyPerType: Int, filterFn: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
     @tailrec
     def continuation(height: Int, acc: Map[ModifierTypeId, Vector[ModifierId]]): Map[ModifierTypeId, Vector[ModifierId]] = {
       // return if at least one of Modifier types reaches howManyPerType limit for modifier ids
@@ -54,7 +54,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         val headersAtThisHeight = headerIdsAtHeight(height).flatMap(id => typedModifierById[Header](id))
 
         if (headersAtThisHeight.nonEmpty) {
-          val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter{ case (mtid, mid) => condition(mtid, mid) }
+          val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter{ case (mtid, mid) => filterFn(mtid, mid) }
           // add new modifiers to download to accumulator
           val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId)) }
           continuation(height + 1, newAcc)
@@ -72,7 +72,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         // download children blocks of last 100 full blocks applied to the best chain
         val minHeight = Math.max(1, fb.header.height - 100)
         continuation(minHeight, Map.empty)
-      case _ =>
+      case None =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
         continuation(pruningProcessor.minimalFullBlockHeight, Map.empty)
     }

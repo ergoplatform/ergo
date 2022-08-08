@@ -2,6 +2,8 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.nodeView.state.SnapshotsInfo
+import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
@@ -38,6 +40,8 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     */
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
+  private var manifestChosen: Option[ManifestId] = None
+
   /**
     * Get modifier ids to download to synchronize full blocks
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
@@ -72,6 +76,12 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         // download children blocks of last 100 full blocks applied to the best chain
         val minHeight = Math.max(1, fb.header.height - 100)
         continuation(minHeight, Map.empty)
+      case None if nodeSettings.utxoBootstrap =>
+        if (manifestChosen.nonEmpty) {
+
+        } else {
+          Map(SnapshotsInfo -> Seq.empty)
+        }
       case None =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
         continuation(pruningProcessor.minimalFullBlockHeight, Map.empty)

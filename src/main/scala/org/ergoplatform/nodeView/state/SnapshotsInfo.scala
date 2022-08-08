@@ -6,6 +6,7 @@ import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{ErgoAlgos, ErgoSettings}
 import org.ergoplatform.wallet.Constants
+import scorex.core.ModifierTypeId
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBFactory, LDBKVStore}
@@ -21,6 +22,8 @@ case class SnapshotsInfo(availableManifests: Map[Height, ManifestId]) {
 }
 
 object SnapshotsInfo {
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (199: Byte)
+
   val empty = SnapshotsInfo(Map.empty)
 }
 

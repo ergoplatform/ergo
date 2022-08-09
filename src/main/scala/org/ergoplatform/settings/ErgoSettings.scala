@@ -13,7 +13,7 @@ import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.ProveDlog
 
-import java.net.{InetAddress, InetSocketAddress, URL}
+import java.net.{InetAddress, URL}
 import scala.util.Try
 
 
@@ -179,7 +179,7 @@ object ErgoSettings extends ScorexLogging
     }
   }
 
-  def invalidRestApiUrl(url: URL): Boolean = {
+  protected[settings] def invalidRestApiUrl(url: URL): Boolean = {
     val uri = url.toURI
     val inetAddress = InetAddress.getByName(url.getHost)
     Option(uri.getQuery).exists(_.nonEmpty) ||
@@ -204,7 +204,7 @@ object ErgoSettings extends ScorexLogging
                 !settings.chainSettings.reemission.checkReemissionRules) {
       failWithError(s"Mining is enabled, but chain.reemission.checkReemissionRules = false , set it to true")
     } else if (settings.scorexSettings.restApi.publicUrl.exists(invalidRestApiUrl)) {
-      failWithError(s"scorexSettings.restApi.publicUrl should not contain query, path or fragment and should not " +
+      failWithError(s"scorex.restApi.publicUrl should not contain query, path or fragment and should not " +
         s"be local or loopback address : ${settings.scorexSettings.restApi.publicUrl.get}")
     } else {
       settings

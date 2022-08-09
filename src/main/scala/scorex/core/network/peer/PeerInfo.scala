@@ -64,7 +64,13 @@ class PeerInfoSerializer(peerSpecSerializer: PeerSpecSerializer) extends ScorexS
 
 object PeerInfoSerializer {
   def apply(ergoSettings: ErgoSettings): PeerInfoSerializer = {
-    val features: Seq[PeerFeature] = Seq(ModePeerFeature(ergoSettings.nodeSettings))
+    val features = ergoSettings.scorexSettings.restApi.publicUrl match {
+      case Some(publicUrl) =>
+        val restApiUrlPeerFeature = RestApiUrlPeerFeature(publicUrl)
+        Seq(ModePeerFeature(ergoSettings.nodeSettings), restApiUrlPeerFeature)
+      case None =>
+        Seq(ModePeerFeature(ergoSettings.nodeSettings))
+    }
     val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
     new PeerInfoSerializer(new PeerSpecSerializer(featureSerializers))
   }

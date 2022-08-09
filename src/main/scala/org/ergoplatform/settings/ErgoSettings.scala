@@ -2,7 +2,6 @@ package org.ergoplatform.settings
 
 import java.io.{File, FileOutputStream}
 import java.nio.channels.Channels
-
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
@@ -14,6 +13,7 @@ import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.ProveDlog
 
+import java.net.URL
 import scala.util.Try
 
 
@@ -179,6 +179,13 @@ object ErgoSettings extends ScorexLogging
     }
   }
 
+  private def invalidRestApiUrl(url: URL): Boolean = {
+    val uri = url.toURI
+    Option(uri.getQuery).exists(_.nonEmpty) ||
+      Option(uri.getPath).exists(_.nonEmpty) ||
+      Option(uri.getFragment).exists(_.nonEmpty)
+  }
+
   private def consistentSettings(settings: ErgoSettings,
                                  desiredNetworkTypeOpt: Option[NetworkType]): ErgoSettings = {
     if (settings.nodeSettings.keepVersions < 0) {
@@ -192,6 +199,9 @@ object ErgoSettings extends ScorexLogging
                 settings.nodeSettings.mining &&
                 !settings.chainSettings.reemission.checkReemissionRules) {
       failWithError(s"Mining is enabled, but chain.reemission.checkReemissionRules = false , set it to true")
+    } else if (settings.scorexSettings.restApi.publicUrl.exists(invalidRestApiUrl)) {
+      failWithError(s"scorexSettings.restApi.publicUrl should not contain query, path or fragment : " +
+        s"${settings.scorexSettings.restApi.publicUrl.get}")
     } else {
       settings
     }

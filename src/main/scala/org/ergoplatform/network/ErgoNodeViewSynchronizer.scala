@@ -492,7 +492,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit =
     getPeersOpt
       .foreach { peers =>
-        val modifiersByBucket = ElementPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
+        val peersCount = peers.size
+        val maxElementsToFetch = Math.min(maxModifiers, peersCount * maxModifiersPerBucket)
+        val fetched = if (maxElementsToFetch <= 0) {
+          Map.empty
+        } else {
+          fetchMax(maxElementsToFetch)
+        }
+        val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched)
         // collect and log useful downloading progress information, don't worry it does not run frequently
         modifiersByBucket.headOption.foreach { _ =>
           modifiersByBucket

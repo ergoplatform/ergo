@@ -40,7 +40,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     */
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
-  private var manifestChosen: Option[ManifestId] = None
+  private val manifestChosen: Option[ManifestId] = None
 
   /**
     * Get modifier ids to download to synchronize full blocks
@@ -77,10 +77,10 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         val minHeight = Math.max(1, fb.header.height - 100)
         continuation(minHeight, Map.empty)
       case None if nodeSettings.utxoBootstrap =>
-        if (manifestChosen.nonEmpty) {
-
+        if (manifestChosen.nonEmpty){
+          ???
         } else {
-          Map(SnapshotsInfo -> Seq.empty)
+          Map(SnapshotsInfo.modifierTypeId -> Seq.empty)
         }
       case None =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from

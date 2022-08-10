@@ -22,7 +22,7 @@ case class SnapshotsInfo(availableManifests: Map[Height, ManifestId]) {
 }
 
 object SnapshotsInfo {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (199: Byte)
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (127: Byte)
 
   val empty = SnapshotsInfo(Map.empty)
 }

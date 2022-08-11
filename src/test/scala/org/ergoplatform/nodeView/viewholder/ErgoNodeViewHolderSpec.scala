@@ -166,6 +166,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     if (verifyTransactions) {
       applyBlock(genesis) shouldBe 'success
       subscribeEvents(classOf[FailedTransaction])
+      subscribeEvents(classOf[SemanticallyFailedModification])
       val block = validFullBlock(Some(genesis), wusAfterGenesis)
       val wusAfterBlock = wusAfterGenesis.applyModifier(block)(mod => nodeViewHolderRef ! mod).get
 
@@ -180,6 +181,11 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       val brokenTransaction = brokenBlock.transactions.head
 
       applyBlock(brokenBlock) shouldBe 'success
+
+      ctx.testProbe.fishForMessage(2.seconds) {
+        case SemanticallyFailedModification(b, _) if b.id == brokenBlock.id =>
+          true
+      }
 
       ctx.testProbe.fishForMessage(2.seconds) {
         case FailedTransaction(txId, _, _) if txId == brokenTransaction.id =>

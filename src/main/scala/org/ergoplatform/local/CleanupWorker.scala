@@ -46,7 +46,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     val toEliminate = validatePool(validator, mempool)
     if (toEliminate.nonEmpty) {
       log.info(s"${toEliminate.size} transactions from mempool were invalidated")
-      nodeViewHolderRef ! EliminateTransactions(toEliminate)
+      nodeViewHolderRef ! EliminateTransactions(toEliminate, "CleanupWorker")
     }
   }
 

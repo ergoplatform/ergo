@@ -14,11 +14,13 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome.Accepted
+import org.scalatest.concurrent.Eventually
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.testkit.utils.NoShrink
 import scorex.util.{ModifierId, bytesToId}
+import scala.concurrent.duration._
 
-class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers with NodeViewTestOps with NoShrink {
+class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers with NodeViewTestOps with NoShrink with Eventually {
 
   private val t0 = TestCase("check chain is healthy") { fixture =>
     val (us, bh) = createUtxoState(parameters)
@@ -163,7 +165,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
     // TODO looks like another bug is still present here, see https://github.com/ergoplatform/ergo/issues/309
     if (verifyTransactions) {
       applyBlock(genesis) shouldBe 'success
-
+      subscribeEvents(classOf[FailedTransaction])
       val block = validFullBlock(Some(genesis), wusAfterGenesis)
       val wusAfterBlock = wusAfterGenesis.applyModifier(block)(mod => nodeViewHolderRef ! mod).get
 
@@ -175,7 +177,14 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       getBestHeaderOpt shouldBe Some(block.header)
 
       val brokenBlock = generateInvalidFullBlock(Some(block), wusAfterBlock)
+      val brokenTransaction = brokenBlock.transactions.head
+
       applyBlock(brokenBlock) shouldBe 'success
+
+      ctx.testProbe.fishForMessage(2.seconds) {
+        case FailedTransaction(txId, _, _) if txId == brokenTransaction.id =>
+          true
+      }
 
       val brokenBlock2 = generateInvalidFullBlock(Some(block), wusAfterBlock)
       brokenBlock2.header should not be brokenBlock.header

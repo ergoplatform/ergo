@@ -253,12 +253,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             case Failure(ex: MalformedModifierError) if ex.modifierTypeId == Transaction.ModifierTypeId =>
               logger.warn(s"Invalidating transaction ${ex.modifierId} in mempool due to ${ex.getMessage}", ex)
               reportInvalidModifier(ex).map { updateInformation =>
-                val updatedPool =
-                  memoryPool().getAll(List(ex.modifierId))
-                    .foldLeft(memoryPool()) {
-                      case (acc, tx) => acc.invalidate(tx)
-                    }
-                updateNodeView(updatedMempool = Some(updatedPool))
+                self ! EliminateTransactions(List(ex.modifierId), ex.getMessage)
                 updateInformation
               }
             case Failure(ex) =>
@@ -594,12 +589,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       txs.foreach(txModify)
     case LocallyGeneratedTransaction(tx) =>
       sender() ! txModify(tx)
-    case EliminateTransactions(ids) =>
+    case EliminateTransactions(ids, reason) =>
       val updatedPool = memoryPool().filter(tx => !ids.contains(tx.id))
       updateNodeView(updatedMempool = Some(updatedPool))
       ids.foreach { id =>
-        val e = new Exception("Became invalid")
-        context.system.eventStream.publish(FailedTransaction(id, e, immediateFailure = false))
+        context.system.eventStream.publish(FailedTransaction(id, new Exception(reason), immediateFailure = false))
       }
   }
 
@@ -670,7 +664,7 @@ object ErgoNodeViewHolder {
 
     case class LocallyGeneratedModifier(pmod: BlockSection)
 
-    case class EliminateTransactions(ids: Seq[scorex.util.ModifierId])
+    case class EliminateTransactions(ids: Seq[scorex.util.ModifierId], reason: String)
 
     case object IsChainHealthy
     sealed trait HealthCheckResult

@@ -13,7 +13,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationState}
+import scorex.core.validation.{InvalidModifierDetails, ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
@@ -145,11 +145,11 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val parsedValidationSettingsTry = ErgoValidationSettings.parseExtension(extension)
 
     validationState
-      .validateNoFailure(exParseParameters, parsedParamsTry)
-      .validateNoFailure(exParseValidationSettings, parsedValidationSettingsTry)
-      .validateTry(parsedParamsTry, e => ModifierValidator.fatal("Failed to parse parameters", e)) {
+      .validateNoFailure(exParseParameters, parsedParamsTry, extension.id, extension.modifierTypeId)
+      .validateNoFailure(exParseValidationSettings, parsedValidationSettingsTry, extension.id, extension.modifierTypeId)
+      .validateTry(parsedParamsTry, e => ModifierValidator.fatal("Failed to parse parameters", extension.id, extension.modifierTypeId, e)) {
         case (vs, parsedParams) =>
-          vs.validateTry(parsedValidationSettingsTry, e => ModifierValidator.fatal("Failed to parse validation settings", e)) {
+          vs.validateTry(parsedValidationSettingsTry, e => ModifierValidator.fatal("Failed to parse validation settings", extension.id, extension.modifierTypeId, e)) {
             case (currentValidationState, parsedSettings) =>
 
               /*
@@ -171,9 +171,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
               }
 
               currentValidationState
-                .validate(exBlockVersion, calculatedParams.blockVersion == header.version, s"${calculatedParams.blockVersion} == ${header.version}")
-                .validateNoFailure(exMatchParameters, Parameters.matchParameters(parsedParams, calculatedParams))
-                .validate(exMatchValidationSettings, parsedSettings == calculatedSettings, s"$parsedSettings vs $calculatedSettings")
+                .validate(exBlockVersion, calculatedParams.blockVersion == header.version, InvalidModifierDetails(s"${calculatedParams.blockVersion} == ${header.version}", extension.id, extension.modifierTypeId))
+                .validateNoFailure(exMatchParameters, Parameters.matchParameters(parsedParams, calculatedParams), extension.id, extension.modifierTypeId)
+                .validate(exMatchValidationSettings, parsedSettings == calculatedSettings, InvalidModifierDetails(s"$parsedSettings vs $calculatedSettings", extension.id, extension.modifierTypeId))
           }.result
       }.result
       .toTry
@@ -191,7 +191,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       val forkVote = votes.contains(Parameters.SoftFork)
 
       val state = ModifierValidator(validationSettings)
-        .validateNoThrow(exCheckForkVote, if (forkVote) checkForkVote(height))
+        .validateNoThrow(exCheckForkVote, if (forkVote) checkForkVote(height), header.id, header.modifierTypeId)
 
       extensionOpt match {
         case Some(extension) if epochStarts =>
@@ -258,10 +258,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       .validateExtension(fb.extension, fb.header, lastExtensionOpt, lastHeaderOpt)
       .validate(bsBlockTransactionsSize,
         fb.blockTransactions.size <= currentParameters.maxBlockSize,
-        s"${fb.id} => ${fb.blockTransactions.size} == ${currentParameters.maxBlockSize}")
+        InvalidModifierDetails(s"${fb.id} => ${fb.blockTransactions.size} == ${currentParameters.maxBlockSize}", fb.id, fb.modifierTypeId))
       .validate(exSize,
         fb.extension.size <= Constants.MaxExtensionSize,
-        s"${fb.id} => ${fb.extension.size} == ${Constants.MaxExtensionSize}")
+        InvalidModifierDetails(s"${fb.id} => ${fb.extension.size} == ${Constants.MaxExtensionSize}", fb.extension.id, fb.extension.modifierTypeId)) // id/type of Block here?
       .result
       .toTry
       .flatMap(_ => checkHeaderHeight(fb.header))
@@ -287,12 +287,12 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
     ModifierValidator(validationSettings)
       .payload(this)
-      .validate(hdrVotesNumber, votesCount <= Parameters.ParamVotesCount, s"votesCount=$votesCount")
+      .validate(hdrVotesNumber, votesCount <= Parameters.ParamVotesCount, InvalidModifierDetails(s"votesCount=$votesCount", header.id, header.modifierTypeId))
       .validateSeq(votes) { case (validationState, v) =>
         validationState
-          .validate(hdrVotesDuplicates, votes.count(_ == v) == 1, s"Double vote in $vs")
-          .validate(hdrVotesContradictory, !reverseVotes.contains(v), s"Contradictory votes in $vs")
-          .validate(hdrVotesUnknown, !(epochStarts && !Parameters.parametersDescs.contains(v)), s"Incorrect vote proposed in $vs")
+          .validate(hdrVotesDuplicates, votes.count(_ == v) == 1, InvalidModifierDetails(s"Double vote in $vs", header.id, header.modifierTypeId))
+          .validate(hdrVotesContradictory, !reverseVotes.contains(v), InvalidModifierDetails(s"Contradictory votes in $vs", header.id, header.modifierTypeId))
+          .validate(hdrVotesUnknown, !(epochStarts && !Parameters.parametersDescs.contains(v)), InvalidModifierDetails(s"Incorrect vote proposed in $vs", header.id, header.modifierTypeId))
       }
   }
 

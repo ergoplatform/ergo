@@ -77,7 +77,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
       val resultTry =
-        ErgoState.stateChanges(transactions).map { stateChanges =>
+        ErgoState.stateChanges(transactions).flatMap { stateChanges =>
           val mods = stateChanges.operations
           Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
         }

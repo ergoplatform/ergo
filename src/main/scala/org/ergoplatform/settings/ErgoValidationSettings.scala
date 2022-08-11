@@ -4,7 +4,7 @@ import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.validation.SigmaValidationSettings
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
+import scorex.core.validation.{InvalidModifierDetails, ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.util.serialization.{Reader, Writer}
 
 import scala.util.Try
@@ -29,8 +29,8 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
 
   override val isFailFast: Boolean = true
 
-  override def getError(id: Short, details: String): ValidationResult.Invalid = {
-    rules.get(id).map(_.error(details)).getOrElse(ModifierValidator.fatal("Unknown message"))
+  override def getError(id: Short, invalidMod: InvalidModifierDetails): ValidationResult.Invalid = {
+    rules.get(id).map(_.invalidMod(invalidMod)).getOrElse(ModifierValidator.fatal(invalidMod.error, invalidMod.modifierId, invalidMod.modifierTypeId))
   }
 
   override def isActive(id: Short): Boolean = {

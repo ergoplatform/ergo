@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform._
@@ -17,7 +16,7 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.validation.ValidationResult.Valid
-import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.core.validation.{MalformedModifierError, ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -136,10 +135,10 @@ object ErgoState extends ScorexLogging {
           collectBoxesById(tx.dataInputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
         lazy val boxes: Try[(IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
         costResult = tx.validateStateless()
-          .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
-          .validateNoFailure(txDataBoxes, dataBoxesTry)
+          .validateNoFailure(txBoxesToSpend, boxesToSpendTry, tx.id, tx.modifierTypeId)
+          .validateNoFailure(txDataBoxes, dataBoxesTry, tx.id, tx.modifierTypeId)
           .payload[Long](validCostResult.value)
-          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
+          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", tx.id, tx.modifierTypeId, e)) { case (_, (dataBoxes, toSpend)) =>
             tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value)(verifier).result
           }
       }
@@ -165,7 +164,7 @@ object ErgoState extends ScorexLogging {
         toInsert.remove(wrappedBoxId) match {
           case None =>
             if (toRemove.put(wrappedBoxId, Remove(i.boxId)).nonEmpty) {
-              throw new IllegalArgumentException(s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId")
+              throw new MalformedModifierError(s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId", tx.id, tx.modifierTypeId)
             }
           case _ => // old value removed, do nothing
         }

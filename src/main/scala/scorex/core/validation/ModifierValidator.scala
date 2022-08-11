@@ -91,13 +91,13 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
 
   /** Validate the condition is `true` or else return the `error` given
     */
-  def validate(id: Short, condition: => Boolean, details: => InvalidModifierDetails): ValidationState[T] = {
-    pass(if (!settings.isActive(id) || condition) result else settings.getError(id, details))
+  def validate(id: Short, condition: => Boolean, invalidModifier: => InvalidModifier): ValidationState[T] = {
+    pass(if (!settings.isActive(id) || condition) result else settings.getError(id, invalidModifier))
   }
 
   /** Reverse condition: Validate the condition is `false` or else return the `error` given */
-  def validateNot(id: Short, condition: => Boolean, details: => InvalidModifierDetails): ValidationState[T] = {
-    validate(id, !condition, details)
+  def validateNot(id: Short, condition: => Boolean, invalidModifier: => InvalidModifier): ValidationState[T] = {
+    validate(id, !condition, invalidModifier)
   }
 
   /** Validate the first argument equals the second. This should not be used with `ModifierId` of type `Array[Byte]`.
@@ -107,9 +107,9 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
     pass((given, expected) match {
       case _ if !settings.isActive(id) => result
       case (a: Array[_], b: Array[_]) if a sameElements[Any] b => result
-      case (_: Array[_], _) => settings.getError(id, InvalidModifierDetails(s"Given: $given, expected: $expected. Use validateEqualIds when comparing Arrays", modifierId, modifierTypeId))
+      case (_: Array[_], _) => settings.getError(id, InvalidModifier(s"Given: $given, expected: $expected. Use validateEqualIds when comparing Arrays", modifierId, modifierTypeId))
       case _ if given == expected => result
-      case _ => settings.getError(id, InvalidModifierDetails(s"Given: $given, expected $expected", modifierId, modifierTypeId))
+      case _ => settings.getError(id, InvalidModifier(s"Given: $given, expected $expected", modifierId, modifierTypeId))
     })
   }
 
@@ -118,13 +118,13 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
   def validateEqualIds(id: Short, given: => ModifierId, expected: => ModifierId, modifierTypeId: ModifierTypeId): ValidationState[T] = {
     pass {
       if (!settings.isActive(id) || given == expected) result
-      else settings.getError(id, InvalidModifierDetails(s"Given: ${e.encodeId(given)}, expected ${e.encodeId(expected)}", given, modifierTypeId))
+      else settings.getError(id, InvalidModifier(s"Given: ${e.encodeId(given)}, expected ${e.encodeId(expected)}", given, modifierTypeId))
     }
   }
 
   /** Wrap semantic validity to the validation state: if semantic validity was not Valid, then return the `error` given
     */
-  def validateSemantics(id: Short, validity: => ModifierSemanticValidity, details: => InvalidModifierDetails): ValidationState[T] = {
+  def validateSemantics(id: Short, validity: => ModifierSemanticValidity, details: => InvalidModifier): ValidationState[T] = {
     validateNot(id, validity == ModifierSemanticValidity.Invalid, details)
   }
 
@@ -174,7 +174,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
   def validateTryFlatten(id: Short, operation: T => Try[T], condition: T => Boolean, modifierId: ModifierId, modifierTypeId: ModifierTypeId): ValidationState[T] = {
     pass(result.toTry.flatMap(r => operation(r)) match {
       case Failure(ex) => settings.getError(id, ex, modifierId, modifierTypeId)
-      case Success(v) if settings.isActive(id) && !condition(v) => settings.getError(id, InvalidModifierDetails(modifierId, modifierId, modifierTypeId))
+      case Success(v) if settings.isActive(id) && !condition(v) => settings.getError(id, InvalidModifier(modifierId, modifierId, modifierTypeId))
       case Success(v) => result(v)
     })
   }
@@ -197,7 +197,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
     */
   def validateOrSkipFlatten[A](id: Short, option: => Option[A], condition: A => Boolean, modifierId: ModifierId, modifierTypeId: ModifierTypeId): ValidationState[T] = {
     pass(option match {
-      case Some(v) if settings.isActive(id) && !condition(v) => settings.getError(id, InvalidModifierDetails(modifierId, modifierId, modifierTypeId))
+      case Some(v) if settings.isActive(id) && !condition(v) => settings.getError(id, InvalidModifier(modifierId, modifierId, modifierTypeId))
       case _ => result
     })
   }

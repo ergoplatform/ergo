@@ -21,7 +21,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{InvalidModifierDetails, ModifierValidator, ValidationResult, ValidationState}
+import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -85,14 +85,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def validateStateless(): ValidationState[Unit] = {
     ModifierValidator(ErgoValidationSettings.initial)
-      .validate(txNoInputs, inputs.nonEmpty, InvalidModifierDetails(s"Tx $id has no inputs", id, modifierTypeId))
-      .validate(txNoOutputs, outputCandidates.nonEmpty, InvalidModifierDetails(s"Tx $id has no outputs", id, modifierTypeId))
-      .validate(txManyInputs, inputs.size <= Short.MaxValue, InvalidModifierDetails(s"$id: ${inputs.size}", id, modifierTypeId))
-      .validate(txManyDataInputs, dataInputs.size <= Short.MaxValue, InvalidModifierDetails(s"$id: ${dataInputs.size}", id, modifierTypeId))
-      .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, InvalidModifierDetails(s"$id: ${outputCandidates.size}", id, modifierTypeId))
-      .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), InvalidModifierDetails(s"$id: ${outputCandidates.map(_.value)}", id, modifierTypeId))
+      .validate(txNoInputs, inputs.nonEmpty, InvalidModifier(s"Tx $id has no inputs", id, modifierTypeId))
+      .validate(txNoOutputs, outputCandidates.nonEmpty, InvalidModifier(s"Tx $id has no outputs", id, modifierTypeId))
+      .validate(txManyInputs, inputs.size <= Short.MaxValue, InvalidModifier(s"$id: ${inputs.size}", id, modifierTypeId))
+      .validate(txManyDataInputs, dataInputs.size <= Short.MaxValue, InvalidModifier(s"$id: ${dataInputs.size}", id, modifierTypeId))
+      .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, InvalidModifier(s"$id: ${outputCandidates.size}", id, modifierTypeId))
+      .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), InvalidModifier(s"$id: ${outputCandidates.map(_.value)}", id, modifierTypeId))
       .validateNoFailure(txOutputSum, outputsSumTry, id, modifierTypeId)
-      .validate(txInputsUnique, inputs.distinct.size == inputs.size, InvalidModifierDetails(s"$id: ${inputs.distinct.size} == ${inputs.size}", id, modifierTypeId))
+      .validate(txInputsUnique, inputs.distinct.size == inputs.size, InvalidModifier(s"$id: ${inputs.distinct.size} == ${inputs.size}", id, modifierTypeId))
   }
 
   /**
@@ -149,9 +149,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     validationBefore
       // Check whether input box script interpreter raised exception
-      .validate(txScriptValidation, costTry.isSuccess && isCostValid, InvalidModifierDetails(s"$id: #$inputIndex => $costTry", id, modifierTypeId))
+      .validate(txScriptValidation, costTry.isSuccess && isCostValid, InvalidModifier(s"$id: #$inputIndex => $costTry", id, modifierTypeId))
       // Check that cost of the transaction after checking the input becomes too big
-      .validate(bsBlockTransactionsCost, currCost <= maxCost, InvalidModifierDetails(s"$id: cost exceeds limit after input #$inputIndex", id, modifierTypeId))
+      .validate(bsBlockTransactionsCost, currCost <= maxCost, InvalidModifier(s"$id: cost exceeds limit after input #$inputIndex", id, modifierTypeId))
       .map(c => addExact(c, scriptCost))
   }
 
@@ -162,11 +162,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val blockVersion = stateContext.blockVersion
 
     validationBefore
-      .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), InvalidModifierDetails(s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}", id, modifierTypeId))
-      .validate(txFuture, out.creationHeight <= stateContext.currentHeight, InvalidModifierDetails(s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out", id, modifierTypeId))
-      .validate(txNegHeight, (blockVersion == 1) || out.creationHeight >= 0, InvalidModifierDetails(s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out", id, modifierTypeId))
-      .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, InvalidModifierDetails(s"$id: output $out", id, modifierTypeId))
-      .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, InvalidModifierDetails(s"$id: output $out", id, modifierTypeId))
+      .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), InvalidModifier(s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}", id, modifierTypeId))
+      .validate(txFuture, out.creationHeight <= stateContext.currentHeight, InvalidModifier(s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out", id, modifierTypeId))
+      .validate(txNegHeight, (blockVersion == 1) || out.creationHeight >= 0, InvalidModifier(s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out", id, modifierTypeId))
+      .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, InvalidModifier(s"$id: output $out", id, modifierTypeId))
+      .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, InvalidModifier(s"$id: output $out", id, modifierTypeId))
   }
 
   private def verifyAssets(validationBefore: ValidationState[Long],
@@ -189,7 +189,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
         validationBefore
           // Check that transaction is not too costly considering all the assets
-          .validate(bsBlockTransactionsCost, maxCost >= newCost, InvalidModifierDetails(s"$id: assets cost", id, modifierTypeId))
+          .validate(bsBlockTransactionsCost, maxCost >= newCost, InvalidModifier(s"$id: assets cost", id, modifierTypeId))
           .validateSeq(outAssets) {
             case (validationState, (outAssetId, outAmount)) =>
               val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
@@ -198,7 +198,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
               // with a possible exception for a new asset created by the transaction
               validationState.validate(txAssetsPreservation,
                 inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
-                InvalidModifierDetails(s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId", id, modifierTypeId))
+                InvalidModifier(s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId", id, modifierTypeId))
           }
           .payload(newCost)
       case Failure(e) =>
@@ -375,25 +375,25 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val startCost = addExact(initialCost, accumulatedCost)
     ModifierValidator(stateContext.validationSettings)
       // Check that the initial transaction cost is not too exceeding block limit
-      .validate(bsBlockTransactionsCost, maxCost >= startCost, InvalidModifierDetails(s"$id: initial cost", id, modifierTypeId))
+      .validate(bsBlockTransactionsCost, maxCost >= startCost, InvalidModifier(s"$id: initial cost", id, modifierTypeId))
       // Starting validation
       .payload(startCost)
       // Perform cheap checks first
       .validateNoFailure(txAssetsInOneBox, outAssetsTry, id, modifierTypeId)
       .validate(txPositiveAssets,
         outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)),
-        InvalidModifierDetails(s"$id: ${outputCandidates.map(_.additionalTokens)}", id, modifierTypeId))
+        InvalidModifier(s"$id: ${outputCandidates.map(_.additionalTokens)}", id, modifierTypeId))
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) => verifyOutput(validationState, out, stateContext) }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
       // Normally, this check should always pass, if the client is implemented properly
       // so it is not part of the protocol really.
-      .validate(txBoxesToSpend, boxesToSpend.size == inputs.size, InvalidModifierDetails(s"$id: ${boxesToSpend.size} == ${inputs.size}", id, modifierTypeId))
-      .validate(txDataBoxes, dataBoxes.size == dataInputs.size, InvalidModifierDetails(s"$id: ${dataBoxes.size} == ${dataInputs.size}", id, modifierTypeId))
+      .validate(txBoxesToSpend, boxesToSpend.size == inputs.size, InvalidModifier(s"$id: ${boxesToSpend.size} == ${inputs.size}", id, modifierTypeId))
+      .validate(txDataBoxes, dataBoxes.size == dataInputs.size, InvalidModifier(s"$id: ${dataBoxes.size} == ${dataInputs.size}", id, modifierTypeId))
       // Check that there are no overflow in input and output values
-      .validate(txInputsSum, inputSumTry.isSuccess, InvalidModifierDetails(s"$id as invalid Inputs Sum", id, modifierTypeId))
+      .validate(txInputsSum, inputSumTry.isSuccess, InvalidModifier(s"$id as invalid Inputs Sum", id, modifierTypeId))
       // Check that transaction is not creating money out of thin air.
-      .validate(txErgPreservation, inputSumTry == outputsSumTry, InvalidModifierDetails(s"$id: $inputSumTry == $outputsSumTry", id, modifierTypeId))
+      .validate(txErgPreservation, inputSumTry == outputsSumTry, InvalidModifier(s"$id: $inputSumTry == $outputsSumTry", id, modifierTypeId))
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", id, modifierTypeId, e)) { case (validation, (outAssets, outAssetsNum)) =>
         verifyAssets(validation, outAssets, outAssetsNum, boxesToSpend, stateContext)
       }
@@ -403,7 +403,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
        }
       .validate(txReemission, !stateContext.ergoSettings.chainSettings.reemission.checkReemissionRules ||
-                                verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifierDetails(id, id, modifierTypeId))
+                                verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifier(id, id, modifierTypeId))
   }
 
   /**

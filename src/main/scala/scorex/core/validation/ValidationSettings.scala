@@ -12,9 +12,9 @@ abstract class ValidationSettings {
   val isFailFast: Boolean
 
   def getError(id: Short, e: Throwable, modifierId: ModifierId, modifierTypeId: ModifierTypeId): Invalid =
-    getError(id, InvalidModifierDetails(e.getMessage, modifierId, modifierTypeId))
+    getError(id, InvalidModifier(e.getMessage, modifierId, modifierTypeId))
 
-  def getError(id: Short, invalidMod: InvalidModifierDetails): ValidationResult.Invalid
+  def getError(id: Short, invalidMod: InvalidModifier): ValidationResult.Invalid
 
   def isActive(id: Short): Boolean
 }

@@ -741,9 +741,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                    s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time, status tracker: $syncTracker")
 
           penalizeNonDeliveringPeer(peer)
-          // For now, we drop connection to the peer, as we do not ban it, connection will be likely established
-          // again after some time (but not soon if connections limit reached)
-          networkControllerRef ! DisconnectFrom(peer)
 
           val checksDone = deliveryTracker.requestsMade(modifierTypeId, modifierId) + 1
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks

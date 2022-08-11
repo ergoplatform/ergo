@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
 import cats.Traverse
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
@@ -15,14 +14,18 @@ import org.ergoplatform.settings.{Algos, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
+import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.ModifierValidator
+import scorex.core.validation.{MalformedModifierError, ModifierValidator}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.util.ModifierId
 
+import scala.collection.breakOut
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -64,6 +67,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
+                                       headerId: ModifierId,
                                        expectedDigest: ADDigest,
                                        currentStateContext: ErgoStateContext): Try[Unit] = {
     import cats.implicits._
@@ -74,16 +78,23 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
+    def performOperation(modifierIdOperation: (ModifierId, Operation)) =
+      persistentProver.performOneOperation(modifierIdOperation._2).recoverWith {
+        case NonFatal(ex) =>
+          Failure(new MalformedModifierError(ex.getMessage, modifierIdOperation._1, Transaction.ModifierTypeId))
+      }
+
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
       val resultTry =
         ErgoState.stateChanges(transactions).flatMap { stateChanges =>
           val mods = stateChanges.operations
-          Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+          val tries: List[Try[Option[ADValue]]] = mods.map(performOperation)(breakOut)
+          Traverse[List].sequence(tries)
         }
       ModifierValidator(stateContext.validationSettings)
-        .validateNoFailure(fbOperationFailed, resultTry)
-        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
+        .validateNoFailure(fbOperationFailed, resultTry, Transaction.ModifierTypeId)
+        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry
     } else {
@@ -116,7 +127,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.id, fb.header.stateRoot, newStateContext)
 
           txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
@@ -158,7 +169,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               ErgoState.stateChanges(fb.blockTransactions.txs) match {
                 case Success(stateChanges) =>
                  val mods = stateChanges.operations
-                  mods.foreach(persistentProver.performOneOperation)
+                  mods.foreach( modIdOp => persistentProver.performOneOperation(modIdOp._2))
 
                   // meta is the same as it is block-specific
                   proofBytes = persistentProver.generateProofAndUpdateStorage(meta)

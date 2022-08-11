@@ -157,7 +157,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
         "Possible reason - state update is in process."))
     } else {
       ErgoState.stateChanges(txs).flatMap { stateChanges =>
-        persistentProver.avlProver.generateProofForOperations(stateChanges.operations)
+        persistentProver.avlProver.generateProofForOperations(stateChanges.operations.map(_._2))
       }
     }
   }

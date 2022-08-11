@@ -135,6 +135,26 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
     pass(if (!settings.isActive(id)) result else condition.fold(e => settings.getError(id, e, modifierId, modifierTypeId), _ => result))
   }
 
+  /** Validate the `condition` is `Success`. Otherwise the `error` callback will be provided with detail
+    * on a failure exception of type ModifierError which contains modifierId and modifierType information
+    */
+  def validateNoFailure(id: Short, condition: => Try[_], modifierTypeId: ModifierTypeId): ValidationState[T] = {
+    pass {
+      if (!settings.isActive(id)) {
+        result
+      } else {
+        condition match {
+          case Failure(ex: ModifierError) =>
+            settings.getError(id, ex, ex.modifierId, ex.modifierTypeId)
+          case Success(_) =>
+            result
+          case Failure(unexpectedEx) =>
+            settings.getError(id, unexpectedEx, ModifierId @@ "unknown", modifierTypeId)
+        }
+      }
+    }
+  }
+
   /** Validate the `block` doesn't throw an Exception. Otherwise the `error` callback will be provided with detail
     * on the exception
     */

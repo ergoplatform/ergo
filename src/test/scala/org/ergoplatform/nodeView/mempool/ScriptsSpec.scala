@@ -72,7 +72,7 @@ class ScriptsSpec extends ErgoPropertyTest {
     val tx = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
     tx.size shouldBe 1
     tx.head.inputs.size shouldBe 2
-    ErgoState.boxChanges(tx).get._1.foreach { case Remove(boxId) =>
+    ErgoState.boxChanges(tx).get._1.foreach { case (_, Remove(boxId)) =>
       assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
     }
     val block = validFullBlock(None, us, tx, Some(1234L))

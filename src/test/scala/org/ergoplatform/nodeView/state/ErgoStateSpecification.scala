@@ -100,7 +100,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       whenever(txs.lengthCompare(2) > 0) {
         // valid transaction should spend the only existing genesis box
         ErgoState.boxChanges(txs).get._1.length shouldBe 1
-        ErgoState.boxChanges(txs).get._1.head.key shouldBe emissionBox.id
+        ErgoState.boxChanges(txs).get._1.head._2.key shouldBe emissionBox.id
 
         // second transaction input should be an input created by the first transaction
         val inputToDoubleSpend = txs(1).inputs.head
@@ -126,13 +126,13 @@ class ErgoStateSpecification extends ErgoPropertyTest {
         val removals = changes.toRemove
         // should remove the only genesis box from the state
         removals.length shouldBe 1
-        removals.head.key shouldEqual emissionBox.id
+        removals.head._2.key shouldEqual emissionBox.id
         // number of inputs should be more than 1 - we create boxes and spend them in the same block
         txs.flatMap(_.inputs).length should be > 1
 
         val insertions = changes.toAppend
         // sum of coins in outputs should equal to genesis value
-        insertions.map(_.value).map(ErgoBoxSerializer.parseBytes).map(_.value).sum shouldBe emissionBox.value
+        insertions.map(_._2.value).map(ErgoBoxSerializer.parseBytes).map(_.value).sum shouldBe emissionBox.value
 
         // if output was spend and then created - it is in both toInsert and toRemove
         val changesRev = ErgoState.stateChanges(txs.reverse).get

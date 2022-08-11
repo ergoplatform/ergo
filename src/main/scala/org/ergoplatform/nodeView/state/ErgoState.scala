@@ -80,7 +80,7 @@ object ErgoState extends ScorexLogging {
     */
   def stateChanges(txs: Seq[ErgoTransaction]): Try[StateChanges] = {
     boxChanges(txs).map { case (toRemoveChanges, toInsertChanges) =>
-      val toLookup: IndexedSeq[Lookup] = txs.flatMap(_.dataInputs).map(b => Lookup(b.boxId))(breakOut)
+      val toLookup: IndexedSeq[(ModifierId, Lookup)] = txs.flatMap(tx => tx.dataInputs.map(b => tx.id -> Lookup(b.boxId)))(breakOut)
       StateChanges(toRemoveChanges, toInsertChanges, toLookup)
     }
   }
@@ -153,7 +153,7 @@ object ErgoState extends ScorexLogging {
     *         if box was first spend and created after that - it is in both toInsert and toRemove,
     *         and an error will be thrown further during tree modification
     */
-  def boxChanges(txs: Seq[ErgoTransaction]): Try[(Vector[Remove], Vector[Insert])] = Try {
+  def boxChanges(txs: Seq[ErgoTransaction]): Try[(IndexedSeq[(ModifierId, Remove)], IndexedSeq[(ModifierId, Insert)])] = Try {
     val toInsert: mutable.TreeMap[ModifierId, Insert] = mutable.TreeMap.empty
     val toRemove: mutable.TreeMap[ModifierId, Remove] = mutable.TreeMap.empty
 
@@ -171,7 +171,7 @@ object ErgoState extends ScorexLogging {
       }
       tx.outputs.foreach(o => toInsert += bytesToId(o.id) -> Insert(o.id, ADValue @@ o.bytes))
     }
-    (toRemove.map(_._2)(breakOut), toInsert.map(_._2)(breakOut))
+    (toRemove.toVector, toInsert.toVector)
   }
 
   /**

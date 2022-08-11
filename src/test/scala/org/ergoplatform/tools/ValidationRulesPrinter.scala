@@ -1,17 +1,20 @@
 package org.ergoplatform.tools
 
 import org.ergoplatform.settings.ValidationRules
-import scorex.util.ScorexLogging
+import scorex.core.ModifierTypeId
+import scorex.core.validation.InvalidModifierDetails
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
 object ValidationRulesPrinter extends App with ScorexLogging {
 
   val rules = ValidationRules.rulesSpec
+  val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
   println("\\textbf{Transaction validation:}\n\n")
   printHeader()
   rules.toSeq.sortBy(_._1).foreach { r =>
 
-    val rule = r._2.error("").errors.head.message.trim
+    val rule = r._2.invalidMod(InvalidModifierDetails("", emptyModifierId, ModifierTypeId @@ 0.toByte)).errors.head.message.trim
     val activated = r._2.isActive
     val mayBeDisabled = r._2.mayBeDisabled
     val modifiers = r._2.affectedClasses.map(_.getSimpleName).mkString(", ")
@@ -34,7 +37,7 @@ object ValidationRulesPrinter extends App with ScorexLogging {
       printHeader()
     }
 
-    if (r._2.error("").isFatal) {
+    if (r._2.invalidMod(InvalidModifierDetails("", emptyModifierId, ModifierTypeId @@ 0.toByte)).isFatal) {
       // we only mention fatal errors here
 
       println(s"    ${r._1} & $rule & ${boolToLatex(mayBeDisabled)} & ${boolToLatex(activated)} & $modifiers \\\\")

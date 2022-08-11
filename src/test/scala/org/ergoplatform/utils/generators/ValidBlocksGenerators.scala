@@ -243,7 +243,7 @@ trait ValidBlocksGenerators
   private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {
     transactions.foreach(_.statelessValidity() shouldBe 'success)
     transactions.nonEmpty shouldBe true
-    ErgoState.boxChanges(transactions).get._1.foreach { case Remove(boxId) =>
+    ErgoState.boxChanges(transactions).get._1.foreach { case (_, Remove(boxId)) =>
       assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
     }
   }

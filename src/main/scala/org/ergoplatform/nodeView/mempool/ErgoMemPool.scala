@@ -9,11 +9,12 @@ import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurat
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
+import com.typesafe.scalalogging.Logger
 import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.util.Try
+import scala.util.{Failure, Random, Success, Try}
 
 
 /**
@@ -31,8 +32,15 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
 
+  /**
+    * When there's no reason to re-check transactions immediately, we assign fake fee factor to them
+    */
+  private val FakeFeeFactor = 1000
+
   private val nodeSettings: NodeConfigurationSettings = settings.nodeSettings
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
+
+  private val sortingOption = SortingOption.random(log)
 
   override def size: Int = pool.size
 
@@ -82,7 +90,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
   }
 
   def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
-    val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx) }
+    val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx, FakeFeeFactor) }
     new ErgoMemPool(updatedPool, stats)
   }
 
@@ -116,22 +124,37 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
   // Check if transaction is double-spending inputs spent in the mempool.
   // If so, the new transacting is replacing older ones if it has bigger weight (fee/byte) than them on average.
   // Otherwise, the new transaction being rejected.
-  private def acceptIfNoDoubleSpend(tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) = {
+  private def acceptIfNoDoubleSpend(tx: ErgoTransaction, cost: Int): (ErgoMemPool, ProcessingOutcome) = {
+    val feeFactor = sortingOption match {
+      case FeePerByte => tx.size
+      case FeePerCostUnit => cost
+    }
+
     val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
       pool.inputs.get(inp.boxId)
     }.toSet
 
     if(doubleSpendingWtxs.nonEmpty) {
-      val ownWtx = weighted(tx)
+      val ownWtx = weighted(tx, feeFactor)
       val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum / doubleSpendingWtxs.size
       if (ownWtx.weight > doubleSpendingTotalWeight) {
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
-        new ErgoMemPool(pool.put(tx).remove(doubleSpendingTxs), stats) -> ProcessingOutcome.Accepted
+        new ErgoMemPool(pool.put(tx, feeFactor).remove(doubleSpendingTxs), stats) -> ProcessingOutcome.Accepted
       } else {
         this -> ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id))
       }
     } else {
-      new ErgoMemPool(pool.put(tx), stats) -> ProcessingOutcome.Accepted
+      val afterPut = pool.put(tx, feeFactor)
+      if (afterPut.size > nodeSettings.mempoolCapacity) {
+        // If mempool is full, remove transaction with smallest weight
+        val txIdToRemove: WeightedTxId = pool.orderedTransactions.lastKey
+        log.debug(s"Removing transaction from pool being overfull: $txIdToRemove")
+        val txToRemove = pool.orderedTransactions.get(txIdToRemove).toSeq
+
+        new ErgoMemPool(afterPut.remove(txToRemove), stats) -> ProcessingOutcome.Accepted
+      } else {
+        new ErgoMemPool(afterPut, stats) -> ProcessingOutcome.Accepted
+      }
     }
   }
 
@@ -148,29 +171,32 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
 
       if (fee >= minFee) {
         if (canAccept) {
+          val costLimit = nodeSettings.maxTransactionCost
           state match {
             case utxo: UtxoState =>
               // Allow proceeded transaction to spend outputs of pooled transactions.
               val utxoWithPool = utxo.withTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
-                utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), nodeSettings.maxTransactionCost, None).fold(
-                  ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
-                  _ => acceptIfNoDoubleSpend(tx)
-                )
+                utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), costLimit, None) match {
+                  case Success(cost) => acceptIfNoDoubleSpend(tx, cost)
+                  case Failure(ex) => new ErgoMemPool (pool.invalidate (tx), stats) -> ProcessingOutcome.Invalidated (ex),
+                }
               } else {
                 this -> ProcessingOutcome.Declined(new Exception("not all utxos in place yet"))
               }
             case validator: TransactionValidation =>
               // transaction validation currently works only for UtxoState, so this branch currently
               // will not be triggered probably
-              validator.validateWithCost(tx, nodeSettings.maxTransactionCost).fold(
-                ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
-                _ => acceptIfNoDoubleSpend(tx)
-              )
+              validator.validateWithCost(tx, costLimit) match {
+                case Success(cost) => acceptIfNoDoubleSpend(tx, cost)
+                case Failure(ex) => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
+              }
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
               // peers though, so such transactions can come from the local wallet only.
-              acceptIfNoDoubleSpend(tx)
+              //
+              // We pass fake cost in this case, as there's no real competition between local transactions only anyway
+              acceptIfNoDoubleSpend(tx, cost = FakeFeeFactor)
           }
         } else {
           this -> ProcessingOutcome.Declined(
@@ -245,6 +271,36 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
 }
 
 object ErgoMemPool {
+
+  /**
+   * Hierarchy of sorting strategies for mempool transactions
+   */
+  sealed trait SortingOption
+
+  object SortingOption {
+    /**
+      * @return randomly chosen mempool sorting strategy
+      */
+    def random(logger: Logger): SortingOption = {
+      if (Random.nextBoolean()) {
+        logger.info("Sorting mempool by fee-per-byte")
+        FeePerByte
+      } else {
+        logger.info("Sorting mempool by fee-per-cycle")
+        FeePerCostUnit
+      }
+    }
+  }
+
+  /**
+    * Sort transactions by fee paid for transaction size, so fee/byte
+    */
+  case object FeePerByte extends SortingOption
+
+  /**
+    * Sort transactions by fee paid for transaction contracts validation cost, so fee/execution unit
+    */
+  case object FeePerCostUnit extends SortingOption
 
   sealed trait ProcessingOutcome
 

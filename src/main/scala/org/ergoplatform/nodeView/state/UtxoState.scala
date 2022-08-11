@@ -73,10 +73,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     import cats.implicits._
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
-    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
+    def checkBoxExistence(tx: ErgoTransaction, id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
       .get(ByteArrayWrapper(id))
       .orElse(boxById(id))
-      .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+      .fold[Try[ErgoBox]](
+        Failure(new MalformedModifierError(s"Box with id ${Algos.encode(id)} not found", tx.id, tx.modifierTypeId))
+      )(Success(_))
 
     def performOperation(modifierIdOperation: (ModifierId, Operation)) =
       persistentProver.performOneOperation(modifierIdOperation._2).recoverWith {

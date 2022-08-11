@@ -94,7 +94,7 @@ object ErgoState extends ScorexLogging {
     */
   def execTransactions(transactions: Seq[ErgoTransaction],
                        currentStateContext: ErgoStateContext)
-                      (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
+                      (checkBoxExistence: (ErgoTransaction, ErgoBox.BoxId) => Try[ErgoBox]): ValidationResult[Long] = {
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
     def preAllocatedBuilder[T: ClassTag](sizeHint: Int): mutable.ArrayBuilder[T] = {
@@ -105,15 +105,16 @@ object ErgoState extends ScorexLogging {
 
     @tailrec
     def collectBoxesById(
+                 tx: ErgoTransaction,
                  remainingBoxIds: Iterator[ErgoBox.BoxId],
                  resultingBoxes: Try[mutable.ArrayBuilder[ErgoBox]]
                ): Try[IndexedSeq[ErgoBox]] = {
       if (!remainingBoxIds.hasNext) {
         resultingBoxes.map(_.result())
       } else {
-        checkBoxExistence(remainingBoxIds.next()) match {
+        checkBoxExistence(tx, remainingBoxIds.next()) match {
           case Success(box) =>
-            collectBoxesById(remainingBoxIds, resultingBoxes.map(_ += box))
+            collectBoxesById(tx, remainingBoxIds, resultingBoxes.map(_ += box))
           case Failure(ex) =>
             Failure(ex)
         }
@@ -130,9 +131,9 @@ object ErgoState extends ScorexLogging {
         val validCostResult = costResult.asInstanceOf[Valid[Long]]
         val tx = transactions(i)
         val boxesToSpendTry: Try[IndexedSeq[ErgoBox]] =
-          collectBoxesById(tx.inputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
+          collectBoxesById(tx, tx.inputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
         lazy val dataBoxesTry: Try[IndexedSeq[ErgoBox]] =
-          collectBoxesById(tx.dataInputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
+          collectBoxesById(tx, tx.dataInputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
         lazy val boxes: Try[(IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
         costResult = tx.validateStateless()
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry, tx.id, tx.modifierTypeId)

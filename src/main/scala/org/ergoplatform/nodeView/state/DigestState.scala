@@ -1,13 +1,12 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
@@ -16,6 +15,7 @@ import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.core._
 import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.MalformedModifierError
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 
@@ -52,11 +52,13 @@ class DigestState protected(override val version: VersionTag,
         (transactions.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
       }
 
-    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] =
+    def checkBoxExistence(tx: ErgoTransaction, id: ErgoBox.BoxId): Try[ErgoBox] =
       knownBoxesTry.flatMap { knownBoxes =>
         knownBoxes
         .get(ByteArrayWrapper(id))
-        .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+        .fold[Try[ErgoBox]](
+          Failure(new MalformedModifierError(s"Box with id ${Algos.encode(id)} not found", tx.id, tx.modifierTypeId))
+        )(Success(_))
       }
 
     ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)

@@ -36,7 +36,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "4.0.5"
+val sigmaStateVersion = "4.0.6"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -127,7 +127,6 @@ val opts = Seq(
   "-XX:+UseStringDeduplication"
 )
 
-// -J prefix is required by the bash script
 javaOptions in run ++= opts
 scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 

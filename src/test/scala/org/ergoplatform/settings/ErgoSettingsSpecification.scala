@@ -2,7 +2,9 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoPropertyTest
+import scorex.core.settings.RESTApiSettings
 
+import java.net.{InetSocketAddress, URL}
 import scala.concurrent.duration._
 
 class ErgoSettingsSpecification extends ErgoPropertyTest {
@@ -38,7 +40,8 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
-      headerChainDiff                           = 100
+      headerChainDiff                           = 100,
+      adProofsSuffixLength                      = 112*1024
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
@@ -56,6 +59,13 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       )
+    )
+    settings.scorexSettings.restApi shouldBe RESTApiSettings(
+      bindAddress = new InetSocketAddress("0.0.0.0", 9052),
+      apiKeyHash = None,
+      corsAllowedOrigin = Some("*"),
+      timeout = 5.seconds,
+      publicUrl = Some(new URL("https://example.com:80"))
     )
   }
 
@@ -82,7 +92,8 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
-      headerChainDiff                           = 100
+      headerChainDiff                           = 100,
+      adProofsSuffixLength                      = 112*1024
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
@@ -126,7 +137,8 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
-      headerChainDiff                           = 100
+      headerChainDiff                           = 100,
+      adProofsSuffixLength                      = 112*1024
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(

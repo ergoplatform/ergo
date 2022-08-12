@@ -11,7 +11,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.{Args, ErgoSettings}
 import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
 import scorex.core.network.{DeliveryTracker, PeerFeature}
@@ -43,14 +43,17 @@ class CrawlerRunner(args: Array[String]) extends Application {
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, LaunchParameters)
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
   val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
+  private val syncTracker = ErgoSyncTracker(settings.network, timeProvider)
+
   val statsCollectorRef: ActorRef =
-    ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, ergoSettings, timeProvider, LaunchParameters)
+    ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider)
+
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     ErgoUtilsApiRoute(ergoSettings),
@@ -59,8 +62,6 @@ class CrawlerRunner(args: Array[String]) extends Application {
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
-
-  private val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
 
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 

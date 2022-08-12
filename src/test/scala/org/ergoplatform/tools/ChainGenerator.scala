@@ -48,7 +48,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
-  val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2)
+  val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2, None)
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/data") else new File(args(1))
@@ -60,7 +60,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, poPoWBootstrap = false, minimalSuffix, mining = false, txCostLimit, txSizeLimit, blockCandidateGenerationInterval = 45.seconds, useExternalMiner = false,
     internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
-    200, 5.minutes, 100000, 1.minute, rebroadcastCount = 20, 1000000, 100)
+    200, 5.minutes, 100000, 1.minute, rebroadcastCount = 20, 1000000, 100, adProofsSuffixLength = 112*1024)
   val ms = settings.chainSettings.monetary.copy(
     minerRewardDelay = RewardDelay
   )
@@ -76,7 +76,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   HistoryTestHelpers.allowToApplyOldBlocks(history)
-  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(fullHistorySettings), parameters)
+  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(fullHistorySettings))
   log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
   val chain = loop(state, None, None, Seq())
@@ -112,7 +112,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
       log.info(
         s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
-      loop(state.applyModifier(block)(_ => ()).get, outToPassNext, Some(block.header), acc :+ block.id)
+      loop(state.applyModifier(block, None)(_ => ()).get, outToPassNext, Some(block.header), acc :+ block.id)
     } else {
       acc
     }
@@ -189,7 +189,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
       }
     }.getOrElse((interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion))
 
-    val emissionTxOpt = CandidateGenerator.collectEmission(state, minerPk, cs.emissionRules)
+    val emissionTxOpt = CandidateGenerator.collectEmission(state, minerPk, emptyStateContext)
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>

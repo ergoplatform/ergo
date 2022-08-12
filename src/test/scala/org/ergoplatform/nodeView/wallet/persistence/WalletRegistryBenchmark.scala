@@ -34,7 +34,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   implicit val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
 
   val registry = WalletRegistry(settings).get
-  val storage = WalletStorage.readOrCreate(settings)(enc)
+  val storage = WalletStorage.readOrCreate(settings)
 
   val rootSecret = ExtendedSecretKey.deriveMasterKey(Array.fill(32)(0: Byte))
 

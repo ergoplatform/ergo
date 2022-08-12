@@ -31,17 +31,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Docker Metadata action for sigma-rust integration test node
-        uses: docker/metadata-action@v3.5.0
-        id: metasigma
-        with:
-          images: ergoplatform/ergo-integration-test
-
-      - name: Build and push Docker images for integration-test node
-        uses: docker/build-push-action@v2.7.0
-        with:
-          context: "{{defaultContext}}:sigma-rust-integration-test" 
-          push: true
-          tags: ${{ steps.metasigma.outputs.tags }}
-          labels: ${{ steps.metasigma.outputs.labels }}

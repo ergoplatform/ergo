@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -39,30 +40,27 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     */
   def validateWithCost(tx: ErgoTransaction,
                        stateContextOpt: Option[ErgoStateContext],
-                       costLimit: Long,
-                       interpreterOpt: Option[ErgoInterpreter]): Try[Long] = {
+                       costLimit: Int,
+                       interpreterOpt: Option[ErgoInterpreter]): Try[Int] = {
     val context = stateContextOpt.getOrElse(stateContext)
-
-    val verifier = interpreterOpt.getOrElse(ErgoInterpreter(context.currentParameters))
-
-    val maxBlockCost = context.currentParameters.maxBlockCost
-    val startCost = maxBlockCost - costLimit
+    val parameters = context.currentParameters.withBlockCost(costLimit)
+    val verifier = interpreterOpt.getOrElse(ErgoInterpreter(parameters))
 
     tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
       tx.statefulValidity(
-          boxesToSpend,
-          tx.dataInputs.flatMap(i => boxById(i.boxId)),
-          context,
-          startCost)(verifier).map(_ - startCost) match {
-            case Success(txCost) if txCost > costLimit =>
-              Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
-            case Success(txCost) =>
-              Success(txCost)
-            case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
-              Failure(TooHighCostError(s"Transaction $tx has too high cost"))
-            case f: Failure[_] => f
-        }
+        boxesToSpend,
+        tx.dataInputs.flatMap(i => boxById(i.boxId)),
+        context,
+        accumulatedCost = 0L)(verifier) match {
+        case Success(txCost) if txCost > costLimit =>
+          Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
+        case Success(txCost) =>
+          Success(txCost)
+        case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
+          Failure(TooHighCostError(s"Transaction $tx has too high cost"))
+        case f: Failure[_] => f
+      }
     }
   }
 
@@ -73,7 +71,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     *
     * Used in mempool.
     */
-  override def validateWithCost(tx: ErgoTransaction, maxTxCost: Long): Try[Long] = {
+  override def validateWithCost(tx: ErgoTransaction, maxTxCost: Int): Try[Int] = {
     validateWithCost(tx, None, maxTxCost, None)
   }
 
@@ -82,21 +80,44 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * @param fb - ergo full block
     * @return emission box from this block transactions
     */
-  protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = emissionBoxIdOpt match {
-    case Some(id) =>
-      fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
-        case Some(tx) if tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition =>
-          tx.outputs.headOption
-        case Some(_) =>
-          log.info(s"Last possible emission box consumed")
-          None
-        case None =>
-          log.warn(s"Emission box not found in block ${fb.encodedId}")
-          boxById(id)
+  protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
+    def hasEmissionBox(tx: ErgoTransaction): Boolean =
+      if(fb.height > constants.settings.chainSettings.reemission.activationHeight) {
+        // after EIP-27 we search for emission box NFT for efficiency's sake
+        tx.outputs.size == 2 &&
+          !tx.outputs.head.additionalTokens.isEmpty &&
+          java.util.Arrays.equals(tx.outputs.head.additionalTokens(0)._1, constants.settings.chainSettings.reemission.emissionNftIdBytes)
+      } else {
+        tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition
       }
-    case None =>
-      log.debug("No emission box: emission should be already finished before this block")
-      None
+
+    def fullSearch(fb: ErgoFullBlock): Option[ErgoBox] = {
+      fb.transactions
+        .find(hasEmissionBox)
+        .map(_.outputs.head)
+        .filter(_.value > 100000 * EmissionRules.CoinsInOneErgo) // to filter out possible spam
+    }
+
+    emissionBoxIdOpt match {
+      case Some(id) =>
+        fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
+          case Some(tx) if hasEmissionBox(tx) =>
+            tx.outputs.headOption
+          case Some(_) =>
+            log.info(s"Last possible emission box consumed")
+            None
+          case None =>
+            log.warn(s"Emission box possibly not spent in block ${fb.encodedId}")
+            boxById(id) match {
+              case s: Some[ErgoBox] => s
+              case None => fullSearch(fb)
+            }
+
+        }
+      case None =>
+        log.debug("No emission box: emission should be already finished before this block")
+        fullSearch(fb)
+    }
   }
 
   protected def emissionBoxIdOpt: Option[ADKey] = store.get(UtxoState.EmissionBoxIdKey).map(s => ADKey @@ s)
@@ -146,7 +167,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Useful when checking mempool transactions.
     */
   def withTransactions(txns: Seq[ErgoTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, constants, parameters) {
+    new UtxoState(persistentProver, version, store, constants) {
       lazy val createdBoxes: Seq[ErgoBox] = txns.flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {

@@ -1,18 +1,20 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
+
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult}
@@ -48,10 +50,11 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
   /**
     *
     * @param mod modifire to apply to the state
+    * @param estimatedTip - estimated height of blockchain tip
     * @param generate function that handles newly created modifier as a result of application the current one
     * @return new State
     */
-  def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[IState]
+  def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[IState]
 
   def rollbackTo(version: VersionTag): Try[IState]
 
@@ -66,7 +69,7 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
 object ErgoState extends ScorexLogging {
 
-  type ModifierProcessing[T <: ErgoState[T]] = PartialFunction[ErgoPersistentModifier, Try[T]]
+  type ModifierProcessing[T <: ErgoState[T]] = PartialFunction[BlockSection, Try[T]]
 
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
@@ -251,22 +254,21 @@ object ErgoState extends ScorexLogging {
   }
 
   def generateGenesisUtxoState(stateDir: File,
-                               constants: StateConstants,
-                               parameters: Parameters): (UtxoState, BoxHolder) = {
+                               constants: StateConstants): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
     val boxes = genesisBoxes(constants.settings.chainSettings)
     val bh = BoxHolder(boxes)
 
-    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants, parameters).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants, LaunchParameters).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
       java.util.Arrays.equals(us.rootHash, constants.settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 
-  def generateGenesisDigestState(stateDir: File, settings: ErgoSettings, parameters: Parameters): DigestState = {
+  def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
     DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest),
-      stateDir, StateConstants(settings), parameters)
+      stateDir, StateConstants(settings))
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
@@ -274,15 +276,14 @@ object ErgoState extends ScorexLogging {
   lazy val genesisStateVersion: VersionTag = idToVersion(Header.GenesisParentId)
 
   def readOrGenerate(settings: ErgoSettings,
-                     constants: StateConstants,
-                     parameters: Parameters): ErgoState[_] = {
+                     constants: StateConstants): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
-      case StateType.Digest => DigestState.create(None, None, dir, constants, parameters)
-      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants, parameters)
-      case _ => ErgoState.generateGenesisUtxoState(dir, constants, parameters)._1
+      case StateType.Digest => DigestState.create(None, None, dir, constants)
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
+      case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
     }
   }
 

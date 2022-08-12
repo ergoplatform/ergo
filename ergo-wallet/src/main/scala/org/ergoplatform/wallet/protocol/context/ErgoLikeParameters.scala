@@ -44,7 +44,7 @@ trait ErgoLikeParameters {
   /**
     * @return computation units limit per block
     */
-  def maxBlockCost: Long
+  def maxBlockCost: Int
 
   /**
     * @return height when voting for a soft-fork had been started

@@ -1,9 +1,8 @@
 package scorex.core.network
 
-import java.net.{InetAddress, InetSocketAddress}
-
+import java.net.{InetAddress, InetSocketAddress, URL}
 import scorex.core.app.{ApplicationVersionSerializer, Version}
-import scorex.core.network.peer.LocalAddressPeerFeature
+import scorex.core.network.peer.{LocalAddressPeerFeature, RestApiUrlPeerFeature}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
@@ -30,6 +29,9 @@ case class PeerSpec(agentName: String,
     features.collectFirst { case LocalAddressPeerFeature(addr) => addr }
   }
 
+  lazy val publicUrlOpt: Option[URL] =
+    features.collectFirst { case RestApiUrlPeerFeature(url) => url }
+
   def reachablePeer: Boolean = address.isDefined
 
   def address: Option[InetSocketAddress] = declaredAddress orElse localAddressOpt
@@ -43,8 +45,15 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
     ApplicationVersionSerializer.serialize(obj.protocolVersion, w)
     w.putShortString(obj.nodeName)
 
-
-    w.putOption(obj.declaredAddress) { (writer, isa) =>
+    val address = obj.declaredAddress match {
+      case Some(isa) =>
+        if(isa.getAddress == null)
+          None
+        else
+          Some(isa)
+      case None => None
+    }
+    w.putOption(address) { (writer, isa) =>
       val addr = isa.getAddress.getAddress
       writer.put((addr.size + 4).toByteExact)
       writer.putBytes(addr)
@@ -86,7 +95,6 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
         featureSerializer.parseTry(r.newReader(featChunk)).toOption
       }
     }
-
     PeerSpec(appName, protocolVersion, nodeName, declaredAddressOpt, feats)
   }
 

@@ -1,8 +1,7 @@
 package scorex.core.network.peer
 
 import java.net.InetSocketAddress
-
-import org.ergoplatform.network.ModeFeature
+import org.ergoplatform.network.ModePeerFeature
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.app.Version
 import scorex.core.network.{ConnectionDirection, Incoming, Outgoing, PeerFeature, PeerSpec, PeerSpecSerializer}
@@ -43,13 +42,11 @@ object PeerInfo {
 
 }
 
-object PeerInfoSerializer extends ScorexSerializer[PeerInfo] {
-  // TODO: This code is cut&pasted from ErgoApp.
-  // It should be better extracted to some other place.
-  private val ergoSettings = ErgoSettings.read()
-  private val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
-  private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
-  private val peerSpecSerializer =  new PeerSpecSerializer(featureSerializers)
+/**
+  * Serializer of [[scorex.core.network.peer.PeerInfo]]
+  * @param peerSpecSerializer serializer of [[scorex.core.network.PeerSpec]]
+  */
+class PeerInfoSerializer(peerSpecSerializer: PeerSpecSerializer) extends ScorexSerializer[PeerInfo] {
 
   override def serialize(obj: PeerInfo, w: Writer): Unit = {
     w.putLong(obj.lastHandshake)
@@ -63,4 +60,12 @@ object PeerInfoSerializer extends ScorexSerializer[PeerInfo] {
      val peerSpec = peerSpecSerializer.parse(r)
      PeerInfo(peerSpec, lastHandshake, connectionType)
    }
+}
+
+object PeerInfoSerializer {
+  def apply(ergoSettings: ErgoSettings): PeerInfoSerializer = {
+    val features: Seq[PeerFeature] = Seq(ModePeerFeature(ergoSettings.nodeSettings))
+    val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
+    new PeerInfoSerializer(new PeerSpecSerializer(featureSerializers))
+  }
 }

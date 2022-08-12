@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -118,7 +118,7 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends HistoryTests
 object ErgoSanity {
   type TX = ErgoTransaction
   type B = ErgoBox
-  type PM = ErgoPersistentModifier
+  type PM = BlockSection
   type CTM = BlockTransactions
   type SI = ErgoSyncInfo
   type HT = ErgoHistory

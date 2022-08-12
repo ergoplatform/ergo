@@ -9,7 +9,7 @@ import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurat
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
-import com.typesafe.scalalogging.Logger
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
@@ -26,7 +26,9 @@ import scala.util.{Failure, Random, Success, Try}
   *                 information about mempool's state and transactions in it.
   */
 class ErgoMemPool private[mempool](pool: OrderedTxPool,
-                                   private[mempool] val stats : MemPoolStatistics)(implicit settings: ErgoSettings)
+                                   private[mempool] val stats : MemPoolStatistics,
+                                   private[mempool] val sortingOption: SortingOption)
+                                  (implicit settings: ErgoSettings)
   extends ErgoMemPoolReader with ScorexLogging {
 
   import ErgoMemPool._
@@ -39,8 +41,6 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
 
   private val nodeSettings: NodeConfigurationSettings = settings.nodeSettings
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
-
-  private val sortingOption = SortingOption.random(log)
 
   override def size: Int = pool.size
 
@@ -78,7 +78,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
   override def getAllPrioritized: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
 
   /**
-    * Method to put a transaction into the memory pool. Validation of tha transactions against
+    * Method to put a transaction into the memory pool. Validation of the transactions against
     * the state is done in NodeVieHolder. This put() method can check whether a transaction is valid
     * @param tx
     * @return Success(updatedPool), if transaction successfully added to the pool, Failure(_) otherwise
@@ -91,18 +91,18 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
 
   def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
     val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx, FakeFeeFactor) }
-    new ErgoMemPool(updatedPool, stats)
+    new ErgoMemPool(updatedPool, stats, sortingOption)
   }
 
   def remove(tx: ErgoTransaction): ErgoMemPool = {
     val wtx = pool.transactionsRegistry.get(tx.id)
     val updStats = wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
       .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
-    new ErgoMemPool(pool.remove(tx), updStats)
+    new ErgoMemPool(pool.remove(tx), updStats, sortingOption)
   }
 
   def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
-    new ErgoMemPool(pool.filter(condition), stats)
+    new ErgoMemPool(pool.filter(condition), stats, sortingOption)
   }
 
   def filter(txs: Seq[ErgoTransaction]): ErgoMemPool = filter(t => !txs.exists(_.id == t.id))
@@ -113,7 +113,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
     * @param tx - Transaction to invalidate
     */
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
-    new ErgoMemPool(pool.invalidate(tx), stats)
+    new ErgoMemPool(pool.invalidate(tx), stats, sortingOption)
   }
 
   /**
@@ -134,26 +134,22 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
       pool.inputs.get(inp.boxId)
     }.toSet
 
-    if(doubleSpendingWtxs.nonEmpty) {
+    if (doubleSpendingWtxs.nonEmpty) {
       val ownWtx = weighted(tx, feeFactor)
       val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum / doubleSpendingWtxs.size
       if (ownWtx.weight > doubleSpendingTotalWeight) {
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
-        new ErgoMemPool(pool.put(tx, feeFactor).remove(doubleSpendingTxs), stats) -> ProcessingOutcome.Accepted
+        new ErgoMemPool(pool.put(tx, feeFactor).remove(doubleSpendingTxs), stats, sortingOption) -> ProcessingOutcome.Accepted
       } else {
         this -> ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id))
       }
     } else {
-      val afterPut = pool.put(tx, feeFactor)
-      if (afterPut.size > nodeSettings.mempoolCapacity) {
-        // If mempool is full, remove transaction with smallest weight
-        val txIdToRemove: WeightedTxId = pool.orderedTransactions.lastKey
-        log.debug(s"Removing transaction from pool being overfull: $txIdToRemove")
-        val txToRemove = pool.orderedTransactions.get(txIdToRemove).toSeq
-
-        new ErgoMemPool(afterPut.remove(txToRemove), stats) -> ProcessingOutcome.Accepted
+      val poolSizeLimit = nodeSettings.mempoolCapacity
+      if (pool.size == poolSizeLimit &&
+        weighted(tx, feeFactor).weight <= pool.orderedTransactions.lastKey.weight) {
+        this -> ProcessingOutcome.Declined(new Exception("Transaction is pool outsider"))
       } else {
-        new ErgoMemPool(afterPut, stats) -> ProcessingOutcome.Accepted
+        new ErgoMemPool(pool.put(tx, feeFactor), stats, sortingOption) -> ProcessingOutcome.Accepted
       }
     }
   }
@@ -162,8 +158,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
     log.info(s"Processing mempool transaction: $tx")
 
     val blacklistedTransactions = nodeSettings.blacklistedTransactions
-    if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
-      new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
+    if (blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
+      new ErgoMemPool(pool.invalidate(tx), stats, sortingOption) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
     } else {
       val fee = extractFee(tx)
       val minFee = settings.nodeSettings.minimalFeeAmount
@@ -179,7 +175,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
                 utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), costLimit, None) match {
                   case Success(cost) => acceptIfNoDoubleSpend(tx, cost)
-                  case Failure(ex) => new ErgoMemPool (pool.invalidate (tx), stats) -> ProcessingOutcome.Invalidated (ex),
+                  case Failure(ex) => new ErgoMemPool (pool.invalidate (tx), stats, sortingOption) -> ProcessingOutcome.Invalidated (ex)
                 }
               } else {
                 this -> ProcessingOutcome.Declined(new Exception("not all utxos in place yet"))
@@ -189,7 +185,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
               // will not be triggered probably
               validator.validateWithCost(tx, costLimit) match {
                 case Success(cost) => acceptIfNoDoubleSpend(tx, cost)
-                case Failure(ex) => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
+                case Failure(ex) => new ErgoMemPool(pool.invalidate(tx), stats, sortingOption) -> ProcessingOutcome.Invalidated(ex)
               }
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
@@ -270,7 +266,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
   def getReader: ErgoMemPoolReader = this
 }
 
-object ErgoMemPool {
+object ErgoMemPool extends ScorexLogging {
 
   /**
    * Hierarchy of sorting strategies for mempool transactions
@@ -281,14 +277,15 @@ object ErgoMemPool {
     /**
       * @return randomly chosen mempool sorting strategy
       */
-    def random(logger: Logger): SortingOption = {
+    def random(): SortingOption = {
       if (Random.nextBoolean()) {
-        logger.info("Sorting mempool by fee-per-byte")
+        log.info("Sorting mempool by fee-per-byte")
         FeePerByte
       } else {
-        logger.info("Sorting mempool by fee-per-cycle")
+        log.info("Sorting mempool by fee-per-cycle")
         FeePerCostUnit
       }
+      FeePerByte
     }
   }
 
@@ -338,6 +335,8 @@ object ErgoMemPool {
     */
   def empty(settings: ErgoSettings): ErgoMemPool =
     new ErgoMemPool(OrderedTxPool.empty(settings),
-      MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))(settings)
+      MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()),
+      SortingOption.random()
+    )(settings)
 
 }

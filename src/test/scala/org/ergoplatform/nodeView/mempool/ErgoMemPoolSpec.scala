@@ -214,8 +214,12 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.size shouldBe (family_depth + 1) * txs.size
     txs.foreach { tx =>
       val sb = tx.outputs.head
-      pool.process(tx.copy(inputs = IndexedSeq(new Input(sb.id, emptyProverResult)),
-        outputCandidates = IndexedSeq(new ErgoBoxCandidate(sb.value+1, sb.ergoTree, sb.creationHeight, sb.additionalTokens, sb.additionalRegisters))), us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+      val txToDecline = tx.copy(inputs = IndexedSeq(new Input(sb.id, emptyProverResult)),
+        outputCandidates = IndexedSeq(new ErgoBoxCandidate(sb.value, sb.ergoTree, sb.creationHeight, sb.additionalTokens, sb.additionalRegisters)))
+
+      // some transaction is dropped from the pool during processing
+      pool = pool.process(txToDecline, us)._1
+      pool.size shouldBe (family_depth + 1) * txs.size
     }
   }
 

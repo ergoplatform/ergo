@@ -19,6 +19,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
@@ -28,13 +29,15 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
 
   implicit private val timeout: Timeout = defaultTimeout
 
+
+  private val newBlockDelay: FiniteDuration        = 3.seconds
   private val newBlockSignal: Class[SemanticallySuccessfulModifier] =
     classOf[SemanticallySuccessfulModifier]
-  private val newBlockDelay: FiniteDuration        = 30.seconds
+
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
 
-  val defaultSettings: ErgoSettings = {
+  private val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read()
     val nodeSettings = empty.nodeSettings.copy(
       mining                       = true,
@@ -149,9 +152,111 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     }
 
     candidateGenerator.tell(block.header.powSolution, testProbe.ref)
-    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-    // after applying solution
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+
+    // we fish either for ack or SSM as the order is non-deterministic
+    testProbe.fishForMessage(blockValidationDelay) {
+      case StatusReply.Success(()) =>
+        testProbe.expectMsgPF(candidateGenDelay) {
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+        }
+        true
+      case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+        testProbe.expectMsg(StatusReply.Success(()))
+        true
+    }
+
+    system.terminate()
+  }
+
+  it should "regenerate candidate periodically" in new TestKit(
+    ActorSystem()
+  ) {
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val settingsWithShortRegeneration: ErgoSettings =
+      ErgoSettings
+        .read()
+        .copy(
+          nodeSettings = defaultSettings.nodeSettings
+            .copy(blockCandidateGenerationInterval = 1.millis),
+          chainSettings =
+            ErgoSettings.read().chainSettings.copy(blockInterval = 1.seconds)
+        )
+
+    val viewHolderRef: ActorRef =
+      ErgoNodeViewRef(settingsWithShortRegeneration, timeProvider, parameters)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        timeProvider,
+        settingsWithShortRegeneration
+      )
+
+    val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+
+    // generate block to use reward as our tx input
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        val block = settingsWithShortRegeneration.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+        candidateGenerator.tell(block.header.powSolution, testProbe.ref)
+        // we fish either for ack or SSM as the order is non-deterministic
+        testProbe.fishForMessage(blockValidationDelay) {
+          case StatusReply.Success(()) =>
+            testProbe.expectMsgPF(candidateGenDelay) {
+              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            }
+            true
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            testProbe.expectMsg(StatusReply.Success(()))
+            true
+        }
+    }
+
+    // build new transaction that uses miner's reward as input
+    val prop: DLogProtocol.ProveDlog =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
+    val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
+    val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
+    rewardBox.propositionBytes shouldBe ErgoScriptPredef
+      .rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk)
+      .bytes
+    val input = Input(rewardBox.id, emptyProverResult)
+
+    val outputs = IndexedSeq(
+      new ErgoBoxCandidate(rewardBox.value, prop, readers.s.stateContext.currentHeight)
+    )
+    val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
+
+    val tx = ErgoTransaction(
+      defaultProver
+        .sign(unsignedTx, IndexedSeq(rewardBox), IndexedSeq(), readers.s.stateContext)
+        .get
+    )
+
+    // candidate should be regenerated immediately after a mempool change
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        // this triggers mempool change that triggers candidate regeneration
+        viewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx))
+        expectNoMessage(candidateGenDelay)
+        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+        testProbe.expectMsgPF(candidateGenDelay) {
+          case StatusReply.Success(regeneratedCandidate: Candidate) =>
+            // regeneratedCandidate now contains new transaction
+            regeneratedCandidate.candidateBlock shouldNot be(
+              candidate.candidateBlock
+            )
+        }
+    }
     system.terminate()
   }
 

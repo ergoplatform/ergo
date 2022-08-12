@@ -46,7 +46,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
   private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: Seq[ErgoTransaction]): WorkMessage =
     await(minerRef.askWithStatus(GenerateCandidate(mandatoryTransactions, reply = true)).mapTo[Candidate].map(_.externalVersion))
 
-  val defaultSettings: ErgoSettings = {
+  private val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read()
 
     val nodeSettings = empty.nodeSettings.copy(mining = true,

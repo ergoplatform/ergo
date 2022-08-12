@@ -53,6 +53,9 @@ class CandidateGenerator(
 
   import org.ergoplatform.mining.CandidateGenerator._
 
+  private val candidateGenInterval =
+    ergoSettings.nodeSettings.blockCandidateGenerationInterval
+
   /** retrieve Readers once on start and then get updated by events */
   override def preStart(): Unit = {
     log.info("CandidateGenerator is starting")
@@ -88,8 +91,8 @@ class CandidateGenerator(
       context.become(
         initialized(
           CandidateGeneratorState(
-            cache       = None,
-            solvedBlock = None,
+            cachedCandidate = None,
+            solvedBlock     = None,
             h,
             s,
             m,
@@ -115,7 +118,17 @@ class CandidateGenerator(
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
     case ChangedMempool(mp: ErgoMemPoolReader) =>
-      context.become(initialized(state.copy(mpr = mp)))
+      if (hasCandidateExpired(
+            state.cachedCandidate,
+            state.solvedBlock,
+            timeProvider,
+            candidateGenInterval
+          )) {
+        context.become(initialized(state.copy(cachedCandidate = None, mpr = mp)))
+        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+      } else {
+        context.become(initialized(state.copy(mpr = mp)))
+      }
     case _: NodeViewChange =>
     // Just ignore all other NodeView Changes
 
@@ -127,11 +140,11 @@ class CandidateGenerator(
       log.info(
         s"Preparing new candidate on getting new block at ${mod.height}"
       )
-      if (needNewCandidate(state.cache, mod)) {
+      if (needNewCandidate(state.cachedCandidate, mod)) {
         if (needNewSolution(state.solvedBlock, mod))
-          context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+          context.become(initialized(state.copy(cachedCandidate = None, solvedBlock = None)))
         else
-          context.become(initialized(state.copy(cache = None)))
+          context.become(initialized(state.copy(cachedCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
       } else {
         context.become(initialized(state))
@@ -142,8 +155,8 @@ class CandidateGenerator(
 
     case gen @ GenerateCandidate(txsToInclude, reply) =>
       val senderOpt = if (reply) Some(sender()) else None
-      if (cachedFor(state.cache, txsToInclude)) {
-        senderOpt.foreach(_ ! StatusReply.success(state.cache.get))
+      if (cachedFor(state.cachedCandidate, txsToInclude)) {
+        senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
         CandidateGenerator.generateCandidate(
@@ -155,24 +168,27 @@ class CandidateGenerator(
           txsToInclude,
           ergoSettings
         ) match {
-          case Some(Failure(ex)) =>
+          case Failure(ex) =>
             log.error(s"Candidate generation failed", ex)
             senderOpt.foreach(
               _ ! StatusReply.error(s"Candidate generation failed : ${ex.getMessage}")
             )
-          case Some(Success((candidate, eliminatedTxs))) =>
+          case Success(Some((candidate, eliminatedTxs))) =>
             if (eliminatedTxs.ids.nonEmpty) viewHolderRef ! eliminatedTxs
             val generationTook = System.currentTimeMillis() - start
             log.info(s"Generated new candidate in $generationTook ms")
             context.become(
               initialized(
-                state.copy(cache = Some(candidate), avgGenTime = generationTook.millis)
+                state.copy(
+                  cachedCandidate = Some(candidate),
+                  avgGenTime      = generationTook.millis
+                )
               )
             )
             senderOpt.foreach(_ ! StatusReply.success(candidate))
-          case None =>
-            log.warn(
-              "Can not generate block candidate: either mempool is empty or chain is not synced (maybe last block not fully applied yet"
+          case Success(None) =>
+            log.info(
+              "Postponing candidate generation: either mempool is empty or chain is not synced (maybe last block not fully applied yet)"
             )
             senderOpt.foreach { s =>
               context.system.scheduler.scheduleOnce(state.avgGenTime, self, gen)(
@@ -184,7 +200,7 @@ class CandidateGenerator(
       }
 
     case preSolution: AutolykosSolution
-        if state.solvedBlock.isEmpty && state.cache.nonEmpty =>
+        if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
       // Inject node pk if it is not externally set (in Autolykos 2)
       val solution =
         if (preSolution.pk.isInfinity) {
@@ -193,7 +209,7 @@ class CandidateGenerator(
           preSolution
         }
       val result: StatusReply[Unit] = {
-        val newBlock = completeBlock(state.cache.get.candidateBlock, solution)
+        val newBlock = completeBlock(state.cachedCandidate.get.candidateBlock, solution)
         log.info(s"New block mined, header: ${newBlock.header}")
         ergoSettings.chainSettings.powScheme
           .validate(newBlock.header)
@@ -204,7 +220,7 @@ class CandidateGenerator(
             StatusReply.success(())
           case Failure(exception) =>
             log.warn(s"Removing candidate due to invalid block", exception)
-            context.become(initialized(state.copy(cache = None)))
+            context.become(initialized(state.copy(cachedCandidate = None)))
             StatusReply.error(
               new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
             )
@@ -245,7 +261,7 @@ object CandidateGenerator extends ScorexLogging {
 
   /** Local state of candidate generator to avoid mutable vars */
   case class CandidateGeneratorState(
-    cache: Option[Candidate],
+    cachedCandidate: Option[Candidate],
     solvedBlock: Option[ErgoFullBlock],
     hr: ErgoHistoryReader,
     sr: UtxoStateReader,
@@ -301,6 +317,31 @@ object CandidateGenerator extends ScorexLogging {
   ): Boolean =
     solvedBlock.nonEmpty && !solvedBlock.map(_.parentId).contains(bestFullBlock.id)
 
+  /** Regenerate candidate to let new transactions in, miners are polling for candidate in ~ 100ms
+    * interval so they switch to it.
+    * If blockCandidateGenerationInterval elapsed since last block generation,
+    * then new tx in mempool is a reasonable trigger of candidate regeneration */
+  def hasCandidateExpired(
+    cachedCandidate: Option[Candidate],
+    solvedBlock: Option[ErgoFullBlock],
+    timeProvider: NetworkTimeProvider,
+    candidateGenInterval: FiniteDuration
+  ): Boolean = {
+    def candidateAge(c: Candidate): FiniteDuration =
+      (timeProvider.time() - c.candidateBlock.timestamp).millis
+    // non-empty solved block means we wait for newly mined block to be applied
+    if (solvedBlock.isEmpty) {
+      cachedCandidate match {
+        // if current candidate is older than candidateGenInterval
+        case Some(c) if candidateGenInterval.compare(candidateAge(c)) <= 0 =>
+          log.info(s"Regenerating block candidate")
+          true
+        case _ =>
+          false
+      }
+    } else false
+  }
+
   /** Calculate average mining time from latest block header timestamps */
   def getBlockMiningTimeAvg(
     timestamps: IndexedSeq[Header.Timestamp]
@@ -332,7 +373,7 @@ object CandidateGenerator extends ScorexLogging {
     pk: ProveDlog,
     txsToInclude: Seq[ErgoTransaction],
     ergoSettings: ErgoSettings
-  ): Option[Try[(Candidate, EliminateTransactions)]] = {
+  ): Try[Option[(Candidate, EliminateTransactions)]] = {
     //mandatory transactions to include into next block taken from the previous candidate
     lazy val unspentTxsToInclude = txsToInclude.filter { tx =>
       inputsNotSpent(tx, s)
@@ -354,26 +395,24 @@ object CandidateGenerator extends ScorexLogging {
 
     if (!hasAnyMemPoolOrMinerTx) {
       log.info(s"Avoiding generation of a block without any transactions")
-      None
+      Success(None)
     } else if (!chainSynced) {
       log.info(
         "Chain not synced probably due to racing condition when last block is not fully applied yet"
       )
-      None
+      Success(None)
     } else {
       val desiredUpdate = ergoSettings.votingTargets.desiredUpdate
-      Some(
-        createCandidate(
-          pk,
-          h,
-          desiredUpdate,
-          s,
-          timeProvider,
-          poolTransactions,
-          emissionTxOpt,
-          unspentTxsToInclude,
-          ergoSettings
-        )
+      createCandidate(
+        pk,
+        h,
+        desiredUpdate,
+        s,
+        timeProvider,
+        poolTransactions,
+        emissionTxOpt,
+        unspentTxsToInclude,
+        ergoSettings
       )
     }
   }
@@ -438,7 +477,7 @@ object CandidateGenerator extends ScorexLogging {
     emissionTxOpt: Option[ErgoTransaction],
     prioritizedTransactions: Seq[ErgoTransaction],
     ergoSettings: ErgoSettings
-  ): Try[(Candidate, EliminateTransactions)] =
+  ): Try[Option[(Candidate, EliminateTransactions)]] =
     Try {
       val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings.powScheme)
       // Extract best header and extension of a best block user their data for assembling a new block
@@ -533,77 +572,76 @@ object CandidateGenerator extends ScorexLogging {
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
       if (txs.isEmpty) {
-        throw new IllegalArgumentException(
-          s"Proofs for 0 txs cannot be generated : emissionTxs: ${emissionTxs.size}, priorityTxs: ${prioritizedTransactions.size}, poolTxs: ${poolTxs.size}"
-        )
-      }
+        Success(Option.empty)
+      } else {
+        def deriveWorkMessage(block: CandidateBlock) =
+          ergoSettings.chainSettings.powScheme.deriveExternalCandidate(
+            block,
+            minerPk,
+            prioritizedTransactions.map(_.id)
+          )
 
-      def deriveWorkMessage(block: CandidateBlock) = {
-        ergoSettings.chainSettings.powScheme.deriveExternalCandidate(
-          block,
-          minerPk,
-          prioritizedTransactions.map(_.id)
-        )
-      }
-
-      state.proofsForTransactions(txs) match {
-        case Success((adProof, adDigest)) =>
-          val candidate = CandidateBlock(
-            bestHeaderOpt,
-            version,
-            nBits,
-            adDigest,
-            adProof,
-            txs,
-            timestamp,
-            extensionCandidate,
-            votes
-          )
-          val ext = deriveWorkMessage(candidate)
-          log.info(
-            s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
-            s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
-          )
-          Success(
-            Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions
-          )
-        case Failure(t: Throwable) =>
-          // We can not produce a block for some reason, so print out an error
-          // and collect only emission transaction if it exists.
-          // We consider that emission transaction is always valid.
-          emissionTxOpt match {
-            case Some(emissionTx) =>
-              log.error(
-                "Failed to produce proofs for transactions, but emission box is found: ",
-                t
-              )
-              val fallbackTxs = Seq(emissionTx)
-              state.proofsForTransactions(fallbackTxs).map {
-                case (adProof, adDigest) =>
-                  val candidate = CandidateBlock(
-                    bestHeaderOpt,
-                    version,
-                    nBits,
-                    adDigest,
-                    adProof,
-                    fallbackTxs,
-                    timestamp,
-                    extensionCandidate,
-                    votes
-                  )
-                  Candidate(
-                    candidate,
-                    deriveWorkMessage(candidate),
-                    prioritizedTransactions
-                  ) -> eliminateTransactions
-              }
-            case None =>
-              log.error(
-                "Failed to produce proofs for transactions and no emission box available: ",
-                t
-              )
-              Failure(t)
-          }
+        state.proofsForTransactions(txs) match {
+          case Success((adProof, adDigest)) =>
+            val candidate = CandidateBlock(
+              bestHeaderOpt,
+              version,
+              nBits,
+              adDigest,
+              adProof,
+              txs,
+              timestamp,
+              extensionCandidate,
+              votes
+            )
+            val ext = deriveWorkMessage(candidate)
+            log.info(
+              s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
+                s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
+            )
+            Success(
+              Option(Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions)
+            )
+          case Failure(t: Throwable) =>
+            // We can not produce a block for some reason, so print out an error
+            // and collect only emission transaction if it exists.
+            // We consider that emission transaction is always valid.
+            emissionTxOpt match {
+              case Some(emissionTx) =>
+                log.error(
+                  "Failed to produce proofs for transactions, but emission box is found: ",
+                  t
+                )
+                val fallbackTxs = Seq(emissionTx)
+                state.proofsForTransactions(fallbackTxs).map {
+                  case (adProof, adDigest) =>
+                    val candidate = CandidateBlock(
+                      bestHeaderOpt,
+                      version,
+                      nBits,
+                      adDigest,
+                      adProof,
+                      fallbackTxs,
+                      timestamp,
+                      extensionCandidate,
+                      votes
+                    )
+                    Option(
+                      Candidate(
+                        candidate,
+                        deriveWorkMessage(candidate),
+                        prioritizedTransactions
+                      ) -> eliminateTransactions
+                    )
+                }
+              case None =>
+                log.error(
+                  "Failed to produce proofs for transactions and no emission box available: ",
+                  t
+                )
+                Failure(t)
+            }
+        }
       }
     }.flatten
 

@@ -1,4 +1,4 @@
-import sbt.Keys.{licenses, _}
+import sbt.Keys._
 import sbt._
 
 logLevel := Level.Debug

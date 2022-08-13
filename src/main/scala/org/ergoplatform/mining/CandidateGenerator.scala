@@ -392,7 +392,7 @@ object CandidateGenerator extends ScorexLogging {
     val protocolVersion = ergoSettings.chainSettings.protocolVersion
 
     // if protocol version is 2 (node version 4.x, we still can vote for 5.0 soft-fork)
-    val betterVersion = if(ergoSettings.networkType.isMainNet && protocolVersion == 2) {
+    val betterVersion = if (ergoSettings.networkType.isMainNet && protocolVersion == 2) {
       true
     } else {
       protocolVersion > header.version
@@ -403,15 +403,15 @@ object CandidateGenerator extends ScorexLogging {
       .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
     val forkVotingAllowed = votingFinishHeight.forall(fh => nextHeight < fh)
 
-    val nextHeightCondition = if(ergoSettings.networkType.isMainNet) {
-      nextHeight >= 819201 // mainnet voting start height, first block of epoch #800
+    val nextHeightCondition = if (ergoSettings.networkType.isMainNet) {
+      nextHeight >= 823297 // mainnet voting start height, first block of epoch #804
     } else {
       nextHeight >= 4096
     }
 
     betterVersion &&
-     forkVotingAllowed &&
-      (ergoSettings.votingTargets.softFork != 0 && nextHeightCondition)
+      forkVotingAllowed &&
+      nextHeightCondition
   }
 
   /**

@@ -216,10 +216,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       val sb = tx.outputs.head
       val txToDecline = tx.copy(inputs = IndexedSeq(new Input(sb.id, emptyProverResult)),
         outputCandidates = IndexedSeq(new ErgoBoxCandidate(sb.value, sb.ergoTree, sb.creationHeight, sb.additionalTokens, sb.additionalRegisters)))
-
-      // some transaction is dropped from the pool during processing
-      pool = pool.process(txToDecline, us)._1
-      pool.size shouldBe (family_depth + 1) * txs.size
+      val res = pool.process(txToDecline, us)._2
+      res.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+      res.asInstanceOf[ProcessingOutcome.Declined].e.getMessage.contains("pays less") shouldBe true
     }
   }
 

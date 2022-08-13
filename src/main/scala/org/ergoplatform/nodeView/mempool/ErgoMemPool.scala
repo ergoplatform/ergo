@@ -147,7 +147,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
       val poolSizeLimit = nodeSettings.mempoolCapacity
       if (pool.size == poolSizeLimit &&
         weighted(tx, feeFactor).weight <= pool.orderedTransactions.lastKey.weight) {
-        this -> ProcessingOutcome.Declined(new Exception("Transaction is pool outsider"))
+        this -> ProcessingOutcome.Declined(new Exception("Transaction pays less than any other in the pool being full"))
       } else {
         new ErgoMemPool(pool.put(tx, feeFactor), stats, sortingOption) -> ProcessingOutcome.Accepted
       }

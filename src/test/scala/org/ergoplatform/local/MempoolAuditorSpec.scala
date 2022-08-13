@@ -2,6 +2,7 @@ package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
+import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -65,11 +66,11 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val temporarilyValidTx = validTransactionFromBoxes(validTx.outputs, outputsProposition = proveDlogGen.sample.get)
 
     subscribeEvents(classOf[FailedTransaction])
-    nodeViewHolderRef ! LocallyGeneratedTransaction(validTx)
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(validTx))
     testProbe.expectMsgClass(cleanupDuration, newTx)
     expectMsgType[ProcessingOutcome.Accepted.type]
 
-    nodeViewHolderRef ! LocallyGeneratedTransaction(temporarilyValidTx)
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(temporarilyValidTx))
     testProbe.expectMsgClass(cleanupDuration, newTx)
     expectMsgType[ProcessingOutcome.Accepted.type]
 
@@ -99,7 +100,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val us = us0.applyModifier(b1, None)(_ => ()).get
 
     val bxs = bh1.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
-    val txs = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1
+    val txs = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1.map(UnconfirmedTransaction.apply)
 
     implicit val system = ActorSystem()
     val probe = TestProbe()

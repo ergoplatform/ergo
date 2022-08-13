@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import java.util.concurrent.Executors
-
 import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform._
 import org.ergoplatform.mining._
@@ -9,7 +8,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants
@@ -92,17 +91,18 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx = defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get
-      val validationRes1 = us.validateWithCost(ErgoTransaction(tx), 100000)
+      val unconfirmedTx = UnconfirmedTransaction(ErgoTransaction(tx))
+      val validationRes1 = us.validateWithCost(unconfirmedTx, 100000)
       validationRes1 shouldBe 'success
       val txCost = validationRes1.get
 
-      val validationRes2 = us.validateWithCost(ErgoTransaction(tx), txCost - 1)
+      val validationRes2 = us.validateWithCost(unconfirmedTx, txCost - 1)
       validationRes2 shouldBe 'failure
       validationRes2.toEither.left.get.isInstanceOf[TooHighCostError] shouldBe true
 
-      us.validateWithCost(ErgoTransaction(tx), txCost + 1) shouldBe 'success
+      us.validateWithCost(unconfirmedTx, txCost + 1) shouldBe 'success
 
-      us.validateWithCost(ErgoTransaction(tx), txCost) shouldBe 'success
+      us.validateWithCost(unconfirmedTx, txCost) shouldBe 'success
 
       height = height + 1
     }

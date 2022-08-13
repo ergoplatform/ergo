@@ -59,12 +59,12 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
-    val unconfirmedTx = UnconfirmedTransaction.apply(tx)
+    val unconfirmedTx = UnconfirmedTransaction(tx)
     validateTransactionAndProcess(unconfirmedTx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
     }
 
   def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) { tx =>
-    val unconfirmedTx = UnconfirmedTransaction.apply(tx)
+    val unconfirmedTx = UnconfirmedTransaction(tx)
     validateTransactionAndProcess(unconfirmedTx)(validTx => ApiResponse(validTx.transaction.id))
   }
 

@@ -1,8 +1,7 @@
 package scorex.testkit.properties.mempool
 
 import java.security.MessageDigest
-
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -35,7 +34,7 @@ trait MempoolFilterPerformanceTest
     var m: ErgoMemPool = memPool
     (0 until 1000) foreach { _ =>
       forAll(transactionGenerator) { tx: ErgoTransaction =>
-        m = m.put(tx).get
+        m = m.put(UnconfirmedTransaction(tx)).get
       }
     }
     m.size should be > 1000
@@ -46,7 +45,7 @@ trait MempoolFilterPerformanceTest
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val m = initializedMempool.get
     forAll(transactionGenerator) { tx: ErgoTransaction =>
-      val (time, _) = profile(m.filter(Seq(tx)))
+      val (time, _) = profile(m.filter(Seq(UnconfirmedTransaction(tx))))
       assert(time < thresholdSecs)
     }
   }
@@ -55,8 +54,9 @@ trait MempoolFilterPerformanceTest
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     var m = initializedMempool.get
     forAll(transactionGenerator) { tx: ErgoTransaction =>
-      m = m.put(tx).get
-      val (time, _) = profile(m.filter(Seq(tx)))
+      val unconfirmedTx = UnconfirmedTransaction(tx)
+      m = m.put(unconfirmedTx).get
+      val (time, _) = profile(m.filter(Seq(unconfirmedTx)))
       assert(time < thresholdSecs)
     }
   }

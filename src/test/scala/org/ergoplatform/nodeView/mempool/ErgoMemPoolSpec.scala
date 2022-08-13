@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
@@ -80,7 +80,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         val tx1 = ErgoTransaction(tx1Like.inputs, tx1Like.outputCandidates)
         val tx2 = ErgoTransaction(tx2Like.inputs, tx2Like.outputCandidates)
 
-        val pool0 = ErgoMemPool.empty(settings)
+        val pool0 = ErgoMemPool.empty(settings, SortingOption.FeePerByte)
         val (pool, tx1Outcome) = pool0.process(tx1, us)
 
         tx1Outcome shouldBe ProcessingOutcome.Accepted

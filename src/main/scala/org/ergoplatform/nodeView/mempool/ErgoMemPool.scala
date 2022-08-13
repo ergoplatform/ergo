@@ -24,6 +24,7 @@ import scala.util.{Failure, Random, Success, Try}
   *                 used for implementing all transaction-related methods
   * @param stats    - Mempool statistics, that allows to track
   *                 information about mempool's state and transactions in it.
+  * @param sortingOption - this input sets how transactions are sorted in the pool, by fee-per-byte or fee-per-cycle
   */
 class ErgoMemPool private[mempool](pool: OrderedTxPool,
                                    private[mempool] val stats : MemPoolStatistics,
@@ -126,8 +127,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
   // Otherwise, the new transaction being rejected.
   private def acceptIfNoDoubleSpend(tx: ErgoTransaction, cost: Int): (ErgoMemPool, ProcessingOutcome) = {
     val feeFactor = sortingOption match {
-      case FeePerByte => tx.size
-      case FeePerCostUnit => cost
+      case SortingOption.FeePerByte => tx.size
+      case SortingOption.FeePerCostUnit => cost
     }
 
     val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
@@ -275,6 +276,16 @@ object ErgoMemPool extends ScorexLogging {
 
   object SortingOption {
     /**
+      * Sort transactions by fee paid for transaction size, so fee/byte
+      */
+    case object FeePerByte extends SortingOption
+
+    /**
+      * Sort transactions by fee paid for transaction contracts validation cost, so fee/execution unit
+      */
+    case object FeePerCostUnit extends SortingOption
+
+    /**
       * @return randomly chosen mempool sorting strategy
       */
     def random(): SortingOption = {
@@ -285,19 +296,9 @@ object ErgoMemPool extends ScorexLogging {
         log.info("Sorting mempool by fee-per-cycle")
         FeePerCostUnit
       }
-      FeePerByte
     }
   }
 
-  /**
-    * Sort transactions by fee paid for transaction size, so fee/byte
-    */
-  case object FeePerByte extends SortingOption
-
-  /**
-    * Sort transactions by fee paid for transaction contracts validation cost, so fee/execution unit
-    */
-  case object FeePerCostUnit extends SortingOption
 
   sealed trait ProcessingOutcome
 
@@ -333,10 +334,10 @@ object ErgoMemPool extends ScorexLogging {
     * @param settings - node settings (to get mempool settings from)
     * @return empty mempool
     */
-  def empty(settings: ErgoSettings): ErgoMemPool =
+  def empty(settings: ErgoSettings, sortingOption: SortingOption = SortingOption.random()): ErgoMemPool =
     new ErgoMemPool(OrderedTxPool.empty(settings),
       MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()),
-      SortingOption.random()
+      sortingOption
     )(settings)
 
 }

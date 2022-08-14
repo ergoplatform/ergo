@@ -89,7 +89,7 @@ object ErgoState extends ScorexLogging {
     * Tries to validate and execute transactions.
     * @param transactions to be validated and executed
     * @param currentStateContext to be used for tx execution
-    * @param checkBoxExistence function to provide ErgoBox by BoxId
+    * @param checkBoxExistence function to provide ErgoBox by BoxId and ErgoTransaction
     * @return Result of transactions execution with total cost inside
     */
   def execTransactions(transactions: Seq[ErgoTransaction],

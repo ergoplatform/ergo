@@ -12,8 +12,6 @@ import scorex.crypto.hash.Digest32
 import scorex.util._
 import sigmastate.helpers.TestingHelpers._
 
-import scala.collection.breakOut
-
 
 class AdProofSpec extends ErgoPropertyTest {
   val KL = 32
@@ -26,10 +24,10 @@ class AdProofSpec extends ErgoPropertyTest {
 
   val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
-  private def insert(box: ErgoBox) = emptyModifierId -> Insert(box.id, ADValue @@ box.bytes)
+  private def insert(box: ErgoBox) = Insert(box.id, ADValue @@ box.bytes)
 
   private def createEnv(howMany: Int = 10):
-  (IndexedSeq[(ModifierId, Insert)], PrevDigest, NewDigest, Proof) = {
+  (IndexedSeq[Insert], PrevDigest, NewDigest, Proof) = {
 
     val prover = new BatchAVLProver[Digest32, HF](KL, None)
     val zeroBox = testBox(0, Constants.TrueLeaf, startHeight, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId)
@@ -42,7 +40,7 @@ class AdProofSpec extends ErgoPropertyTest {
     val pf = prover.generateProof()
 
     val newDigest = prover.digest
-    val operations: IndexedSeq[(ModifierId, Insert)] = boxes.map(box => emptyModifierId -> Insert(box.id, ADValue @@ box.bytes))(breakOut)
+    val operations: IndexedSeq[Insert] = boxes.map(box => Insert(box.id, ADValue @@ box.bytes))
     (operations, prevDigest, newDigest, pf)
   }
 

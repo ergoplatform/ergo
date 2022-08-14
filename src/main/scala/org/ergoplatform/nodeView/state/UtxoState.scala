@@ -7,7 +7,6 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
@@ -18,15 +17,13 @@ import scorex.core._
 import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{MalformedModifierError, ModifierValidator}
+import scorex.core.validation.{ModifierValidator}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.ModifierId
 
-import scala.collection.breakOut
-import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -87,22 +84,15 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    def performStateChangingOperations(stateChanges: StateChanges): Try[List[Option[ADValue]]] = {
-      def performOperation(modifierIdOperation: (ModifierId, Operation)): Try[Option[ADValue]] =
-        persistentProver.performOneOperation(modifierIdOperation._2).recoverWith {
-          case NonFatal(ex) =>
-            Failure(new MalformedModifierError(ex.getMessage, modifierIdOperation._1, Transaction.ModifierTypeId))
-        }
-
-        val results: List[Try[Option[ADValue]]] = stateChanges.operations.map(performOperation)(breakOut)
-        Traverse[List].sequence(results)
-    }
-
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
-      val operationsProcessing = ErgoState.stateChanges(transactions).flatMap(performStateChangingOperations)
+      val resultTry =
+        ErgoState.stateChanges(transactions).map { stateChanges =>
+          val mods = stateChanges.operations
+          Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+        }
       ModifierValidator(stateContext.validationSettings)
-        .validateNoFailure(fbOperationFailed, operationsProcessing, Transaction.ModifierTypeId)
+        .validateNoFailure(fbOperationFailed, resultTry, Transaction.ModifierTypeId)
         .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry
@@ -178,7 +168,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               ErgoState.stateChanges(fb.blockTransactions.txs) match {
                 case Success(stateChanges) =>
                  val mods = stateChanges.operations
-                  mods.foreach( modIdOp => persistentProver.performOneOperation(modIdOp._2))
+                  mods.foreach( modOp => persistentProver.performOneOperation(modOp))
 
                   // meta is the same as it is block-specific
                   proofBytes = persistentProver.generateProofAndUpdateStorage(meta)

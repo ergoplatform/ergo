@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRefHolder
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
@@ -320,6 +321,7 @@ object ErgoHistory extends ScorexLogging {
     repairIfNeeded(history)
 
     log.info("History database read")
+    ExtraIndexerRefHolder.start(history) //start extra indexer, if enabled
     history
   }
 

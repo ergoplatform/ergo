@@ -1,7 +1,6 @@
 package org.ergoplatform.http.api
 
 import java.math.BigInteger
-
 import io.circe._
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
@@ -29,6 +28,7 @@ import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndexerRef, IndexedErgoAddress, IndexedErgoBox, IndexedErgoTransaction}
 import org.ergoplatform.wallet.interface4j.SecretString
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.authds.merkle.MerkleProof
@@ -469,6 +469,39 @@ trait ApiCodecs extends JsonCodecs {
       fields.asJson
   }
 
+  implicit val indexedBoxEncoder: Encoder[IndexedErgoBox] = { iEb =>
+    iEb.box.asJson.deepMerge(Json.obj(
+      "globalIndex" -> iEb.globalIndex.asJson,
+      "inclusionHeight" -> iEb.inclusionHeightOpt.asJson,
+      "address" -> ExtraIndexerRef.getAddressEncoder.toString(iEb.getAddress).asJson,
+      "spentTransactionId" -> iEb.spendingTxIdOpt.asJson
+    ))
+  }
+
+  implicit val indexedTxEncoder: Encoder[IndexedErgoTransaction] = { tx =>
+    Json.obj(
+      "id" -> tx.id.asJson,
+      "blockId" -> tx.blockId.asJson,
+      "inclusionHeight" -> tx.inclusionHeight.asJson,
+      "timestamp" -> tx.timestamp.asJson,
+      "index" -> tx.index.asJson,
+      "globalIndex" -> tx.globalIndex.asJson,
+      "numConfirmations" -> tx.numConfirmations.asJson,
+      "inputs" -> tx.inputs.asJson,
+      "dataInputs" -> tx.dataInputs.asJson,
+      "outputs" -> tx.outputs.asJson,
+      "size" -> tx.txSize.asJson)
+  }
+
+  implicit val indexedAddressEncoder: Encoder[IndexedErgoAddress] = { address =>
+    Json.obj(
+      "transactions" -> address.transactions(-1).map(_.asJson).asJson,
+      "txCount" -> address.transactions(-1).size.asJson,
+      "utxos" -> address.utxos(-1).asJson,
+      "balance" -> address.utxos(-1).map(_.box.value).sum.asJson,
+      "tokens" -> address.utxos(-1).map(_.box.additionalTokens.toArray.toSeq.asJson).asJson
+    )
+  }
 }
 
 trait ApiEncoderOption

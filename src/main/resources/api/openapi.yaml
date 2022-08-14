@@ -200,6 +200,62 @@ components:
             example: 1
             default: 1
 
+    IndexedErgoBox:
+      type: object
+      description: Box indexed with extra information
+      required:
+        - box
+        - confirmationsNum
+        - address
+        - creationTransaction
+        - spendingTransaction
+        - spendingHeight
+        - inclusionHeight
+        - spent
+        - globalIndex
+      properties:
+        box:
+          $ref: '#/components/schemas/ErgoTransactionOutput'
+        confirmationsNum:
+          description: Number of confirmations, if the box is included into the blockchain
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+          nullable: true
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+        creationTransaction:
+          description: Transaction which created the box
+          $ref: '#/components/schemas/ModifierId'
+        spendingTransaction:
+          description: Transaction which created the box
+          nullable: true
+          $ref: '#/components/schemas/ModifierId'
+        spendingHeight:
+          description: The height the box was spent at
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+          nullable: true
+        inclusionHeight:
+          description: The height the transaction containing the box was included in a block at
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+        spent:
+          description: A flag signalling whether the box was spent
+          type: boolean
+          example: false
+        globalIndex:
+          description: The global index of the box
+          type: integer
+          format: int64
+          minimum: 0
+          example: 83927
+
     UnsignedErgoTransaction:
       type: object
       description: Unsigned Ergo transaction
@@ -301,6 +357,70 @@ components:
             type: integer
             example: 1
             default: 1
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+
+    IndexedErgoTransaction:
+      type: object
+      description: Transaction indexed with extra information
+      required:
+        - id
+        - inputs
+        - dataInputs
+        - outputs
+        - inclusionHeight
+        - numConfirmations
+        - blockId
+        - timestamp
+        - index
+        - globalIndex
+        - size
+      properties:
+        id:
+          $ref: '#/components/schemas/TransactionId'
+        inputs:
+          description: Transaction inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          description: Transaction data inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          description: Transaction outputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        inclusionHeight:
+          description: Height of a block the transaction was included in
+          type: integer
+          format: int32
+          example: 20998
+        numConfirmations:
+          description: Number of transaction confirmations
+          type: integer
+          format: int32
+          example: 20998
+        blockId:
+          description: Id of the block the transaction was included in
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        index:
+          description: index of the transaction in the block it was included in
+          type: integer
+          format: int32
+          example: 3
+        globalIndex:
+          description: index of the box globally
+          type: integer
+          format: int64
+          example: 3565445
         size:
           description: Size in bytes
           type: integer
@@ -5064,6 +5184,434 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EmissionScripts'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /extra/transaction/byId/{txId}:
+    get:
+      summary: Retrieve a transaction by its id
+      operationId: getTxById
+      tags:
+        - extra
+      parameters:
+        - in: path
+          name: txId
+          required: true
+          description: id of the wanted transaction
+          schema:
+            type: string
+      responses:
+        '200':
+          description: transaction with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoTransaction'
+        '404':
+          description: Transaction with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /extra/transaction/byIndex/{txIndex}:
+    get:
+      summary: Retrieve a transaction by global index number
+      operationId: getTxByIndex
+      tags:
+        - extra
+      parameters:
+        - in: path
+          name: txIndex
+          required: true
+          description: index of the wanted transaction
+          schema:
+            type: number
+      responses:
+        '200':
+          description: transaction with wanted index
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoTransaction'
+        '404':
+          description: Transaction with this index doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /extra/transaction/byAddress/{address}:
+    get:
+      summary: Retrieve transactions by their associated address
+      operationId: getTxsByAddress
+      tags:
+        - extra
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: adderess associated with transactions
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+        - in: query
+          name: limit
+          required: false
+          description: get last n elements, set to negative for all elements
+          schema:
+            type: integer
+            format: int64
+            default: 20
+      responses:
+        '200':
+          description: transactions associated with wanted address
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of transactions
+                items:
+                  $ref: '#/components/schemas/IndexedErgoTransaction'
+        '404':
+          description: No transactions found for wanted address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /extra/transaction/range:
+    get:
+      summary: Get a range of transaction ids
+      operationId: getTxRange
+      tags:
+        - extra
+      parameters:
+        - in: query
+          name: fromIndex
+          required: false
+          description: Min transaction index
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - in: query
+          name: toIndex
+          required: false
+          description: Max transaction index
+          schema:
+            type: integer
+            format: int64
+            default: 10
+      responses:
+        '200':
+          description: transactions in wanted range
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of transactions
+                items:
+                  $ref: '#/components/schemas/IndexedErgoTransaction'
+          default:
+            description: Error
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ApiError'
+
+  /extra/box/byId/{boxId}:
+    get:
+      summary: Retrieve a box by its id
+      operationId: getBoxById
+      tags:
+        - extra
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: id of the wanted box
+          schema:
+            type: string
+      responses:
+        '200':
+          description: box with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No box found with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /extra/box/byIndex/{boxIndex}:
+    get:
+      summary: Retrieve a box by global index number
+      operationId: getBoxByIndex
+      tags:
+        - extra
+      parameters:
+        - in: path
+          name: boxIndex
+          required: true
+          description: index of the wanted box
+          schema:
+            type: number
+      responses:
+        '200':
+          description: box with wanted index
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: Box with this index doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /extra/box/byAddress/{address}:
+    get:
+      summary: Retrieve boxes by their associated address
+      operationId: getBoxesByAddress
+      tags:
+        - extra
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: adderess associated with boxes
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+        - in: query
+          name: limit
+          required: false
+          description: get last n elements, set to negative for all elements
+          schema:
+            type: integer
+            format: int64
+            default: 20
+      responses:
+        '200':
+          description: boxes associated with wanted address
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of boxes
+                items:
+                  $ref: '#/components/schemas/IndexedErgoTransaction'
+        '404':
+          description: No boxes found for wanted address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /extra/box/unspent/byAddress/{address}:
+    get:
+      summary: Retrieve unspent boxes by their associated address
+      operationId: getBoxesByAddressUnspent
+      tags:
+        - extra
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: adderess associated with unspent boxes
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+        - in: query
+          name: limit
+          required: false
+          description: get last n elements, set to negative for all elements
+          schema:
+            type: integer
+            format: int64
+            default: 20
+      responses:
+        '200':
+          description: unspent boxes associated with wanted address
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of boxes
+                items:
+                  $ref: '#/components/schemas/IndexedErgoTransaction'
+        '404':
+          description: No unspent boxes found for wanted address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /extra/box/range:
+    get:
+      summary: Get a range of box ids
+      operationId: getBoxRange
+      tags:
+        - extra
+      parameters:
+        - in: query
+          name: fromIndex
+          required: false
+          description: Min box index
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - in: query
+          name: toIndex
+          required: false
+          description: Max box index
+          schema:
+            type: integer
+            format: int64
+            default: 10
+      responses:
+        '200':
+          description: boxes in wanted range
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of boxes
+                items:
+                  $ref: '#/components/schemas/IndexedErgoBox'
+          default:
+            description: Error
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ApiError'
+
+  /extra/box/byErgoTree/{ergoTreeHex}:
+    get:
+      summary: Retrieve boxes by their associated ergotree
+      operationId: getBoxesByErgoTree
+      tags:
+        - extra
+      parameters:
+        - in: path
+          name: ergoTreeHex
+          required: true
+          description: hex encoded ergotree
+          schema:
+            type: string
+            example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
+        - in: query
+          name: limit
+          required: false
+          description: get last n elements, set to negative for all elements
+          schema:
+            type: integer
+            format: int64
+            default: 20
+      responses:
+        '200':
+          description: boxes with wanted ergotree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No box found with wanted ergotree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /extra/box/unspent/byErgoTree/{ergoTreeHex}:
+    get:
+      summary: Retrieve unspent boxes by their associated ergotree
+      operationId: getBoxesByErgoTreeUnspent
+      tags:
+        - extra
+      parameters:
+        - in: path
+          name: ergoTreeHex
+          required: true
+          description: hex encoded ergotree
+          schema:
+            type: string
+            example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
+        - in: query
+          name: limit
+          required: false
+          description: get last n elements, set to negative for all elements
+          schema:
+            type: integer
+            format: int64
+            default: 20
+      responses:
+        '200':
+          description: unspent boxes with wanted ergotree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No unspent box found with wanted ergotree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:

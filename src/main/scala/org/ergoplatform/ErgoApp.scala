@@ -13,6 +13,7 @@ import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModePeerFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.slf4j.{Logger, LoggerFactory}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
@@ -28,7 +29,7 @@ import scorex.util.ScorexLogging
 
 import java.net.InetSocketAddress
 import scala.concurrent.{ExecutionContext, Future}
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 class ErgoApp(args: Args) extends ScorexLogging {
 
@@ -100,6 +101,13 @@ class ErgoApp(args: Args) extends ScorexLogging {
       None
     }
 
+  // Create an instance of ExtraIndexer actor if "extraIndex = true" in config
+  private val indexerRefOpt: Option[ActorRef] =
+    if(ergoSettings.nodeSettings.extraIndex)
+      Some(ExtraIndexerRef(ergoSettings.chainSettings))
+    else
+      None
+  ExtraIndexerRef.setAddressEncoder(ergoSettings.addressEncoder) // initialize an accessible address encoder regardless of extra indexing being enabled
 
   private val syncTracker = ErgoSyncTracker(scorexSettings.network, timeProvider)
   private val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider)
@@ -124,6 +132,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
+    ExtraIndexApiRoute(readersHolderRef, ergoSettings, indexerRefOpt),
     ErgoPeersApiRoute(peerManagerRef, networkControllerRef, syncTracker, deliveryTracker, scorexSettings.restApi),
     InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
@@ -176,7 +185,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     root.setLevel(Level.toLevel(ergoSettings.scorexSettings.logging.level))
   }
 
-  private def swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
+  private def swaggerConfig: String = Source.fromResource("api/openapi.yaml")(Codec.UTF8).getLines.mkString("\n")
 
   private def run(): Future[ServerBinding] = {
     require(scorexSettings.network.agentName.length <= ErgoApp.ApplicationNameLimit)

@@ -7,6 +7,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
@@ -66,6 +67,14 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
+  /**
+    *
+    * @param transactions to be applied to state
+    * @param headerId of the block these transactions belong to
+    * @param expectedDigest AVL+ tree digest of UTXO set after applying operations from txs
+    * @param currentStateContext Additional data required for transactions validation
+    * @return
+    */
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        headerId: ModifierId,
                                        expectedDigest: ADDigest,
@@ -78,22 +87,22 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    def performOperation(modifierIdOperation: (ModifierId, Operation)) =
-      persistentProver.performOneOperation(modifierIdOperation._2).recoverWith {
-        case NonFatal(ex) =>
-          Failure(new MalformedModifierError(ex.getMessage, modifierIdOperation._1, Transaction.ModifierTypeId))
-      }
+    def performStateChangingOperations(stateChanges: StateChanges): Try[List[Option[ADValue]]] = {
+      def performOperation(modifierIdOperation: (ModifierId, Operation)): Try[Option[ADValue]] =
+        persistentProver.performOneOperation(modifierIdOperation._2).recoverWith {
+          case NonFatal(ex) =>
+            Failure(new MalformedModifierError(ex.getMessage, modifierIdOperation._1, Transaction.ModifierTypeId))
+        }
+
+        val results: List[Try[Option[ADValue]]] = stateChanges.operations.map(performOperation)(breakOut)
+        Traverse[List].sequence(results)
+    }
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
-      val resultTry =
-        ErgoState.stateChanges(transactions).flatMap { stateChanges =>
-          val mods = stateChanges.operations
-          val tries: List[Try[Option[ADValue]]] = mods.map(performOperation)(breakOut)
-          Traverse[List].sequence(tries)
-        }
+      val operationsProcessing = ErgoState.stateChanges(transactions).flatMap(performStateChangingOperations)
       ModifierValidator(stateContext.validationSettings)
-        .validateNoFailure(fbOperationFailed, resultTry, Transaction.ModifierTypeId)
+        .validateNoFailure(fbOperationFailed, operationsProcessing, Transaction.ModifierTypeId)
         .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry

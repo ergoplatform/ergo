@@ -11,8 +11,7 @@ case class StateChanges(
 
   /**
     * First lookup for all leafs required by data inputs (never fails, but may return proof-of-non-existence),
-    * then remove all leafs that should be removed,
-    * then add new leafs
+    * then remove all leafs that should be removed, then add new leafs
     */
   val operations: IndexedSeq[(ModifierId, Operation)] = toLookup ++ toRemove ++ toAppend
 

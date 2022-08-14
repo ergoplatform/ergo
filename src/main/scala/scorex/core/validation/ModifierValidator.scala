@@ -135,8 +135,13 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
     pass(if (!settings.isActive(id)) result else condition.fold(e => settings.getError(id, e, modifierId, modifierTypeId), _ => result))
   }
 
-  /** Validate the `condition` is `Success`. Otherwise the `error` callback will be provided with detail
+  /**
+    * Validate the `condition` is `Success`. Otherwise the `error` callback will be provided with detail
     * on a failure exception of type ModifierError which contains modifierId and modifierType information
+    * @param id validation identifier
+    * @param condition true => Valid, false => Invalid
+    * @param modifierTypeId provide for a case when it cannot be resolved from a ModifierError
+    * @return validation state
     */
   def validateNoFailure(id: Short, condition: => Try[_], modifierTypeId: ModifierTypeId): ValidationState[T] = {
     pass {

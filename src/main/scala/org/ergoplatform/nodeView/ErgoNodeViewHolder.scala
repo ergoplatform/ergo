@@ -251,6 +251,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
               }
             case Failure(ex: MalformedModifierError) if ex.modifierTypeId == Transaction.ModifierTypeId =>
+              // invalid transaction in a block will likely be in mempool and should be removed
               logger.warn(s"Invalidating transaction ${ex.modifierId} in mempool due to ${ex.getMessage}", ex)
               reportInvalidModifier(ex).map { updateInformation =>
                 self ! EliminateTransactions(List(ex.modifierId), ex.getMessage)

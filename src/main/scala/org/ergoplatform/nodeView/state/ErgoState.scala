@@ -73,6 +73,8 @@ object ErgoState extends ScorexLogging {
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
   /**
+    * Resolves state changing operations from transactions. There could be invalid sequence
+    * of operations like utxo double-spending in which case entire block is considered invalid
     * @param txs - sequence of transactions
     * @return ordered sequence of operations on UTXO set from this sequence of transactions
     *         if some box was created and later spent in this sequence - it is not included in the result at all

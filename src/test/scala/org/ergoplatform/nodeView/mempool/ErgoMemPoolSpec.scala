@@ -38,6 +38,29 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
   }
 
+  it should "respect given sorting order" in {
+    implicit val ms = settings.chainSettings.monetary
+    val (us, bh) = createUtxoState(parameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
+    val inputBox = wus.takeBoxes(1).head
+    val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
+    val tx = ErgoTransaction(
+      IndexedSeq(new Input(inputBox.id, new ProverResult(Array.emptyByteArray, ContextExtension.empty))),
+      IndexedSeq(feeOut)
+    )
+
+    var poolSize = ErgoMemPool.empty(settings, SortingOption.FeePerByte)
+    poolSize = poolSize.process(tx, wus)._1
+    val size = tx.size
+    poolSize.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, size).weight
+
+    var poolCost = ErgoMemPool.empty(settings, SortingOption.FeePerCostUnit)
+    poolCost = poolCost.process(tx, wus)._1
+    val cost = wus.validateWithCost(tx, Int.MaxValue).get
+    poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, cost).weight
+  }
+
   it should "decline already contained transaction" in {
     val (us, bh) = createUtxoState(parameters)
     val genesis = validFullBlock(None, us, bh)

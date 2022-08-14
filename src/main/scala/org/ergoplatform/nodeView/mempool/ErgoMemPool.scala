@@ -26,7 +26,7 @@ import scala.util.{Failure, Random, Success, Try}
   *                 information about mempool's state and transactions in it.
   * @param sortingOption - this input sets how transactions are sorted in the pool, by fee-per-byte or fee-per-cycle
   */
-class ErgoMemPool private[mempool](pool: OrderedTxPool,
+class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                                    private[mempool] val stats : MemPoolStatistics,
                                    private[mempool] val sortingOption: SortingOption)
                                   (implicit settings: ErgoSettings)

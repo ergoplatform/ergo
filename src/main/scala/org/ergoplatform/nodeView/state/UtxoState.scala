@@ -177,8 +177,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
               ErgoState.stateChanges(fb.blockTransactions.txs) match {
                 case Success(stateChanges) =>
-                 val mods = stateChanges.operations
-                  mods.foreach( modIdOp => persistentProver.performOneOperation(modIdOp._2))
+                  stateChanges.operations.foreach { case (_, operation) =>
+                    persistentProver.performOneOperation(operation)
+                  }
 
                   // meta is the same as it is block-specific
                   proofBytes = persistentProver.generateProofAndUpdateStorage(meta)

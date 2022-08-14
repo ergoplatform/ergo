@@ -219,6 +219,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       val res = pool.process(txToDecline, us)._2
       res.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
       res.asInstanceOf[ProcessingOutcome.Declined].e.getMessage.contains("pays less") shouldBe true
+      pool.size shouldBe (family_depth + 1) * txs.size
     }
   }
 

@@ -197,6 +197,7 @@ object OrderedTxPool {
   }
 
   /**
+    * Wrap transaction into an entity which is storing its mempool sorting weight also
     *
     * @param tx - transaction
     * @param feeFactor - fee-related factor of the transaction `tx`, so size or cost
@@ -210,7 +211,8 @@ object OrderedTxPool {
       .sum
 
     // We multiply by 1024 for better precision
-    val feePerKb = fee * 1024 / feeFactor
-    WeightedTxId(tx.id, feePerKb, feePerKb, System.currentTimeMillis())
+    val feePerFactor = fee * 1024 / feeFactor
+    // Weight is equal to feePerFactor here, however, it can be modified later when children transactions will arrive
+    WeightedTxId(tx.id, feePerFactor, feePerFactor, System.currentTimeMillis())
   }
 }

@@ -8,7 +8,7 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import sigmastate.Values.ByteArrayConstant
+import sigmastate.Values.{ByteArrayConstant, TrueLeaf}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 class ErgoMemPoolSpec extends AnyFlatSpec
@@ -83,7 +83,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         val wus = WrappedUtxoState(us, bh, stateConstants, extendedParameters).applyModifier(genesis)(_ => ()).get
 
         val feeProp = settings.chainSettings.monetary.feeProposition
-        val inputBox = wus.takeBoxes(1).head
+        val inputBox = wus.takeBoxes(100).collectFirst{
+          case box if box.ergoTree == TrueLeaf.toSigmaProp.treeWithSegregation => box
+        }.get
         val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
 
         def rndContext(n: Int): ContextExtension = ContextExtension(Map(

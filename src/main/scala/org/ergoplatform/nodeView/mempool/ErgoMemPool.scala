@@ -81,6 +81,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   /**
     * Method to put a transaction into the memory pool. Validation of the transactions against
     * the state is done in NodeVieHolder. This put() method can check whether a transaction is valid
+    *
     * @param tx
     * @return Success(updatedPool), if transaction successfully added to the pool, Failure(_) otherwise
     */
@@ -176,7 +177,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
                 utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), costLimit, None) match {
                   case Success(cost) => acceptIfNoDoubleSpend(tx, cost)
-                  case Failure(ex) => new ErgoMemPool (pool.invalidate (tx), stats, sortingOption) -> ProcessingOutcome.Invalidated (ex)
+                  case Failure(ex) => new ErgoMemPool(pool.invalidate(tx), stats, sortingOption) -> ProcessingOutcome.Invalidated(ex)
                 }
               } else {
                 this -> ProcessingOutcome.Declined(new Exception("not all utxos in place yet"))
@@ -239,6 +240,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     * Calculate position in mempool corresponding to the specified fee and
     * estimate time of serving this transaction based on average rate of placing
     * transactions in blockchain
+    *
     * @param txFee  - transaction fee
     * @param txSize - size of transaction (in bytes)
     * @return average time for this transaction to be placed in block
@@ -312,6 +314,7 @@ object ErgoMemPool extends ScorexLogging {
     /**
       * Class signalling that a valid transaction was rejected as it is double-spending inputs of mempool transactions
       * and has no bigger weight (fee/byte) than them on average.
+      *
       * @param winnerTxIds - identifiers of transactions won in replace-by-fee auction
       */
     case class DoubleSpendingLoser(winnerTxIds: Set[ModifierId]) extends ProcessingOutcome
@@ -331,6 +334,7 @@ object ErgoMemPool extends ScorexLogging {
 
   /**
     * Create empty mempool
+    *
     * @param settings - node settings (to get mempool settings from)
     * @param sortingOption - how to sort transactions (by size or execution cost)
     * @return empty mempool

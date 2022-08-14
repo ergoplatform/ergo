@@ -5,7 +5,7 @@ import scorex.util.ModifierId
 
 import scala.util.control.NoStackTrace
 
-case class InvalidModifierDetails(error: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId)
+case class InvalidModifier(error: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId)
 
 /** Base trait for errors that were occurred during NodeView Modifier validation
   */

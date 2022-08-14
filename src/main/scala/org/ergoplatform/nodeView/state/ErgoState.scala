@@ -16,7 +16,7 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.validation.ValidationResult.Valid
-import scorex.core.validation.{MalformedModifierError, ModifierValidator, ValidationResult}
+import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -73,6 +73,8 @@ object ErgoState extends ScorexLogging {
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
   /**
+    * Resolves state changing operations from transactions. There could be invalid sequence
+    * of operations like utxo double-spending in which case entire block is considered invalid
     * @param txs - sequence of transactions
     * @return ordered sequence of operations on UTXO set from this sequence of transactions
     *         if some box was created and later spent in this sequence - it is not included in the result at all
@@ -80,7 +82,7 @@ object ErgoState extends ScorexLogging {
     */
   def stateChanges(txs: Seq[ErgoTransaction]): Try[StateChanges] = {
     boxChanges(txs).map { case (toRemoveChanges, toInsertChanges) =>
-      val toLookup: IndexedSeq[(ModifierId, Lookup)] = txs.flatMap(tx => tx.dataInputs.map(b => tx.id -> Lookup(b.boxId)))(breakOut)
+      val toLookup: IndexedSeq[Lookup] = txs.flatMap(_.dataInputs).map(b => Lookup(b.boxId))(breakOut)
       StateChanges(toRemoveChanges, toInsertChanges, toLookup)
     }
   }
@@ -154,7 +156,7 @@ object ErgoState extends ScorexLogging {
     *         if box was first spend and created after that - it is in both toInsert and toRemove,
     *         and an error will be thrown further during tree modification
     */
-  def boxChanges(txs: Seq[ErgoTransaction]): Try[(IndexedSeq[(ModifierId, Remove)], IndexedSeq[(ModifierId, Insert)])] = Try {
+  def boxChanges(txs: Seq[ErgoTransaction]): Try[(Vector[Remove], Vector[Insert])] = Try {
     val toInsert: mutable.TreeMap[ModifierId, Insert] = mutable.TreeMap.empty
     val toRemove: mutable.TreeMap[ModifierId, Remove] = mutable.TreeMap.empty
 
@@ -165,14 +167,14 @@ object ErgoState extends ScorexLogging {
         toInsert.remove(wrappedBoxId) match {
           case None =>
             if (toRemove.put(wrappedBoxId, Remove(i.boxId)).nonEmpty) {
-              throw new MalformedModifierError(s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId", tx.id, tx.modifierTypeId)
+              throw new IllegalArgumentException(s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId")
             }
           case _ => // old value removed, do nothing
         }
       }
       tx.outputs.foreach(o => toInsert += bytesToId(o.id) -> Insert(o.id, ADValue @@ o.bytes))
     }
-    (toRemove.toVector, toInsert.toVector)
+    (toRemove.map(_._2)(breakOut), toInsert.map(_._2)(breakOut))
   }
 
   /**

@@ -47,8 +47,8 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
             val changes = ErgoState.stateChanges(ct.transactions).get
             val updHolder = versionedBoxHolder.applyChanges(
               us.version,
-              changes.toRemove.map(_._2.key).map(ByteArrayWrapper.apply),
-              changes.toAppend.map(_._2.value).map(ErgoBoxSerializer.parseBytes))
+              changes.toRemove.map(_.key).map(ByteArrayWrapper.apply),
+              changes.toAppend.map(_.value).map(ErgoBoxSerializer.parseBytes))
             Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants))
           case _ =>
             val updHolder = versionedBoxHolder.applyChanges(us.version, Seq(), Seq())

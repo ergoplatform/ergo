@@ -13,7 +13,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{InvalidModifierDetails, ModifierValidator, ValidationState}
+import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
@@ -171,9 +171,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
               }
 
               currentValidationState
-                .validate(exBlockVersion, calculatedParams.blockVersion == header.version, InvalidModifierDetails(s"${calculatedParams.blockVersion} == ${header.version}", extension.id, extension.modifierTypeId))
+                .validate(exBlockVersion, calculatedParams.blockVersion == header.version, InvalidModifier(s"${calculatedParams.blockVersion} == ${header.version}", extension.id, extension.modifierTypeId))
                 .validateNoFailure(exMatchParameters, Parameters.matchParameters(parsedParams, calculatedParams), extension.id, extension.modifierTypeId)
-                .validate(exMatchValidationSettings, parsedSettings == calculatedSettings, InvalidModifierDetails(s"$parsedSettings vs $calculatedSettings", extension.id, extension.modifierTypeId))
+                .validate(exMatchValidationSettings, parsedSettings == calculatedSettings, InvalidModifier(s"$parsedSettings vs $calculatedSettings", extension.id, extension.modifierTypeId))
           }.result
       }.result
       .toTry
@@ -258,10 +258,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       .validateExtension(fb.extension, fb.header, lastExtensionOpt, lastHeaderOpt)
       .validate(bsBlockTransactionsSize,
         fb.blockTransactions.size <= currentParameters.maxBlockSize,
-        InvalidModifierDetails(s"${fb.id} => ${fb.blockTransactions.size} == ${currentParameters.maxBlockSize}", fb.id, fb.modifierTypeId))
+        InvalidModifier(s"${fb.id} => ${fb.blockTransactions.size} == ${currentParameters.maxBlockSize}", fb.id, fb.modifierTypeId))
       .validate(exSize,
         fb.extension.size <= Constants.MaxExtensionSize,
-        InvalidModifierDetails(s"${fb.id} => ${fb.extension.size} == ${Constants.MaxExtensionSize}", fb.extension.id, fb.extension.modifierTypeId)) // id/type of Block here?
+        InvalidModifier(s"${fb.id} => ${fb.extension.size} == ${Constants.MaxExtensionSize}", fb.extension.id, fb.extension.modifierTypeId)) // id/type of Block here?
       .result
       .toTry
       .flatMap(_ => checkHeaderHeight(fb.header))
@@ -287,12 +287,12 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
     ModifierValidator(validationSettings)
       .payload(this)
-      .validate(hdrVotesNumber, votesCount <= Parameters.ParamVotesCount, InvalidModifierDetails(s"votesCount=$votesCount", header.id, header.modifierTypeId))
+      .validate(hdrVotesNumber, votesCount <= Parameters.ParamVotesCount, InvalidModifier(s"votesCount=$votesCount", header.id, header.modifierTypeId))
       .validateSeq(votes) { case (validationState, v) =>
         validationState
-          .validate(hdrVotesDuplicates, votes.count(_ == v) == 1, InvalidModifierDetails(s"Double vote in $vs", header.id, header.modifierTypeId))
-          .validate(hdrVotesContradictory, !reverseVotes.contains(v), InvalidModifierDetails(s"Contradictory votes in $vs", header.id, header.modifierTypeId))
-          .validate(hdrVotesUnknown, !(epochStarts && !Parameters.parametersDescs.contains(v)), InvalidModifierDetails(s"Incorrect vote proposed in $vs", header.id, header.modifierTypeId))
+          .validate(hdrVotesDuplicates, votes.count(_ == v) == 1, InvalidModifier(s"Double vote in $vs", header.id, header.modifierTypeId))
+          .validate(hdrVotesContradictory, !reverseVotes.contains(v), InvalidModifier(s"Contradictory votes in $vs", header.id, header.modifierTypeId))
+          .validate(hdrVotesUnknown, !(epochStarts && !Parameters.parametersDescs.contains(v)), InvalidModifier(s"Incorrect vote proposed in $vs", header.id, header.modifierTypeId))
       }
   }
 

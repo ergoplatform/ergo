@@ -5,7 +5,7 @@ import scorex.core.ModifierTypeId
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoder
 import scorex.core.validation.ValidationResult._
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.{Failure, Success, Try}
 
@@ -154,7 +154,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
           case Success(_) =>
             result
           case Failure(unexpectedEx) =>
-            settings.getError(id, unexpectedEx, ModifierId @@ "unknown", modifierTypeId)
+            settings.getError(id, unexpectedEx, ModifierId @@ bytesToId(Array.fill(32)(0.toByte)), modifierTypeId)
         }
       }
     }

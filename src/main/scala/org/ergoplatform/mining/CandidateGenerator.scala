@@ -530,7 +530,7 @@ object CandidateGenerator extends ScorexLogging {
         emissionTxs ++ prioritizedTransactions ++ poolTxs
       )
 
-      val eliminateTransactions = EliminateTransactions(toEliminate, "CandidateGenerator")
+      val eliminateTransactions = EliminateTransactions(toEliminate, EliminateTransactions.FromMiningValidation)
 
       if (txs.isEmpty) {
         throw new IllegalArgumentException(

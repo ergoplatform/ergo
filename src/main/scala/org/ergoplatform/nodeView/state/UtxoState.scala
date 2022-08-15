@@ -17,7 +17,7 @@ import scorex.core._
 import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator}
+import scorex.core.validation.{MalformedModifierError, ModifierValidator}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32

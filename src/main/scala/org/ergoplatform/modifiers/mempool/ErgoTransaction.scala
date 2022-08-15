@@ -134,7 +134,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val (isCostValid, scriptCost: Long) =
       costTry match {
         case Failure(t) =>
-          log.warn(s"Tx verification failed: ${t.getMessage}")
+          log.warn(s"Tx verification failed: ${t.getMessage}", t)
           log.warn(s"Tx $id verification context: " +
             s"${JsonCodecsWrapper.ergoLikeContextEncoder.apply(ctx)} " +
             s"input context: $inputContext " +

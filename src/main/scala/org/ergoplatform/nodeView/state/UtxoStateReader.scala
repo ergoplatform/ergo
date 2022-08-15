@@ -82,12 +82,14 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     */
   protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
     def hasEmissionBox(tx: ErgoTransaction): Boolean =
-      if(fb.height > constants.settings.chainSettings.reemission.activationHeight) // after EIP-27
-        tx.outputs.size == 2 && 
-        !tx.outputs.head.additionalTokens.isEmpty &&
-        java.util.Arrays.equals(tx.outputs.head.additionalTokens(0)._1, constants.settings.chainSettings.reemission.emissionNftIdBytes)
-      else
+      if(fb.height > constants.settings.chainSettings.reemission.activationHeight) {
+        // after EIP-27 we search for emission box NFT for efficiency's sake
+        tx.outputs.size == 2 &&
+          !tx.outputs.head.additionalTokens.isEmpty &&
+          java.util.Arrays.equals(tx.outputs.head.additionalTokens(0)._1, constants.settings.chainSettings.reemission.emissionNftIdBytes)
+      } else {
         tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition
+      }
 
     def fullSearch(fb: ErgoFullBlock): Option[ErgoBox] = {
       fb.transactions

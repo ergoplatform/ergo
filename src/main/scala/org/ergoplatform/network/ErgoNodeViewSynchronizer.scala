@@ -327,17 +327,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
+    * Variable which is caching height of last header which was extracted from sync info message
+    */
+  private var lastSyncHeaderApplied: Option[Int] = Option.empty
+
+  /**
     * Calculates new continuation header from syncInfo message if any, validates it and sends it
     * to nodeViewHolder as a remote modifier for it to be applied
     * @param syncInfo other's node sync info
     */
-  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2, history: ErgoHistory, peer: ConnectedPeer): Unit =
+  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2,
+                                             history: ErgoHistory,
+                                             peer: ConnectedPeer): Unit = {
     history.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
-      history.applicableTry(continuationHeader) match {
-        case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
-          log.warn(s"Header from syncInfoV2 ${continuationHeader.encodedId} is invalid", e)
-        case _ =>
+      if (deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
+        if (continuationHeader.height > lastSyncHeaderApplied.getOrElse(0)) {
           log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
+          lastSyncHeaderApplied = Some(continuationHeader.height)
           viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
           val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
           modifiersToDownload.foreach {
@@ -347,8 +353,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 requestBlockSection(modifierTypeId, Seq(modifierId), peer)
               }
           }
+        }
       }
     }
+  }
 
   /**
     * Headers should be downloaded from an Older node, it is triggered by received sync message from an older node
@@ -623,6 +631,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // (so having UTXO set, and the chain is synced
         if (!settings.nodeSettings.stateType.requireProofs &&
           hr.isHeadersChainSynced &&
+          hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) &&
           hr.fullBlockHeight == hr.headersHeight) {
           val unknownMods =
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
@@ -652,7 +661,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def requestMoreModifiers(historyReader: ErgoHistory): Unit = {
     if (historyReader.isHeadersChainSynced) {
-      // our requested list is is half empty - request more missed modifiers
+      // our requested list is half empty - request more missed modifiers
       self ! CheckModifiersToDownload
     } else {
       // headers chain is not synced yet, but our requested list is half empty - ask for more headers
@@ -786,7 +795,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       syncTracker.clearStatus(connectedPeer)
   }
 
-  protected def getLocalSyncInfo(historyReader: ErgoHistory): Receive = {
+  protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
     case SendLocalSyncInfo =>
       sendSync(historyReader)
   }
@@ -891,7 +900,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def initialized(hr: ErgoHistory, mp: ErgoMemPool, blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
     processDataFromPeer(msgHandlers(hr, mp, blockAppliedTxsCache)) orElse
       onDownloadRequest(hr) orElse
-      getLocalSyncInfo(hr) orElse
+      sendLocalSyncInfo(hr) orElse
       viewHolderEvents(hr, mp, blockAppliedTxsCache) orElse
       peerManagerEvents orElse
       checkDelivery orElse {

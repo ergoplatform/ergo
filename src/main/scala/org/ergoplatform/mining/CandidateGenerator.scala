@@ -411,7 +411,7 @@ object CandidateGenerator extends ScorexLogging {
 
     betterVersion &&
       forkVotingAllowed &&
-      (ergoSettings.votingTargets.softFork != 0 && nextHeightCondition)
+      nextHeightCondition
   }
 
   /**

@@ -27,7 +27,7 @@ import scala.util.{Failure, Random, Success, Try}
   * @param sortingOption - this input sets how transactions are sorted in the pool, by fee-per-byte or fee-per-cycle
   */
 class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
-                                   private[mempool] val stats : MemPoolStatistics,
+                                   private[mempool] val stats: MemPoolStatistics,
                                    private[mempool] val sortingOption: SortingOption)
                                   (implicit settings: ErgoSettings)
   extends ErgoMemPoolReader with ScorexLogging {
@@ -129,7 +129,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   private def acceptIfNoDoubleSpend(tx: ErgoTransaction, cost: Int): (ErgoMemPool, ProcessingOutcome) = {
     val feeFactor = sortingOption match {
       case SortingOption.FeePerByte => tx.size
-      case SortingOption.FeePerCostUnit => cost
+      case SortingOption.FeePerCycle => cost
     }
 
     val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
@@ -285,18 +285,16 @@ object ErgoMemPool extends ScorexLogging {
     /**
       * Sort transactions by fee paid for transaction contracts validation cost, so fee/execution unit
       */
-    case object FeePerCostUnit extends SortingOption
+    case object FeePerCycle extends SortingOption
 
     /**
       * @return randomly chosen mempool sorting strategy
       */
     def random(): SortingOption = {
       if (Random.nextBoolean()) {
-        log.info("Sorting mempool by fee-per-byte")
         FeePerByte
       } else {
-        log.info("Sorting mempool by fee-per-cycle")
-        FeePerCostUnit
+        FeePerCycle
       }
     }
   }
@@ -339,10 +337,15 @@ object ErgoMemPool extends ScorexLogging {
     * @param sortingOption - how to sort transactions (by size or execution cost)
     * @return empty mempool
     */
-  def empty(settings: ErgoSettings, sortingOption: SortingOption = SortingOption.random()): ErgoMemPool =
+  def empty(settings: ErgoSettings, sortingOption: SortingOption = SortingOption.random()): ErgoMemPool = {
+    sortingOption match {
+      case SortingOption.FeePerByte => log.info("Sorting mempool by fee-per-byte")
+      case SortingOption.FeePerCycle => log.info("Sorting mempool by fee-per-cycle")
+    }
     new ErgoMemPool(OrderedTxPool.empty(settings),
       MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()),
       sortingOption
     )(settings)
+  }
 
 }

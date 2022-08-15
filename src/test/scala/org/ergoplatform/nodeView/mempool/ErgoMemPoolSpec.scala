@@ -55,7 +55,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val size = tx.size
     poolSize.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, size).weight
 
-    var poolCost = ErgoMemPool.empty(settings, SortingOption.FeePerCostUnit)
+    var poolCost = ErgoMemPool.empty(settings, SortingOption.FeePerCycle)
     poolCost = poolCost.process(tx, wus)._1
     val cost = wus.validateWithCost(tx, Int.MaxValue).get
     poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, cost).weight

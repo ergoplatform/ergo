@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.mempool
 
 import scorex.core.serialization.ScorexSerializer
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 import scorex.util.serialization.{Reader, Writer}
 
 
@@ -12,15 +12,13 @@ case class UnconfirmedTransaction(
                                    lastCheckedTime: Long,
                                    transactionBytes: Option[Array[Byte]])
   extends ScorexLogging {
-//    with ErgoNodeViewModifier {
+
+  def id: ModifierId = transaction.id
 
   def updateCost(cost: Int): UnconfirmedTransaction = {
     copy(lastCost = Some(cost), lastCheckedTime = System.currentTimeMillis())
   }
 
-//  override def serializedId: Array[Byte] = ???
-//
-//  override val sizeOpt: Option[Int] = _
 }
 
 object UnconfirmedTransaction {
@@ -43,16 +41,23 @@ object UnconfirmedTransactionSerializer extends ScorexSerializer[UnconfirmedTran
     w.putOption(unconfirmedTx.lastCost)(_.putUInt(_))
     w.putULong(unconfirmedTx.createdTime)
     w.putULong(unconfirmedTx.lastCheckedTime)
-    w.putOption(unconfirmedTx.transactionBytes)((_,d) => w.putBytes(d.toArray))
+    w.putOption(unconfirmedTx.transactionBytes){(_,d) =>
+      w.putInt(d.length)
+      w.putBytes(d)
+    }
+
   }
 
+  // this serializer used internally only, so we do not validate data here
   override def parse(r: Reader): UnconfirmedTransaction = {
-
     val ergoTransaction = ErgoTransactionSerializer.parse(r)
     val lastCostOpt = r.getOption(r.getUInt().toInt)
     val createdTime = r.getULong()
     val lastCheckedTime = r.getULong()
-    val transactionBytesOpt = r.getOption(r.getBytes(256)) //TODO transaction bytes size?
+    val transactionBytesOpt = r.getOption{
+      val size = r.getInt()
+      r.getBytes(size)
+    }
 
     UnconfirmedTransaction(ergoTransaction, lastCostOpt, createdTime, lastCheckedTime, transactionBytesOpt)
   }

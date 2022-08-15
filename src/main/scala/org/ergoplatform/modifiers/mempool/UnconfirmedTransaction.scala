@@ -5,12 +5,11 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.util.serialization.{Reader, Writer}
 
 
-case class UnconfirmedTransaction(
-                                   transaction: ErgoTransaction,
-                                   lastCost: Option[Int],
-                                   createdTime: Long,
-                                   lastCheckedTime: Long,
-                                   transactionBytes: Option[Array[Byte]])
+case class UnconfirmedTransaction(transaction: ErgoTransaction,
+                                  lastCost: Option[Int],
+                                  createdTime: Long,
+                                  lastCheckedTime: Long,
+                                  transactionBytes: Option[Array[Byte]])
   extends ScorexLogging {
 
   def id: ModifierId = transaction.id

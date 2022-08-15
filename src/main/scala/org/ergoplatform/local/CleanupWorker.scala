@@ -67,7 +67,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
                        invalidated: Seq[ModifierId],
                        etAcc: Long): (Seq[ModifierId], Seq[ModifierId]) = {
       txs match {
-        case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos && !validatedIndex.contains(head.transaction.id) =>
+        case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos && !validatedIndex.contains(head.id) =>
 
           // Take into account previously validated transactions from the pool.
           // This provides possibility to validate transactions which are spending off-chain outputs.
@@ -81,7 +81,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
           val t1 = System.nanoTime()
           val accumulatedTime = etAcc + (t1 - t0)
 
-          val txId = head.transaction.id
+          val txId = head.id
           validationResult match {
             case Success(_) =>
               validationLoop(tail, validated :+ txId, invalidated, accumulatedTime)

@@ -74,7 +74,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
   /**
     * Method to put a transaction into the memory pool. Validation of tha transactions against
     * the state is done in NodeVieHolder. This put() method can check whether a transaction is valid
-    * @param tx
+    * @param unconfirmedTx
     * @return Success(updatedPool), if transaction successfully added to the pool, Failure(_) otherwise
     */
   def put(unconfirmedTx: UnconfirmedTransaction): Try[ErgoMemPool] = put(Seq(unconfirmedTx))
@@ -105,7 +105,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
   /**
     * Invalidate transaction and delete it from pool
     *
-    * @param tx - Transaction to invalidate
+    * @param unconfirmedTransaction - Transaction to invalidate
     */
   def invalidate(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
     new ErgoMemPool(pool.invalidate(unconfirmedTransaction), stats)

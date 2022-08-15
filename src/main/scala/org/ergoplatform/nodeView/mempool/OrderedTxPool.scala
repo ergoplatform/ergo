@@ -45,7 +45,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     * put() is preceded by canAccept method which enforces that newly added transaction will not be immediately
     * thrown from the pool.
     *
-    * @param tx - transaction to add
+    * @param unconfirmedTx - transaction to add
     * @return - modified pool
     */
   def put(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {

@@ -103,7 +103,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def broadcastTx(unconfirmedTx: UnconfirmedTransaction): Unit = {
     val msg = Message(
       InvSpec,
-      Right(InvData(Transaction.ModifierTypeId, Seq(unconfirmedTx.transaction.id))),
+      Right(InvData(Transaction.ModifierTypeId, Seq(unconfirmedTx.id))),
       None
     )
     networkControllerRef ! SendToNetwork(msg, Broadcast)

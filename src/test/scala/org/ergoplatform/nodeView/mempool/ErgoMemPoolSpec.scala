@@ -46,7 +46,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val inputBox = wus.takeBoxes(1).head
     val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
     val tx = ErgoTransaction(
-      IndexedSeq(new Input(inputBox.id, new ProverResult(Array.emptyByteArray, ContextExtension.empty))),
+      IndexedSeq(new Input(inputBox.id, ProverResult.empty)),
       IndexedSeq(feeOut)
     )
 

@@ -22,15 +22,12 @@ case class UnconfirmedTransaction(transaction: ErgoTransaction,
 
 object UnconfirmedTransaction {
 
-  def apply(tx: ErgoTransaction): UnconfirmedTransaction = {
-    UnconfirmedTransaction(
-      tx,
-      None,
-      0,
-      0,
-      Some(ErgoTransactionSerializer.toBytes(tx))
-    )
+  def apply(tx: ErgoTransaction): UnconfirmedTransaction = UnconfirmedTransaction(tx, None, 0, 0, None)
+
+  def apply(tx: ErgoTransaction, txBytes: Array[Byte]): UnconfirmedTransaction = {
+    UnconfirmedTransaction(tx, None, 0, 0, Some(txBytes))
   }
+
 }
 
 object UnconfirmedTransactionSerializer extends ScorexSerializer[UnconfirmedTransaction] {

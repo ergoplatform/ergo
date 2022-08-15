@@ -77,7 +77,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
           }
 
           val t0 = System.nanoTime()
-          val validationResult = state.validateWithCost(head, nodeSettings.maxTransactionCost)
+          // todo: update unconfirmed tx in the pool
+          val validationResult = state.validateWithCost(head.transaction, nodeSettings.maxTransactionCost)
           val t1 = System.nanoTime()
           val accumulatedTime = etAcc + (t1 - t0)
 

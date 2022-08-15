@@ -155,11 +155,11 @@ case class WalletApiRoute(readersHolder: ActorRef,
   private def generateTransactionAndProcess(requests: Seq[TransactionGenerationRequest],
                                             inputsRaw: Seq[String],
                                             dataInputsRaw: Seq[String],
-                                            verifyFn: UnconfirmedTransaction => Future[Try[UnconfirmedTransaction]],
+                                            verifyFn: ErgoTransaction => Future[Try[UnconfirmedTransaction]],
                                             processFn: UnconfirmedTransaction => Route): Route = {
     withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap(txTry => txTry match {
       case Success(tx) => verifyFn(tx)
-      case f: Failure[UnconfirmedTransaction] => Future(f)
+      case Failure(e) => Future(Failure[UnconfirmedTransaction](e))
     })) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => processFn(tx)
@@ -169,7 +169,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
   private def generateTransaction(requests: Seq[TransactionGenerationRequest],
                                   inputsRaw: Seq[String],
                                   dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => Future(Success(tx)), tx => ApiResponse(tx))
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => Future(Success(UnconfirmedTransaction(tx))), tx => ApiResponse(tx))
   }
 
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],

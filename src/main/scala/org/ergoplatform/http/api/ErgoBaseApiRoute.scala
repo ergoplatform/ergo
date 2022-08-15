@@ -3,7 +3,7 @@ package org.ergoplatform.http.api
 import akka.actor.ActorRef
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.{Directive1, ValidationRejection}
-import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
@@ -66,18 +66,20 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
     * Used in /transactions (POST /transactions and /transactions/check methods) and /wallet (/wallet/payment/send
     * and /wallet/transaction/send) API methods to check submitted or generated transaction
     */
-  protected def verifyTransaction(unconfirmedTx: UnconfirmedTransaction,
+  protected def verifyTransaction(tx: ErgoTransaction,
                                   readersHolder: ActorRef,
                                   ergoSettings: ErgoSettings): Future[Try[UnconfirmedTransaction]] = {
+    val now: Long = System.currentTimeMillis()
+
     getStateAndPool(readersHolder)
       .map {
         case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
           val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
           utxo.withMempool(mp)
-            .validateWithCost(unconfirmedTx, maxTxCost)
-            .map(_ => unconfirmedTx)
+            .validateWithCost(tx, maxTxCost)
+            .map(cost => UnconfirmedTransaction(tx, Some(cost), now, now, None))
         case _ =>
-          unconfirmedTx.transaction.statelessValidity().map(_ => unconfirmedTx)
+          tx.statelessValidity().map(_ => UnconfirmedTransaction(tx, None, now, now, None))
       }
   }
 

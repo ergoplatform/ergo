@@ -6,7 +6,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.{ErgoBox, P2PKAddress}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
@@ -92,10 +92,9 @@ trait ErgoWalletReader extends NodeViewComponent {
 
   def generateTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
-                          dataInputsRaw: Seq[String] = Seq.empty): Future[Try[UnconfirmedTransaction]] =
+                          dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
     (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true))
       .mapTo[Try[ErgoTransaction]]
-      .mapTo[Try[UnconfirmedTransaction]]
 
   def generateCommitmentsFor(unsignedErgoTransaction: UnsignedErgoTransaction,
                              externalSecretsOpt: Option[Seq[ExternalSecret]],

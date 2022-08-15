@@ -37,21 +37,20 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getMemPool.map { p =>
-    p.getAll.slice(offset, offset + limit).map(_.asJson).asJson
+    p.getAll.slice(offset, offset + limit).map(_.transaction).map(_.asJson).asJson
   }
 
-  private def validateTransactionAndProcess(unconfirmedTx: UnconfirmedTransaction)
+  private def validateTransactionAndProcess(tx: ErgoTransaction)
                                            (processFn: UnconfirmedTransaction => Route): Route = {
-    val tx = unconfirmedTx.transaction
     if (tx.size > ergoSettings.nodeSettings.maxTransactionSize) {
       BadRequest(s"Transaction $tx has too large size ${tx.size}")
     } else {
       onSuccess {
-        verifyTransaction(unconfirmedTx, readersHolder, ergoSettings)
+        verifyTransaction(tx, readersHolder, ergoSettings)
       } {
         _.fold(
           e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
-          _ => processFn(unconfirmedTx)
+          utx => processFn(utx)
         )
       }
     }
@@ -59,13 +58,11 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
-    val unconfirmedTx = UnconfirmedTransaction(tx)
-    validateTransactionAndProcess(unconfirmedTx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
-    }
+    validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
+  }
 
   def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) { tx =>
-    val unconfirmedTx = UnconfirmedTransaction(tx)
-    validateTransactionAndProcess(unconfirmedTx)(validTx => ApiResponse(validTx.transaction.id))
+    validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
   }
 
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & txPaging) { (offset, limit) =>

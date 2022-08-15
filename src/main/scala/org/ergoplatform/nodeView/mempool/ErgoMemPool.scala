@@ -167,7 +167,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool,
             case validator: TransactionValidation =>
               // transaction validation currently works only for UtxoState, so this branch currently
               // will not be triggered probably
-              validator.validateWithCost(unconfirmedTx, nodeSettings.maxTransactionCost).fold(
+              validator.validateWithCost(unconfirmedTx.transaction, nodeSettings.maxTransactionCost).fold(
                 ex => new ErgoMemPool(pool.invalidate(unconfirmedTx), stats) -> ProcessingOutcome.Invalidated(ex),
                 _ => acceptIfNoDoubleSpend(unconfirmedTx)
               )

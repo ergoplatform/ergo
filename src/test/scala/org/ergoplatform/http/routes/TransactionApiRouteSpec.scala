@@ -109,7 +109,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   it should "get unconfirmed from mempool" in {
     Get(prefix + "/unconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      memPool.take(50).toSeq shouldBe responseAs[Seq[ErgoTransaction]]
+      memPool.take(50).map(_.transaction).toSeq shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
 
@@ -118,7 +118,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     val offset = 20
     Get(prefix + s"/unconfirmed?limit=$limit&offset=$offset") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      memPool.getAll.slice(offset, offset + limit) shouldBe responseAs[Seq[ErgoTransaction]]
+      memPool.getAll.slice(offset, offset + limit).map(_.transaction) shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
 }

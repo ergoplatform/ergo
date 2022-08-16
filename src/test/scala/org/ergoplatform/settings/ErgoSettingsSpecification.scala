@@ -156,4 +156,27 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
   }
 
+  property("scorex.restApi.publicUrl should be valid") {
+    val invalidUrls =
+      List(
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://0.0.0.0",
+        "http://example.com/foo/bar",
+        "http://example.com?foo=bar"
+      ).map(new URL(_))
+
+    invalidUrls.forall(ErgoSettings.invalidRestApiUrl) shouldBe true
+
+    val validUrls =
+      List(
+        "http://example.com",
+        "http://example.com:80",
+        "http://82.90.21.31",
+        "http://82.90.21.31:80"
+      ).map(new URL(_))
+
+    validUrls.forall(url => !ErgoSettings.invalidRestApiUrl(url)) shouldBe true
+  }
+
 }

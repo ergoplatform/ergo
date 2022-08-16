@@ -65,7 +65,7 @@ class RequestModifiersSpecification extends ErgoPropertyTest with DecodingUtils 
 
     headersCount shouldBe 1
 
-    // read mofifier (header) ids
+    // read modifier (header) ids
     val headerIdParsed = getBytes(bb, 32)
 
     headerIdParsed.toIndexedSeq shouldBe headerId.toIndexedSeq

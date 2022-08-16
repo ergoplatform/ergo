@@ -409,8 +409,20 @@ object CandidateGenerator extends ScorexLogging {
       nextHeight >= 4096
     }
 
+    // we automatically vote for 5.0 soft-fork in the mainnet if 120 = 0 vote not provided in settings
+    val forkOrdered = if (ergoSettings.networkType.isMainNet && protocolVersion == 2) {
+      ergoSettings.votingTargets.softForkOption.getOrElse(1) == 1
+    } else {
+      ergoSettings.votingTargets.softForkOption.getOrElse(0) == 1
+    }
+
+    //todo: remove after 5.0 soft-fork activation
+    log.debug(s"betterVersion: $betterVersion, forkVotingAllowed: $forkVotingAllowed, " +
+              s"forkOrdered: $forkOrdered, nextHeightCondition: $nextHeightCondition")
+
     betterVersion &&
       forkVotingAllowed &&
+      forkOrdered &&
       nextHeightCondition
   }
 

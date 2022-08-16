@@ -18,7 +18,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
-import scorex.core.network.NetworkController.ReceivableMessages.{DisconnectFrom, PenalizePeer, RegisterMessageSpecs, SendToNetwork}
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader

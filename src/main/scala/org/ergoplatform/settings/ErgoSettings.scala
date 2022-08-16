@@ -202,7 +202,7 @@ object ErgoSettings extends ScorexLogging
     } else if(settings.networkType.isMainNet &&
                 settings.nodeSettings.mining &&
                 !settings.chainSettings.reemission.checkReemissionRules) {
-      failWithError(s"Mining is enabled, but chain.reemission.checkReemissionRules = false , set it to true")
+      failWithError(s"Mining is enabled, but ergo.chain.reemission.checkReemissionRules = false , set it to true")
     } else if (settings.scorexSettings.restApi.publicUrl.exists(invalidRestApiUrl)) {
       failWithError(s"scorex.restApi.publicUrl should not contain query, path or fragment and should not " +
         s"be local or loopback address : ${settings.scorexSettings.restApi.publicUrl.get}")

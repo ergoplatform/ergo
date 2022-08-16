@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.{DataInput, JsonCodecs}
+import org.ergoplatform.DataInput
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.{ModifierTypeId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
@@ -12,7 +12,7 @@ import scorex.util.{ModifierId, bytesToId}
 
 case class IndexedErgoTransaction(txid: ModifierId,
                                   height: Int,
-                                  globalIndex: Long) extends BlockSection with JsonCodecs {
+                                  globalIndex: Long) extends BlockSection {
 
   override val modifierTypeId: ModifierTypeId = IndexedErgoTransaction.modifierTypeId
   override def serializedId: Array[Byte] = idToBytes(txid)
@@ -20,8 +20,6 @@ case class IndexedErgoTransaction(txid: ModifierId,
   override def parentId: ModifierId = null
   override type M = IndexedErgoTransaction
   override def serializer: ScorexSerializer[IndexedErgoTransaction] = IndexedErgoTransactionSerializer
-
-  def toBytes: Array[Byte] = serializer.toBytes(this)
 
   private var _blockId: ModifierId = _
   private var _inclusionHeight: Int = 0
@@ -66,7 +64,6 @@ case class IndexedErgoTransaction(txid: ModifierId,
 object IndexedErgoTransactionSerializer extends ScorexSerializer[IndexedErgoTransaction] {
 
   override def serialize(iTx: IndexedErgoTransaction, w: Writer): Unit = {
-    w.putUByte(IndexedErgoTransaction.modifierTypeId)
     w.putUByte(iTx.serializedId.length)
     w.putBytes(iTx.serializedId)
     w.putInt(iTx.height)

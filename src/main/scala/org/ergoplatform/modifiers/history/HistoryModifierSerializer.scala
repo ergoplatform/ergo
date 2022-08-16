@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.nodeView.history.extra.{IndexedErgoAddress, IndexedErgoAddressSerializer, IndexedErgoBox, IndexedErgoBoxSerializer, IndexedErgoTransaction, IndexedErgoTransactionSerializer, IndexedErgoTree, IndexedErgoTreeSerializer}
+import org.ergoplatform.nodeView.history.extra.{IndexedErgoAddress, IndexedErgoAddressSerializer, IndexedErgoBox, IndexedErgoBoxSerializer, IndexedErgoTransaction, IndexedErgoTransactionSerializer, IndexedErgoTree, IndexedErgoTreeSerializer, NumericBoxIndex, NumericBoxIndexSerializer, NumericTxIndex, NumericTxIndexSerializer}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 
@@ -35,6 +35,12 @@ object HistoryModifierSerializer extends ScorexSerializer[BlockSection] {
       case m: IndexedErgoBox =>
         w.put(IndexedErgoBox.modifierTypeId)
         IndexedErgoBoxSerializer.serialize(m, w)
+      case m: NumericTxIndex =>
+        w.put(NumericTxIndex.modifierTypeId)
+        NumericTxIndexSerializer.serialize(m, w)
+      case m: NumericBoxIndex =>
+        w.put(NumericBoxIndex.modifierTypeId)
+        NumericBoxIndexSerializer.serialize(m, w)
       case m =>
         throw new Error(s"Serialization for unknown modifier: $m")
     }
@@ -58,6 +64,10 @@ object HistoryModifierSerializer extends ScorexSerializer[BlockSection] {
         IndexedErgoTransactionSerializer.parse(r)
       case IndexedErgoBox.`modifierTypeId` =>
         IndexedErgoBoxSerializer.parse(r)
+      case NumericTxIndex.`modifierTypeId` =>
+        NumericTxIndexSerializer.parse(r)
+      case NumericBoxIndex.`modifierTypeId` =>
+        NumericBoxIndexSerializer.parse(r)
       case m =>
         throw new Error(s"Deserialization for unknown type byte: $m")
     }

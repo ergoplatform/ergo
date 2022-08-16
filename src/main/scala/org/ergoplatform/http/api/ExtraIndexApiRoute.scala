@@ -6,8 +6,7 @@ import akka.pattern.ask
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{box_indexNumHash, ergoTreeHash, tx_indexNumHash}
-import org.ergoplatform.nodeView.history.extra.{IndexedErgoAddress, IndexedErgoAddressSerializer, IndexedErgoBox, IndexedErgoTransaction, IndexedErgoTree}
+import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -52,9 +51,7 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
   private def getAddress(addr: ErgoAddress)(implicit history: ErgoHistoryReader): Option[IndexedErgoAddress] = {
-    val x: Option[IndexedErgoAddress] = history.typedModifierById[IndexedErgoAddress](IndexedErgoAddressSerializer.addressToModifierId(addr))
-    if(x.isDefined) log.info(s"Address: ${addressEncoder.toString(x.get.address)} => ${x.get.txIds}, ${x.get.boxIds}")
-    x
+    history.typedModifierById[IndexedErgoAddress](IndexedErgoAddressSerializer.addressToModifierId(addr))
   }
 
   private def getTxById(id: ModifierId)(implicit history: ErgoHistoryReader): Option[IndexedErgoTransaction] =
@@ -75,7 +72,7 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getTxByIndex(index: Long): Future[Option[IndexedErgoTransaction]] =
     getHistory.map { history =>
-      getTxById(bytesToId(history.modifierBytesById(bytesToId(tx_indexNumHash(index))).get))(history) // prepend 0 byte to circumvent "removing modifier type byte with .tail"
+      getTxById(history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(index))).get.m)(history)
     }
 
   private def getTxByIndexR: Route = (pathPrefix("transaction" / "byIndex" / LongNumber) & get) { index =>
@@ -85,7 +82,7 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getTxsByAddress(addr: ErgoAddress, lastN: Long): Future[Option[Seq[IndexedErgoTransaction]]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => Some(addr.retrieveBody(history).transactions(lastN))
+        case Some(addr) => Some(addr.retrieveTxs(history, lastN).transactions(-1))
         case None       => None
       }
     }
@@ -100,7 +97,7 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getTxRange(fromHeight: Long, toHeight: Long): Future[Seq[ModifierId]] =
     getHistory.map { history =>
       (for(n <- fromHeight to toHeight)
-        yield bytesToId(history.modifierBytesById(bytesToId(tx_indexNumHash(n))).get)
+        yield history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n))).get.m
       ).toSeq
     }
 
@@ -128,7 +125,7 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getBoxByIndex(index: Long): Future[Option[IndexedErgoBox]] =
     getHistory.map { history =>
-      getBoxById(bytesToId(history.modifierBytesById(bytesToId(box_indexNumHash(index))).get))(history)
+      getBoxById(history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(index))).get.m)(history)
     }
 
   private def getBoxByIndexR: Route = (pathPrefix("box" / "byIndex" / LongNumber) & get) { index =>
@@ -138,7 +135,7 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxesByAddress(addr: ErgoAddress, lastN: Long): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => addr.retrieveBody(history).boxes(lastN)
+        case Some(addr) => addr.retrieveBoxes(history, lastN).boxes()
         case None       => Seq.empty[IndexedErgoBox]
       }
     }
@@ -153,12 +150,12 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxesByAddressUnspent(addr: ErgoAddress, lastN: Long): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => addr.retrieveBody(history).utxos(lastN)
+        case Some(addr) => addr.retrieveBoxes(history, lastN).utxos()
         case None       => Seq.empty[IndexedErgoBox]
       }
     }
 
-  private def getBoxesByAddressUnspentR: Route = (get & pathPrefix("transaction" / "unspent" / "byAddress") & path(Segment) & lastN) { (address, limit) =>
+  private def getBoxesByAddressUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byAddress") & path(Segment) & lastN) { (address, limit) =>
     addressEncoder.fromString(address) match {
       case Success(addr) => ApiResponse(getBoxesByAddressUnspent(addr, limit))
       case Failure(_)    => BadRequest("Incorrect address format")
@@ -168,7 +165,7 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxRange(fromHeight: Long, toHeight: Long): Future[Seq[ModifierId]] =
     getHistory.map { history =>
       (for(n <- fromHeight to toHeight)
-          yield bytesToId(history.modifierBytesById(bytesToId(box_indexNumHash(n))).get)
+          yield history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n))).get.m
       ).toSeq
     }
 
@@ -184,7 +181,7 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getBoxesByErgoTree(tree: ErgoTree, lastN: Long): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
-      history.typedModifierById[IndexedErgoTree](bytesToId(ergoTreeHash(tree))) match {
+      history.typedModifierById[IndexedErgoTree](bytesToId(IndexedErgoTreeSerializer.ergoTreeHash(tree))) match {
         case Some(iEt) => iEt.retrieveBody(history, lastN)
         case None      => Seq.empty[IndexedErgoBox]
       }
@@ -200,7 +197,7 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getBoxesByErgoTreeUnspent(tree: ErgoTree, lastN: Long): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
-      history.typedModifierById[IndexedErgoTree](bytesToId(ergoTreeHash(tree))) match {
+      history.typedModifierById[IndexedErgoTree](bytesToId(IndexedErgoTreeSerializer.ergoTreeHash(tree))) match {
         case Some(iEt) => iEt.retrieveBody(history, lastN).filter(!_.trackedBox.isSpent)
         case None      => Seq.empty[IndexedErgoBox]
       }

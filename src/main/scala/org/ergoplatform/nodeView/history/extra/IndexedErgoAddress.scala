@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress, Pay2SAddress, Pay2SHAddress}
+import org.ergoplatform.ErgoAddress
 import org.ergoplatform.ErgoAddressEncoder.{ChecksumLength, hash256}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.BlockSection
@@ -9,23 +9,19 @@ import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.ADKey
-import scorex.util.{ByteArrayOps, ModifierId, bytesToId}
+import scorex.util.{ByteArrayOps, ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.serialization.{ErgoTreeSerializer, GroupElementSerializer, SigmaSerializer}
 
-class IndexedErgoAddress(val address: ErgoAddress,
-                         val txIds: Seq[ModifierId],
-                         val boxIds: Seq[BoxId]) extends BlockSection {
+case class IndexedErgoAddress(addressHash: ModifierId,
+                              txIds: Seq[ModifierId],
+                              boxIds: Seq[BoxId]) extends BlockSection {
 
   override val sizeOpt: Option[Int] = None
-  override def serializedId: Array[Byte] = Algos.hash(IndexedErgoAddressSerializer.addressToBytes(address))
+  override def serializedId: Array[Byte] = idToBytes(addressHash)
   override def parentId: ModifierId = null
   override val modifierTypeId: ModifierTypeId = IndexedErgoAddress.modifierTypeId
   override type M = IndexedErgoAddress
   override def serializer: ScorexSerializer[IndexedErgoAddress] = IndexedErgoAddressSerializer
-
-  def getBytes: Array[Byte] = serializer.toBytes(this)
 
   private var _transactions: Seq[IndexedErgoTransaction] = Seq.empty[IndexedErgoTransaction]
   private var _boxes: Seq[IndexedErgoBox] = Seq.empty[IndexedErgoBox]
@@ -37,22 +33,33 @@ class IndexedErgoAddress(val address: ErgoAddress,
     else
       _transactions
 
-  def boxes(lastN: Long = 20L): Seq[IndexedErgoBox] =
-    if(lastN > 0)
-      _boxes.slice(math.max((_boxes.size - lastN).toInt, 0), _boxes.size)
-    else
-      _boxes
+  def boxes(): Seq[IndexedErgoBox] = _boxes
 
-  def utxos(lastN: Long = 20L): Seq[IndexedErgoBox] = {
-    if(lastN > 0)
-      _utxos.slice(math.max((_utxos.size - lastN).toInt, 0), _utxos.size)
-    else
-      _utxos
-  }
+  def utxos(): Seq[IndexedErgoBox] = _utxos
 
   def retrieveBody(history: ErgoHistoryReader): IndexedErgoAddress = {
-    _transactions = txIds.map(history.typedModifierById[IndexedErgoTransaction](_).get.retrieveBody(history))
-    _boxes = boxIds.map(x => history.typedModifierById[IndexedErgoBox](bytesToId(x)).get)
+    retrieveTxs(history, -1)
+    retrieveBoxes(history, -1)
+    this
+  }
+
+  def retrieveTxs(history: ErgoHistoryReader, lastN: Long): IndexedErgoAddress = {
+    _transactions = (
+      if(lastN > 0)
+        txIds.slice(math.max((txIds.size - lastN).toInt, 0), txIds.size)
+      else
+        txIds
+      ).map(history.typedModifierById[IndexedErgoTransaction](_).get.retrieveBody(history))
+    this
+  }
+
+  def retrieveBoxes(history: ErgoHistoryReader, lastN: Long): IndexedErgoAddress = {
+    _boxes = (
+      if(lastN > 0)
+        boxIds.slice(math.max((boxIds.size - lastN).toInt, 0), boxIds.size)
+      else
+        boxIds
+      ).map(x => history.typedModifierById[IndexedErgoBox](bytesToId(x)).get)
     _utxos = _boxes.filter(!_.trackedBox.isSpent)
     this
   }
@@ -67,21 +74,8 @@ object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress]
 
   def addressToModifierId(address: ErgoAddress): ModifierId = bytesToId(Algos.hash(addressToBytes(address)))
 
-  def bytesToAddress(bytes: Array[Byte]): ErgoAddress = {
-    val contentBytes: Array[Byte] = bytes.slice(1, bytes.length - ChecksumLength)
-    implicit val encoder: ErgoAddressEncoder = ExtraIndexerRef.getAddressEncoder
-    (bytes(0) & 0x0F).toByte match {
-      case P2PKAddress.  addressTypePrefix => new P2PKAddress(ProveDlog(GroupElementSerializer.parseTry(SigmaSerializer.startReader(contentBytes)).get), contentBytes)
-      case Pay2SHAddress.addressTypePrefix => new Pay2SHAddress(contentBytes)
-      case Pay2SAddress. addressTypePrefix => new Pay2SAddress(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(contentBytes), contentBytes)
-    }
-  }
-
   override def serialize(iEa: IndexedErgoAddress, w: Writer): Unit = {
-    w.putUByte(IndexedErgoAddress.modifierTypeId)
-    val addressBytes: Array[Byte] = addressToBytes(iEa.address)
-    w.putUShort(addressBytes.length)
-    w.putBytes(addressBytes)
+    w.putBytes(idToBytes(iEa.addressHash))
     w.putUInt(iEa.txIds.length)
     iEa.txIds.foreach(m => w.putBytes(m.toBytes))
     w.putUInt(iEa.boxIds.length)
@@ -89,15 +83,14 @@ object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress]
   }
 
   override def parse(r: Reader): IndexedErgoAddress = {
-    val addressLen: Int = r.getUShort()
-    val address: ErgoAddress = bytesToAddress(r.getBytes(addressLen))
+    val addressHash: ModifierId = bytesToId(r.getBytes(32))
     val txnsLen: Long = r.getUInt()
     var txns: Seq[ModifierId] = Seq.empty[ModifierId]
     for(n <- 1L to txnsLen) txns = txns :+ r.getBytes(32).toModifierId
     val boxesLen: Long = r.getUInt()
     var boxes: Seq[BoxId] = Seq.empty[BoxId]
     for(n <- 1L to boxesLen) boxes = boxes :+ ADKey @@ r.getBytes(32)
-    new IndexedErgoAddress(address, txns, boxes)
+    new IndexedErgoAddress(addressHash, txns, boxes)
   }
 }
 

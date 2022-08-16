@@ -9,6 +9,7 @@ import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.Values.ErgoTree
 
 class IndexedErgoBox(val inclusionHeightOpt: Option[Int],
                      val spendingTxIdOpt: Option[ModifierId],
@@ -16,15 +17,14 @@ class IndexedErgoBox(val inclusionHeightOpt: Option[Int],
                      val box: ErgoBox,
                      val globalIndex: Long,
                      val confirmations: Option[Int])
-  extends WalletBox(new TrackedBox(box.transactionId,
-                                   box.index,
-                                   inclusionHeightOpt,
-                                   spendingTxIdOpt,
-                                   spendingHeightOpt,
-                                   box,
-                                   Set.empty[ScanId]),
-                                   confirmations
-                   ) with BlockSection {
+  extends WalletBox(TrackedBox(box.transactionId,
+                               box.index,
+                               inclusionHeightOpt,
+                               spendingTxIdOpt,
+                               spendingHeightOpt,
+                               box,
+                               Set.empty[ScanId]),
+                               confirmations) with BlockSection {
 
   override def parentId: ModifierId = null
   override val modifierTypeId: ModifierTypeId = IndexedErgoBox.modifierTypeId
@@ -33,20 +33,20 @@ class IndexedErgoBox(val inclusionHeightOpt: Option[Int],
   override type M = IndexedErgoBox
   override def serializer: ScorexSerializer[IndexedErgoBox] = IndexedErgoBoxSerializer
 
-  def getAddress: ErgoAddress = box.ergoTree.root match {
-    case Right(_) => ExtraIndexerRef.getAddressEncoder.fromProposition(box.ergoTree).get // default most of the time
-    case Left(_) => new Pay2SAddress(box.ergoTree, box.ergoTree.bytes)(ExtraIndexerRef.getAddressEncoder) // needed for burn address 4MQyMKvMbnCJG3aJ
-  }
-
-  def toBytes: Array[Byte] = serializer.toBytes(this)
+  def getAddress: ErgoAddress = IndexedErgoBoxSerializer.getAddress(box.ergoTree)
 
   def asSpent(txId: ModifierId, txHeight: Int): IndexedErgoBox =
     new IndexedErgoBox(inclusionHeightOpt, Some(txId), Some(txHeight), box, globalIndex, confirmations)
 }
 object IndexedErgoBoxSerializer extends ScorexSerializer[IndexedErgoBox] {
 
+  def getAddress(tree: ErgoTree): ErgoAddress =
+    tree.root match {
+      case Right(_) => ExtraIndexerRef.getAddressEncoder.fromProposition(tree).get // default most of the time
+      case Left(_) => new Pay2SAddress(tree, tree.bytes)(ExtraIndexerRef.getAddressEncoder) // needed for burn address 4MQyMKvMbnCJG3aJ
+    }
+
   override def serialize(iEb: IndexedErgoBox, w: Writer): Unit = {
-    w.putUByte(IndexedErgoBox.modifierTypeId)
     w.putOption[Int](iEb.inclusionHeightOpt)(_.putInt(_))
     w.putOption[ModifierId](iEb.spendingTxIdOpt)((ww, id) => ww.putBytes(idToBytes(id)))
     w.putOption[Int](iEb.spendingHeightOpt)(_.putInt(_))

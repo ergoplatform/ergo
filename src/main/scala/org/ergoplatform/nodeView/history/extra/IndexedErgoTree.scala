@@ -2,10 +2,12 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.settings.Algos
 import scorex.core.{ModifierTypeId, idToBytes}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.Values.ErgoTree
 
 case class IndexedErgoTree(treeHash: ModifierId, boxIds: Seq[ModifierId]) extends BlockSection {
   override val sizeOpt: Option[Int] = None
@@ -14,8 +16,6 @@ case class IndexedErgoTree(treeHash: ModifierId, boxIds: Seq[ModifierId]) extend
   override val modifierTypeId: ModifierTypeId = IndexedErgoTree.modifierTypeId
   override type M = IndexedErgoTree
   override def serializer: ScorexSerializer[IndexedErgoTree] = IndexedErgoTreeSerializer
-
-  def getBytes: Array[Byte] = serializer.toBytes(this)
 
   def retrieveBody(history: ErgoHistoryReader, lastN: Long): Seq[IndexedErgoBox] =
     (
@@ -28,8 +28,9 @@ case class IndexedErgoTree(treeHash: ModifierId, boxIds: Seq[ModifierId]) extend
 
 object IndexedErgoTreeSerializer extends ScorexSerializer[IndexedErgoTree] {
 
+  def ergoTreeHash(tree: ErgoTree): Array[Byte] = Algos.hash(tree.bytes)
+
   override def serialize(iEt: IndexedErgoTree, w: Writer): Unit = {
-    w.putUByte(IndexedErgoTree.modifierTypeId)
     w.putBytes(iEt.serializedId)
     w.putUInt(iEt.boxIds.length)
     iEt.boxIds.foreach(id => w.putBytes(idToBytes(id)))

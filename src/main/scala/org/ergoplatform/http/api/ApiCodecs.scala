@@ -495,11 +495,11 @@ trait ApiCodecs extends JsonCodecs {
 
   implicit val indexedAddressEncoder: Encoder[IndexedErgoAddress] = { address =>
     Json.obj(
-      "transactions" -> address.transactions(-1).map(_.asJson).asJson,
-      "txCount" -> address.transactions(-1).size.asJson,
-      "utxos" -> address.utxos(-1).asJson,
-      "balance" -> address.utxos(-1).map(_.box.value).sum.asJson,
-      "tokens" -> address.utxos(-1).map(_.box.additionalTokens.toArray.toSeq.asJson).asJson
+      "transactions" -> address.transactions().map(_.asJson).asJson,
+      "txCount" -> address.transactions().size.asJson,
+      "utxos" -> address.utxos().asJson,
+      "balance" -> address.utxos().map(_.box.value).sum.asJson,
+      "tokens" -> address.utxos().map(_.box.additionalTokens.toArray.toSeq.asJson).asJson
     )
   }
 }

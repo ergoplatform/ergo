@@ -745,13 +745,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           val checksDone = deliveryTracker.requestsMade(modifierTypeId, modifierId) + 1
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
-          if(checksDone < maxDeliveryChecks) {
+          if (checksDone < maxDeliveryChecks) {
             log.info(s"Rescheduling request for $modifierId")
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
             requestBlockSection(modifierTypeId, modifierId, checksDone, Some(peer))
           } else {
             log.error(s"Exceeded max delivery attempts($maxDeliveryChecks) limit for $modifierId")
-            deliveryTracker.setUnknown(modifierId, modifierTypeId)
+            if (modifierTypeId == Header.modifierTypeId) {
+              log.info(s"Marking header as invalid: $modifierId")
+              deliveryTracker.setInvalid(modifierId, modifierTypeId)
+            } else {
+              // we will stop to ask for non-header block section automatically after some time
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+            }
           }
         }
       }

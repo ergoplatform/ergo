@@ -2,13 +2,13 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import sigmastate.Values.ByteArrayConstant
+import sigmastate.Values.{ByteArrayConstant, TrueLeaf}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 class ErgoMemPoolSpec extends AnyFlatSpec
@@ -38,6 +38,29 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
   }
 
+  it should "respect given sorting order" in {
+    implicit val ms = settings.chainSettings.monetary
+    val (us, bh) = createUtxoState(parameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
+    val inputBox = wus.takeBoxes(1).head
+    val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
+    val tx = ErgoTransaction(
+      IndexedSeq(new Input(inputBox.id, ProverResult.empty)),
+      IndexedSeq(feeOut)
+    )
+
+    var poolSize = ErgoMemPool.empty(settings, SortingOption.FeePerByte)
+    poolSize = poolSize.process(tx, wus)._1
+    val size = tx.size
+    poolSize.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, size).weight
+
+    var poolCost = ErgoMemPool.empty(settings, SortingOption.FeePerCycle)
+    poolCost = poolCost.process(tx, wus)._1
+    val cost = wus.validateWithCost(tx, Int.MaxValue).get
+    poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, cost).weight
+  }
+
   it should "decline already contained transaction" in {
     val (us, bh) = createUtxoState(parameters)
     val genesis = validFullBlock(None, us, bh)
@@ -60,7 +83,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         val wus = WrappedUtxoState(us, bh, stateConstants, extendedParameters).applyModifier(genesis)(_ => ()).get
 
         val feeProp = settings.chainSettings.monetary.feeProposition
-        val inputBox = wus.takeBoxes(1).head
+        val inputBox = wus.takeBoxes(100).collectFirst{
+          case box if box.ergoTree == TrueLeaf.toSigmaProp.treeWithSegregation => box
+        }.get
         val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
 
         def rndContext(n: Int): ContextExtension = ContextExtension(Map(
@@ -80,7 +105,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         val tx1 = ErgoTransaction(tx1Like.inputs, tx1Like.outputCandidates)
         val tx2 = ErgoTransaction(tx2Like.inputs, tx2Like.outputCandidates)
 
-        val pool0 = ErgoMemPool.empty(settings)
+        val pool0 = ErgoMemPool.empty(settings, SortingOption.FeePerByte)
         val (pool, tx1Outcome) = pool0.process(tx1, us)
 
         tx1Outcome shouldBe ProcessingOutcome.Accepted
@@ -214,8 +239,12 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.size shouldBe (family_depth + 1) * txs.size
     txs.foreach { tx =>
       val sb = tx.outputs.head
-      pool.process(tx.copy(inputs = IndexedSeq(new Input(sb.id, emptyProverResult)),
-        outputCandidates = IndexedSeq(new ErgoBoxCandidate(sb.value+1, sb.ergoTree, sb.creationHeight, sb.additionalTokens, sb.additionalRegisters))), us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+      val txToDecline = tx.copy(inputs = IndexedSeq(new Input(sb.id, emptyProverResult)),
+        outputCandidates = IndexedSeq(new ErgoBoxCandidate(sb.value, sb.ergoTree, sb.creationHeight, sb.additionalTokens, sb.additionalRegisters)))
+      val res = pool.process(txToDecline, us)._2
+      res.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+      res.asInstanceOf[ProcessingOutcome.Declined].e.getMessage.contains("pays less") shouldBe true
+      pool.size shouldBe (family_depth + 1) * txs.size
     }
   }
 

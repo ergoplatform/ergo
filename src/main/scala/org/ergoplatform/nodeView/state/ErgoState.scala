@@ -16,7 +16,7 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.validation.ValidationResult.Valid
-import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.core.validation.{MalformedModifierError, ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -167,7 +167,11 @@ object ErgoState extends ScorexLogging {
         toInsert.remove(wrappedBoxId) match {
           case None =>
             if (toRemove.put(wrappedBoxId, Remove(i.boxId)).nonEmpty) {
-              throw new IllegalArgumentException(s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId")
+              throw new MalformedModifierError(
+                s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId",
+                tx.id,
+                tx.modifierTypeId
+              )
             }
           case _ => // old value removed, do nothing
         }

@@ -28,6 +28,7 @@ import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions.ValidationSource
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.transaction.Transaction
 
@@ -254,7 +255,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
               // invalid transaction in a block will likely be in mempool and should be removed
               logger.warn(s"Invalidating transaction ${ex.modifierId} in mempool due to ${ex.getMessage}", ex)
               reportInvalidModifier(ex).map { updateInformation =>
-                self ! EliminateTransactions(List(ex.modifierId), ex.getMessage)
+                self ! EliminateTransactions(List(ex.modifierId), EliminateTransactions.FromBlockValidation)
                 updateInformation
               }
             case Failure(ex) =>
@@ -592,11 +593,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       txs.foreach(txModify)
     case LocallyGeneratedTransaction(tx) =>
       sender() ! txModify(tx)
-    case EliminateTransactions(ids, reason) =>
+    case EliminateTransactions(ids, source) =>
+      val immediateFailure = source match {
+        case EliminateTransactions.FromBlockValidation => true
+        case _ => false
+      }
       val updatedPool = memoryPool().filter(tx => !ids.contains(tx.id))
       updateNodeView(updatedMempool = Some(updatedPool))
       ids.foreach { id =>
-        context.system.eventStream.publish(FailedTransaction(id, new Exception(reason), immediateFailure = false))
+        context.system.eventStream.publish(
+          FailedTransaction(id, new Exception(s"Tx $id rejection coming : $source"), immediateFailure)
+        )
       }
   }
 
@@ -667,7 +674,14 @@ object ErgoNodeViewHolder {
 
     case class LocallyGeneratedModifier(pmod: BlockSection)
 
-    case class EliminateTransactions(ids: Seq[scorex.util.ModifierId], reason: String)
+    case class EliminateTransactions(ids: Seq[scorex.util.ModifierId], source: ValidationSource)
+
+    object EliminateTransactions {
+      sealed trait ValidationSource
+      case object FromMiningValidation extends ValidationSource
+      case object FromBlockValidation extends ValidationSource
+      case object FromPoolValidation extends ValidationSource
+    }
 
     case object IsChainHealthy
     sealed trait HealthCheckResult

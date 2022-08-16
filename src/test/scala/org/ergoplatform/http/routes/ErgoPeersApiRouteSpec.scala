@@ -14,6 +14,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
+import scorex.core.network.peer.PeerManager.ReceivableMessages.GetAllPeers
 import scorex.core.settings.RESTApiSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.TimeProvider.Time
@@ -38,6 +39,32 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
   val peerManagerProbe = TestProbe()
+
+  it should "return all peers" in {
+    forAll(connectedPeerGen(Actor.noSender)) { peer =>
+      val networkControllerProbe = TestProbe()
+      val route: Route = ErgoPeersApiRoute(peerManagerProbe.ref, networkControllerProbe.ref, null, null, restApiSettings).route
+      Future {
+        peerManagerProbe.expectMsg(GetAllPeers)
+        peerManagerProbe.reply(Map(peer.connectionId.remoteAddress -> peer.peerInfo.get))
+      }
+
+      Get("/peers/all") ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        val json = responseAs[Json]
+        log.info(s"Received connected peers: $json")
+        val c = json.asArray.get.head.hcursor
+        c.downField("address").as[String] shouldEqual Right(peer.connectionId.remoteAddress.toString)
+        peer.peerInfo.get.peerSpec.publicUrlOpt.foreach { restApiUrl =>
+          c.downField("restApiUrl").as[String] shouldEqual Right(restApiUrl.toString)
+        }
+        c.downField("lastMessage").as[Long] shouldEqual Right(0L)
+        c.downField("lastHandshake").as[Long] shouldEqual Right(0L)
+        c.downField("name").as[String] shouldEqual Right(peer.peerInfo.get.peerSpec.nodeName)
+        c.downField("connectionType").as[String] shouldEqual Right("Incoming")
+      }
+    }
+  }
 
   it should "return connected peers" in {
     forAll(connectedPeerGen(Actor.noSender)) { peer =>

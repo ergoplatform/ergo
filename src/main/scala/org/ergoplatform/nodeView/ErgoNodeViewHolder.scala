@@ -255,7 +255,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  protected def txModify(unconfirmedTx: UnconfirmedTransaction): Unit = {
+  protected def txModify(unconfirmedTx: UnconfirmedTransaction): ProcessingOutcome = {
     val tx = unconfirmedTx.transaction
     val (newPool, processingOutcome) = memoryPool().process(unconfirmedTx, minimalState())
     processingOutcome match {
@@ -273,6 +273,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case ProcessingOutcome.Declined(e) => // do nothing
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
     }
+    processingOutcome
   }
 
   /**

@@ -169,7 +169,13 @@ case class WalletApiRoute(readersHolder: ActorRef,
   private def generateTransaction(requests: Seq[TransactionGenerationRequest],
                                   inputsRaw: Seq[String],
                                   dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => Future(Success(UnconfirmedTransaction(tx))), tx => ApiResponse(tx))
+    generateTransactionAndProcess(
+      requests,
+      inputsRaw,
+      dataInputsRaw,
+      tx => Future(Success(UnconfirmedTransaction(tx))),
+      utx => ApiResponse(utx.transaction)
+    )
   }
 
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],

@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform._
@@ -74,6 +73,8 @@ object ErgoState extends ScorexLogging {
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
   /**
+    * Resolves state changing operations from transactions. There could be invalid sequence
+    * of operations like utxo double-spending in which case entire block is considered invalid
     * @param txs - sequence of transactions
     * @return ordered sequence of operations on UTXO set from this sequence of transactions
     *         if some box was created and later spent in this sequence - it is not included in the result at all
@@ -136,10 +137,10 @@ object ErgoState extends ScorexLogging {
           collectBoxesById(tx.dataInputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
         lazy val boxes: Try[(IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
         costResult = tx.validateStateless()
-          .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
-          .validateNoFailure(txDataBoxes, dataBoxesTry)
+          .validateNoFailure(txBoxesToSpend, boxesToSpendTry, tx.id, tx.modifierTypeId)
+          .validateNoFailure(txDataBoxes, dataBoxesTry, tx.id, tx.modifierTypeId)
           .payload[Long](validCostResult.value)
-          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
+          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", tx.id, tx.modifierTypeId, e)) { case (_, (dataBoxes, toSpend)) =>
             tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value)(verifier).result
           }
       }

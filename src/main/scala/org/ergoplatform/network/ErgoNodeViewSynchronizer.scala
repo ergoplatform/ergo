@@ -88,7 +88,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   // no more than `PerPeerSyncLockTime` milliseconds ago.
   private val PerPeerSyncLockTime = 100
 
-  private var lastModifierGotTime = 0
+  private var lastModifierGotTime: Long = 0
 
   /**
     * Register periodic events
@@ -514,7 +514,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
     log.debug("Modifier ids: " + modifiers.keys)
 
-    lastModificheckerGotTime = System.currentTimeMillis()
+    lastModifierGotTime = System.currentTimeMillis()
 
     // filter out non-requested modifiers
     val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
@@ -743,7 +743,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // A block section is not delivered on time.
           log.info(s"Peer ${peer.toString} has not delivered modifier " +
                    s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time, status tracker: $syncTracker")
-          
+
+          // Number of block section delivery checks increased
           val checksDone = deliveryTracker.getRequestedInfo(modifierTypeId, modifierId) match {
             case Some(ri) if ri.requestTime < lastModifierGotTime =>
               ri.checks

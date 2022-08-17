@@ -112,13 +112,6 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
   }
 
   /**
-    * @return how many times modifier was requested before
-    */
-  def requestsMade(modifierTypeId: ModifierTypeId, modifierId: ModifierId): Int = {
-    requested.get(modifierTypeId).flatMap(_.get(modifierId)).map(_.checks).getOrElse(0)
-  }
-
-  /**
     * Set status of modifier with id `id` to `Requested`
     */
   def setRequested(typeId: ModifierTypeId,
@@ -129,9 +122,17 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     tryWithLogging {
       checkStatusTransition(status(id, typeId, Seq.empty), Requested)
       val cancellable = schedule(CheckDelivery(supplier, typeId, id))
-      val requestedInfo = RequestedInfo(supplier, cancellable, checksDone)
+      val now = System.currentTimeMillis()
+      val requestedInfo = RequestedInfo(supplier, cancellable, checksDone, now)
       requested.adjust(typeId)(_.fold(Map(id -> requestedInfo))(_.updated(id, requestedInfo)))
     }
+
+  /**
+    * @return - information on requested modifier delivery tracker potentially has
+    */
+  def getRequestedInfo(typeId: ModifierTypeId, id: ModifierId): Option[RequestedInfo] = {
+    requested.get(typeId).flatMap(_.get(id))
+  }
 
   /** Get peer we're communicating with in regards with modifier `id` **/
   def getSource(id: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
@@ -308,7 +309,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
 
 object DeliveryTracker {
 
-  case class RequestedInfo(peer: ConnectedPeer, cancellable: Cancellable, checks: Int)
+  case class RequestedInfo(peer: ConnectedPeer, cancellable: Cancellable, checks: Int, requestTime: Long)
 
   object RequestedInfo {
     import io.circe.syntax._

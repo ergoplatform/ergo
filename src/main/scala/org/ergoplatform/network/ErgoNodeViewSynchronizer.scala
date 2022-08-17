@@ -18,7 +18,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
-import scorex.core.network.NetworkController.ReceivableMessages.{DisconnectFrom, PenalizePeer, RegisterMessageSpecs, SendToNetwork}
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
@@ -84,9 +84,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
 
   // It could be the case that adversarial peers are sending sync messages to the node to cause
-  // resource exhaustion. To prevent it, we do not answer to a peer on sync message, if previous one was sent
+  // resource exhaustion. To prevent it, we do not provide an answer for sync message, if previous one was sent
   // no more than `PerPeerSyncLockTime` milliseconds ago.
   private val PerPeerSyncLockTime = 100
+
+  // when we got last modifier, both unconfirmed transactions and block sections count
+  private var lastModifierGotTime: Long = 0
 
   /**
     * Register periodic events
@@ -416,7 +419,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * A helper method to ask for block sectiona from given peer
+    * A helper method to ask for block section from given peer
     *
     * @param modifierTypeId - block section type id
     * @param modifierIds - ids of block section to download
@@ -503,15 +506,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Filter out non-requested block parts (with a penalty to spamming peer),
     * parse block parts and send valid modifiers to NodeViewHolder
     */
-  protected def modifiersFromRemote(
-                                     hr: ErgoHistory,
-                                     data: ModifiersData,
-                                     remote: ConnectedPeer,
-                                     blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
+  protected def modifiersFromRemote(hr: ErgoHistory,
+                                    data: ModifiersData,
+                                    remote: ConnectedPeer,
+                                    blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
     val typeId = data.typeId
     val modifiers = data.modifiers
     log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
     log.debug("Modifier ids: " + modifiers.keys)
+
+    lastModifierGotTime = System.currentTimeMillis()
 
     // filter out non-requested modifiers
     val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
@@ -629,6 +633,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // (so having UTXO set, and the chain is synced
         if (!settings.nodeSettings.stateType.requireProofs &&
           hr.isHeadersChainSynced &&
+          hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) &&
           hr.fullBlockHeight == hr.headersHeight) {
           val unknownMods =
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
@@ -658,7 +663,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def requestMoreModifiers(historyReader: ErgoHistory): Unit = {
     if (historyReader.isHeadersChainSynced) {
-      // our requested list is is half empty - request more missed modifiers
+      // our requested list is half empty - request more missed modifiers
       self ! CheckModifiersToDownload
     } else {
       // headers chain is not synced yet, but our requested list is half empty - ask for more headers
@@ -740,20 +745,35 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           log.info(s"Peer ${peer.toString} has not delivered modifier " +
                    s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time, status tracker: $syncTracker")
 
-          penalizeNonDeliveringPeer(peer)
-          // For now, we drop connection to the peer, as we do not ban it, connection will be likely established
-          // again after some time (but not soon if connections limit reached)
-          networkControllerRef ! DisconnectFrom(peer)
+          // Number of block section delivery checks increased or initialized,
+          // except the case where we can have issues with connectivity,
+          // which is currently defined by comparing request time with time the
+          // node got last modifier (in future we may consider more precise method)
+          val checksDone = deliveryTracker.getRequestedInfo(modifierTypeId, modifierId) match {
+            case Some(ri) if ri.requestTime < lastModifierGotTime =>
+              ri.checks
+            case Some(ri) =>
+              penalizeNonDeliveringPeer(peer)
+              ri.checks + 1
+            case None => 0
+          }
 
-          val checksDone = deliveryTracker.requestsMade(modifierTypeId, modifierId) + 1
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
-          if(checksDone < maxDeliveryChecks) {
+          if (checksDone < maxDeliveryChecks) {
             log.info(s"Rescheduling request for $modifierId")
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
             requestBlockSection(modifierTypeId, modifierId, checksDone, Some(peer))
           } else {
             log.error(s"Exceeded max delivery attempts($maxDeliveryChecks) limit for $modifierId")
-            deliveryTracker.setUnknown(modifierId, modifierTypeId)
+            if (modifierTypeId == Header.modifierTypeId) {
+              // if we can not get header after max number of attempts, invalidate it
+              log.info(s"Marking header as invalid: $modifierId")
+              deliveryTracker.setInvalid(modifierId, modifierTypeId)
+            } else {
+              // we will stop to ask for non-header block section automatically after some time,
+              // see how `nextModifiersToDownload` done in `ToDownloadProcessor`
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+            }
           }
         }
       }
@@ -791,7 +811,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       syncTracker.clearStatus(connectedPeer)
   }
 
-  protected def getLocalSyncInfo(historyReader: ErgoHistory): Receive = {
+  protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
     case SendLocalSyncInfo =>
       sendSync(historyReader)
   }
@@ -896,7 +916,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def initialized(hr: ErgoHistory, mp: ErgoMemPool, blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
     processDataFromPeer(msgHandlers(hr, mp, blockAppliedTxsCache)) orElse
       onDownloadRequest(hr) orElse
-      getLocalSyncInfo(hr) orElse
+      sendLocalSyncInfo(hr) orElse
       viewHolderEvents(hr, mp, blockAppliedTxsCache) orElse
       peerManagerEvents orElse
       checkDelivery orElse {

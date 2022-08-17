@@ -85,7 +85,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
           case header: Header => s"Error applying header ${header.id}: $outcome"
           case other => s"Error applying section $other: $outcome"
         }
-        val e = new MalformedModifierError(msg)
+        val e = new MalformedModifierError(msg, section.id, section.modifierTypeId)
         log.error(msg, e)
         Failure(e)
     }

@@ -14,7 +14,8 @@ import scala.util.Try
   * @param desiredUpdate - rules to deactivate if soft-fork is desirable
   */
 case class VotingTargets(targets: Map[Byte, Int], desiredUpdate: ErgoValidationSettingsUpdate) {
-  val softFork: Int = targets.getOrElse(Parameters.SoftFork, 0)
+  val softForkOption: Option[Int] = targets.get(Parameters.SoftFork)
+  val softFork: Int = softForkOption.getOrElse(0)
 }
 
 object VotingTargets {

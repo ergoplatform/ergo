@@ -88,6 +88,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   // no more than `PerPeerSyncLockTime` milliseconds ago.
   private val PerPeerSyncLockTime = 100
 
+  // when we got last modifier, both unconfirmed transactions and block sections count
   private var lastModifierGotTime: Long = 0
 
   /**
@@ -744,7 +745,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           log.info(s"Peer ${peer.toString} has not delivered modifier " +
                    s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time, status tracker: $syncTracker")
 
-          // Number of block section delivery checks increased
+          // Number of block section delivery checks increased or initialized,
+          // except the case where we can have issues with connectivity,
+          // which is currently defined by comparing request time with time the
+          // node got last modifier (in future we may consider more precise method)
           val checksDone = deliveryTracker.getRequestedInfo(modifierTypeId, modifierId) match {
             case Some(ri) if ri.requestTime < lastModifierGotTime =>
               ri.checks
@@ -762,6 +766,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           } else {
             log.error(s"Exceeded max delivery attempts($maxDeliveryChecks) limit for $modifierId")
             if (modifierTypeId == Header.modifierTypeId) {
+              // if we can not get header after max number of attempts, invalidate it
               log.info(s"Marking header as invalid: $modifierId")
               deliveryTracker.setInvalid(modifierId, modifierTypeId)
             } else {

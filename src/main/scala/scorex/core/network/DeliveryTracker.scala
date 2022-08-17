@@ -127,6 +127,9 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
       requested.adjust(typeId)(_.fold(Map(id -> requestedInfo))(_.updated(id, requestedInfo)))
     }
 
+  /**
+    * @return - information on requested modifier delivery tracker potentially has
+    */
   def getRequestedInfo(typeId: ModifierTypeId, id: ModifierId): Option[RequestedInfo] = {
     requested.get(typeId).flatMap(_.get(id))
   }

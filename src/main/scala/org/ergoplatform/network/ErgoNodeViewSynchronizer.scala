@@ -20,7 +20,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
-import scorex.core.network.NetworkController.ReceivableMessages.{DisconnectFrom, PenalizePeer, RegisterMessageSpecs, SendToNetwork}
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
@@ -86,9 +86,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
 
   // It could be the case that adversarial peers are sending sync messages to the node to cause
-  // resource exhaustion. To prevent it, we do not answer to a peer on sync message, if previous one was sent
+  // resource exhaustion. To prevent it, we do not provide an answer for sync message, if previous one was sent
   // no more than `PerPeerSyncLockTime` milliseconds ago.
   private val PerPeerSyncLockTime = 100
+
+  // when we got last modifier, both unconfirmed transactions and block sections count
+  private var lastModifierGotTime: Long = 0
 
   /**
     * Register periodic events
@@ -418,7 +421,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * A helper method to ask for block sectiona from given peer
+    * A helper method to ask for block section from given peer
     *
     * @param modifierTypeId - block section type id
     * @param modifierIds - ids of block section to download
@@ -505,15 +508,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Filter out non-requested block parts (with a penalty to spamming peer),
     * parse block parts and send valid modifiers to NodeViewHolder
     */
-  protected def modifiersFromRemote(
-                                     hr: ErgoHistory,
-                                     data: ModifiersData,
-                                     remote: ConnectedPeer,
-                                     blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
+  protected def modifiersFromRemote(hr: ErgoHistory,
+                                    data: ModifiersData,
+                                    remote: ConnectedPeer,
+                                    blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
     val typeId = data.typeId
     val modifiers = data.modifiers
     log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
     log.debug("Modifier ids: " + modifiers.keys)
+
+    lastModifierGotTime = System.currentTimeMillis()
 
     // filter out non-requested modifiers
     val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
@@ -744,20 +748,35 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           log.info(s"Peer ${peer.toString} has not delivered modifier " +
                    s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time, status tracker: $syncTracker")
 
-          penalizeNonDeliveringPeer(peer)
-          // For now, we drop connection to the peer, as we do not ban it, connection will be likely established
-          // again after some time (but not soon if connections limit reached)
-          networkControllerRef ! DisconnectFrom(peer)
+          // Number of block section delivery checks increased or initialized,
+          // except the case where we can have issues with connectivity,
+          // which is currently defined by comparing request time with time the
+          // node got last modifier (in future we may consider more precise method)
+          val checksDone = deliveryTracker.getRequestedInfo(modifierTypeId, modifierId) match {
+            case Some(ri) if ri.requestTime < lastModifierGotTime =>
+              ri.checks
+            case Some(ri) =>
+              penalizeNonDeliveringPeer(peer)
+              ri.checks + 1
+            case None => 0
+          }
 
-          val checksDone = deliveryTracker.requestsMade(modifierTypeId, modifierId) + 1
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
-          if(checksDone < maxDeliveryChecks) {
+          if (checksDone < maxDeliveryChecks) {
             log.info(s"Rescheduling request for $modifierId")
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
             requestBlockSection(modifierTypeId, modifierId, checksDone, Some(peer))
           } else {
             log.error(s"Exceeded max delivery attempts($maxDeliveryChecks) limit for $modifierId")
-            deliveryTracker.setUnknown(modifierId, modifierTypeId)
+            if (modifierTypeId == Header.modifierTypeId) {
+              // if we can not get header after max number of attempts, invalidate it
+              log.info(s"Marking header as invalid: $modifierId")
+              deliveryTracker.setInvalid(modifierId, modifierTypeId)
+            } else {
+              // we will stop to ask for non-header block section automatically after some time,
+              // see how `nextModifiersToDownload` done in `ToDownloadProcessor`
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+            }
           }
         }
       }

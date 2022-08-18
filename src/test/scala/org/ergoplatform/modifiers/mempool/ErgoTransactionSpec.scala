@@ -14,9 +14,11 @@ import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContex
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import scalan.util.BenchmarkUtil
+import scorex.core.transaction.Transaction
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.ByteArrayWrapper
+import scorex.util.{ModifierId, bytesToId}
 import scorex.util.encode.Base16
 import sigmastate.AND
 import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant, TrueLeaf}
@@ -31,6 +33,8 @@ import scala.util.{Random, Try}
 class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
+
+  private val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
   property("serialization vector") {
     // test vectors, that specifies transaction json and bytes representation.
@@ -206,7 +210,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
       val validity = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext)
       validity.isSuccess shouldBe false
       val e = validity.failed.get
-      e.getMessage should startWith(ValidationRules.errorMessage(ValidationRules.txScriptValidation, ""))
+      e.getMessage should startWith(ValidationRules.errorMessage(ValidationRules.txScriptValidation, "",  emptyModifierId, Transaction.ModifierTypeId))
     }
   }
 
@@ -283,7 +287,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
-    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txAssetsInOneBox, "").take(30))
+    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txAssetsInOneBox, "", emptyModifierId, Transaction.ModifierTypeId).take(30))
   }
 
   property("transaction with too many inputs should be rejected") {
@@ -313,7 +317,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     assert(time0 <= Timeout)
 
     val cause = validity.failed.get.getMessage
-    cause should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
+    cause should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "", emptyModifierId, Transaction.ModifierTypeId).take(30))
 
     //check that spam transaction validation with no cost limit is indeed taking too much time
     import Parameters._

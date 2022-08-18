@@ -11,12 +11,11 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.ReceivableMessage
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, ChainSettings, ErgoAlgos}
 import scorex.db.ByteArrayWrapper
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util.{ScorexLogging, bytesToId}
 
 import java.nio.ByteBuffer
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-import scala.reflect.ClassTag
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 class ExtraIndex(chainSettings: ChainSettings)
   extends Actor with ScorexLogging {
@@ -33,6 +32,8 @@ class ExtraIndex(chainSettings: ChainSettings)
   private var globalBoxIndex: Long = 0L
   private val globalBoxIndexBuffer: ByteBuffer = ByteBuffer.allocate(8)
 
+  private val saveLimit: Int = 10
+
   private var done: Boolean = false
 
   private def chainHeight: Int = _history.fullBlockHeight
@@ -43,29 +44,34 @@ class ExtraIndex(chainSettings: ChainSettings)
 
   // fast access
   private val modifiers: ArrayBuffer[BlockSection] = ArrayBuffer.empty[BlockSection]
-  private val boxesGroupedByAddress: mutable.HashMap[ModifierId, Seq[BoxId]] = mutable.HashMap.empty[ModifierId, Seq[BoxId]]
-  private val emptyBoxSeq: Seq[BoxId] = Seq.empty[BoxId]
+  private val boxesGroupedByAddress: mutable.HashMap[Array[Byte], ListBuffer[BoxId]] = mutable.HashMap.empty[Array[Byte], ListBuffer[BoxId]]
+  private val emptyBoxBuffer: ListBuffer[BoxId] = ListBuffer.empty[BoxId]
 
-  // if any element "e" of type "T" satisfies "f(e) == true", the element and its index in the buffer are returned
-  private def updateMatch[T <: BlockSection : ClassTag](f: T => Boolean): Option[(T, Int)] = {
-    modifiers.indices.foreach({ n =>
-      modifiers(n) match {
-        case e: T if f(e) => return Some((e, n))
-        case _ =>
-      }
-    })
-    None
-  }
+  private def findModifierOpt(id: Array[Byte]): Option[Int] =
+    modifiers.indexWhere(x => java.util.Arrays.equals(x.serializedId, id)) match {
+      case x: Int if x >= 0 => Some(x)
+      case _ => None
+    }
 
-  private def index(bt: BlockTransactions, height: Int) = {
+  private def saveProgress(): Unit = {
+    indexedHeightBuffer.clear()
+    globalTxIndexBuffer.clear()
+    globalBoxIndexBuffer.clear()
+
+    historyStorage.insert(Seq((IndexedHeightKey , indexedHeightBuffer .putInt (indexedHeight ).array),
+                              (GlobalTxIndexKey , globalTxIndexBuffer .putLong(globalTxIndex ).array),
+                              (GlobalBoxIndexKey, globalBoxIndexBuffer.putLong(globalBoxIndex).array)), modifiers)
 
     modifiers.clear()
     boxesGroupedByAddress.clear()
+  }
+
+  private def index(bt: BlockTransactions, height: Int): Unit = {
 
     //process transactions
-    bt.txIds.indices.foreach(n => {
-      modifiers += IndexedErgoTransaction(bytesToId(bt.txIds(n)), indexedHeight, globalTxIndex)
-      modifiers += new NumericTxIndex(globalTxIndex, bytesToId(bt.txIds(n)))
+    bt.txIds.foreach(id => {
+      modifiers += IndexedErgoTransaction(bytesToId(id), indexedHeight, globalTxIndex)
+      modifiers += NumericTxIndex(globalTxIndex, bytesToId(id))
       globalTxIndex += 1
     })
 
@@ -74,9 +80,9 @@ class ExtraIndex(chainSettings: ChainSettings)
       //process tx inputs
       if(indexedHeight != 1) { //only after 1st block (skip genesis box)
         tx.inputs.foreach(in =>
-          updateMatch[IndexedErgoBox](x => java.util.Arrays.equals(x.box.id, in.boxId)) match {
-            case Some((iEb, n)) => modifiers.update(n, iEb.asSpent(tx.id, indexedHeight)) // box found in this block, update
-            case None      => // box not found in this block
+          findModifierOpt(in.boxId) match {
+            case Some(n) => modifiers(n).asInstanceOf[IndexedErgoBox].asSpent(tx.id, indexedHeight) // box found in last saveLimit blocks, update
+            case None    => // box not found in this block
               history.typedModifierById[IndexedErgoBox](bytesToId(in.boxId)) match {
                 case Some(x) => modifiers += x.asSpent(tx.id, indexedHeight) // box found in DB, update
                 case None    => log.warn(s"Input for box ${ErgoAlgos.encode(in.boxId)} not found in database") // box not found at all (this shouldn't happen)
@@ -88,29 +94,29 @@ class ExtraIndex(chainSettings: ChainSettings)
       //process tx outputs
       tx.outputs.foreach(box => {
         modifiers += new IndexedErgoBox(Some(indexedHeight), None, None, box, globalBoxIndex, Some(chainHeight - indexedHeight)) // box by id
-        modifiers += new NumericBoxIndex(globalBoxIndex, bytesToId(box.id)) // box id by global box number
-        val maybeNewTree: ModifierId = bytesToId(IndexedErgoTreeSerializer.ergoTreeHash(box.ergoTree))
-        updateMatch[IndexedErgoTree](_.treeHash.eq(maybeNewTree)) match {
-          case Some((iEt, n)) => modifiers.update(n, IndexedErgoTree(iEt.treeHash, iEt.boxIds :+ bytesToId(box.id))) // ergotree found in this block, update
-          case None      => // ergotree not found in this TX
-            history.typedModifierById[IndexedErgoTree](maybeNewTree) match {
-              case Some(x) => modifiers += IndexedErgoTree(x.treeHash, x.boxIds :+ bytesToId(box.id)) // ergotree found in DB, update
-              case None    => modifiers += IndexedErgoTree(maybeNewTree, Seq(bytesToId(box.id))) // ergotree not found at all, record
+        modifiers += NumericBoxIndex(globalBoxIndex, bytesToId(box.id)) // box id by global box number
+        var tmp: Array[Byte] = IndexedErgoTreeSerializer.ergoTreeHash(box.ergoTree)
+        findModifierOpt(tmp) match {
+          case Some(n) => modifiers(n).asInstanceOf[IndexedErgoTree].addBox(bytesToId(box.id)) // ergotree found in last saveLimit blocks, update
+          case None    => // ergotree not found in this TX
+            history.typedModifierById[IndexedErgoTree](bytesToId(tmp)) match {
+              case Some(x) => modifiers += x.addBox(bytesToId(box.id)) // ergotree found in DB, update
+              case None    => modifiers += IndexedErgoTree(bytesToId(tmp), ListBuffer(bytesToId(box.id))) // ergotree not found at all, record
             }
         }
         globalBoxIndex += 1
-        val addrHash: ModifierId = IndexedErgoAddressSerializer.addressToModifierId(IndexedErgoBoxSerializer.getAddress(box.ergoTree))
-        boxesGroupedByAddress.put(addrHash, boxesGroupedByAddress.getOrElse[Seq[BoxId]](addrHash, emptyBoxSeq) :+ box.id)
+        tmp = IndexedErgoAddressSerializer.hashAddress(IndexedErgoBoxSerializer.getAddress(box.ergoTree))
+        boxesGroupedByAddress.put(tmp, boxesGroupedByAddress.getOrElse[ListBuffer[BoxId]](tmp, emptyBoxBuffer) :+ box.id)
       })
 
       //process boxes by address
       for(addressWithBoxes <- boxesGroupedByAddress)
-        updateMatch[IndexedErgoAddress](_.addressHash.eq(addressWithBoxes._1)) match {
-          case Some((iEa, n)) => modifiers.update(n, IndexedErgoAddress(addressWithBoxes._1, iEa.txIds :+ tx.id, iEa.boxIds ++ addressWithBoxes._2)) // address found in this block, update
-          case None      => // address not found in this block
-            history.typedModifierById[IndexedErgoAddress](addressWithBoxes._1) match {
-              case Some(x) => modifiers += IndexedErgoAddress(addressWithBoxes._1, x.txIds :+ tx.id, x.boxIds ++ addressWithBoxes._2) //address found in DB, update
-              case None    => modifiers += IndexedErgoAddress(addressWithBoxes._1, Seq(tx.id), addressWithBoxes._2) //address not found at all, record
+        findModifierOpt(addressWithBoxes._1) match {
+          case Some(n) => modifiers(n).asInstanceOf[IndexedErgoAddress].addTx(tx.id).addBoxes(addressWithBoxes._2) // address found in last saveLimit blocks, update
+          case None    => // address not found in this block
+            history.typedModifierById[IndexedErgoAddress](bytesToId(addressWithBoxes._1)) match {
+              case Some(x) => modifiers += x.addTx(tx.id).addBoxes(addressWithBoxes._2) //address found in DB, update
+              case None    => modifiers += IndexedErgoAddress(bytesToId(addressWithBoxes._1), ListBuffer(tx.id), addressWithBoxes._2) //address not found at all, record
             }
         }
     })
@@ -119,13 +125,7 @@ class ExtraIndex(chainSettings: ChainSettings)
 
     if(done) indexedHeight = height // update after caught up with chain
 
-    indexedHeightBuffer.clear()
-    globalTxIndexBuffer.clear()
-    globalBoxIndexBuffer.clear()
-
-    historyStorage.insert(Seq((IndexedHeightKey , indexedHeightBuffer .putInt (indexedHeight ).array),
-                              (GlobalTxIndexKey , globalTxIndexBuffer .putLong(globalTxIndex ).array),
-                              (GlobalBoxIndexKey, globalBoxIndexBuffer.putLong(globalBoxIndex).array)), modifiers)
+    if(indexedHeight % saveLimit == 0 || done) saveProgress() // save index every saveLimit blocks or every block after caught up
 
   }
 

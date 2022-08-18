@@ -40,11 +40,12 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
-      adProofsSuffixLength                      = 112*1024
+      adProofsSuffixLength                      = 112*1024,
+      extraIndex                                = false
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 100, 1000
+        12, 250, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -91,11 +92,12 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
-      adProofsSuffixLength                      = 112*1024
+      adProofsSuffixLength                      = 112*1024,
+      extraIndex                                = false
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 100, 1000
+        12, 250, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -135,11 +137,12 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
-      adProofsSuffixLength                      = 112*1024
+      adProofsSuffixLength                      = 112*1024,
+      extraIndex                                = false
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 100, 1000
+        12, 250, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,

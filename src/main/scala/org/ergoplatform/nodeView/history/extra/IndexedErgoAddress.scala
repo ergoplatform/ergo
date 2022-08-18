@@ -12,9 +12,11 @@ import scorex.crypto.authds.ADKey
 import scorex.util.{ByteArrayOps, ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 
+import scala.collection.mutable.ListBuffer
+
 case class IndexedErgoAddress(addressHash: ModifierId,
-                              txIds: Seq[ModifierId],
-                              boxIds: Seq[BoxId]) extends BlockSection {
+                              txIds: ListBuffer[ModifierId],
+                              boxIds: ListBuffer[BoxId]) extends BlockSection {
 
   override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = idToBytes(addressHash)
@@ -63,6 +65,16 @@ case class IndexedErgoAddress(addressHash: ModifierId,
     _utxos = _boxes.filter(!_.trackedBox.isSpent)
     this
   }
+
+  def addTx(id: ModifierId): IndexedErgoAddress = {
+    txIds += id
+    this
+  }
+
+  def addBoxes(boxes: ListBuffer[BoxId]): IndexedErgoAddress = {
+    boxIds ++= boxes
+    this
+  }
 }
 
 object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress] {
@@ -72,7 +84,9 @@ object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress]
     withNetworkByte ++ hash256(withNetworkByte).take(ChecksumLength)
   }
 
-  def addressToModifierId(address: ErgoAddress): ModifierId = bytesToId(Algos.hash(addressToBytes(address)))
+  def hashAddress(address: ErgoAddress): Array[Byte] = Algos.hash(addressToBytes(address))
+
+  def addressToModifierId(address: ErgoAddress): ModifierId = bytesToId(hashAddress(address))
 
   override def serialize(iEa: IndexedErgoAddress, w: Writer): Unit = {
     w.putBytes(idToBytes(iEa.addressHash))
@@ -85,11 +99,11 @@ object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress]
   override def parse(r: Reader): IndexedErgoAddress = {
     val addressHash: ModifierId = bytesToId(r.getBytes(32))
     val txnsLen: Long = r.getUInt()
-    var txns: Seq[ModifierId] = Seq.empty[ModifierId]
-    for(n <- 1L to txnsLen) txns = txns :+ r.getBytes(32).toModifierId
+    val txns: ListBuffer[ModifierId] = ListBuffer.empty[ModifierId]
+    for(n <- 1L to txnsLen) txns += r.getBytes(32).toModifierId
     val boxesLen: Long = r.getUInt()
-    var boxes: Seq[BoxId] = Seq.empty[BoxId]
-    for(n <- 1L to boxesLen) boxes = boxes :+ ADKey @@ r.getBytes(32)
+    val boxes: ListBuffer[BoxId] = ListBuffer.empty[BoxId]
+    for(n <- 1L to boxesLen) boxes += ADKey @@ r.getBytes(32)
     new IndexedErgoAddress(addressHash, txns, boxes)
   }
 }

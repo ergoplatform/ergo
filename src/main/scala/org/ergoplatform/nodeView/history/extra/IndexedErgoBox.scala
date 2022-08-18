@@ -12,8 +12,8 @@ import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
 class IndexedErgoBox(val inclusionHeightOpt: Option[Int],
-                     val spendingTxIdOpt: Option[ModifierId],
-                     val spendingHeightOpt: Option[Int],
+                     var spendingTxIdOpt: Option[ModifierId],
+                     var spendingHeightOpt: Option[Int],
                      val box: ErgoBox,
                      val globalIndex: Long,
                      val confirmations: Option[Int])
@@ -35,8 +35,11 @@ class IndexedErgoBox(val inclusionHeightOpt: Option[Int],
 
   def getAddress: ErgoAddress = IndexedErgoBoxSerializer.getAddress(box.ergoTree)
 
-  def asSpent(txId: ModifierId, txHeight: Int): IndexedErgoBox =
-    new IndexedErgoBox(inclusionHeightOpt, Some(txId), Some(txHeight), box, globalIndex, confirmations)
+  def asSpent(txId: ModifierId, txHeight: Int): IndexedErgoBox = {
+    spendingTxIdOpt = Some(txId)
+    spendingHeightOpt = Some(txHeight)
+    this
+  }
 }
 object IndexedErgoBoxSerializer extends ScorexSerializer[IndexedErgoBox] {
 

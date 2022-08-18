@@ -4,6 +4,7 @@ import com.google.common.cache.CacheBuilder
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.nodeView.history.extra.{IndexedErgoAddress, IndexedErgoBox, IndexedErgoTree}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import scorex.core.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
@@ -32,21 +33,27 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
     .maximumSize(config.history.blockSectionsCacheSize)
     .build[String, BlockSection]
 
+  private val extraCache = CacheBuilder.newBuilder()
+    .maximumSize(config.history.extraCacheSize)
+    .build[String, BlockSection]
+
   private val indexCache = CacheBuilder.newBuilder()
     .maximumSize(config.history.indexesCacheSize)
     .build[ByteArrayWrapper, Array[Byte]]
 
   private def cacheModifier(mod: BlockSection): Unit = mod.modifierTypeId match {
     case Header.modifierTypeId => headersCache.put(mod.id, mod)
+    case IndexedErgoBox.modifierTypeId | IndexedErgoAddress.modifierTypeId | IndexedErgoTree.modifierTypeId => extraCache.put(mod.id, mod)
     case _ => blockSectionsCache.put(mod.id, mod)
   }
 
   private def lookupModifier(id: ModifierId): Option[BlockSection] =
-    Option(headersCache.getIfPresent(id)) orElse Option(blockSectionsCache.getIfPresent(id))
+    Option(extraCache.getIfPresent(id)) orElse Option(headersCache.getIfPresent(id)) orElse Option(blockSectionsCache.getIfPresent(id))
 
   private def removeModifier(id: ModifierId): Unit = {
     headersCache.invalidate(id)
     blockSectionsCache.invalidate(id)
+    extraCache.invalidate(id)
   }
 
   def modifierBytesById(id: ModifierId): Option[Array[Byte]] = {

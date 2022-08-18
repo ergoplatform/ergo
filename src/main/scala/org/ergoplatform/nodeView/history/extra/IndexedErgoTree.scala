@@ -9,7 +9,9 @@ import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
-case class IndexedErgoTree(treeHash: ModifierId, boxIds: Seq[ModifierId]) extends BlockSection {
+import scala.collection.mutable.ListBuffer
+
+case class IndexedErgoTree(treeHash: ModifierId, boxIds: ListBuffer[ModifierId]) extends BlockSection {
   override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = idToBytes(treeHash)
   override def parentId: ModifierId = null
@@ -24,6 +26,11 @@ case class IndexedErgoTree(treeHash: ModifierId, boxIds: Seq[ModifierId]) extend
       else
         boxIds
     ).map(history.typedModifierById[IndexedErgoBox](_).get)
+
+  def addBox(id: ModifierId): IndexedErgoTree = {
+    boxIds += id
+    this
+  }
 }
 
 object IndexedErgoTreeSerializer extends ScorexSerializer[IndexedErgoTree] {
@@ -39,8 +46,8 @@ object IndexedErgoTreeSerializer extends ScorexSerializer[IndexedErgoTree] {
   override def parse(r: Reader): IndexedErgoTree = {
     val treeHash: ModifierId = bytesToId(r.getBytes(32))
     val boxIdsLen: Long = r.getUInt()
-    var boxIds: Seq[ModifierId] = Seq.empty[ModifierId]
-    for(n <- 1L to boxIdsLen) boxIds = boxIds :+ bytesToId(r.getBytes(32))
+    val boxIds: ListBuffer[ModifierId] = ListBuffer.empty[ModifierId]
+    for(n <- 1L to boxIdsLen) boxIds += bytesToId(r.getBytes(32))
     IndexedErgoTree(treeHash, boxIds)
   }
 }

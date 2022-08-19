@@ -26,5 +26,5 @@ trait ContainsModifiers[MOD <: ErgoNodeViewModifier] {
     * @param modifierId - modifier id to get
     * @return modifier of type MOD with id == modifierId if exist
     */
-  def modifierById(modifierId: ModifierId): Option[ErgoNodeViewModifier]
+  def modifierById(modifierId: ModifierId): Option[MOD]
 }

@@ -1,7 +1,6 @@
 package scorex.core.transaction.state
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-
 import scala.util.Try
 
 /**

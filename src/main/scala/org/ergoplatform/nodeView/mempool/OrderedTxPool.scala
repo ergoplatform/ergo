@@ -73,7 +73,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
   /**
     * Removes transaction from the pool
     *
-    * @param tx - Transaction to remove
+    * @param unconfirmedTx - Transaction to remove
     */
   def remove(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
@@ -138,7 +138,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     * To achieve this goal we recursively add weight of new transaction to all transactions which
     * outputs it directly or indirectly spending.
     *
-    * @param tx
+    * @param unconfirmedTx
     * @param weight
     * @return
     */

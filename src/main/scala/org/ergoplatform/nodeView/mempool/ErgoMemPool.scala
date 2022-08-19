@@ -45,10 +45,13 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
   override def size: Int = pool.size
 
-  override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] =
+  override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = {
     pool.get(modifierId).map(unconfirmedTx => unconfirmedTx.transaction)
+  }
 
-  override def take(limit: Int): Iterable[UnconfirmedTransaction] = pool.orderedTransactions.values.take(limit)
+  override def take(limit: Int): Iterable[UnconfirmedTransaction] = {
+    pool.orderedTransactions.values.take(limit)
+  }
 
   def random(limit: Int): Iterable[UnconfirmedTransaction] = {
     val result = mutable.WrappedArray.newBuilder[UnconfirmedTransaction]

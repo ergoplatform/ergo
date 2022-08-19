@@ -1,6 +1,7 @@
 package org.ergoplatform.http.api
 
 import java.math.BigInteger
+
 import io.circe._
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
@@ -194,25 +195,26 @@ trait ApiCodecs extends JsonCodecs {
     } yield ErgoTransaction(ergoLikeTx)
   }
 
+  // We are not using this encoder for now, but may use in future
   implicit val unconfirmedTxEncoder: Encoder[UnconfirmedTransaction] = { unconfirmedTx =>
     Json.obj(
       "transaction" -> transactionEncoder(unconfirmedTx.transaction),
       "lastCost" -> unconfirmedTx.lastCost.asJson,
       "createdTime" -> unconfirmedTx.createdTime.asJson,
-      "lastCheckedTime" -> unconfirmedTx.lastCheckedTime.asJson,
-      "transactionBytes" -> unconfirmedTx.transactionBytes.asJson
+      "lastCheckedTime" -> unconfirmedTx.lastCheckedTime.asJson
     )
   }
 
+  // We are not using this decoder for now, but may use in future
   implicit val unconfirmedTxDecoder: Decoder[UnconfirmedTransaction] = { cursor =>
     for {
       tx <- transactionDecoder(cursor)
       lastCost <- cursor.downField("lastCost").as[Option[Int]]
       createdTime <- cursor.downField("createdTime").as[Long]
       lastCheckedTime <- cursor.downField("lastCheckedTime").as[Long]
-      transactionBytes <- cursor.downField("transactionBytes").as[Option[Array[Byte]]]
-    } yield UnconfirmedTransaction(tx, lastCost, createdTime, lastCheckedTime, transactionBytes)
+    } yield UnconfirmedTransaction(tx, lastCost, createdTime, lastCheckedTime, None)
   }
+
 
 
   implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {

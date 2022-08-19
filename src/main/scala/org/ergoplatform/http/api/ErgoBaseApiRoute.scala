@@ -70,6 +70,7 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
                                   readersHolder: ActorRef,
                                   ergoSettings: ErgoSettings): Future[Try[UnconfirmedTransaction]] = {
     val now: Long = System.currentTimeMillis()
+    val bytes = Some(tx.bytes)
 
     getStateAndPool(readersHolder)
       .map {
@@ -77,9 +78,9 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
           val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
           utxo.withMempool(mp)
             .validateWithCost(tx, maxTxCost)
-            .map(cost => UnconfirmedTransaction(tx, Some(cost), now, now, None))
+            .map(cost => UnconfirmedTransaction(tx, Some(cost), now, now, bytes))
         case _ =>
-          tx.statelessValidity().map(_ => UnconfirmedTransaction(tx, None, now, now, None))
+          tx.statelessValidity().map(_ => UnconfirmedTransaction(tx, None, now, now, bytes))
       }
   }
 

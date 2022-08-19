@@ -1,10 +1,9 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
@@ -335,6 +334,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Calculates new continuation header from syncInfo message if any, validates it and sends it
     * to nodeViewHolder as a remote modifier for it to be applied
+    *
     * @param syncInfo other's node sync info
     */
   private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2,
@@ -361,6 +361,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
     * Headers should be downloaded from an Older node, it is triggered by received sync message from an older node
+    *
     * @param callingPeer that can be used to download headers, it must be Older
     * @return available peers to download headers from together with the state/origin of the peer
     */
@@ -406,6 +407,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
     * Other persistent modifiers besides headers should be downloaded from either Older or Equal node, with fallback to Unknown or Fork
+    *
     * @return available peers to download persistent modifiers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingBlocks: Option[Iterable[ConnectedPeer]] = {
@@ -474,6 +476,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Modifier download method that is given min/max constraints for modifiers to download from peers.
     * It sends requests for modifiers to given peers in optimally sized batches.
+    *
     * @param maxModifiers maximum modifiers to download
     * @param minModifiersPerBucket minimum modifiers to download per bucket
     * @param maxModifiersPerBucket maximum modifiers to download per bucket
@@ -520,31 +523,53 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // filter out non-requested modifiers
     val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
 
-    Constants.modifierSerializers.get(typeId) match {
-      case Some(serializer: ScorexSerializer[ErgoTransaction]@unchecked) if typeId == Transaction.ModifierTypeId =>
-        // parse all transactions and send them to node view holder
-        val parsed: Iterable[ErgoTransaction] = parseModifiers(requestedModifiers, typeId, serializer, remote)
-        viewHolderRef ! TransactionsFromRemote(parsed.map(UnconfirmedTransaction.apply))
-
-      case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
-        // parse all modifiers and put them to modifiers cache
-        val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)
-        val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
-        if (valid.nonEmpty) {
-          viewHolderRef ! ModifiersFromRemote(valid)
-
-          // send sync message to the peer to get new headers quickly
-          if (valid.head.isInstanceOf[Header]) {
-            val syncInfo = if (syncV2Supported(remote)) {
-              getV2SyncInfo(hr, full = false)
-            } else {
-              getV1SyncInfo(hr)
+    if (typeId == Transaction.ModifierTypeId) {
+      // parse all transactions and send them to node view holder
+      val parsed: Iterable[UnconfirmedTransaction] = parseTransactions(requestedModifiers, remote)
+      viewHolderRef ! TransactionsFromRemote(parsed)
+    } else {
+      Constants.modifierSerializers.get(typeId) match {
+        case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
+          // parse all modifiers and put them to modifiers cache
+          val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)
+          val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
+          if (valid.nonEmpty) {
+            viewHolderRef ! ModifiersFromRemote(valid)
+            // send sync message to the peer to get new headers quickly
+            if (valid.head.isInstanceOf[Header]) {
+              val syncInfo = if (syncV2Supported(remote)) {
+                getV2SyncInfo(hr, full = false)
+              } else {
+                getV1SyncInfo(hr)
+              }
+              sendSyncToPeer(remote, syncInfo)
             }
-            sendSyncToPeer(remote, syncInfo)
           }
+        case _ =>
+          log.error(s"Undefined serializer for modifier of type $typeId")
+      }
+    }
+  }
+
+  def parseTransactions(modifiers: Map[ModifierId, Array[Byte]],
+                         remote: ConnectedPeer): Iterable[UnconfirmedTransaction] = {
+    modifiers.flatMap{ case (id, bytes) =>
+      if (bytes.length > settings.nodeSettings.maxTransactionSize) {
+        deliveryTracker.setInvalid(id, Transaction.ModifierTypeId)
+        penalizeMisbehavingPeer(remote)
+        log.warn(s"Transaction size ${bytes.length} from ${remote.toString} exceeds limit ${settings.nodeSettings.maxTransactionSize}")
+        None
+      } else {
+        ErgoTransactionSerializer.parseBytesTry(bytes) match {
+          case Success(tx) if id == tx.id =>
+            Some(UnconfirmedTransaction(tx, bytes))
+          case _ =>
+            // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
+            penalizeMisbehavingPeer(remote)
+            log.warn(s"Failed to parse transaction with declared id ${encoder.encodeId(id)} from ${remote.toString}")
+            None
         }
-      case _ =>
-        log.error(s"Undefined serializer for modifier of type $typeId")
+      }
     }
   }
 
@@ -561,21 +586,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                             serializer: ScorexSerializer[M],
                                             remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
-      if (typeId == Transaction.ModifierTypeId && bytes.length > settings.nodeSettings.maxTransactionSize) {
-        deliveryTracker.setInvalid(id, typeId)
-        penalizeMisbehavingPeer(remote)
-        log.warn(s"Transaction size ${bytes.length} from ${remote.toString} exceeds limit ${settings.nodeSettings.maxTransactionSize}")
-        None
-      } else {
-        serializer.parseBytesTry(bytes) match {
-          case Success(mod) if id == mod.id =>
-            Some(mod)
-          case _ =>
-            // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
-            penalizeMisbehavingPeer(remote)
-            log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
-            None
-        }
+      serializer.parseBytesTry(bytes) match {
+        case Success(mod) if id == mod.id =>
+          Some(mod)
+        case _ =>
+          // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
+          penalizeMisbehavingPeer(remote)
+          log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
+          None
       }
     }
   }
@@ -675,8 +693,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def modifiersReq(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, remote: ConnectedPeer): Unit = {
       val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
         case typeId: ModifierTypeId if typeId == Transaction.ModifierTypeId =>
-          mp.getAll(invData.ids).map(unconfirmedTx =>
-            unconfirmedTx.transaction.id -> unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes))
+          mp.getAll(invData.ids).map { unconfirmedTx =>
+            unconfirmedTx.transaction.id -> unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes)
+          }
         case _: ModifierTypeId =>
           invData.ids.flatMap(id => hr.modifierBytesById(id).map(bytes => (id, bytes)))
       }

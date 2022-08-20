@@ -41,14 +41,10 @@ trait ErgoTestConstants extends ScorexLogging {
   val extendedParameters: Parameters = {
     // Randomness in tests is causing occasional cost overflow in the state context and insufficient box value
     val extension = Map(
-      MaxBlockCostIncrease -> Math.ceil(parameters.parametersTable(MaxBlockCostIncrease) * 1.2).toInt,
+      MaxBlockCostIncrease -> Math.ceil(parameters.parametersTable(MaxBlockCostIncrease) * 1.3).toInt,
       MinValuePerByteIncrease -> (parameters.parametersTable(MinValuePerByteIncrease) - 30)
     )
-    new Parameters(
-      height = 0,
-      parametersTable = Parameters.DefaultParameters ++ extension,
-      proposedUpdate = ErgoValidationSettingsUpdate.empty
-    )
+    Parameters(0, Parameters.DefaultParameters ++ extension, ErgoValidationSettingsUpdate.empty)
   }
 
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
@@ -56,7 +52,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   implicit val settings: ErgoSettings = initSettings
 
-  val popowAlgos = new NipopowAlgos(powScheme)
+  val nipopowAlgos = new NipopowAlgos(powScheme)
 
   val lightModeSettings: ErgoSettings = initSettings.copy(
     nodeSettings = initSettings.nodeSettings.copy(stateType = StateType.Digest)

@@ -43,15 +43,12 @@ trait Application extends ScorexLogging {
   upnpGateway.foreach(_.addPort(settings.network.bindAddress.getPort))
 
   private lazy val basicSpecs = {
-    val invSpec = new InvSpec(settings.network.maxInvObjects)
-    val requestModifierSpec = new RequestModifierSpec(settings.network.maxInvObjects)
-    val modifiersSpec = new ModifiersSpec(settings.network.maxPacketSize)
     Seq(
       GetPeersSpec,
       new PeersSpec(featureSerializers, settings.network.maxPeerSpecObjects),
-      invSpec,
-      requestModifierSpec,
-      modifiersSpec
+      InvSpec,
+      RequestModifierSpec,
+      ModifiersSpec
     )
   }
 
@@ -82,7 +79,7 @@ trait Application extends ScorexLogging {
   val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
   val networkControllerRef: ActorRef = NetworkControllerRef(
-    "networkController", settings.network, peerManagerRef, scorexContext)
+    "networkController", settings, peerManagerRef, scorexContext)
 
   val peerSynchronizer: ActorRef = PeerSynchronizerRef("PeerSynchronizer",
     networkControllerRef, peerManagerRef, settings.network, featureSerializers)

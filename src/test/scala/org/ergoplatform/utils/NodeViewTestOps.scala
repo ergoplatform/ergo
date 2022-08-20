@@ -6,7 +6,7 @@ import akka.util.Timeout
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.settings.Algos
@@ -76,7 +76,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
     subscribeEvents(classOf[SyntacticallyFailedModification])
   }
 
-  def expectModificationOutcome(section: ErgoPersistentModifier)(implicit ctx: Ctx): Try[Unit] = {
+  def expectModificationOutcome(section: BlockSection)(implicit ctx: Ctx): Try[Unit] = {
     expectMsgType[ModificationOutcome] match {
       case SyntacticallySuccessfulModifier(mod) if mod.id == section.id =>
         Success(())
@@ -85,7 +85,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
           case header: Header => s"Error applying header ${header.id}: $outcome"
           case other => s"Error applying section $other: $outcome"
         }
-        val e = new MalformedModifierError(msg)
+        val e = new MalformedModifierError(msg, section.id, section.modifierTypeId)
         log.error(msg, e)
         Failure(e)
     }
@@ -147,7 +147,7 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 
   def getLastHeadersLength(count: Int)(implicit ctx: Ctx): Int = getHistory.lastHeaders(count).size
 
-  def getModifierById(id: ModifierId)(implicit ctx: Ctx): Option[ErgoPersistentModifier] = getHistory.modifierById(id)
+  def getModifierById(id: ModifierId)(implicit ctx: Ctx): Option[BlockSection] = getHistory.modifierById(id)
 
   def getGenesisStateDigest(implicit ctx: Ctx): Array[Byte] =
     ctx.settings.chainSettings.genesisStateDigest

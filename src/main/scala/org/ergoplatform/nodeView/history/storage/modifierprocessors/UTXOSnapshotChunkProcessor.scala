@@ -1,9 +1,9 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import scorex.core.consensus.History.ProgressInfo
+import scorex.core.consensus.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.util.ScorexLogging
 
@@ -16,7 +16,7 @@ trait UTXOSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
 
   protected val historyStorage: HistoryStorage
 
-  def process(m: UTXOSnapshotChunk): Try[ProgressInfo[ErgoPersistentModifier]] = ???
+  def process(m: UTXOSnapshotChunk): Try[ProgressInfo[BlockSection]] = ???
 /*
     {
       //TODO

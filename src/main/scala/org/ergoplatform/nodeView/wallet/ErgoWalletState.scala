@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoS
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
-import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import scorex.util.ScorexLogging
 
@@ -26,7 +26,9 @@ case class ErgoWalletState(
     mempoolReaderOpt: Option[ErgoMemPoolReader],
     utxoStateReaderOpt: Option[UtxoStateReader],
     parameters: Parameters,
-    error: Option[String] = None
+    maxInputsToUse: Int,
+    error: Option[String] = None,
+    rescanInProgress: Boolean
   ) extends ScorexLogging {
 
   /**
@@ -79,11 +81,11 @@ case class ErgoWalletState(
     */
   def fullHeight: Int = stateContext.currentHeight
 
-  def getChangeAddress(implicit addrEncoder: ErgoAddressEncoder): Option[P2PKAddress] = {
+  def getChangeAddress(addrEncoder: ErgoAddressEncoder): Option[P2PKAddress] = {
     walletVars.proverOpt.map { prover =>
       storage.readChangeAddress.getOrElse {
         log.debug("Change address not specified. Using root address from wallet.")
-        P2PKAddress(prover.hdPubKeys.head.key)
+        P2PKAddress(prover.hdPubKeys.head.key)(addrEncoder)
       }
     }
   }
@@ -119,7 +121,7 @@ case class ErgoWalletState(
     */
   def getBoxesToSpend: Seq[TrackedBox] = {
     require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
-    (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
+    (registry.walletUnspentBoxes(maxInputsToUse * BoxSelector.ScanDepthFactor) ++ offChainRegistry.offChainBoxes).distinct
   }
 
 }
@@ -135,9 +137,10 @@ object ErgoWalletState {
 
   def initial(ergoSettings: ErgoSettings, parameters: Parameters): Try[ErgoWalletState] = {
     WalletRegistry.apply(ergoSettings).map { registry =>
-      val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)(ergoSettings.addressEncoder)
+      val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)
       val offChainRegistry = OffChainRegistry.init(registry)
       val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
+      val maxInputsToUse = ergoSettings.walletSettings.maxInputs
       ErgoWalletState(
         ergoStorage,
         secretStorageOpt = None,
@@ -148,7 +151,9 @@ object ErgoWalletState {
         stateReaderOpt = None,
         mempoolReaderOpt = None,
         utxoStateReaderOpt = None,
-        parameters
+        parameters,
+        maxInputsToUse,
+        rescanInProgress = false
       )
     }
   }

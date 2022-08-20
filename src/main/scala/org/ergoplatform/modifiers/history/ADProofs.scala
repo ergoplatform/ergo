@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.NonHeaderBlockSection
 import org.ergoplatform.modifiers.state._
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
@@ -20,7 +20,7 @@ import scala.util.{Failure, Success, Try}
 
 case class ADProofs(headerId: ModifierId,
                     proofBytes: SerializedAdProof,
-                    override val sizeOpt: Option[Int] = None) extends BlockSection {
+                    override val sizeOpt: Option[Int] = None) extends NonHeaderBlockSection {
 
   override def digest: Digest32 = ADProofs.proofDigest(proofBytes)
 
@@ -46,7 +46,7 @@ case class ADProofs(headerId: ModifierId,
 
     def applyChanges(verifier: BatchAVLVerifier[Digest32, HF],
                      changes: StateChanges): Try[Seq[ADValue]] = Try {
-      changes.operations.flatMap(o => verifier.performOneOperation(ADProofs.changeToMod(o)).get)
+      changes.operations.flatMap(o => verifier.performOneOperation(o).get)
     }
 
     val verifier = new BatchAVLVerifier[Digest32, HF](previousHash, proofBytes, ADProofs.KL,
@@ -74,22 +74,6 @@ object ADProofs extends ApiCodecs {
   val KL = 32
 
   def proofDigest(proofBytes: SerializedAdProof): Digest32 = Algos.hash(proofBytes)
-
-  /**
-    * Convert operation over a box into an AVL+ tree operations
-    *
-    * @param change - operation over a box
-    * @return AVL+ tree modification
-    */
-  def changeToMod(change: StateChangeOperation): Operation =
-    change match {
-      case i: Insertion =>
-        Insert(i.box.id, ADValue @@ i.box.bytes)
-      case r: Removal =>
-        Remove(r.boxId)
-      case r: Lookup =>
-        scorex.crypto.authds.avltree.batch.Lookup(r.boxId)
-    }
 
   implicit val jsonEncoder: Encoder[ADProofs] = { proof: ADProofs =>
     Map(

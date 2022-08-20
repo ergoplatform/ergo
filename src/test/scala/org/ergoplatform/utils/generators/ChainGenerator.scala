@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandida
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, PoPowHeader}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
@@ -68,11 +68,17 @@ trait ChainGenerator extends ErgoTestConstants {
   def popowHeaderChain(chain: HeaderChain): Seq[PoPowHeader] = {
     chain.headers.foldLeft((Seq.empty[PoPowHeader], None: Option[PoPowHeader])) {
       case ((acc, bestHeaderOpt), h) =>
-        val links = popowAlgos.updateInterlinks(
-          bestHeaderOpt.map(_.header),
-          bestHeaderOpt.map(ph => popowAlgos.interlinksToExtension(ph.interlinks).toExtension(ph.id))
-        )
-        val poPowH = PoPowHeader(h, links)
+        val links = if (bestHeaderOpt.isEmpty) {
+          Seq(scorex.util.bytesToId(Array.fill(32)(0: Byte)))
+        } else {
+          nipopowAlgos.updateInterlinks(
+            bestHeaderOpt.map(_.header),
+            bestHeaderOpt.map(ph => nipopowAlgos.interlinksToExtension(ph.interlinks).toExtension(ph.id))
+          )
+        }
+        val interlinkProof = NipopowAlgos.proofForInterlinkVector(ExtensionCandidate(NipopowAlgos.packInterlinks(links)))
+          .getOrElse(throw new Error(s"Failed to build interlink proof."))
+        val poPowH = PoPowHeader(h, links, interlinkProof)
         (acc :+ poPowH, Some(poPowH))
     }._1
   }
@@ -148,8 +154,8 @@ trait ChainGenerator extends ErgoTestConstants {
                 blockVersion: Header.Version = Header.InitialVersion,
                 nBits: Long = settings.chainSettings.initialNBits): ErgoFullBlock = {
     val interlinks = prev.toSeq.flatMap(x =>
-      popowAlgos.updateInterlinks(x.header, NipopowAlgos.unpackInterlinks(x.extension.fields).get))
-    val validExtension = extension ++ popowAlgos.interlinksToExtension(interlinks)
+      nipopowAlgos.updateInterlinks(x.header, NipopowAlgos.unpackInterlinks(x.extension.fields).get))
+    val validExtension = extension ++ nipopowAlgos.interlinksToExtension(interlinks)
     powScheme.proveBlock(
       prev.map(_.header),
       blockVersion,
@@ -173,7 +179,7 @@ trait ChainGenerator extends ErgoTestConstants {
   }
 
   def applyChain(historyIn: ErgoHistory, blocks: Seq[ErgoFullBlock]): ErgoHistory = {
-    def appendOrPass(mod: ErgoPersistentModifier, history: ErgoHistory) =
+    def appendOrPass(mod: BlockSection, history: ErgoHistory) =
       if (history.contains(mod)) history else history.append(mod).get._1
     blocks.foldLeft(historyIn) { (history, block) =>
       val historyWithBlockHeader = appendOrPass(block.header, history)
@@ -185,6 +191,6 @@ trait ChainGenerator extends ErgoTestConstants {
 
   def applyBlock(historyIn: ErgoHistory, block: ErgoFullBlock): ErgoHistory = applyChain(historyIn, Seq(block))
 
-  def applySection(historyIn: ErgoHistory, section: BlockSection): ErgoHistory = historyIn.append(section).get._1
+  def applySection(historyIn: ErgoHistory, section: NonHeaderBlockSection): ErgoHistory = historyIn.append(section).get._1
 
 }

@@ -9,8 +9,8 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
-import scorex.core.consensus.History._
 import scorex.crypto.hash.Digest32
+import scorex.core.consensus.{Older, Younger, Fork, Equal}
 
 import scala.util.Random
 

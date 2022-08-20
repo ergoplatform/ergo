@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
@@ -16,7 +16,7 @@ import scorex.util.{ModifierId, bytesToId}
   * @param sizeOpt - optionally, serialized network message size
   */
 case class NipopowProofModifier(proof: NipopowProof, override val sizeOpt: Option[Int] = None)
-  extends Comparable[NipopowProofModifier] with Ordered[NipopowProofModifier] with ErgoPersistentModifier {
+  extends Comparable[NipopowProofModifier] with Ordered[NipopowProofModifier] with BlockSection {
 
   override val modifierTypeId: ModifierTypeId = NipopowProofModifier.modifierTypeId
 

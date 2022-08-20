@@ -1,26 +1,28 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
 import cats.Traverse
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
 import org.ergoplatform.settings.{Algos, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
+import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.ModifierValidator
+import scorex.core.validation.{ModifierValidator}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.util.ModifierId
 
 import scala.util.{Failure, Success, Try}
 
@@ -35,8 +37,7 @@ import scala.util.{Failure, Success, Try}
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: LDBVersionedStore,
-                override val constants: StateConstants,
-                override val parameters: Parameters)
+                override val constants: StateConstants)
   extends ErgoState[UtxoState]
     with TransactionValidation
     with UtxoStateReader
@@ -55,16 +56,24 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
-          new UtxoState(p, version, store, constants, parameters)
+          new UtxoState(p, version, store, constants)
         }
-        store.clean(constants.keepVersions)
         rollbackResult
       case None =>
         Failure(new Error(s"Unable to get root hash at version ${Algos.encoder.encode(version)}"))
     }
   }
 
+  /**
+    *
+    * @param transactions to be applied to state
+    * @param headerId of the block these transactions belong to
+    * @param expectedDigest AVL+ tree digest of UTXO set after applying operations from txs
+    * @param currentStateContext Additional data required for transactions validation
+    * @return
+    */
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
+                                       headerId: ModifierId,
                                        expectedDigest: ADDigest,
                                        currentStateContext: ErgoStateContext): Try[Unit] = {
     import cats.implicits._
@@ -77,22 +86,38 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
-      persistentProver.synchronized {
-        val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-        val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
-        ModifierValidator(stateContext.validationSettings)
-          .validateNoFailure(fbOperationFailed, resultTry)
-          .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
-          .result
-          .toTry
-      }
+      val resultTry =
+        ErgoState.stateChanges(transactions).map { stateChanges =>
+          val mods = stateChanges.operations
+          Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+        }
+      ModifierValidator(stateContext.validationSettings)
+        .validateNoFailure(fbOperationFailed, resultTry, Transaction.ModifierTypeId)
+        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
+        .result
+        .toTry
     } else {
       txProcessing.toTry.map(_ => ())
     }
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier)(generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
+  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height])
+                            (generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
+
+      // avoid storing versioned information in the database when block being processed is behind
+      // blockchain tip by `keepVersions` blocks at least
+      // we store `keepVersions` diffs in the database if chain tip is not known yet
+      if (fb.height >= estimatedTip.getOrElse(0) - constants.keepVersions) {
+        if (store.getKeepVersions < constants.keepVersions) {
+          store.setKeepVersions(constants.keepVersions)
+        }
+      } else {
+        if (store.getKeepVersions > 0) {
+          store.setKeepVersions(0)
+        }
+      }
+
       persistentProver.synchronized {
         val height = fb.header.height
 
@@ -101,45 +126,77 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          val tm0 = System.currentTimeMillis()
-          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
-          val tm = System.currentTimeMillis()
-          log.debug(s"Transactions at height $height checked in ${tm-tm0} ms.")
+          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.id, fb.header.stateRoot, newStateContext)
 
           txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
 
-            val tp0 = System.currentTimeMillis()
-            val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
-            val tp = System.currentTimeMillis()
-            log.debug(s"Utxo storage at height $height updated in ${tp-tp0} ms.")
-
-            val proofHash = ADProofs.proofDigest(proofBytes)
-
-            if (fb.adProofs.isEmpty) {
-              val ta0 = System.currentTimeMillis()
-              val adProofs = ADProofs(fb.header.id, proofBytes)
-              generate(LocallyGeneratedModifier(adProofs))
-              val ta = System.currentTimeMillis()
-              log.debug(s"UTXO set transformation proofs at height $height dumped in ${ta-ta0} ms.")
-            }
+            var proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
 
             if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
-              throw new Error("Storage kept roothash is not equal to the declared one")
-            } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
-              throw new Error("Calculated proofHash is not equal to the declared one")
-            } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
-              throw new Error("Calculated stateRoot is not equal to the declared one")
+              throw new Exception("Storage kept roothash is not equal to the declared one")
             }
+
+            if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
+              throw new Exception("Calculated stateRoot is not equal to the declared one")
+            }
+
+            var proofHash = ADProofs.proofDigest(proofBytes)
+
+            if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+
+              log.error("Calculated proofHash is not equal to the declared one, doing another attempt")
+
+              /**
+                * Proof generated was different from one announced.
+                *
+                * In most cases, announced proof is okay, and as proof is already checked, problem in some
+                * extra bytes added to the proof.
+                *
+                * Could be related to https://github.com/ergoplatform/ergo/issues/1614
+                *
+                * So the problem could appear on mining nodes only, and caused by
+                * proofsForTransactions() wasting the tree unexpectedly.
+                *
+                * We are trying to generate proof again now.
+                */
+
+              persistentProver.rollback(inRoot)
+                .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
+
+              ErgoState.stateChanges(fb.blockTransactions.txs) match {
+                case Success(stateChanges) =>
+                 val mods = stateChanges.operations
+                  mods.foreach( modOp => persistentProver.performOneOperation(modOp))
+
+                  // meta is the same as it is block-specific
+                  proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
+                  proofHash = ADProofs.proofDigest(proofBytes)
+
+                  if(!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+                    throw new Exception("Regenerated proofHash is not equal to the declared one")
+                  }
+                case Failure(e) =>
+                  throw new Exception("Can't generate state changes on proof regeneration ", e)
+              }
+            }
+
+            if (fb.adProofs.isEmpty) {
+              if (fb.height >= estimatedTip.getOrElse(Int.MaxValue) - stateContext.ergoSettings.nodeSettings.adProofsSuffixLength) {
+                val adProofs = ADProofs(fb.header.id, proofBytes)
+                generate(LocallyGeneratedModifier(adProofs))
+              }
+            }
+
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
-            new UtxoState(persistentProver, idToVersion(fb.id), store, constants, parameters)
+            new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
         }
         stateTry.recoverWith[UtxoState] { case e =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
+            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ", e)
           persistentProver.rollback(inRoot)
             .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
           Failure(e)
@@ -152,7 +209,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       //todo: update state context with headers (when snapshot downloading is done), so
       //todo: application of the first full block after the snapshot should have correct state context
       //todo: (in particular, "lastHeaders" field of it)
-      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants, parameters))
+      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
 
     case a: Any =>
       log.error(s"Unhandled unknown modifier: $a")
@@ -173,6 +230,7 @@ object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
+  // block-specific metadata to write into database (in addition to AVL+ tree)
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,
                        currentEmissionBoxOpt: Option[ErgoBox],
@@ -184,11 +242,11 @@ object UtxoState {
     val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
 
-    Seq(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
+    Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
-  def create(dir: File, constants: StateConstants, parameters: Parameters): UtxoState = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+  def create(dir: File, constants: StateConstants): UtxoState = {
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
@@ -197,7 +255,7 @@ object UtxoState {
       val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
-    new UtxoState(persistentProver, version, store, constants, parameters)
+    new UtxoState(persistentProver, version, store, constants)
   }
 
   /**
@@ -214,7 +272,7 @@ object UtxoState {
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
 
     val defaultStateContext = ErgoStateContext.empty(constants, parameters)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
@@ -226,7 +284,7 @@ object UtxoState {
       paranoidChecks = true
     ).get
 
-    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants, parameters)
+    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }
 
 }

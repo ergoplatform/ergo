@@ -48,7 +48,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
-  val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2)
+  val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2, None)
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/data") else new File(args(1))
@@ -56,10 +56,11 @@ object ChainGenerator extends App with ErgoTestHelpers {
 
   val minimalSuffix = 2
   val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
+  val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
-    -1, poPoWBootstrap = false, minimalSuffix, mining = false, txCostLimit, useExternalMiner = false,
+    -1, poPoWBootstrap = false, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
     internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
-    200, 5.minutes, 100000, 1.minute, rebroadcastCount = 20, 1000000, 100)
+    200, 5.minutes, 100000, 1.minute, rebroadcastCount = 20, 1000000, 100, adProofsSuffixLength = 112*1024)
   val ms = settings.chainSettings.monetary.copy(
     minerRewardDelay = RewardDelay
   )
@@ -75,7 +76,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   HistoryTestHelpers.allowToApplyOldBlocks(history)
-  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(fullHistorySettings), parameters)
+  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(fullHistorySettings))
   log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
   val chain = loop(state, None, None, Seq())
@@ -111,7 +112,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
       log.info(
         s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
-      loop(state.applyModifier(block)(_ => ()).get, outToPassNext, Some(block.header), acc :+ block.id)
+      loop(state.applyModifier(block, None)(_ => ()).get, outToPassNext, Some(block.header), acc :+ block.id)
     } else {
       acc
     }
@@ -161,10 +162,10 @@ object ChainGenerator extends App with ErgoTestHelpers {
       .flatMap { h =>
         history.typedModifierById[Extension](h.extensionId)
           .flatMap(ext => NipopowAlgos.unpackInterlinks(ext.fields).toOption)
-          .map(popowAlgos.updateInterlinks(h, _))
+          .map(nipopowAlgos.updateInterlinks(h, _))
       }
       .getOrElse(Seq.empty)
-    val interlinksExtension = popowAlgos.interlinksToExtension(interlinks)
+    val interlinksExtension = nipopowAlgos.interlinksToExtension(interlinks)
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = lastHeaderOpt.map { header =>
       val newHeight = header.height + 1
@@ -182,13 +183,13 @@ object ChainGenerator extends App with ErgoTestHelpers {
           newParams.suggestVotes(settings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {
-        (popowAlgos.interlinksToExtension(interlinks),
+        (nipopowAlgos.interlinksToExtension(interlinks),
           currentParams.vote(settings.votingTargets.targets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
     }.getOrElse((interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion))
 
-    val emissionTxOpt = CandidateGenerator.collectEmission(state, minerPk, cs.emissionRules)
+    val emissionTxOpt = CandidateGenerator.collectEmission(state, minerPk, emptyStateContext)
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
@@ -204,12 +205,12 @@ object ChainGenerator extends App with ErgoTestHelpers {
       case Some(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt
-          .map(popowAlgos.updateInterlinks(_, NipopowAlgos.unpackInterlinks(candidate.extension.fields).get))
+          .map(nipopowAlgos.updateInterlinks(_, NipopowAlgos.unpackInterlinks(candidate.extension.fields).get))
           .getOrElse(Seq.empty)
         val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
         proveCandidate {
           candidate.copy(
-            extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag)) ++ popowAlgos.interlinksToExtension(interlinks)
+            extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag)) ++ nipopowAlgos.interlinksToExtension(interlinks)
           )
         }
     }

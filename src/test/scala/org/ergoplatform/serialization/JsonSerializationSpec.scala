@@ -149,9 +149,9 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   property("PopowProof roundtrip"){
     forAll(poPowProofGen){ pp =>
       val json = pp.asJson
-      implicit val decoder = NipopowProof.nipopowProofDecoder(popowAlgos)
+      implicit val decoder: Decoder[NipopowProof] = NipopowProof.nipopowProofDecoder(nipopowAlgos)
       val parsedProof = json.as[NipopowProof].toOption.get
-      parsedProof shouldBe pp
+      parsedProof shouldEqual pp
     }
   }
 

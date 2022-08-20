@@ -3,10 +3,10 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
-import scorex.core.consensus.History.ProgressInfo
+import scorex.core.consensus.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, _}
 import scorex.util.ModifierId
@@ -28,7 +28,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     * Otherwise - try to construct full block with this block section, if possible - process this new full block,
     * if not - just put new block section to storage.
     */
-  override protected def process(m: BlockSection): Try[ProgressInfo[ErgoPersistentModifier]] = {
+  override protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] = {
     m match {
       case _: ADProofs if !requireProofs =>
         // got proofs in UTXO mode. Don't need to try to update better chain
@@ -43,13 +43,13 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     }
   }
 
-  override protected def validate(m: BlockSection): Try[Unit] = {
+  override protected def validate(m: NonHeaderBlockSection): Try[Unit] = {
     typedModifierById[Header](m.headerId).map(header =>
       new PayloadValidator().validate(m, header)
     ).getOrElse(
       // Block section can not be validated without a corresponding header
       initialValidationState
-        .validate(bsNoHeader, condition = false, s"Block section id: ${Algos.encode(m.id)}")
+        .validate(bsNoHeader, condition = false, InvalidModifier(s"Block section id: ${Algos.encode(m.id)}", m.id, m.modifierTypeId))
         .result
     ).toTry
   }
@@ -60,8 +60,8 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     * @param m - new modifier
     * @return Some(ErgoFullBlock) if block construction is possible, None otherwise
     */
-  private def getFullBlockByBlockSection(m: BlockSection): Option[ErgoFullBlock] = {
-    def getOrRead[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] = m match {
+  private def getFullBlockByBlockSection(m: NonHeaderBlockSection): Option[ErgoFullBlock] = {
+    def getOrRead[T <: BlockSection : ClassTag](id: ModifierId): Option[T] = m match {
       case mod: T if m.id == id => Some(mod)
       case _ => typedModifierById[T](id)
     }
@@ -81,7 +81,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     }
   }
 
-  private def justPutToHistory(m: BlockSection): Try[ProgressInfo[ErgoPersistentModifier]] = {
+  private def justPutToHistory(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] = {
     historyStorage.insert(Seq.empty, Seq(m)).map { _ =>
       ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
     }
@@ -92,18 +92,18 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     */
   class PayloadValidator extends ScorexEncoding {
 
-    def validate(m: BlockSection, header: Header): ValidationResult[Unit] = {
+    def validate(m: NonHeaderBlockSection, header: Header): ValidationResult[Unit] = {
       initialValidationState
-        .validate(alreadyApplied, !historyStorage.contains(m.id), s"${m.encodedId}")
-        .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), s"header=${header.encodedId}, id=${m.encodedId}")
-        .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), s"header=${header.encodedId}, id=${m.encodedId}")
-        .validate(bsHeadersChainSynced, isHeadersChainSynced)
+        .validate(alreadyApplied, !historyStorage.contains(m.id), InvalidModifier(m.encodedId, m.id, m.modifierTypeId))
+        .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
+        .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
+        .validate(bsHeadersChainSynced, isHeadersChainSynced, InvalidModifier(header.id, m.id, m.modifierTypeId))
         .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height),
-          s"header=${header.encodedId}, id=${m.encodedId}")
+          InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
         .result
     }
 
-    private def isHistoryADProof(m: BlockSection, header: Header): Boolean = m match {
+    private def isHistoryADProof(m: NonHeaderBlockSection, header: Header): Boolean = m match {
       // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
       case _: ADProofs if contains(header.transactionsId) => true
       case _ => false

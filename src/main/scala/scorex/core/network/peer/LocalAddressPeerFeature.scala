@@ -2,21 +2,22 @@ package scorex.core.network.peer
 
 import java.net.{InetAddress, InetSocketAddress}
 
+import org.ergoplatform.settings.PeerFeatureIds
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
 import scorex.util.serialization._
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.Extensions._
 
+/**
+  * Peer feature required for handling connections from/to local or loopback address
+  * @param address local or loopback address
+  */
 case class LocalAddressPeerFeature(address: InetSocketAddress) extends PeerFeature {
   override type M = LocalAddressPeerFeature
-  override val featureId: Id = LocalAddressPeerFeature.featureId
+  override val featureId: Id = PeerFeatureIds.LocalAddressPeerFeatureId
 
   override def serializer: LocalAddressPeerFeatureSerializer.type = LocalAddressPeerFeatureSerializer
-}
-
-object LocalAddressPeerFeature {
-  val featureId: Id = 2: Byte
 }
 
 object LocalAddressPeerFeatureSerializer extends ScorexSerializer[LocalAddressPeerFeature] {

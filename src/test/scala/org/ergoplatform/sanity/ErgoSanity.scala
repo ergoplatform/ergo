@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -15,6 +15,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.scalacheck.Gen
+import scorex.core.network.DeliveryTracker
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{PersistentNodeViewModifier, bytesToId}
 import scorex.crypto.authds.ADDigest
@@ -90,14 +91,16 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends HistoryTests
                         syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                         settings: ErgoSettings,
                         timeProvider: NetworkTimeProvider,
-                        syncTracker: ErgoSyncTracker)
+                        syncTracker: ErgoSyncTracker,
+                        deliveryTracker: DeliveryTracker)
                        (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
     networkControllerRef,
     viewHolderRef,
     syncInfoSpec,
     settings,
     timeProvider,
-    syncTracker)(ec) {
+    syncTracker,
+    deliveryTracker)(ec) {
 
     override protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
       mod match {
@@ -115,7 +118,7 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends HistoryTests
 object ErgoSanity {
   type TX = ErgoTransaction
   type B = ErgoBox
-  type PM = ErgoPersistentModifier
+  type PM = BlockSection
   type CTM = BlockTransactions
   type SI = ErgoSyncInfo
   type HT = ErgoHistory

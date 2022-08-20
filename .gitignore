@@ -3,6 +3,7 @@ devnet
 
 # IDE/Editor files
 .idea
+.bsp
 .ensime
 .ensime_cache/
 scorex.yaml

@@ -4,7 +4,7 @@ package scorex.crypto.authds.avltree.batch
 import scorex.crypto.authds.{ADKey, Balance}
 import scorex.crypto.hash.{CryptographicHash, Digest}
 import scorex.db.LDBVersionedStore
-
+import InternalNode.InternalNodePrefix
 
 class ProxyInternalProverNode[D <: Digest](protected var pk: ADKey,
                                            val lkey: ADKey,
@@ -14,6 +14,10 @@ class ProxyInternalProverNode[D <: Digest](protected var pk: ADKey,
                                            store: LDBVersionedStore,
                                            nodeParameters: NodeParameters)
   extends InternalProverNode(k = pk, l = null, r = null, b = pb)(phf) {
+
+  override protected def computeLabel: D = {
+    hf.hash(Array(InternalNodePrefix, b), lkey, rkey)
+  }
 
   override def left: ProverNodes[D] = {
     if (l == null) l = VersionedLDBAVLStorage.fetch[D](lkey)

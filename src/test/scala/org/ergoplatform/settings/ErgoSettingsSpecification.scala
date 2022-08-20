@@ -2,12 +2,15 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoPropertyTest
+import scorex.core.settings.RESTApiSettings
 
+import java.net.{InetSocketAddress, URL}
 import scala.concurrent.duration._
 
 class ErgoSettingsSpecification extends ErgoPropertyTest {
 
   private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
+  private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
 
   property("should keep data user home  by default") {
     val settings = ErgoSettings.read()
@@ -24,6 +27,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
@@ -35,11 +39,12 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
-      headerChainDiff                           = 100
+      headerChainDiff                           = 100,
+      adProofsSuffixLength                      = 112*1024
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        100, 1000
+        12, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -54,6 +59,13 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
         invalidModifiersCacheExpiration           = 6.hours,
       )
     )
+    settings.scorexSettings.restApi shouldBe RESTApiSettings(
+      bindAddress = new InetSocketAddress("0.0.0.0", 9052),
+      apiKeyHash = None,
+      corsAllowedOrigin = Some("*"),
+      timeout = 5.seconds,
+      publicUrl = Some(new URL("https://example.com:80"))
+    )
   }
 
   property("should read user settings from json file") {
@@ -66,6 +78,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
@@ -77,11 +90,12 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
-      headerChainDiff                           = 100
+      headerChainDiff                           = 100,
+      adProofsSuffixLength                      = 112*1024
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        100, 1000
+        12, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -108,6 +122,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       txCostLimit,
+      txSizeLimit,
       useExternalMiner                          = false,
       internalMinersCount                       = 1,
       internalMinerPollingInterval              = 1.second,
@@ -119,11 +134,12 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
-      headerChainDiff                           = 100
+      headerChainDiff                           = 100,
+      adProofsSuffixLength                      = 112*1024
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        100, 1000
+        12, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -138,6 +154,29 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
         invalidModifiersCacheExpiration           = 6.hours,
       )
     )
+  }
+
+  property("scorex.restApi.publicUrl should be valid") {
+    val invalidUrls =
+      List(
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://0.0.0.0",
+        "http://example.com/foo/bar",
+        "http://example.com?foo=bar"
+      ).map(new URL(_))
+
+    invalidUrls.forall(ErgoSettings.invalidRestApiUrl) shouldBe true
+
+    val validUrls =
+      List(
+        "http://example.com",
+        "http://example.com:80",
+        "http://82.90.21.31",
+        "http://82.90.21.31:80"
+      ).map(new URL(_))
+
+    validUrls.forall(url => !ErgoSettings.invalidRestApiUrl(url)) shouldBe true
   }
 
 }

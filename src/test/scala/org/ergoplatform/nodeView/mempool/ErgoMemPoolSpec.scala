@@ -39,7 +39,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
   }
 
-  it should "respect bySize sorting order" in {
+  it should "respect given sorting order" in {
     implicit val ms = settings.chainSettings.monetary
     val (us, bh) = createUtxoState(parameters)
     val genesis = validFullBlock(None, us, bh)

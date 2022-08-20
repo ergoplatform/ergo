@@ -3,6 +3,7 @@ package org.ergoplatform.settings
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import scorex.util.ModifierId
 
@@ -41,6 +42,7 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      acceptableChainUpdateDelay: FiniteDuration,
                                      mempoolCapacity: Int,
                                      mempoolCleanupDuration: FiniteDuration,
+                                     mempoolSorting: SortingOption,
                                      rebroadcastCount: Int,
                                      minimalFeeAmount: Long,
                                      headerChainDiff: Int,
@@ -77,6 +79,7 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       cfg.as[FiniteDuration](s"$path.acceptableChainUpdateDelay"),
       cfg.as[Int](s"$path.mempoolCapacity"),
       cfg.as[FiniteDuration](s"$path.mempoolCleanupDuration"),
+      cfg.as[SortingOption](s"$path.mempoolSorting"),
       cfg.as[Int](s"$path.rebroadcastCount"),
       cfg.as[Long](s"$path.minimalFeeAmount"),
       cfg.as[Int](s"$path.headerChainDiff"),
@@ -86,4 +89,11 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
     )
   }
 
+  implicit val sortingOptionReader: ValueReader[SortingOption] = { (cfg, path) =>
+    path match {
+      case "bySize" => SortingOption.FeePerByte
+      case "byExecutionCost" => SortingOption.FeePerCycle
+      case _ => SortingOption.random()
+    }
+  }
 }

@@ -337,7 +337,8 @@ object ErgoMemPool extends ScorexLogging {
     * @param sortingOption - how to sort transactions (by size or execution cost)
     * @return empty mempool
     */
-  def empty(settings: ErgoSettings, sortingOption: SortingOption = SortingOption.random()): ErgoMemPool = {
+  def empty(settings: ErgoSettings): ErgoMemPool = {
+    val sortingOption = settings.nodeSettings.mempoolSorting
     sortingOption match {
       case SortingOption.FeePerByte => log.info("Sorting mempool by fee-per-byte")
       case SortingOption.FeePerCycle => log.info("Sorting mempool by fee-per-cycle")

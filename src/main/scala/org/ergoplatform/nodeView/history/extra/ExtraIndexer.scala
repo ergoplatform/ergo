@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.extra
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input}
-import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.{BlockTransactions, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -56,13 +56,17 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
     val start: Long = System.nanoTime()
 
+    cfor(0)(_ < modifiers.length, _ + 1) { i =>
+      historyStorage.insert(modifiers(i).serializedId, HistoryModifierSerializer.toBytes(modifiers(i)))
+    }
+
     indexedHeightBuffer.clear()
     globalTxIndexBuffer.clear()
     globalBoxIndexBuffer.clear()
 
     historyStorage.insert(Seq((IndexedHeightKey , indexedHeightBuffer .putInt (indexedHeight ).array),
                               (GlobalTxIndexKey , globalTxIndexBuffer .putLong(globalTxIndex ).array),
-                              (GlobalBoxIndexKey, globalBoxIndexBuffer.putLong(globalBoxIndex).array)), modifiers)
+                              (GlobalBoxIndexKey, globalBoxIndexBuffer.putLong(globalBoxIndex).array)), Seq.empty)
 
     val end: Long = System.nanoTime()
 

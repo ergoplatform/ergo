@@ -104,7 +104,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   // Create an instance of ExtraIndexer actor if "extraIndex = true" in config
   private val indexerRefOpt: Option[ActorRef] =
     if(ergoSettings.nodeSettings.extraIndex)
-      Some(ExtraIndexerRef(ergoSettings.chainSettings))
+      Some(ExtraIndexerRef(ergoSettings.chainSettings, ergoSettings.cacheSettings))
     else
       None
   ExtraIndexerRef.setAddressEncoder(ergoSettings.addressEncoder) // initialize an accessible address encoder regardless of extra indexing being enabled

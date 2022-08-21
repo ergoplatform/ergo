@@ -9,7 +9,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.Sema
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.ReceivableMessages.Start
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.settings.{Algos, ChainSettings}
+import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ScorexLogging, bytesToId}
 
@@ -17,7 +17,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import spire.syntax.all.cfor
 
-class ExtraIndex(chainSettings: ChainSettings)
+class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
   extends Actor with ScorexLogging {
 
   private val IndexedHeightKey: ByteArrayWrapper = ByteArrayWrapper.apply(Algos.hash("indexed height"))
@@ -32,7 +32,7 @@ class ExtraIndex(chainSettings: ChainSettings)
   private var globalBoxIndex: Long = 0L
   private val globalBoxIndexBuffer: ByteBuffer = ByteBuffer.allocate(8)
 
-  private val saveLimit: Int = 100
+  private val saveLimit: Int = cacheSettings.history.extraCacheSize * 25
 
   private var done: Boolean = false
 
@@ -45,13 +45,8 @@ class ExtraIndex(chainSettings: ChainSettings)
   // fast access
   private val modifiers: ArrayBuffer[BlockSection] = ArrayBuffer.empty[BlockSection]
 
-  // timing
-  private var txs: (Long, Long) = (0L, 0L)
-  private var boxes: (Long, Long) = (0L, 0L)
-  private var write: (Long, Long) = (0L, 0L)
-
   private def findModifierOpt(id: Array[Byte]): Option[Int] = {
-    cfor(modifiers.size - 1)(_ >= 0, _ - 1) { i => // loop backwards == test latest modifiers first
+    cfor(modifiers.size - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
       if(java.util.Arrays.equals(modifiers(i).serializedId, id)) return Some(i)
     }
     None
@@ -59,7 +54,7 @@ class ExtraIndex(chainSettings: ChainSettings)
 
   private def saveProgress(): Unit = {
 
-    write = write.copy(_1 = System.nanoTime())
+    val start: Long = System.nanoTime()
 
     indexedHeightBuffer.clear()
     globalTxIndexBuffer.clear()
@@ -69,9 +64,9 @@ class ExtraIndex(chainSettings: ChainSettings)
                               (GlobalTxIndexKey , globalTxIndexBuffer .putLong(globalTxIndex ).array),
                               (GlobalBoxIndexKey, globalBoxIndexBuffer.putLong(globalBoxIndex).array)), modifiers)
 
-    write = write.copy(_2 = System.nanoTime())
+    val end: Long = System.nanoTime()
 
-    log.info(s"Wrote ${modifiers.size} extra indexes to database in ${write._2 - write._1}ns")
+    log.info(s"Wrote ${modifiers.size} extra indexes to database in ${(end - start) / 1000000000D}s")
 
     modifiers.clear()
 
@@ -80,15 +75,12 @@ class ExtraIndex(chainSettings: ChainSettings)
   private def index(bt: BlockTransactions, height: Int): Unit = {
 
     //process transactions
-    txs = txs.copy(_1 = System.nanoTime())
     cfor(0)(_ < bt.txIds.size, _ + 1) { i =>
       modifiers += IndexedErgoTransaction(bytesToId(bt.txIds(i)), indexedHeight, globalTxIndex)
       modifiers += NumericTxIndex(globalTxIndex, bytesToId(bt.txIds(i)))
       globalTxIndex += 1
     }
-    txs = txs.copy(_2 = System.nanoTime())
 
-    boxes = boxes.copy(_1 = System.nanoTime())
     cfor(0)(_ < bt.txs.size, _ + 1) { n =>
 
       val tx: ErgoTransaction = bt.txs(n)
@@ -98,7 +90,7 @@ class ExtraIndex(chainSettings: ChainSettings)
         cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
           val input: Input = tx.inputs(i)
           findModifierOpt(input.boxId) match {
-            case Some(x) => modifiers(x).asInstanceOf[IndexedErgoBox].asSpent(tx.id, indexedHeight) // box found in last saveLimit blocks, update
+            case Some(x) => modifiers(x).asInstanceOf[IndexedErgoBox].asSpent(tx.id, indexedHeight) // box found in last saveLimit modifiers, update
             case None => // box not found in last saveLimit blocks
               history.typedModifierById[IndexedErgoBox](bytesToId(input.boxId)) match {
                 case Some(x) => modifiers += x.asSpent(tx.id, indexedHeight) // box found in DB, update
@@ -118,7 +110,7 @@ class ExtraIndex(chainSettings: ChainSettings)
         // box by ergotree
         val treeHash: Array[Byte] = IndexedErgoTreeSerializer.ergoTreeHash(box.ergoTree)
         findModifierOpt(treeHash) match {
-          case Some(x) => modifiers(x).asInstanceOf[IndexedErgoTree].addBox(bytesToId(box.id)) // ergotree found in last saveLimit blocks, update
+          case Some(x) => modifiers(x).asInstanceOf[IndexedErgoTree].addBox(bytesToId(box.id)) // ergotree found in last saveLimit modifiers, update
           case None    => // ergotree not found in last saveLimit blocks
             history.typedModifierById[IndexedErgoTree](bytesToId(treeHash)) match {
               case Some(x) => modifiers += x.addBox(bytesToId(box.id)) // ergotree found in DB, update
@@ -129,7 +121,7 @@ class ExtraIndex(chainSettings: ChainSettings)
         // box by address
         val addrHash: Array[Byte] = IndexedErgoAddressSerializer.hashAddress(IndexedErgoBoxSerializer.getAddress(box.ergoTree))
         findModifierOpt(addrHash) match {
-          case Some(x) => modifiers(x).asInstanceOf[IndexedErgoAddress].addBox(box.id) // address found in last saveLimit blocks, update
+          case Some(x) => modifiers(x).asInstanceOf[IndexedErgoAddress].addBox(box.id) // address found in last saveLimit modifiers, update
           case None => // address not found in last saveLimit blocks
             history.typedModifierById[IndexedErgoAddress](bytesToId(addrHash)) match {
               case Some(x) => modifiers += x.addTx(tx.id).addBox(box.id)//address found in DB, update
@@ -139,13 +131,12 @@ class ExtraIndex(chainSettings: ChainSettings)
       }
 
     }
-    boxes = boxes.copy(_2 = System.nanoTime())
 
-    log.info(s"Indexed block #$indexedHeight (transactions: ${bt.txs.size} [${txs._2 - txs._1}ns], boxes: ${bt.txs.map(_.outputs.size).sum} [${boxes._2 - boxes._1}ns]) - progress: $indexedHeight / $chainHeight (mods: ${modifiers.size})")
+    log.info(s"Indexed block #$indexedHeight [transactions: ${bt.txs.size}, boxes: ${bt.txs.map(_.outputs.size).sum}] - progress: $indexedHeight / $chainHeight (mods: ${modifiers.size})")
 
-    if(done) indexedHeight = height // update after caught up with chain
+    if(done) indexedHeight = height // update height here after caught up with chain
 
-    if(indexedHeight % saveLimit == 0 || done) saveProgress() // save index every saveLimit blocks or every block after caught up
+    if(modifiers.size >= saveLimit || done) saveProgress() // save index every saveLimit modifiers or every block after caught up
 
   }
 
@@ -197,8 +188,8 @@ object ExtraIndexerRef {
 
   def setAddressEncoder(encoder: ErgoAddressEncoder): Unit = if(_ae == null) _ae = encoder
 
-  def apply(chainSettings: ChainSettings)(implicit system: ActorSystem): ActorRef = {
-    val actor = system.actorOf(Props.create(classOf[ExtraIndex], chainSettings))
+  def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {
+    val actor = system.actorOf(Props.create(classOf[ExtraIndex], chainSettings, cacheSettings))
     _ae = chainSettings.addressEncoder
     ExtraIndexerRefHolder.init(actor)
     actor

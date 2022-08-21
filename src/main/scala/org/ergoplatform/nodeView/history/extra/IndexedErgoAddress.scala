@@ -13,6 +13,7 @@ import scorex.util.{ByteArrayOps, ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 
 import scala.collection.mutable.ListBuffer
+import spire.syntax.all.cfor
 
 case class IndexedErgoAddress(addressHash: ModifierId,
                               txIds: ListBuffer[ModifierId],
@@ -25,19 +26,19 @@ case class IndexedErgoAddress(addressHash: ModifierId,
   override type M = IndexedErgoAddress
   override def serializer: ScorexSerializer[IndexedErgoAddress] = IndexedErgoAddressSerializer
 
-  private var _transactions: Seq[IndexedErgoTransaction] = Seq.empty[IndexedErgoTransaction]
-  private var _boxes: Seq[IndexedErgoBox] = Seq.empty[IndexedErgoBox]
-  private var _utxos: Seq[IndexedErgoBox] = _
+  private var _transactions: ListBuffer[IndexedErgoTransaction] = ListBuffer.empty[IndexedErgoTransaction]
+  private var _boxes: ListBuffer[IndexedErgoBox] = ListBuffer.empty[IndexedErgoBox]
+  private var _utxos: ListBuffer[IndexedErgoBox] = ListBuffer.empty[IndexedErgoBox]
 
-  def transactions(lastN: Long = 20L): Seq[IndexedErgoTransaction] =
+  def transactions(lastN: Long = 20L): ListBuffer[IndexedErgoTransaction] =
     if(lastN > 0)
       _transactions.slice(math.max((_transactions.size - lastN).toInt, 0), _transactions.size)
     else
       _transactions
 
-  def boxes(): Seq[IndexedErgoBox] = _boxes
+  def boxes(): ListBuffer[IndexedErgoBox] = _boxes
 
-  def utxos(): Seq[IndexedErgoBox] = _utxos
+  def utxos(): ListBuffer[IndexedErgoBox] = _utxos
 
   def retrieveBody(history: ErgoHistoryReader): IndexedErgoAddress = {
     retrieveTxs(history, -1)
@@ -71,8 +72,8 @@ case class IndexedErgoAddress(addressHash: ModifierId,
     this
   }
 
-  def addBoxes(boxes: ListBuffer[BoxId]): IndexedErgoAddress = {
-    boxIds ++= boxes
+  def addBox(box: BoxId): IndexedErgoAddress = {
+    boxIds += box
     this
   }
 }
@@ -91,19 +92,19 @@ object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress]
   override def serialize(iEa: IndexedErgoAddress, w: Writer): Unit = {
     w.putBytes(idToBytes(iEa.addressHash))
     w.putUInt(iEa.txIds.length)
-    iEa.txIds.foreach(m => w.putBytes(m.toBytes))
+    cfor(0)(_ < iEa.txIds.length, _ + 1) { i => w.putBytes(iEa.txIds(i).toBytes)}
     w.putUInt(iEa.boxIds.length)
-    iEa.boxIds.foreach(w.putBytes(_))
+    cfor(0)(_ < iEa.boxIds.length, _ + 1) { i => w.putBytes(iEa.boxIds(i))}
   }
 
   override def parse(r: Reader): IndexedErgoAddress = {
     val addressHash: ModifierId = bytesToId(r.getBytes(32))
     val txnsLen: Long = r.getUInt()
     val txns: ListBuffer[ModifierId] = ListBuffer.empty[ModifierId]
-    for(n <- 1L to txnsLen) txns += r.getBytes(32).toModifierId
+    cfor(0)(_ < txnsLen, _ + 1) {_ => txns += r.getBytes(32).toModifierId}
     val boxesLen: Long = r.getUInt()
     val boxes: ListBuffer[BoxId] = ListBuffer.empty[BoxId]
-    for(n <- 1L to boxesLen) boxes += ADKey @@ r.getBytes(32)
+    cfor(0)(_ < boxesLen, _ + 1) { _ => boxes += ADKey @@ r.getBytes(32)}
     new IndexedErgoAddress(addressHash, txns, boxes)
   }
 }

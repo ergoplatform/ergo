@@ -10,6 +10,7 @@ import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
 import scala.collection.mutable.ListBuffer
+import spire.syntax.all.cfor
 
 case class IndexedErgoTree(treeHash: ModifierId, boxIds: ListBuffer[ModifierId]) extends BlockSection {
   override val sizeOpt: Option[Int] = None
@@ -40,14 +41,14 @@ object IndexedErgoTreeSerializer extends ScorexSerializer[IndexedErgoTree] {
   override def serialize(iEt: IndexedErgoTree, w: Writer): Unit = {
     w.putBytes(iEt.serializedId)
     w.putUInt(iEt.boxIds.length)
-    iEt.boxIds.foreach(id => w.putBytes(idToBytes(id)))
+    cfor(0)(_ < iEt.boxIds.length, _ + 1) { i => w.putBytes(idToBytes(iEt.boxIds(i)))}
   }
 
   override def parse(r: Reader): IndexedErgoTree = {
     val treeHash: ModifierId = bytesToId(r.getBytes(32))
     val boxIdsLen: Long = r.getUInt()
     val boxIds: ListBuffer[ModifierId] = ListBuffer.empty[ModifierId]
-    for(n <- 1L to boxIdsLen) boxIds += bytesToId(r.getBytes(32))
+    cfor(0)(_ < boxIdsLen, _ + 1) { _ => boxIds += bytesToId(r.getBytes(32))}
     IndexedErgoTree(treeHash, boxIds)
   }
 }

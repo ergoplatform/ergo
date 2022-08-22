@@ -809,7 +809,8 @@ object CandidateGenerator extends ScorexLogging {
               invalidTxs: Seq[ModifierId]
             ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
-      def current: Seq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
+      val currentCosted = acc ++ lastFeeTx
+      def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
 
       val stateWithTxs = us.withTransactions(current)
 
@@ -843,6 +844,8 @@ object CandidateGenerator extends ScorexLogging {
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
                           loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
                         } else {
+                          log.debug(s"Finishing block assembly on limits overflow, " +
+                                    s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
                           current -> invalidTxs
                         }
                       case Failure(e) =>

@@ -14,6 +14,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReade
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome.{Accepted, Invalidated}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
@@ -368,7 +369,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
-      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024
+      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
+      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024
 )
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null

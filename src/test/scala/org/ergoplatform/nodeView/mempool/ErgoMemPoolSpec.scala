@@ -52,7 +52,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     )
 
     // Randomly initialized
-    settings.nodeSettings.mempoolSorting shouldBe oneOf (SortingOption.FeePerByte, SortingOption.FeePerCycle)
+    settings.nodeSettings.mempoolSorting should (be (SortingOption.FeePerByte) or be (SortingOption.FeePerCycle))
 
     val sortBySizeSettings: ErgoSettings = settings.copy(
       nodeSettings = settings.nodeSettings.copy(

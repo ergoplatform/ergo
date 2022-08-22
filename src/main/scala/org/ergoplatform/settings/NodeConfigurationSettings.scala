@@ -90,7 +90,8 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
   }
 
   implicit val sortingOptionReader: ValueReader[SortingOption] = { (cfg, path) =>
-    path match {
+    val sorting = cfg.as[String](s"$path")
+    sorting match {
       case "bySize" => SortingOption.FeePerByte
       case "byExecutionCost" => SortingOption.FeePerCycle
       case _ => SortingOption.random()

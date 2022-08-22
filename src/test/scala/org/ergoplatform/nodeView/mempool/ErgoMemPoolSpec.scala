@@ -4,6 +4,7 @@ import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
 import org.scalatest.flatspec.AnyFlatSpec
@@ -50,12 +51,25 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       IndexedSeq(feeOut)
     )
 
-    var poolSize = ErgoMemPool.empty(settings, SortingOption.FeePerByte)
+    // Randomly initialized
+    settings.nodeSettings.mempoolSorting should (be (SortingOption.FeePerByte) or be (SortingOption.FeePerCycle))
+
+    val sortBySizeSettings: ErgoSettings = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(
+        mempoolSorting = SortingOption.FeePerByte,
+      ))
+
+    var poolSize = ErgoMemPool.empty(sortBySizeSettings)
     poolSize = poolSize.process(tx, wus)._1
     val size = tx.size
     poolSize.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, size).weight
 
-    var poolCost = ErgoMemPool.empty(settings, SortingOption.FeePerCycle)
+    val sortByCostSettings: ErgoSettings = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(
+        mempoolSorting = SortingOption.FeePerCycle,
+      ))
+
+    var poolCost = ErgoMemPool.empty(sortByCostSettings)
     poolCost = poolCost.process(tx, wus)._1
     val cost = wus.validateWithCost(tx, Int.MaxValue).get
     poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, cost).weight
@@ -105,7 +119,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         val tx1 = ErgoTransaction(tx1Like.inputs, tx1Like.outputCandidates)
         val tx2 = ErgoTransaction(tx2Like.inputs, tx2Like.outputCandidates)
 
-        val pool0 = ErgoMemPool.empty(settings, SortingOption.FeePerByte)
+        val pool0 = ErgoMemPool.empty(settings)
         val (pool, tx1Outcome) = pool0.process(tx1, us)
 
         tx1Outcome shouldBe ProcessingOutcome.Accepted

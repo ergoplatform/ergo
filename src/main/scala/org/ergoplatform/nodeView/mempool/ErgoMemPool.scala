@@ -334,7 +334,6 @@ object ErgoMemPool extends ScorexLogging {
     * Create empty mempool
     *
     * @param settings - node settings (to get mempool settings from)
-    * @param sortingOption - how to sort transactions (by size or execution cost)
     * @return empty mempool
     */
   def empty(settings: ErgoSettings): ErgoMemPool = {

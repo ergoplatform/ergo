@@ -36,7 +36,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
   private def runCleanup(validator: TransactionValidation,
                          mempool: ErgoMemPoolReader): Unit = {
-    val (validated, toEliminate) = validatePool(validator, mempool)
+    val (_, toEliminate) = validatePool(validator, mempool)
 
     if (toEliminate.nonEmpty) {
       log.info(s"${toEliminate.size} transactions from mempool were invalidated")
@@ -87,7 +87,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
               validationLoop(tail, validated :+ updTx, invalidated, txCost + costAcc)
             case Failure(e) =>
               log.info(s"Transaction $txId invalidated: ${e.getMessage}")
-              validationLoop(tail, validated, invalidated :+ txId, head + costAcc) //add old cost
+              validationLoop(tail, validated, invalidated :+ txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
           }
         case _ =>
           validated -> invalidated

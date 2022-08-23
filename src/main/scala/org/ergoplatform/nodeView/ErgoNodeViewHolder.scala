@@ -8,7 +8,6 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
@@ -649,15 +648,10 @@ object ErgoNodeViewHolder {
     // Modifiers received from the remote peer with new elements in it
     case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
 
-    sealed trait NewTransactions{
-      val unconfirmedTxs: Iterable[UnconfirmedTransaction]
-    }
 
-    case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction) extends NewTransactions {
-      override val unconfirmedTxs: Iterable[UnconfirmedTransaction] = Iterable(tx)
-    }
+    case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction)
 
-    case class TransactionsFromRemote(override val unconfirmedTxs: Iterable[UnconfirmedTransaction]) extends NewTransactions
+    case class TransactionsFromRemote(unconfirmedTxs: Iterable[UnconfirmedTransaction])
 
     case class LocallyGeneratedModifier(pmod: BlockSection)
 

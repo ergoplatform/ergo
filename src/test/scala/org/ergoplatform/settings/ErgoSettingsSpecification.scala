@@ -1,5 +1,6 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.settings.RESTApiSettings
@@ -37,6 +38,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       acceptableChainUpdateDelay                = 30.minutes,
       mempoolCapacity                           = 100000,
       mempoolCleanupDuration                    = 10.seconds,
+      mempoolSorting                            = SortingOption.FeePerByte,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
@@ -88,6 +90,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       acceptableChainUpdateDelay                = 30.minutes,
       mempoolCapacity                           = 100000,
       mempoolCleanupDuration                    = 10.seconds,
+      mempoolSorting                            = SortingOption.FeePerByte,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
@@ -132,6 +135,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       acceptableChainUpdateDelay                = 30.minutes,
       mempoolCapacity                           = 100000,
       mempoolCleanupDuration                    = 10.seconds,
+      mempoolSorting                            = SortingOption.FeePerByte,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,

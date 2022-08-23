@@ -510,6 +510,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * parse block parts and send valid modifiers to NodeViewHolder
     */
   protected def modifiersFromRemote(hr: ErgoHistory,
+                                    mp: ErgoMemPool,
                                     data: ModifiersData,
                                     remote: ConnectedPeer,
                                     blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
@@ -524,7 +525,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
 
     if (typeId == Transaction.ModifierTypeId) {
-      // parse all transactions and send them to node view holder
+      // filter out transactions already in the mempool
+      val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
+      // parse all transactions not in the mempool and send them to node view holder
       val parsed: Iterable[UnconfirmedTransaction] = parseTransactions(requestedModifiers, remote)
       viewHolderRef ! TransactionsFromRemote(parsed)
     } else {
@@ -532,6 +535,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
           // parse all modifiers and put them to modifiers cache
           val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)
+
+          // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
           val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
           if (valid.nonEmpty) {
             viewHolderRef ! ModifiersFromRemote(valid)
@@ -551,9 +556,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  def parseTransactions(modifiers: Map[ModifierId, Array[Byte]],
-                         remote: ConnectedPeer): Iterable[UnconfirmedTransaction] = {
-    modifiers.flatMap{ case (id, bytes) =>
+  /**
+    * Parse transactions coming from remote, filtering out ones which are too big on the way
+    */
+  def parseTransactions(txs: Map[ModifierId, Array[Byte]], remote: ConnectedPeer): Iterable[UnconfirmedTransaction] = {
+    txs.flatMap{ case (id, bytes) =>
       if (bytes.length > settings.nodeSettings.maxTransactionSize) {
         deliveryTracker.setInvalid(id, Transaction.ModifierTypeId)
         penalizeMisbehavingPeer(remote)
@@ -574,10 +581,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    *
-    * Parse modifiers using specified serializer, check that its id is equal to the declared one,
-    * penalize misbehaving peer for every incorrect modifier,
-    * call deliveryTracker.onReceive() for every correct modifier to update its status
+    * Parse block sections with serializer provided, check that its id is equal to the declared one,
+    * penalize misbehaving peer for every incorrect modifier
     *
     * @return collection of parsed modifiers
     */
@@ -930,7 +935,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case (_: RequestModifierSpec.type, data: InvData, remote) =>
       modifiersReq(hr, mp, data, remote)
     case (_: ModifiersSpec.type, data: ModifiersData, remote) =>
-      modifiersFromRemote(hr, data, remote, blockAppliedTxsCache)
+      modifiersFromRemote(hr, mp, data, remote, blockAppliedTxsCache)
   }
 
   def initialized(hr: ErgoHistory, mp: ErgoMemPool, blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {

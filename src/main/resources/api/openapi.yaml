@@ -5191,12 +5191,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /extra/transaction/byId/{txId}:
+  /blockchain/transaction/byId/{txId}:
     get:
       summary: Retrieve a transaction by its id
       operationId: getTxById
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: path
           name: txId
@@ -5224,12 +5224,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /extra/transaction/byIndex/{txIndex}:
+  /blockchain/transaction/byIndex/{txIndex}:
     get:
       summary: Retrieve a transaction by global index number
       operationId: getTxByIndex
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: path
           name: txIndex
@@ -5257,12 +5257,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /extra/transaction/byAddress/{address}:
+  /blockchain/transaction/byAddress/{address}:
     get:
       summary: Retrieve transactions by their associated address
       operationId: getTxsByAddress
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: path
           name: address
@@ -5271,13 +5271,21 @@ paths:
           schema:
             $ref: '#/components/schemas/ErgoAddress'
         - in: query
-          name: limit
+          name: offset
           required: false
-          description: get last n elements, set to negative for all elements
+          description: amount of elements to skip from the start
           schema:
             type: integer
             format: int64
-            default: 20
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int64
+            default: 10
       responses:
         '200':
           description: transactions associated with wanted address
@@ -5301,25 +5309,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /extra/transaction/range:
+  /blockchain/transaction/range:
     get:
       summary: Get a range of transaction ids
       operationId: getTxRange
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: query
-          name: fromIndex
+          name: offset
           required: false
-          description: Min transaction index
+          description: amount of elements to skip from the start
           schema:
             type: integer
             format: int64
             default: 0
         - in: query
-          name: toIndex
+          name: limit
           required: false
-          description: Max transaction index
+          description: amount of elements to retrieve
           schema:
             type: integer
             format: int64
@@ -5341,12 +5349,12 @@ paths:
                 schema:
                   $ref: '#/components/schemas/ApiError'
 
-  /extra/box/byId/{boxId}:
+  /blockchain/box/byId/{boxId}:
     get:
       summary: Retrieve a box by its id
       operationId: getBoxById
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: path
           name: boxId
@@ -5374,12 +5382,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /extra/box/byIndex/{boxIndex}:
+  /blockchain/box/byIndex/{boxIndex}:
     get:
       summary: Retrieve a box by global index number
       operationId: getBoxByIndex
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: path
           name: boxIndex
@@ -5407,12 +5415,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /extra/box/byAddress/{address}:
+  /blockchain/box/byAddress/{address}:
     get:
       summary: Retrieve boxes by their associated address
       operationId: getBoxesByAddress
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: path
           name: address
@@ -5421,13 +5429,21 @@ paths:
           schema:
             $ref: '#/components/schemas/ErgoAddress'
         - in: query
-          name: limit
+          name: offset
           required: false
-          description: get last n elements, set to negative for all elements
+          description: amount of elements to skip from the start
           schema:
             type: integer
             format: int64
-            default: 20
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int64
+            default: 10
       responses:
         '200':
           description: boxes associated with wanted address
@@ -5451,12 +5467,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /extra/box/unspent/byAddress/{address}:
+  /blockchain/box/unspent/byAddress/{address}:
     get:
       summary: Retrieve unspent boxes by their associated address
       operationId: getBoxesByAddressUnspent
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: path
           name: address
@@ -5465,13 +5481,21 @@ paths:
           schema:
             $ref: '#/components/schemas/ErgoAddress'
         - in: query
-          name: limit
+          name: offset
           required: false
-          description: get last n elements, set to negative for all elements
+          description: amount of elements to skip from the start
           schema:
             type: integer
             format: int64
-            default: 20
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int64
+            default: 10
       responses:
         '200':
           description: unspent boxes associated with wanted address
@@ -5495,25 +5519,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /extra/box/range:
+  /blockchain/box/range:
     get:
       summary: Get a range of box ids
       operationId: getBoxRange
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: query
-          name: fromIndex
+          name: offset
           required: false
-          description: Min box index
+          description: amount of elements to skip from the start
           schema:
             type: integer
             format: int64
             default: 0
         - in: query
-          name: toIndex
+          name: limit
           required: false
-          description: Max box index
+          description: amount of elements to retrieve
           schema:
             type: integer
             format: int64
@@ -5535,12 +5559,12 @@ paths:
                 schema:
                   $ref: '#/components/schemas/ApiError'
 
-  /extra/box/byErgoTree/{ergoTreeHex}:
+  /blockchain/box/byErgoTree/{ergoTreeHex}:
     get:
       summary: Retrieve boxes by their associated ergotree
       operationId: getBoxesByErgoTree
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: path
           name: ergoTreeHex
@@ -5550,13 +5574,21 @@ paths:
             type: string
             example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
         - in: query
-          name: limit
+          name: offset
           required: false
-          description: get last n elements, set to negative for all elements
+          description: amount of elements to skip from the start
           schema:
             type: integer
             format: int64
-            default: 20
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int64
+            default: 10
       responses:
         '200':
           description: boxes with wanted ergotree
@@ -5577,12 +5609,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /extra/box/unspent/byErgoTree/{ergoTreeHex}:
+  /blockchain/box/unspent/byErgoTree/{ergoTreeHex}:
     get:
       summary: Retrieve unspent boxes by their associated ergotree
       operationId: getBoxesByErgoTreeUnspent
       tags:
-        - extra
+        - blockchain
       parameters:
         - in: path
           name: ergoTreeHex
@@ -5592,13 +5624,21 @@ paths:
             type: string
             example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
         - in: query
-          name: limit
+          name: offset
           required: false
-          description: get last n elements, set to negative for all elements
+          description: amount of elements to skip from the start
           schema:
             type: integer
             format: int64
-            default: 20
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int64
+            default: 10
       responses:
         '200':
           description: unspent boxes with wanted ergotree

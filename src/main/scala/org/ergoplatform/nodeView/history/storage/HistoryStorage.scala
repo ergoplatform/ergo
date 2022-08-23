@@ -4,13 +4,14 @@ import com.google.common.cache.CacheBuilder
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.extra.{IndexedErgoAddress, IndexedErgoBox, IndexedErgoTree}
+import org.ergoplatform.nodeView.history.extra.{IndexedErgoAddress, IndexedErgoTree}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import scorex.core.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
+import spire.syntax.all.cfor
 
 /**
   * Storage for Ergo history
@@ -20,7 +21,7 @@ import scala.util.{Failure, Success, Try}
   * @param objectsStore - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
   * @param config       - cache configs
   */
-class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: CacheSettings)
+class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStore: LDBKVStore, config: CacheSettings)
   extends ScorexLogging
     with AutoCloseable
     with ScorexEncoding {
@@ -43,7 +44,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
 
   private def cacheModifier(mod: BlockSection): Unit = mod.modifierTypeId match {
     case Header.modifierTypeId => headersCache.put(mod.id, mod)
-    case IndexedErgoBox.modifierTypeId | IndexedErgoAddress.modifierTypeId | IndexedErgoTree.modifierTypeId => extraCache.put(mod.id, mod)
+    case IndexedErgoAddress.modifierTypeId | IndexedErgoTree.modifierTypeId => extraCache.put(mod.id, mod)
     case _ => blockSectionsCache.put(mod.id, mod)
   }
 
@@ -62,7 +63,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
 
   def modifierById(id: ModifierId): Option[BlockSection] =
     lookupModifier(id) orElse
-      objectsStore.get(idToBytes(id)).flatMap { bytes =>
+      (extraStore.get(idToBytes(id)) orElse objectsStore.get(idToBytes(id))).flatMap { bytes =>
         HistoryModifierSerializer.parseBytesTry(bytes) match {
           case Success(pm) =>
             log.trace(s"Cache miss for existing modifier $id")
@@ -86,19 +87,26 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
 
   def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
 
-  def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
-             objectsToInsert: Seq[BlockSection]): Try[Unit] = {
+  def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
+             objectsToInsert: Array[BlockSection]): Try[Unit] = {
     objectsStore.insert(
-      objectsToInsert.map(m => idToBytes(m.id) -> HistoryModifierSerializer.toBytes(m))
+      objectsToInsert.map(m => m.serializedId -> HistoryModifierSerializer.toBytes(m))
     ).flatMap { _ =>
-      objectsToInsert.foreach(o => cacheModifier(o))
+      cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i))}
       if (indexesToInsert.nonEmpty) {
         indexStore.insert(indexesToInsert.map { case (k, v) => k.data -> v }).map { _ =>
-          indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
+          cfor(0)(_ < indexesToInsert.length, _ + 1) { i => indexCache.put(indexesToInsert(i)._1, indexesToInsert(i)._2)}
           ()
         }
       } else Success(())
     }
+  }
+
+  def insertExtra(indexesToInsert: Array[(Array[Byte], Array[Byte])],
+                  objectsToInsert: Array[BlockSection]): Unit = {
+    extraStore.insert(objectsToInsert.map(m => m.serializedId -> HistoryModifierSerializer.toBytes(m)))
+    cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i))}
+    cfor(0)(_ < indexesToInsert.length, _ + 1) { i => extraStore.insert(indexesToInsert(i)._1, indexesToInsert(i)._2)}
   }
 
   /**
@@ -121,17 +129,13 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
     * @param idsToRemove - identifiers of modifiers to remove
     * @return
     */
-  def remove(indicesToRemove: Seq[ByteArrayWrapper],
-             idsToRemove: Seq[ModifierId]): Try[Unit] = {
+  def remove(indicesToRemove: Array[ByteArrayWrapper],
+             idsToRemove: Array[ModifierId]): Try[Unit] = {
 
       objectsStore.remove(idsToRemove.map(idToBytes)).map { _ =>
-        idsToRemove.foreach { id =>
-          removeModifier(id)
-        }
+        cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i))}
         indexStore.remove(indicesToRemove.map(_.data)).map { _ =>
-          indicesToRemove.foreach { id =>
-            indexCache.invalidate(id)
-          }
+          cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i))}
           ()
         }
       }
@@ -149,6 +153,7 @@ object HistoryStorage {
   def apply(ergoSettings: ErgoSettings): HistoryStorage = {
     val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
     val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
-    new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
+    val extraStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/extra")
+    new HistoryStorage(indexStore, objectsStore, extraStore, ergoSettings.cacheSettings)
   }
 }

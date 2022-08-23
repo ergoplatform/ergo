@@ -365,9 +365,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return available peers to download headers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): Iterable[ConnectedPeer] = {
-    syncTracker.peersByStatus
-      .get(Older)
-      .getOrElse(Array(callingPeer))
+    syncTracker.peersByStatus.getOrElse(Older, Array(callingPeer))
   }
 
   /**
@@ -385,6 +383,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // if the peer is not ok (e.g. of some old version having problems)
       // choose first peer which is okay
       // so usually returns randomized peer, with fallback to deterministic one
+      if(peers.isEmpty) return None // if no peers are available after sudden network change (eg. VPN)
       val randomPeer = peers(Random.nextInt(peers.size))
       if (filterOutFn(randomPeer)) {
         Some(randomPeer)

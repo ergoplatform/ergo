@@ -45,7 +45,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 250, 100, 1000
+        12, 500, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -97,7 +97,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 250, 100, 1000
+        12, 500, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,
@@ -142,7 +142,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 250, 100, 1000
+        12, 500, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersBloomFilterCapacity       = 10000000,

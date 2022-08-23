@@ -19,21 +19,19 @@ import sigmastate.serialization.ErgoTreeSerializer
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
-case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, extraIndexerOpt: Option[ActorRef])
+case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, extraIndexerOpt: Option[ActorRef])
                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  val paging: Directive[(Long, Long)] = parameters("fromIndex".as[Long] ? 0L, "toIndex".as[Long] ? 10L)
+  val paging: Directive[(Long, Long)] = parameters("offset".as[Long] ? 0L, "limit".as[Long] ? 10L)
 
-  val lastN: Directive[Tuple1[Long]] = parameter("limit".as[Long] ? 20L)
+  private val MaxItems = IndexedErgoAddress.segmentTreshold
 
   val addressEncoder: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
 
-  private val MaxTxs = 16384
-  private val MaxBoxes = MaxTxs * 3
 
-  override val route: Route = pathPrefix("extra") {
+  override val route: Route = pathPrefix("blockchain") {
     getTxByIdR ~
       getTxByIndexR ~
       getTxsByAddressR ~
@@ -79,35 +77,36 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getTxByIndex(index))
   }
 
-  private def getTxsByAddress(addr: ErgoAddress, lastN: Long): Future[Option[Seq[IndexedErgoTransaction]]] =
+  private def getTxsByAddress(addr: ErgoAddress, offset: Long, limit: Long): Future[Option[Seq[IndexedErgoTransaction]]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => Some(addr.retrieveTxs(history, lastN).transactions(-1))
+        case Some(addr) => Some(addr.retrieveTxs(history, offset, limit))
         case None       => None
       }
     }
 
-  private def getTxsByAddressR: Route = (get & pathPrefix("transaction" / "byAddress") & path(Segment) & lastN) { (address, limit) =>
-    addressEncoder.fromString(address) match {
-      case Success(addr) => ApiResponse(getTxsByAddress(addr, limit))
-      case Failure(_)    => BadRequest("Incorrect address format")
+  private def getTxsByAddressR: Route = (get & pathPrefix("transaction" / "byAddress") & path(Segment) & paging) { (address, offset, limit) =>
+    if(limit > MaxItems) {
+      BadRequest(s"No more than $MaxItems transactions can be requested")
+    }else {
+      addressEncoder.fromString(address) match {
+        case Success(addr) => ApiResponse(getTxsByAddress(addr, offset, limit))
+        case Failure(_) => BadRequest("Incorrect address format")
+      }
     }
   }
 
-  private def getTxRange(fromHeight: Long, toHeight: Long): Future[Seq[ModifierId]] =
+  private def getTxRange(offset: Long, limit: Long): Future[Seq[ModifierId]] =
     getHistory.map { history =>
-      (for(n <- fromHeight to toHeight)
-        yield history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n))).get.m
-      ).toSeq
+      val base: Int = (history.fullBlockHeight - offset).toInt
+      for(n <- (base - limit) to base) yield history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n))).get.m
     }
 
-  private def getTxRangeR: Route = (pathPrefix("transaction" / "range") & paging) { (fromIndex, toIndex) =>
-    if (toIndex < fromIndex) {
-      BadRequest("toIndex < fromIndex")
-    } else if (fromIndex - toIndex > MaxTxs) {
-      BadRequest(s"No more than $MaxTxs transactions can be requested")
-    } else {
-      ApiResponse(getTxRange(fromIndex, toIndex))
+  private def getTxRangeR: Route = (pathPrefix("transaction" / "range") & paging) { (offset, limit) =>
+    if(limit > MaxItems) {
+      BadRequest(s"No more than $MaxItems transactions can be requested")
+    }else {
+      ApiResponse(getTxRange(offset, limit))
     }
   }
 
@@ -132,80 +131,93 @@ case class ExtraIndexApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getBoxByIndex(index))
   }
 
-  private def getBoxesByAddress(addr: ErgoAddress, lastN: Long): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByAddress(addr: ErgoAddress, offset: Long, limit: Long): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => addr.retrieveBoxes(history, lastN).boxes()
+        case Some(addr) => addr.retrieveBoxes(history, offset, limit)
         case None       => Seq.empty[IndexedErgoBox]
       }
     }
 
-  private def getBoxesByAddressR: Route = (get & pathPrefix("box" / "byAddress") & path(Segment) & lastN) { (address, limit) =>
-    addressEncoder.fromString(address) match {
-      case Success(addr) => ApiResponse(getBoxesByAddress(addr, limit))
-      case Failure(_)    => BadRequest("Incorrect address format")
+  private def getBoxesByAddressR: Route = (get & pathPrefix("box" / "byAddress") & path(Segment) & paging) { (address, offset, limit) =>
+    if(limit > MaxItems) {
+      BadRequest(s"No more than $MaxItems boxes can be requested")
+    }else {
+      addressEncoder.fromString(address) match {
+        case Success(addr) => ApiResponse(getBoxesByAddress(addr, offset, limit))
+        case Failure(_)    => BadRequest("Incorrect address format")
+      }
     }
   }
 
-  private def getBoxesByAddressUnspent(addr: ErgoAddress, lastN: Long): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Long, limit: Long): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => addr.retrieveBoxes(history, lastN).utxos()
+        case Some(addr) => addr.retrieveUtxos(history, offset, limit)
         case None       => Seq.empty[IndexedErgoBox]
       }
     }
 
-  private def getBoxesByAddressUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byAddress") & path(Segment) & lastN) { (address, limit) =>
-    addressEncoder.fromString(address) match {
-      case Success(addr) => ApiResponse(getBoxesByAddressUnspent(addr, limit))
-      case Failure(_)    => BadRequest("Incorrect address format")
+  private def getBoxesByAddressUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byAddress") & path(Segment) & paging) { (address, offset, limit) =>
+    if(limit > MaxItems) {
+      BadRequest(s"No more than $MaxItems boxes can be requested")
+    }else {
+      addressEncoder.fromString(address) match {
+        case Success(addr) => ApiResponse(getBoxesByAddressUnspent(addr, offset, limit))
+        case Failure(_) => BadRequest("Incorrect address format")
+      }
     }
   }
 
-  private def getBoxRange(fromHeight: Long, toHeight: Long): Future[Seq[ModifierId]] =
+  private def getBoxRange(offset: Long, limit: Long): Future[Seq[ModifierId]] =
     getHistory.map { history =>
-      (for(n <- fromHeight to toHeight)
-          yield history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n))).get.m
-      ).toSeq
+      val base: Int = (history.fullBlockHeight - offset).toInt
+      for(n <- (base - limit) to base) yield history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n))).get.m
     }
 
-  private def getBoxRangeR: Route = (pathPrefix("box" / "range") & paging) { (fromIndex, toIndex) =>
-    if (toIndex < fromIndex) {
-      BadRequest("toIndex < fromIndex")
-    } else if (fromIndex - toIndex > MaxBoxes) {
-      BadRequest(s"No more than $MaxBoxes boxes can be requested")
-    } else {
-      ApiResponse(getBoxRange(fromIndex, toIndex))
+  private def getBoxRangeR: Route = (pathPrefix("box" / "range") & paging) { (offset, limit) =>
+    if(limit > MaxItems) {
+      BadRequest(s"No more than $MaxItems boxes can be requested")
+    }else {
+      ApiResponse(getBoxRange(offset, limit))
     }
   }
 
-  private def getBoxesByErgoTree(tree: ErgoTree, lastN: Long): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByErgoTree(tree: ErgoTree, offset: Long, limit: Long): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       history.typedModifierById[IndexedErgoTree](bytesToId(IndexedErgoTreeSerializer.ergoTreeHash(tree))) match {
-        case Some(iEt) => iEt.retrieveBody(history, lastN)
+        case Some(iEt) => iEt.retrieveBoxes(history, offset, limit)
         case None      => Seq.empty[IndexedErgoBox]
       }
     }
 
-  private def getBoxesByErgoTreeR: Route = (get & pathPrefix("box" / "byErgoTree") & path(Segment) & lastN) { (tree, limit) =>
+  private def getBoxesByErgoTreeR: Route = (get & pathPrefix("box" / "byErgoTree") & path(Segment) & paging) { (tree, offset, limit) =>
     try {
-      ApiResponse(getBoxesByErgoTree(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(tree).get), limit))
+      if(limit > MaxItems) {
+        BadRequest(s"No more than $MaxItems boxes can be requested")
+      }else {
+        ApiResponse(getBoxesByErgoTree(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(tree).get), offset, limit))
+      }
     }catch {
       case e: Exception => BadRequest(s"${e.getMessage}")
     }
   }
 
-  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, lastN: Long): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Long, limit: Long): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       history.typedModifierById[IndexedErgoTree](bytesToId(IndexedErgoTreeSerializer.ergoTreeHash(tree))) match {
-        case Some(iEt) => iEt.retrieveBody(history, lastN).filter(!_.trackedBox.isSpent)
+        case Some(iEt) => iEt.retrieveUtxos(history, offset, limit)
         case None      => Seq.empty[IndexedErgoBox]
       }
     }
 
-  private def getBoxesByErgoTreeUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byErgoTree") & path(Segment) & lastN) { (tree, limit) =>
+  private def getBoxesByErgoTreeUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byErgoTree") & path(Segment) & paging) { (tree, offset, limit) =>
     try {
-      ApiResponse(getBoxesByErgoTreeUnspent(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(tree).get), limit))
+      if(limit > MaxItems) {
+        BadRequest(s"No more than $MaxItems boxes can be requested")
+      }else {
+        ApiResponse(getBoxesByErgoTreeUnspent(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(tree).get), offset, limit))
+      }
     }catch {
       case e: Exception => BadRequest(s"${e.getMessage}")
     }

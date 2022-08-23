@@ -50,7 +50,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   }
 
   override def contains(modifierId: ModifierId): Boolean = {
-    pool.contains(id)
+    pool.contains(modifierId)
   }
 
   override def take(limit: Int): Iterable[UnconfirmedTransaction] = {

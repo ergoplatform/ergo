@@ -12,7 +12,6 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
-import scala.collection.immutable.TreeSet
 import scala.util.{Failure, Success}
 
 /**
@@ -21,12 +20,6 @@ import scala.util.{Failure, Success}
   */
 class CleanupWorker(nodeViewHolderRef: ActorRef,
                     nodeSettings: NodeConfigurationSettings) extends Actor with ScorexLogging {
-
-  // keep some number of recently validated transactions in order
-  // to avoid validating the same transactions too many times.
-  private var validatedIndex: TreeSet[ModifierId] = TreeSet.empty[ModifierId]
-  // count validation sessions in order to perform index cleanup.
-  private var epochNr: Int = 0
 
   override def preStart(): Unit = {
     log.info("Cleanup worker started")
@@ -43,7 +36,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
   private def runCleanup(validator: TransactionValidation,
                          mempool: ErgoMemPoolReader): Unit = {
-    val toEliminate = validatePool(validator, mempool)
+    val (validated, toEliminate) = validatePool(validator, mempool)
+
     if (toEliminate.nonEmpty) {
       log.info(s"${toEliminate.size} transactions from mempool were invalidated")
       nodeViewHolderRef ! EliminateTransactions(toEliminate)
@@ -55,19 +49,26 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     *
     * @return - invalidated transaction ids
     */
-  private def validatePool(validator: TransactionValidation, mempool: ErgoMemPoolReader): Seq[ModifierId] = {
+  private def validatePool(validator: TransactionValidation,
+                           mempool: ErgoMemPoolReader): (Seq[UnconfirmedTransaction], Seq[ModifierId]) = {
+
+    val now = System.currentTimeMillis()
 
     // Check transactions sorted by priority. Parent transaction comes before its children.
-    val txsToValidate = mempool.getAllPrioritized.toList
+    val txsToValidate = mempool.getAllPrioritized.filter { utx =>
+      (now - utx.lastCheckedTime) / 1000 / 60 > 30 // more than 30 mins since last check
+    }
+
+    val costLimit = 7000000
 
     //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
     def validationLoop(txs: Seq[UnconfirmedTransaction],
-                       validated: Seq[ModifierId],
+                       validated: Seq[UnconfirmedTransaction],
                        invalidated: Seq[ModifierId],
-                       etAcc: Long): (Seq[ModifierId], Seq[ModifierId]) = {
+                       costAcc: Long): (Seq[UnconfirmedTransaction], Seq[ModifierId]) = {
       txs match {
-        case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos && !validatedIndex.contains(head.id) =>
+        case head :: tail if costAcc < costLimit =>
 
           // Take into account previously validated transactions from the pool.
           // This provides possibility to validate transactions which are spending off-chain outputs.
@@ -76,39 +77,24 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
             case _ => validator
           }
 
-          val t0 = System.nanoTime()
           // todo: update unconfirmed tx in the pool
           val validationResult = state.validateWithCost(head.transaction, nodeSettings.maxTransactionCost)
-          val t1 = System.nanoTime()
-          val accumulatedTime = etAcc + (t1 - t0)
 
           val txId = head.id
           validationResult match {
-            case Success(_) =>
-              validationLoop(tail, validated :+ txId, invalidated, accumulatedTime)
+            case Success(txCost) =>
+              val updTx = head.updateCost(txCost)
+              validationLoop(tail, validated :+ updTx, invalidated, txCost + costAcc)
             case Failure(e) =>
               log.info(s"Transaction $txId invalidated: ${e.getMessage}")
-              validationLoop(tail, validated, invalidated :+ txId, accumulatedTime)
+              validationLoop(tail, validated, invalidated :+ txId, head + costAcc) //add old cost
           }
-        case _ :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
-          // this transaction was validated earlier, skip it
-          validationLoop(tail, validated, invalidated, etAcc)
         case _ =>
           validated -> invalidated
       }
     }
 
-    val (validatedIds, invalidatedIds) = validationLoop(txsToValidate, Seq.empty, Seq.empty, 0L)
-
-    epochNr += 1
-    if (epochNr % CleanupWorker.RevisionInterval == 0) {
-      // drop old index in order to check potentially outdated transactions again.
-      validatedIndex = TreeSet(validatedIds: _*)
-    } else {
-      validatedIndex ++= validatedIds
-    }
-
-    invalidatedIds
+    validationLoop(txsToValidate, Seq.empty, Seq.empty, 0L)
   }
 
 }

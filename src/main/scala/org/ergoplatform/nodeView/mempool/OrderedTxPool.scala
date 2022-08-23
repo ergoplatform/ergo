@@ -122,10 +122,12 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     */
   def canAccept(unconfirmedTx: UnconfirmedTransaction): Boolean = {
     val tx = unconfirmedTx.transaction
-    !isInvalidated(tx.id) && !contains(tx.id) && size <= mempoolCapacity
+    !contains(tx.id) && size <= mempoolCapacity
   }
 
-  def contains(id: ModifierId): Boolean = transactionsRegistry.contains(id)
+  def contains(id: ModifierId): Boolean = {
+    transactionsRegistry.contains(id) || isInvalidated(id)
+  }
 
   def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)
 

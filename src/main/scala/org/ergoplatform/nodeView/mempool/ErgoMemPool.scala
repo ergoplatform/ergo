@@ -49,6 +49,10 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     pool.get(modifierId).map(unconfirmedTx => unconfirmedTx.transaction)
   }
 
+  override def contains(modifierId: ModifierId): Boolean = {
+    pool.contains(id)
+  }
+
   override def take(limit: Int): Iterable[UnconfirmedTransaction] = {
     pool.orderedTransactions.values.take(limit)
   }

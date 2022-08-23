@@ -528,7 +528,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // filter out transactions already in the mempool
       val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
       // parse all transactions not in the mempool and send them to node view holder
-      val parsed: Iterable[UnconfirmedTransaction] = parseTransactions(requestedModifiers, remote)
+      val parsed: Iterable[UnconfirmedTransaction] = parseTransactions(notInThePool, remote)
       viewHolderRef ! TransactionsFromRemote(parsed)
     } else {
       Constants.modifierSerializers.get(typeId) match {
@@ -705,10 +705,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           invData.ids.flatMap(id => hr.modifierBytesById(id).map(bytes => (id, bytes)))
       }
 
-      log.whenDebugEnabled {
-        log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
-          s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_._1))} ")
-      }
+      log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
+                s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_._1))} ")
 
     @tailrec
     def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {

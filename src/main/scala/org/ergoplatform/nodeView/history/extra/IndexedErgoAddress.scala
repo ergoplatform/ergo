@@ -68,8 +68,7 @@ case class IndexedErgoAddress(addressHash: ModifierId,
   }
 
   def addTx(tx: Long): IndexedErgoAddress = {
-    cfor(txs.length - 1)(_ >= 0, _ - 1) { i => if(txs(i) == tx) return this} // check for duplicates
-    txs += tx
+    if(!txs.takeRight(5).contains(tx)) txs += tx // check for duplicates
     this
   }
 

@@ -83,7 +83,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
       }
     }
 
-  def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(idToBytes(id))
+  def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(idToBytes(id)).orElse(extraStore.get(idToBytes(id)))
 
   def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
 

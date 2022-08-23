@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.settings.NodeConfigurationSettings
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, RecheckedTransactions}
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging}
 
@@ -36,8 +36,11 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
   private def runCleanup(validator: TransactionValidation,
                          mempool: ErgoMemPoolReader): Unit = {
-    val (_, toEliminate) = validatePool(validator, mempool)
+    val (validated, toEliminate) = validatePool(validator, mempool)
 
+    if(validated.nonEmpty) {
+      nodeViewHolderRef ! RecheckedTransactions(validated)
+    }
     if (toEliminate.nonEmpty) {
       log.info(s"${toEliminate.size} transactions from mempool were invalidated")
       nodeViewHolderRef ! EliminateTransactions(toEliminate)

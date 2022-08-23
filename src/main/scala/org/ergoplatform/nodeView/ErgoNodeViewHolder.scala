@@ -584,6 +584,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       unconfirmedTx.foreach(txModify)
     case LocallyGeneratedTransaction(unconfirmedTx) =>
       sender() ! txModify(unconfirmedTx)
+    case RecheckedTransactions(unconfirmedTxs) =>
+      val updatedPool = unconfirmedTxs.foldRight(memoryPool()) { case (utx, mp) =>
+        mp.remove(utx).putWithoutCheck(utx)
+      }
+      updateNodeView(updatedMempool = Some(updatedPool))
     case EliminateTransactions(ids) =>
       val updatedPool = memoryPool().filter(unconfirmedTx => !ids.contains(unconfirmedTx.transaction.id))
       updateNodeView(updatedMempool = Some(updatedPool))
@@ -652,6 +657,8 @@ object ErgoNodeViewHolder {
     case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction)
 
     case class TransactionsFromRemote(unconfirmedTxs: Iterable[UnconfirmedTransaction])
+
+    case class RecheckedTransactions(unconfirmedTxs: Iterable[UnconfirmedTransaction])
 
     case class LocallyGeneratedModifier(pmod: BlockSection)
 

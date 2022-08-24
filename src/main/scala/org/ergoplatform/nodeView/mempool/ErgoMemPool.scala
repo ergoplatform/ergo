@@ -20,8 +20,8 @@ import scala.util.{Failure, Random, Success, Try}
 /**
   * Immutable memory pool implementation.
   *
-  * @param pool     - Ordered transaction pool. Acts as related transaction storage, and is
-  *                 used for implementing all transaction-related methods
+  * @param pool     - Ordered transaction pool. Acts as transactions storage,
+  *                  used for implementing all transaction-related methods
   * @param stats    - Mempool statistics, that allows to track
   *                 information about mempool's state and transactions in it.
   * @param sortingOption - this input sets how transactions are sorted in the pool, by fee-per-byte or fee-per-cycle
@@ -184,7 +184,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     log.info(s"Processing mempool transaction: $tx")
     val blacklistedTransactions = nodeSettings.blacklistedTransactions
     if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
-      new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
+      this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
     } else {
       val fee = extractFee(tx)
       val minFee = settings.nodeSettings.minimalFeeAmount
@@ -200,7 +200,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
                 utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), costLimit, None) match {
                   case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx.updateCost(cost))
-                  case Failure(ex) => new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption) -> ProcessingOutcome.Invalidated(ex)
+                  case Failure(ex) => this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(ex)
                 }
               } else {
                 this -> ProcessingOutcome.Declined(new Exception("not all utxos in place yet"))
@@ -210,7 +210,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               // will not be triggered probably
               validator.validateWithCost(tx, costLimit) match {
                 case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx.updateCost(cost))
-                case Failure(ex) => new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption) -> ProcessingOutcome.Invalidated(ex)
+                case Failure(ex) => this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(ex)
               }
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other

@@ -131,7 +131,6 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
 
   def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)
 
-
   /**
     *
     * Form families of transactions: take in account relations between transaction when perform ordering.

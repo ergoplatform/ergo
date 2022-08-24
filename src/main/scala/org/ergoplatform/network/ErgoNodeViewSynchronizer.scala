@@ -657,14 +657,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (!settings.nodeSettings.stateType.requireProofs &&
           hr.isHeadersChainSynced &&
           hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) &&
-          hr.fullBlockHeight == hr.headersHeight) {
+          hr.fullBlockHeight == hr.headersHeight &&
+          declined.size < MaxDeclined) {
           val unknownMods =
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history
           val notApplied = unknownMods.filterNot(blockAppliedTxsCache.mightContain)
+          // filter out transactions previously declined
+          val notDeclined = notApplied.filter(id => !declined.contains(id))
           log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
-            s"${unknownMods.size} of them are unknown, requesting $notApplied")
-          notApplied
+            s"${unknownMods.size} of them are unknown, requesting $notDeclined")
+          notDeclined
         } else {
           Seq.empty
         }
@@ -844,6 +847,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
   }
 
+  val declined = mutable.TreeMap[ModifierId, Long]()
+  val MaxDeclined = 200
+
+  private def clearDeclined(): Unit = {
+    val now = System.currentTimeMillis()
+    val toRemove = declined.filter { case (_, time) =>
+      (now - time) / 1000 / 60 > 7 // 7 mins
+    }
+    log.info(s"Declined transactions to be cleaned: ${toRemove.size}") //todo: make it debug before release
+    toRemove.foreach { case (id, _) =>
+      declined.remove(id)
+    }
+  }
+
   protected def viewHolderEvents(historyReader: ErgoHistory, mempoolReader: ErgoMemPool, blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
@@ -861,10 +878,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
     case SemanticallySuccessfulModifier(mod) =>
       broadcastInvForNewModifier(mod)
+      clearDeclined()
 
     case SuccessfulTransaction(tx) =>
       deliveryTracker.setHeld(tx.id, Transaction.ModifierTypeId)
       broadcastModifierInv(tx)
+
+    case DeclinedTransaction(id: ModifierId) =>
+      declined.put(id, System.currentTimeMillis())
 
     case FailedTransaction(id, error, immediateFailure) =>
       if (immediateFailure) {
@@ -875,6 +896,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               log.info(s"Penalize spamming peer $peer for too costly transaction $id")
               penalizeSpammingPeer(peer)
             case _ =>
+              log.info(s"Penalize peer $peer for too costly transaction $id (reason: $error)")
               penalizeMisbehavingPeer(peer)
           }
         }
@@ -1053,6 +1075,8 @@ object ErgoNodeViewSynchronizer {
     case class FailedTransaction(transactionId: ModifierId, error: Throwable, immediateFailure: Boolean) extends ModificationOutcome
 
     case class SuccessfulTransaction(transaction: ErgoTransaction) extends ModificationOutcome
+
+    case class DeclinedTransaction(transactionId: ModifierId) extends ModificationOutcome
 
     case class RecoverableFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome
 

@@ -269,8 +269,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         context.system.eventStream.publish(FailedTransaction(tx.id, e, immediateFailure = true))
       case ProcessingOutcome.DoubleSpendingLoser(winnerTxs) => // do nothing
         log.debug(s"Transaction $tx declined, as other transactions $winnerTxs are paying more")
+        context.system.eventStream.publish(DeclinedTransaction(tx.id))
       case ProcessingOutcome.Declined(e) => // do nothing
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
+        context.system.eventStream.publish(DeclinedTransaction(tx.id))
     }
     processingOutcome
   }

@@ -59,8 +59,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
     // Check transactions sorted by priority. Parent transaction comes before its children.
     val txsToValidate = mempool.getAllPrioritized.filter { utx =>
-      (now - utx.lastCheckedTime) / 1000 / 60 > 30 // more than 30 mins since last check
-    }
+      (now - utx.lastCheckedTime) > nodeSettings.mempoolCleanupDuration.toMillis
+    }.toList
 
     val costLimit = 7000000
 
@@ -80,7 +80,6 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
             case _ => validator
           }
 
-          // todo: update unconfirmed tx in the pool
           val validationResult = state.validateWithCost(head.transaction, nodeSettings.maxTransactionCost)
 
           val txId = head.id

@@ -878,7 +878,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
     case SemanticallySuccessfulModifier(mod) =>
       broadcastInvForNewModifier(mod)
-      clearDeclined()
+      if (mod.isInstanceOf[ErgoFullBlock]) {
+        clearDeclined()
+      }
 
     case SuccessfulTransaction(tx) =>
       deliveryTracker.setHeld(tx.id, Transaction.ModifierTypeId)

@@ -26,7 +26,7 @@ import sigmastate.serialization.ErgoTreeSerializer
 class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers with MempoolTestHelpers {
   implicit lazy val context: IRContext = new RuntimeIRContext
 
-  val cleanupDuration: FiniteDuration = 50.millis
+  val cleanupDuration: FiniteDuration = 200.millis
   val settingsToTest: ErgoSettings = settings.copy(
     nodeSettings = settings.nodeSettings.copy(
       mempoolCleanupDuration = cleanupDuration,
@@ -77,6 +77,8 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     getPoolSize shouldBe 2
 
     val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, nodeViewHolderRef, settingsToTest)
+
+    Thread.sleep(200) // give transactions in the pool enough time to become candidates for re-checking
 
     // include first transaction in the block
     val block = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))

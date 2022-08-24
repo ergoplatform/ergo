@@ -2,8 +2,9 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
 import org.ergoplatform.settings.Algos
-import scorex.core.{ModifierTypeId, idToBytes}
+import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
@@ -22,7 +23,7 @@ object NumericTxIndexSerializer extends ScorexSerializer[NumericTxIndex] {
 
   override def serialize(ni: NumericTxIndex, w: Writer): Unit = {
     w.putLong(ni.n)
-    w.putBytes(idToBytes(ni.m))
+    w.putBytes(fastIdToBytes(ni.m))
   }
 
   override def parse(r: Reader): NumericTxIndex = {
@@ -55,7 +56,7 @@ object NumericBoxIndexSerializer extends ScorexSerializer[NumericBoxIndex] {
 
   override def serialize(ni: NumericBoxIndex, w: Writer): Unit = {
     w.putLong(ni.n)
-    w.putBytes(idToBytes(ni.m))
+    w.putBytes(fastIdToBytes(ni.m))
   }
 
   override def parse(r: Reader): NumericBoxIndex = {

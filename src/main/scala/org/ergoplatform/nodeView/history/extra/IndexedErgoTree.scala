@@ -2,10 +2,11 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.history.extra.IndexedErgoTree.{getSegmentsForRange, segmentTreshold, slice}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getSegmentsForRange, segmentTreshold, slice}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoTreeSerializer.segmentId
 import org.ergoplatform.settings.Algos
-import scorex.core.{ModifierTypeId, idToBytes}
+import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
@@ -16,7 +17,7 @@ import spire.syntax.all.cfor
 
 case class IndexedErgoTree(treeHash: ModifierId, boxes: ListBuffer[Long]) extends BlockSection {
   override val sizeOpt: Option[Int] = None
-  override def serializedId: Array[Byte] = idToBytes(treeHash)
+  override def serializedId: Array[Byte] = fastIdToBytes(treeHash)
   override def parentId: ModifierId = null
   override val modifierTypeId: ModifierTypeId = IndexedErgoTree.modifierTypeId
   override type M = IndexedErgoTree
@@ -26,17 +27,15 @@ case class IndexedErgoTree(treeHash: ModifierId, boxes: ListBuffer[Long]) extend
 
   def boxCount(): Long = segmentTreshold * segmentCount + boxes.length
 
-  def retrieveBoxes(history: ErgoHistoryReader, offset: Long, limit: Long): Array[IndexedErgoBox] =
+  def retrieveBoxes(history: ErgoHistoryReader, offset: Long, limit: Long): Array[IndexedErgoBox] = {
     if(offset > boxes.length) {
-      val range: (Int, Int) = getSegmentsForRange(offset, limit)
-      val data: ListBuffer[IndexedErgoBox] =
-        history.typedModifierById[IndexedErgoAddress](segmentId(treeHash, segmentCount - range._1)).get.boxes.map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
-      if(range._2 > 0) data ++=
-        history.typedModifierById[IndexedErgoAddress](segmentId(treeHash, segmentCount - range._2)).get.boxes.map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
-      data.toArray
-    } else {
-      slice(boxes, offset, limit).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).toArray
+      val range: Array[Int] = getSegmentsForRange(offset, limit)
+      cfor(0)(_ < range.length, _ + 1) { i =>
+        boxes ++=: history.typedModifierById[IndexedErgoAddress](segmentId(treeHash, segmentCount - range(i))).get.boxes
+      }
     }
+    slice(boxes, offset, limit).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).toArray
+  }
 
   def retrieveUtxos(history: ErgoHistoryReader, offset: Long, limit: Long): Array[IndexedErgoBox] = {
     val data: ListBuffer[IndexedErgoBox] = ListBuffer.empty[IndexedErgoBox]
@@ -92,11 +91,5 @@ object IndexedErgoTreeSerializer extends ScorexSerializer[IndexedErgoTree] {
 object IndexedErgoTree {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ 20.toByte
-
-  val segmentTreshold: Int = IndexedErgoAddress.segmentTreshold
-
-  def getSegmentsForRange(offset: Long, limit: Long): (Int, Int) = IndexedErgoAddress.getSegmentsForRange(offset, limit)
-
-  def slice[T](arr: Iterable[T], offset: Long, limit: Long): Iterable[T] = IndexedErgoAddress.slice(arr, offset, limit)
 
 }

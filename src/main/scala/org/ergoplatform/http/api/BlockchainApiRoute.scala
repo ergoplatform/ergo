@@ -26,7 +26,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   val paging: Directive[(Long, Long)] = parameters("offset".as[Long] ? 0L, "limit".as[Long] ? 10L)
 
-  private val MaxItems = IndexedErgoAddress.segmentTreshold
+  private val MaxItems = 16384
 
   val addressEncoder: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
 

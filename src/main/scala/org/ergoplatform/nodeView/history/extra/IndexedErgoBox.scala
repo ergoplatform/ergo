@@ -2,12 +2,13 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.{ErgoAddress, ErgoBox, Pay2SAddress}
 import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
 import org.ergoplatform.nodeView.wallet.WalletBox
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, TrackedBox}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
@@ -51,7 +52,7 @@ object IndexedErgoBoxSerializer extends ScorexSerializer[IndexedErgoBox] {
 
   override def serialize(iEb: IndexedErgoBox, w: Writer): Unit = {
     w.putOption[Int](iEb.inclusionHeightOpt)(_.putInt(_))
-    w.putOption[ModifierId](iEb.spendingTxIdOpt)((ww, id) => ww.putBytes(idToBytes(id)))
+    w.putOption[ModifierId](iEb.spendingTxIdOpt)((ww, id) => ww.putBytes(fastIdToBytes(id)))
     w.putOption[Int](iEb.spendingHeightOpt)(_.putInt(_))
     ErgoBoxSerializer.serialize(iEb.box, w)
     w.putLong(iEb.globalIndex)

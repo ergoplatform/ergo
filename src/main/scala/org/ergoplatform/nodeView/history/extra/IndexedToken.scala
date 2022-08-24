@@ -3,7 +3,8 @@ package org.ergoplatform.nodeView.history.extra
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
 import org.ergoplatform.modifiers.BlockSection
-import scorex.core.{ModifierTypeId, idToBytes}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
+import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
@@ -20,7 +21,7 @@ case class IndexedToken(tokenId: ModifierId,
   override type M = IndexedToken
   override def serializer: ScorexSerializer[IndexedToken] = IndexedTokenSerializer
   override val sizeOpt: Option[Int] = None
-  override def serializedId: Array[Byte] = idToBytes(tokenId)
+  override def serializedId: Array[Byte] = fastIdToBytes(tokenId)
 }
 
 object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {

@@ -5,8 +5,9 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.DataInput
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.{ModifierTypeId, idToBytes}
+import scorex.core.ModifierTypeId
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
 
@@ -15,7 +16,7 @@ case class IndexedErgoTransaction(txid: ModifierId,
                                   globalIndex: Long) extends BlockSection {
 
   override val modifierTypeId: ModifierTypeId = IndexedErgoTransaction.modifierTypeId
-  override def serializedId: Array[Byte] = idToBytes(txid)
+  override def serializedId: Array[Byte] = fastIdToBytes(txid)
   override val sizeOpt: Option[Int] = None
   override def parentId: ModifierId = null
   override type M = IndexedErgoTransaction

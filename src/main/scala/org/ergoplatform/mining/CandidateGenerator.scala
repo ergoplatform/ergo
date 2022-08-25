@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
 import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, SemanticallySuccessfulModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -441,15 +441,15 @@ object CandidateGenerator extends ScorexLogging {
     * @return - candidate or an error
     */
   def createCandidate(
-    minerPk: ProveDlog,
-    history: ErgoHistoryReader,
-    proposedUpdate: ErgoValidationSettingsUpdate,
-    state: UtxoStateReader,
-    timeProvider: NetworkTimeProvider,
-    poolTxs: Seq[ErgoTransaction],
-    emissionTxOpt: Option[ErgoTransaction],
-    prioritizedTransactions: Seq[ErgoTransaction],
-    ergoSettings: ErgoSettings
+                       minerPk: ProveDlog,
+                       history: ErgoHistoryReader,
+                       proposedUpdate: ErgoValidationSettingsUpdate,
+                       state: UtxoStateReader,
+                       timeProvider: NetworkTimeProvider,
+                       poolTxs: Seq[UnconfirmedTransaction],
+                       emissionTxOpt: Option[ErgoTransaction],
+                       prioritizedTransactions: Seq[ErgoTransaction],
+                       ergoSettings: ErgoSettings
   ): Try[(Candidate, EliminateTransactions)] =
     Try {
       val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings.powScheme)
@@ -525,9 +525,9 @@ object CandidateGenerator extends ScorexLogging {
       // todo: remove in 5.0
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
       // differently due to bugs in AOT costing
-      val safeGap = if(state.stateContext.currentParameters.maxBlockCost < 1000000) {
+      val safeGap = if (state.stateContext.currentParameters.maxBlockCost < 1000000) {
         0
-      } else if(state.stateContext.currentParameters.maxBlockCost < 5000000) {
+      } else if (state.stateContext.currentParameters.maxBlockCost < 5000000) {
         150000
       } else {
         1000000
@@ -539,7 +539,7 @@ object CandidateGenerator extends ScorexLogging {
         state.stateContext.currentParameters.maxBlockSize,
         state,
         upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs
+        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
       )
 
       val eliminateTransactions = EliminateTransactions(toEliminate)
@@ -784,13 +784,13 @@ object CandidateGenerator extends ScorexLogging {
     * @return - transactions to include into the block, transaction ids turned out to be invalid.
     */
   def collectTxs(
-    minerPk: ProveDlog,
-    maxBlockCost: Int,
-    maxBlockSize: Int,
-    us: UtxoStateReader,
-    upcomingContext: ErgoStateContext,
-    transactions: Seq[ErgoTransaction]
-  ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+                  minerPk: ProveDlog,
+                  maxBlockCost: Int,
+                  maxBlockSize: Int,
+                  us: UtxoStateReader,
+                  upcomingContext: ErgoStateContext,
+                  transactions: Seq[ErgoTransaction]
+                ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
 
     val currentHeight = us.stateContext.currentHeight
     val nextHeight = upcomingContext.currentHeight
@@ -803,13 +803,14 @@ object CandidateGenerator extends ScorexLogging {
 
     @tailrec
     def loop(
-      mempoolTxs: Iterable[ErgoTransaction],
-      acc: Seq[CostedTransaction],
-      lastFeeTx: Option[CostedTransaction],
-      invalidTxs: Seq[ModifierId]
-    ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+              mempoolTxs: Iterable[ErgoTransaction],
+              acc: Seq[CostedTransaction],
+              lastFeeTx: Option[CostedTransaction],
+              invalidTxs: Seq[ModifierId]
+            ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
-      def current: Seq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
+      val currentCosted = acc ++ lastFeeTx
+      def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
 
       val stateWithTxs = us.withTransactions(current)
 
@@ -829,7 +830,7 @@ object CandidateGenerator extends ScorexLogging {
               Some(verifier)
             ) match {
               case Success(costConsumed) =>
-                val newTxs   = acc :+ (tx -> costConsumed)
+                val newTxs = acc :+ (tx -> costConsumed)
                 val newBoxes = newTxs.flatMap(_._1.outputs)
 
                 collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
@@ -843,12 +844,14 @@ object CandidateGenerator extends ScorexLogging {
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
                           loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
                         } else {
+                          log.debug(s"Finishing block assembly on limits overflow, " +
+                                    s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
                           current -> invalidTxs
                         }
                       case Failure(e) =>
                         log.warn(
                           s"Fee collecting tx is invalid, not including it, " +
-                          s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
+                            s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
                         )
                         current -> invalidTxs
                     }
@@ -866,7 +869,7 @@ object CandidateGenerator extends ScorexLogging {
                 loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
             }
           }
-        case _ => // mempool is empty
+        case None => // mempool is empty
           current -> invalidTxs
       }
     }
@@ -874,11 +877,8 @@ object CandidateGenerator extends ScorexLogging {
     val res = loop(transactions, Seq.empty, None, Seq.empty)
     log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
-      s"${res._2.length} transactions turned out to be invalid"
-    )
-    log.whenDebugEnabled {
-      log.debug(s"Invalid trandaction ids for block #$currentHeight : ${res._2}")
-    }
+        s"invalid transaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")
+
     res
   }
 
@@ -895,7 +895,7 @@ object CandidateGenerator extends ScorexLogging {
     val (parentId, height) = derivedHeaderFields(candidate.parentOpt)
     val transactionsRoot =
       BlockTransactions.transactionsRoot(candidate.transactions, candidate.version)
-    val adProofsRoot            = ADProofs.proofDigest(candidate.adProofBytes)
+    val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
     val extensionRoot: Digest32 = candidate.extension.digest
 
     HeaderWithoutPow(
@@ -915,11 +915,8 @@ object CandidateGenerator extends ScorexLogging {
   /**
     * Assemble `ErgoFullBlock` using candidate block and provided pow solution.
     */
-  def completeBlock(
-    candidate: CandidateBlock,
-    solution: AutolykosSolution
-  ): ErgoFullBlock = {
-    val header   = deriveUnprovenHeader(candidate).toHeader(solution, None)
+  def completeBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
+    val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
     val adProofs = ADProofs(header.id, candidate.adProofBytes)
     val blockTransactions = BlockTransactions(header.id, candidate.version, candidate.transactions)
     val extension = Extension(header.id, candidate.extension.fields)

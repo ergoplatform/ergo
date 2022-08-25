@@ -1,7 +1,8 @@
 {
   "ergo": {
     "node": {
-      "blocksToKeep": 12
+      "blocksToKeep": 12,
+      "mempoolSorting": "bySize"
     }
   }
 }

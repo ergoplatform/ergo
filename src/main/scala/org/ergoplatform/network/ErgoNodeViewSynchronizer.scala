@@ -866,12 +866,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
   }
 
+  // helper method to clear declined transactions after some off, so the node may accept them again
   private def clearDeclined(): Unit = {
+    val clearTimeout = FiniteDuration(7, MINUTES)
     val now = System.currentTimeMillis()
+
     val toRemove = declined.filter { case (_, time) =>
-      (now - time) / 1000 / 60 > 7 // 7 mins
+      (now - time) > clearTimeout.toMillis
     }
-    log.debug(s"Declined transactions to be cleaned: ${toRemove.size}")
+    log.debug(s"Declined transactions to be cleared: ${toRemove.size}")
     toRemove.foreach { case (id, _) =>
       declined.remove(id)
     }
@@ -1094,6 +1097,9 @@ object ErgoNodeViewSynchronizer {
 
     case class SuccessfulTransaction(transaction: ErgoTransaction) extends ModificationOutcome
 
+    /**
+      * Transaction declined by the mempool (not permanently invalidated, so pool can accept it in future)
+      */
     case class DeclinedTransaction(transactionId: ModifierId) extends ModificationOutcome
 
     case class RecoverableFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome

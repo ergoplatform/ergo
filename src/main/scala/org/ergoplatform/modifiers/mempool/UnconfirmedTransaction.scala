@@ -22,10 +22,14 @@ case class UnconfirmedTransaction(transaction: ErgoTransaction,
 
 object UnconfirmedTransaction {
 
-  def apply(tx: ErgoTransaction): UnconfirmedTransaction = UnconfirmedTransaction(tx, None, 0, 0, tx.bytes)
+  def apply(tx: ErgoTransaction): UnconfirmedTransaction = {
+    val now = System.currentTimeMillis()
+    UnconfirmedTransaction(tx, None, now, now, tx.bytes)
+  }
 
   def apply(tx: ErgoTransaction, txBytes: Array[Byte]): UnconfirmedTransaction = {
-    UnconfirmedTransaction(tx, None, 0, 0, Some(txBytes))
+    val now = System.currentTimeMillis()
+    UnconfirmedTransaction(tx, None, now, now, Some(txBytes))
   }
 
 }

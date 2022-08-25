@@ -44,11 +44,13 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
                          mempool: ErgoMemPoolReader): Unit = {
     val (validated, toEliminate) = validatePool(validator, mempool)
 
+    log.debug(s"${validated.size} re-checked mempool transactions were ok, " +
+              s"${toEliminate.size} transactions were invalidated")
+
     if(validated.nonEmpty) {
       nodeViewHolderRef ! RecheckedTransactions(validated)
     }
     if (toEliminate.nonEmpty) {
-      log.info(s"${toEliminate.size} transactions from mempool were invalidated")
       nodeViewHolderRef ! EliminateTransactions(toEliminate)
     }
   }

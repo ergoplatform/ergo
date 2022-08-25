@@ -14,7 +14,7 @@ case class UnconfirmedTransaction(transaction: ErgoTransaction,
 
   def id: ModifierId = transaction.id
 
-  def updateCost(cost: Int): UnconfirmedTransaction = {
+  def withCost(cost: Int): UnconfirmedTransaction = {
     copy(lastCost = Some(cost), lastCheckedTime = System.currentTimeMillis())
   }
 
@@ -22,10 +22,14 @@ case class UnconfirmedTransaction(transaction: ErgoTransaction,
 
 object UnconfirmedTransaction {
 
-  def apply(tx: ErgoTransaction): UnconfirmedTransaction = UnconfirmedTransaction(tx, None, 0, 0, None)
+  def apply(tx: ErgoTransaction): UnconfirmedTransaction = {
+    val now = System.currentTimeMillis()
+    UnconfirmedTransaction(tx, None, now, now, Some(tx.bytes))
+  }
 
   def apply(tx: ErgoTransaction, txBytes: Array[Byte]): UnconfirmedTransaction = {
-    UnconfirmedTransaction(tx, None, 0, 0, Some(txBytes))
+    val now = System.currentTimeMillis()
+    UnconfirmedTransaction(tx, None, now, now, Some(txBytes))
   }
 
 }

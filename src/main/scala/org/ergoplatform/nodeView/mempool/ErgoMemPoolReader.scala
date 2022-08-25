@@ -9,6 +9,10 @@ import scorex.util.ModifierId
 
 trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTransaction] {
 
+  /**
+    * @param id -  transaction id
+    * @return `true` if mempool holds this transaction or it was invalidated earlier, `false` otherwise
+    */
   def contains(id: ModifierId): Boolean
 
   def getAll(ids: Seq[ModifierId]): Seq[UnconfirmedTransaction]

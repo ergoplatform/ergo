@@ -20,8 +20,8 @@ import scala.util.{Failure, Random, Success, Try}
 /**
   * Immutable memory pool implementation.
   *
-  * @param pool     - Ordered transaction pool. Acts as related transaction storage, and is
-  *                 used for implementing all transaction-related methods
+  * @param pool     - Ordered transaction pool. Acts as transactions storage,
+  *                  used for implementing all transaction-related methods
   * @param stats    - Mempool statistics, that allows to track
   *                 information about mempool's state and transactions in it.
   * @param sortingOption - this input sets how transactions are sorted in the pool, by fee-per-byte or fee-per-cycle
@@ -36,9 +36,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   import EmissionRules.CoinsInOneErgo
 
   /**
-    * When there's no reason to re-check transactions immediately, we assign fake fee factor to them
+    * When there's no reason to re-check transactions immediately, we assign fake cost to them
     */
-  private val FakeFeeFactor = 1000
+  private val FakeCost = 1000
 
   private val nodeSettings: NodeConfigurationSettings = settings.nodeSettings
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
@@ -47,6 +47,10 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = {
     pool.get(modifierId).map(unconfirmedTx => unconfirmedTx.transaction)
+  }
+
+  override def contains(modifierId: ModifierId): Boolean = {
+    pool.contains(modifierId)
   }
 
   override def take(limit: Int): Iterable[UnconfirmedTransaction] = {
@@ -94,8 +98,13 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     putWithoutCheck(unconfirmedTxs.filterNot(unconfirmedTx => pool.contains(unconfirmedTx.transaction.id)))
   }
 
+  def putWithoutCheck(tx: UnconfirmedTransaction): ErgoMemPool = {
+    val updatedPool = pool.put(tx, feeFactor(tx))
+    new ErgoMemPool(updatedPool, stats, sortingOption)
+  }
+
   def putWithoutCheck(txs: Iterable[UnconfirmedTransaction]): ErgoMemPool = {
-    val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx, FakeFeeFactor) }
+    val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx, feeFactor(tx)) }
     new ErgoMemPool(updatedPool, stats, sortingOption)
   }
 
@@ -127,36 +136,45 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     */
   override def spentInputs: Iterator[BoxId] = pool.inputs.keysIterator
 
+  private def feeFactor(unconfirmedTransaction: UnconfirmedTransaction): Int = {
+    sortingOption match {
+      case SortingOption.FeePerByte =>
+        unconfirmedTransaction.transactionBytes.map(_.length).getOrElse(unconfirmedTransaction.transaction.size)
+      case SortingOption.FeePerCycle =>
+        unconfirmedTransaction.lastCost.getOrElse(FakeCost)
+    }
+  }
+
   // Check if transaction is double-spending inputs spent in the mempool.
   // If so, the new transacting is replacing older ones if it has bigger weight (fee/byte) than them on average.
   // Otherwise, the new transaction being rejected.
-  private def acceptIfNoDoubleSpend(unconfirmedTransaction: UnconfirmedTransaction, cost: Int): (ErgoMemPool, ProcessingOutcome) = {
+  private def acceptIfNoDoubleSpend(unconfirmedTransaction: UnconfirmedTransaction): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTransaction.transaction
-    val feeFactor = sortingOption match {
-      case SortingOption.FeePerByte => tx.size
-      case SortingOption.FeePerCycle => cost
-    }
 
     val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
       pool.inputs.get(inp.boxId)
     }.toSet
 
+    val feeF = feeFactor(unconfirmedTransaction)
+
     if (doubleSpendingWtxs.nonEmpty) {
-      val ownWtx = weighted(tx, feeFactor)
+      val ownWtx = weighted(tx, feeF)
       val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum / doubleSpendingWtxs.size
       if (ownWtx.weight > doubleSpendingTotalWeight) {
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
-        new ErgoMemPool(pool.put(unconfirmedTransaction, feeFactor).remove(doubleSpendingTxs), stats, sortingOption) -> ProcessingOutcome.Accepted
+        val p = pool.put(unconfirmedTransaction, feeF).remove(doubleSpendingTxs)
+        val updPool = new ErgoMemPool(p, stats, sortingOption)
+        updPool -> ProcessingOutcome.Accepted
       } else {
         this -> ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id))
       }
     } else {
       val poolSizeLimit = nodeSettings.mempoolCapacity
       if (pool.size == poolSizeLimit &&
-        weighted(tx, feeFactor).weight <= pool.orderedTransactions.lastKey.weight) {
+        weighted(tx, feeF).weight <= pool.orderedTransactions.lastKey.weight) {
         this -> ProcessingOutcome.Declined(new Exception("Transaction pays less than any other in the pool being full"))
       } else {
-        new ErgoMemPool(pool.put(unconfirmedTransaction, feeFactor), stats, sortingOption) -> ProcessingOutcome.Accepted
+        new ErgoMemPool(pool.put(unconfirmedTransaction, feeF), stats, sortingOption) -> ProcessingOutcome.Accepted
       }
     }
   }
@@ -166,7 +184,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     log.info(s"Processing mempool transaction: $tx")
     val blacklistedTransactions = nodeSettings.blacklistedTransactions
     if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
-      new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
+      this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
     } else {
       val fee = extractFee(tx)
       val minFee = settings.nodeSettings.minimalFeeAmount
@@ -181,8 +199,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
                 utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), costLimit, None) match {
-                  case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx, cost)
-                  case Failure(ex) => new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption) -> ProcessingOutcome.Invalidated(ex)
+                  case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost))
+                  case Failure(ex) => this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(ex)
                 }
               } else {
                 this -> ProcessingOutcome.Declined(new Exception("not all utxos in place yet"))
@@ -191,15 +209,13 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               // transaction validation currently works only for UtxoState, so this branch currently
               // will not be triggered probably
               validator.validateWithCost(tx, costLimit) match {
-                case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx, cost)
-                case Failure(ex) => new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption) -> ProcessingOutcome.Invalidated(ex)
+                case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost))
+                case Failure(ex) => this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(ex)
               }
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
               // peers though, so such transactions can come from the local wallet only.
-              //
-              // We pass fake cost in this case, as there's no real competition between local transactions only anyway
-              acceptIfNoDoubleSpend(unconfirmedTx, cost = FakeFeeFactor)
+              acceptIfNoDoubleSpend(unconfirmedTx)
           }
         } else {
           this -> ProcessingOutcome.Declined(

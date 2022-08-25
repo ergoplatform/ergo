@@ -10,7 +10,7 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FailedTransaction, SuccessfulTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
@@ -26,7 +26,7 @@ import sigmastate.serialization.ErgoTreeSerializer
 class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers with MempoolTestHelpers {
   implicit lazy val context: IRContext = new RuntimeIRContext
 
-  val cleanupDuration: FiniteDuration = 3.seconds
+  val cleanupDuration: FiniteDuration = 200.millis
   val settingsToTest: ErgoSettings = settings.copy(
     nodeSettings = settings.nodeSettings.copy(
       mempoolCleanupDuration = cleanupDuration,
@@ -78,6 +78,8 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, nodeViewHolderRef, settingsToTest)
 
+    Thread.sleep(200) // give transactions in the pool enough time to become candidates for re-checking
+
     // include first transaction in the block
     val block = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))
 
@@ -107,11 +109,10 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, settingsToTest))
 
-    val coin = Random.nextBoolean()
-
     def sendState(): Unit = auditor ! ChangedState(us)
     def sendPool(): Unit = auditor ! ChangedMempool(new FakeMempool(txs))
 
+    val coin = Random.nextBoolean() // flip random coin
     if (coin) {
       sendPool()
       sendState()
@@ -120,6 +121,9 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
       sendPool()
     }
 
-    probe.expectMsgType[SendToNetwork]
+    probe.fishForMessage(3.seconds) {
+      case _: SendToNetwork => true
+      case _: RecheckedTransactions => false
+    }.isInstanceOf[SendToNetwork] shouldBe true
   }
 }

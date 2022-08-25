@@ -877,7 +877,7 @@ object CandidateGenerator extends ScorexLogging {
     val res = loop(transactions, Seq.empty, None, Seq.empty)
     log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
-        s"invalid trandaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")
+        s"invalid transaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")
 
     res
   }

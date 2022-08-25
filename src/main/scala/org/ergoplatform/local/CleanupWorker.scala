@@ -89,7 +89,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
         case head :: tail if costAcc < CostLimit =>
           state.validateWithCost(head.transaction, nodeSettings.maxTransactionCost) match {
             case Success(txCost) =>
-              val updTx = head.updateCost(txCost)
+              val updTx = head.withCost(txCost)
               validationLoop(tail, validated :+ updTx, invalidated, txCost + costAcc)
             case Failure(e) =>
               val txId = head.id

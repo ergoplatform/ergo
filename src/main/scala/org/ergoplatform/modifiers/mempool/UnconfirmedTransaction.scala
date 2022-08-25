@@ -14,7 +14,7 @@ case class UnconfirmedTransaction(transaction: ErgoTransaction,
 
   def id: ModifierId = transaction.id
 
-  def updateCost(cost: Int): UnconfirmedTransaction = {
+  def withCost(cost: Int): UnconfirmedTransaction = {
     copy(lastCost = Some(cost), lastCheckedTime = System.currentTimeMillis())
   }
 

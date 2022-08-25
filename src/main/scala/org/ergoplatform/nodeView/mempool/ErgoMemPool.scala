@@ -199,7 +199,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
                 utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), costLimit, None) match {
-                  case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx.updateCost(cost))
+                  case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost))
                   case Failure(ex) => this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(ex)
                 }
               } else {
@@ -209,7 +209,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               // transaction validation currently works only for UtxoState, so this branch currently
               // will not be triggered probably
               validator.validateWithCost(tx, costLimit) match {
-                case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx.updateCost(cost))
+                case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost))
                 case Failure(ex) => this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(ex)
               }
             case _ =>

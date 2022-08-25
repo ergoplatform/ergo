@@ -1,8 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
-import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, ScorexLogging}
-import scorex.util.serialization.{Reader, Writer}
 
 
 case class UnconfirmedTransaction(transaction: ErgoTransaction,

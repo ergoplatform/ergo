@@ -15,11 +15,17 @@ import scala.annotation.tailrec
 import scala.util.{Failure, Success}
 
 /**
-  * Performs mempool validation task on demand.
-  * Validation result is sent directly to `NodeViewHolder`.
+  * Performs mempool transactions re-validation. Called on a new block coming.
+  * Validation results sent directly to `NodeViewHolder`.
   */
 class CleanupWorker(nodeViewHolderRef: ActorRef,
                     nodeSettings: NodeConfigurationSettings) extends Actor with ScorexLogging {
+
+  // Limit for total cost of transactions to be re-checked. Hard-coded for now.
+  private val CostLimit = 7000000
+
+  // Transaction can be re-checked only after this delay
+  private val TimeLimit = nodeSettings.mempoolCleanupDuration.toMillis
 
   override def preStart(): Unit = {
     log.info("Cleanup worker started")
@@ -50,19 +56,26 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
   /**
     * Validates transactions from mempool for some specified amount of time.
     *
-    * @return - invalidated transaction ids
+    * @return - updated valid transactions and invalidated transaction ids
     */
   private def validatePool(validator: TransactionValidation,
                            mempool: ErgoMemPoolReader): (Seq[UnconfirmedTransaction], Seq[ModifierId]) = {
 
     val now = System.currentTimeMillis()
 
+    val allPoolTxs = mempool.getAllPrioritized
     // Check transactions sorted by priority. Parent transaction comes before its children.
-    val txsToValidate = mempool.getAllPrioritized.filter { utx =>
-      (now - utx.lastCheckedTime) > nodeSettings.mempoolCleanupDuration.toMillis
+    val txsToValidate = allPoolTxs.filter { utx =>
+      (now - utx.lastCheckedTime) > TimeLimit
     }.toList
 
-    val costLimit = 7000000
+
+    // Take into account other transactions from the pool.
+    // This provides possibility to validate transactions which are spending off-chain outputs.
+    val state = validator match {
+      case u: UtxoStateReader => u.withUnconfirmedTransactions(allPoolTxs)
+      case _ => validator
+    }
 
     //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
@@ -71,23 +84,13 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
                        invalidated: Seq[ModifierId],
                        costAcc: Long): (Seq[UnconfirmedTransaction], Seq[ModifierId]) = {
       txs match {
-        case head :: tail if costAcc < costLimit =>
-
-          // Take into account previously validated transactions from the pool.
-          // This provides possibility to validate transactions which are spending off-chain outputs.
-          val state = validator match {
-            case u: UtxoStateReader => u.withUnconfirmedTransactions(txsToValidate)
-            case _ => validator
-          }
-
-          val validationResult = state.validateWithCost(head.transaction, nodeSettings.maxTransactionCost)
-
-          val txId = head.id
-          validationResult match {
+        case head :: tail if costAcc < CostLimit =>
+          state.validateWithCost(head.transaction, nodeSettings.maxTransactionCost) match {
             case Success(txCost) =>
               val updTx = head.updateCost(txCost)
               validationLoop(tail, validated :+ updTx, invalidated, txCost + costAcc)
             case Failure(e) =>
+              val txId = head.id
               log.info(s"Transaction $txId invalidated: ${e.getMessage}")
               validationLoop(tail, validated, invalidated :+ txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
           }

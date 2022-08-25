@@ -37,31 +37,3 @@ object UnconfirmedTransaction {
 
 }
 
-object UnconfirmedTransactionSerializer extends ScorexSerializer[UnconfirmedTransaction] {
-
-  override def serialize(unconfirmedTx: UnconfirmedTransaction, w: Writer): Unit = {
-    ErgoTransactionSerializer.serialize(unconfirmedTx.transaction, w)
-    w.putOption(unconfirmedTx.lastCost)(_.putUInt(_))
-    w.putULong(unconfirmedTx.createdTime)
-    w.putULong(unconfirmedTx.lastCheckedTime)
-    w.putOption(unconfirmedTx.transactionBytes){(_,d) =>
-      w.putInt(d.length)
-      w.putBytes(d)
-    }
-
-  }
-
-  // this serializer used internally only, so we do not validate data here
-  override def parse(r: Reader): UnconfirmedTransaction = {
-    val ergoTransaction = ErgoTransactionSerializer.parse(r)
-    val lastCostOpt = r.getOption(r.getUInt().toInt)
-    val createdTime = r.getULong()
-    val lastCheckedTime = r.getULong()
-    val transactionBytesOpt = r.getOption{
-      val size = r.getInt()
-      r.getBytes(size)
-    }
-
-    UnconfirmedTransaction(ergoTransaction, lastCostOpt, createdTime, lastCheckedTime, transactionBytesOpt)
-  }
-}

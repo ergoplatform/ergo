@@ -212,7 +212,7 @@ trait ApiCodecs extends JsonCodecs {
       lastCost <- cursor.downField("lastCost").as[Option[Int]]
       createdTime <- cursor.downField("createdTime").as[Long]
       lastCheckedTime <- cursor.downField("lastCheckedTime").as[Long]
-    } yield UnconfirmedTransaction(tx, lastCost, createdTime, lastCheckedTime, None)
+    } yield UnconfirmedTransaction(tx, lastCost, createdTime, lastCheckedTime, Some(tx.bytes))
   }
 
 

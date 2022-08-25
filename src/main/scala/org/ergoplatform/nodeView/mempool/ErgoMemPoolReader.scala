@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import scorex.core.NodeViewComponent
 import scorex.core.consensus.ContainsModifiers
@@ -11,7 +11,7 @@ trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTra
 
   def contains(id: ModifierId): Boolean
 
-  def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction]
+  def getAll(ids: Seq[ModifierId]): Seq[UnconfirmedTransaction]
 
   def size: Int
 
@@ -20,23 +20,23 @@ trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTra
     */
   def spentInputs: Iterator[BoxId]
 
-  def getAll: Seq[ErgoTransaction]
+  def getAll: Seq[UnconfirmedTransaction]
 
   /**
     * Returns all transactions resided in pool sorted by weight in descending order
     */
-  def getAllPrioritized: Seq[ErgoTransaction]
+  def getAllPrioritized: Seq[UnconfirmedTransaction]
 
 
   /**
     * Returns given number of transactions resided in pool sorted by weight in descending order
     */
-  def take(limit: Int): Iterable[ErgoTransaction]
+  def take(limit: Int): Iterable[UnconfirmedTransaction]
 
   /**
     * Returns up to given number of transactions randomly
     */
-  def random(limit: Int): Iterable[ErgoTransaction]
+  def random(limit: Int): Iterable[UnconfirmedTransaction]
 
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 

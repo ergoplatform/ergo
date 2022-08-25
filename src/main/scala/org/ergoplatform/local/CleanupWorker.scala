@@ -3,7 +3,7 @@ package org.ergoplatform.local
 import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.settings.NodeConfigurationSettings
@@ -62,7 +62,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
     //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
-    def validationLoop(txs: Seq[ErgoTransaction],
+    def validationLoop(txs: Seq[UnconfirmedTransaction],
                        validated: Seq[ModifierId],
                        invalidated: Seq[ModifierId],
                        etAcc: Long): (Seq[ModifierId], Seq[ModifierId]) = {
@@ -72,12 +72,13 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
           // Take into account previously validated transactions from the pool.
           // This provides possibility to validate transactions which are spending off-chain outputs.
           val state = validator match {
-            case u: UtxoStateReader => u.withTransactions(txsToValidate)
+            case u: UtxoStateReader => u.withUnconfirmedTransactions(txsToValidate)
             case _ => validator
           }
 
           val t0 = System.nanoTime()
-          val validationResult = state.validateWithCost(head, nodeSettings.maxTransactionCost)
+          // todo: update unconfirmed tx in the pool
+          val validationResult = state.validateWithCost(head.transaction, nodeSettings.maxTransactionCost)
           val t1 = System.nanoTime()
           val accumulatedTime = etAcc + (t1 - t0)
 

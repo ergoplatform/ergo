@@ -8,7 +8,7 @@ import org.ergoplatform.mining.CandidateGenerator.Candidate
 import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -71,7 +71,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val wallet = new WalletStub
 
   val txs: Seq[ErgoTransaction] = validTransactionsFromBoxHolder(boxesHolderGen.sample.get)._1
-  val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
+  val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs.map(UnconfirmedTransaction.apply)).get
 
   val digestReaders = Readers(history, digestState, memPool, wallet)
 

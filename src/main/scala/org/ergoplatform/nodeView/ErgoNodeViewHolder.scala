@@ -6,7 +6,7 @@ import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -26,11 +26,9 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
+
 import java.io.File
-
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
-
-
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 
 import scala.annotation.tailrec
@@ -257,8 +255,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  protected def txModify(tx: ErgoTransaction): ProcessingOutcome = {
-    val (newPool, processingOutcome) = memoryPool().process(tx, minimalState())
+  protected def txModify(unconfirmedTx: UnconfirmedTransaction): ProcessingOutcome = {
+    val tx = unconfirmedTx.transaction
+    val (newPool, processingOutcome) = memoryPool().process(unconfirmedTx, minimalState())
     processingOutcome match {
       case ProcessingOutcome.Accepted =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
@@ -349,10 +348,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                               blocksApplied: Seq[BlockSection],
                               memPool: ErgoMemPool,
                               state: State): ErgoMemPool = {
-    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions)
+    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions).map(UnconfirmedTransaction.apply)
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
-    memPool.putWithoutCheck(rolledBackTxs).filter(tx => !appliedTxs.exists(_.id == tx.id))
+    memPool.putWithoutCheck(rolledBackTxs)
+      .filter(unconfirmedTx => !appliedTxs.exists(_.id == unconfirmedTx.transaction.id))
   }
 
   /**
@@ -581,12 +581,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def transactionsProcessing: Receive = {
-    case TransactionsFromRemote(txs) =>
-      txs.foreach(txModify)
-    case LocallyGeneratedTransaction(tx) =>
-      sender() ! txModify(tx)
+    case TransactionsFromRemote(unconfirmedTx) =>
+      unconfirmedTx.foreach(txModify)
+    case LocallyGeneratedTransaction(unconfirmedTx) =>
+      sender() ! txModify(unconfirmedTx)
     case EliminateTransactions(ids) =>
-      val updatedPool = memoryPool().filter(tx => !ids.contains(tx.id))
+      val updatedPool = memoryPool().filter(unconfirmedTx => !ids.contains(unconfirmedTx.transaction.id))
       updateNodeView(updatedMempool = Some(updatedPool))
       ids.foreach { id =>
         val e = new Exception("Became invalid")
@@ -650,14 +650,14 @@ object ErgoNodeViewHolder {
     case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
 
     sealed trait NewTransactions{
-      val txs: Iterable[ErgoTransaction]
+      val unconfirmedTxs: Iterable[UnconfirmedTransaction]
     }
 
-    case class LocallyGeneratedTransaction(tx: ErgoTransaction) extends NewTransactions {
-      override val txs: Iterable[ErgoTransaction] = Iterable(tx)
+    case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction) extends NewTransactions {
+      override val unconfirmedTxs: Iterable[UnconfirmedTransaction] = Iterable(tx)
     }
 
-    case class TransactionsFromRemote(override val txs: Iterable[ErgoTransaction]) extends NewTransactions
+    case class TransactionsFromRemote(override val unconfirmedTxs: Iterable[UnconfirmedTransaction]) extends NewTransactions
 
     case class LocallyGeneratedModifier(pmod: BlockSection)
 

@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
 import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, SemanticallySuccessfulModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -441,15 +441,15 @@ object CandidateGenerator extends ScorexLogging {
     * @return - candidate or an error
     */
   def createCandidate(
-    minerPk: ProveDlog,
-    history: ErgoHistoryReader,
-    proposedUpdate: ErgoValidationSettingsUpdate,
-    state: UtxoStateReader,
-    timeProvider: NetworkTimeProvider,
-    poolTxs: Seq[ErgoTransaction],
-    emissionTxOpt: Option[ErgoTransaction],
-    prioritizedTransactions: Seq[ErgoTransaction],
-    ergoSettings: ErgoSettings
+                       minerPk: ProveDlog,
+                       history: ErgoHistoryReader,
+                       proposedUpdate: ErgoValidationSettingsUpdate,
+                       state: UtxoStateReader,
+                       timeProvider: NetworkTimeProvider,
+                       poolTxs: Seq[UnconfirmedTransaction],
+                       emissionTxOpt: Option[ErgoTransaction],
+                       prioritizedTransactions: Seq[ErgoTransaction],
+                       ergoSettings: ErgoSettings
   ): Try[(Candidate, EliminateTransactions)] =
     Try {
       val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings.powScheme)
@@ -539,7 +539,7 @@ object CandidateGenerator extends ScorexLogging {
         state.stateContext.currentParameters.maxBlockSize,
         state,
         upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs
+        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
       )
 
       val eliminateTransactions = EliminateTransactions(toEliminate)

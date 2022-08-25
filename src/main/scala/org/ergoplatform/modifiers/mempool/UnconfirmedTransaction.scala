@@ -17,7 +17,7 @@ case class UnconfirmedTransaction(transaction: ErgoTransaction,
   /**
     * Updates cost and last checked time of unconfirmed transaction
     */
-  def withCost(cost: Int): UnconfirmedTransaction = {
+  def onRecheck(cost: Int): UnconfirmedTransaction = {
     copy(lastCost = Some(cost), lastCheckedTime = System.currentTimeMillis())
   }
 

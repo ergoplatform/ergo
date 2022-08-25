@@ -24,7 +24,7 @@ object UnconfirmedTransaction {
 
   def apply(tx: ErgoTransaction): UnconfirmedTransaction = {
     val now = System.currentTimeMillis()
-    UnconfirmedTransaction(tx, None, now, now, tx.bytes)
+    UnconfirmedTransaction(tx, None, now, now, Some(tx.bytes))
   }
 
   def apply(tx: ErgoTransaction, txBytes: Array[Byte]): UnconfirmedTransaction = {

@@ -22,7 +22,7 @@ case class UnconfirmedTransaction(transaction: ErgoTransaction,
 
 object UnconfirmedTransaction {
 
-  def apply(tx: ErgoTransaction): UnconfirmedTransaction = UnconfirmedTransaction(tx, None, 0, 0, None)
+  def apply(tx: ErgoTransaction): UnconfirmedTransaction = UnconfirmedTransaction(tx, None, 0, 0, tx.bytes)
 
   def apply(tx: ErgoTransaction, txBytes: Array[Byte]): UnconfirmedTransaction = {
     UnconfirmedTransaction(tx, None, 0, 0, Some(txBytes))

@@ -215,8 +215,6 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
               // peers though, so such transactions can come from the local wallet only.
-              //
-              // We pass fake cost in this case, as there's no real competition between local transactions only anyway
               acceptIfNoDoubleSpend(unconfirmedTx)
           }
         } else {

@@ -125,6 +125,11 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     !contains(tx.id) && size <= mempoolCapacity
   }
 
+  /**
+    *
+    * @param id - transaction id
+    * @return - true, if transaction is in the pool or invalidated earlier, false otherwise
+    */
   def contains(id: ModifierId): Boolean = {
     transactionsRegistry.contains(id) || isInvalidated(id)
   }

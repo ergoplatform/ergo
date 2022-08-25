@@ -662,16 +662,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                            invData: InvData,
                            peer: ConnectedPeer,
                            blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
+
+    // We download transactions only if following conditions met:
+    def txAcceptanceFilter: Boolean = {
+      settings.nodeSettings.stateType.holdsUtxoSet && // node holds UTXO set
+        hr.isHeadersChainSynced && // our chain is synced
+        hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
+        hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
+        declined.size < MaxDeclined // the node is not stormed by transactions is has to decline
+    }
+
     val modifierTypeId = invData.typeId
+
     val newModifierIds = modifierTypeId match {
       case Transaction.ModifierTypeId =>
-        // We download transactions only if the node is not needed for externally provided proofs
-        // (so having UTXO set, and the chain is synced
-        if (!settings.nodeSettings.stateType.requireProofs &&
-          hr.isHeadersChainSynced &&
-          hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) &&
-          hr.fullBlockHeight == hr.headersHeight &&
-          declined.size < MaxDeclined) {
+
+        if (txAcceptanceFilter) {
           val unknownMods =
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history

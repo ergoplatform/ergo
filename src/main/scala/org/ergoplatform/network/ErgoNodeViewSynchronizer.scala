@@ -91,6 +91,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var lastModifierGotTime: Long = 0
 
   /**
+    * Dictionary (tx id -> checking time), which is storing transactions declined by the mempool, as mempool is not
+    * storing this information. We keep declined transactions in the dictionary for few blocks just, as declined
+    * transaction could become acceptable with time
+    */
+  private val declined = mutable.TreeMap[ModifierId, Long]()
+
+  /**
+    * The node stops to accept transactions if declined table reaches this max size. It prevents spam attacks trying
+    * to bloat the table (or exhaust node's CPU)
+    */
+  private val MaxDeclined = 400
+
+  /**
     * Register periodic events
     */
   override def preStart(): Unit = {
@@ -847,15 +860,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
   }
 
-  val declined = mutable.TreeMap[ModifierId, Long]()
-  val MaxDeclined = 200
-
   private def clearDeclined(): Unit = {
     val now = System.currentTimeMillis()
     val toRemove = declined.filter { case (_, time) =>
       (now - time) / 1000 / 60 > 7 // 7 mins
     }
-    log.info(s"Declined transactions to be cleaned: ${toRemove.size}") //todo: make it debug before release
+    log.debug(s"Declined transactions to be cleaned: ${toRemove.size}")
     toRemove.foreach { case (id, _) =>
       declined.remove(id)
     }

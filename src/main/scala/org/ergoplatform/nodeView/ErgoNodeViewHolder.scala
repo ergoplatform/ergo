@@ -656,10 +656,20 @@ object ErgoNodeViewHolder {
     case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
 
 
+    /**
+      * Wrapper for a transaction submitted via API
+      */
     case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction)
 
+    /**
+      * Wrapper for transactions cominng from P2P network
+      */
     case class TransactionsFromRemote(unconfirmedTxs: Iterable[UnconfirmedTransaction])
 
+    /**
+      * Wrapper for transactions which sit in mempool for long enough time, so `CleanWorker` is re-checking their
+      * validity and then sending via this message to update the mempool
+      */
     case class RecheckedTransactions(unconfirmedTxs: Iterable[UnconfirmedTransaction])
 
     case class LocallyGeneratedModifier(pmod: BlockSection)

@@ -163,28 +163,28 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     val expectedCost = 535995
 
     // successful validation
-    ErgoState.execTransactions(txs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe Valid(expectedCost)
+    ErgoState.execTransactions(txs, stateContext)((_, id) => Try(boxes(ByteArrayWrapper(id)))) shouldBe Valid(expectedCost)
 
     // cost limit exception expected when crossing MaxBlockCost
     val tooManyTxs = txs ++ generateTxs
     assert(
-      ErgoState.execTransactions(tooManyTxs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))).errors.head.message.contains(
+      ErgoState.execTransactions(tooManyTxs, stateContext)((_, id) => Try(boxes(ByteArrayWrapper(id)))).errors.head.message.contains(
         "Estimated execution cost 23533 exceeds the limit 23009"
       )
     )
 
     // missing box in state
-    ErgoState.execTransactions(txs, stateContext)(_ => Failure(new RuntimeException)).errors.head.message shouldBe
+    ErgoState.execTransactions(txs, stateContext)((_, _) => Failure(new RuntimeException)).errors.head.message shouldBe
       "Every input of the transaction should be in UTXO. null"
 
     // tx validation should kick in and detect block height violation
     val invalidTx = invalidErgoTransactionGen.sample.get
     assert(
-      ErgoState.execTransactions(txs :+ invalidTx, stateContext)(id => Try(boxes.getOrElse(ByteArrayWrapper(id), invalidTx.outputs.head)))
+      ErgoState.execTransactions(txs :+ invalidTx, stateContext)((_, id) => Try(boxes.getOrElse(ByteArrayWrapper(id), invalidTx.outputs.head)))
         .errors.head.message.startsWith("Transaction outputs should have creationHeight not exceeding block height.")
     )
 
     // no transactions are valid
-    assert(ErgoState.execTransactions(Seq.empty, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))).isValid)
+    assert(ErgoState.execTransactions(Seq.empty, stateContext)((_, id) => Try(boxes(ByteArrayWrapper(id)))).isValid)
   }
 }

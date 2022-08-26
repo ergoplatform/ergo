@@ -22,13 +22,15 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import scorex.core.consensus.ProgressInfo
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
-import scorex.core.validation.RecoverableModifierError
+import scorex.core.validation.{MalformedModifierError, RecoverableModifierError}
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions.ValidationSource
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import scorex.core.transaction.Transaction
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
@@ -237,6 +239,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.error("Reporting modifier failed", ex)
         f
       case (success@Success(updateInfo), modToApply) =>
+        def reportInvalidModifier(ex: Throwable): Try[UpdateInformation] =
+          history.reportModifierIsInvalid(modToApply, progressInfo).map { case (newHis, newProgressInfo) =>
+            context.system.eventStream.publish(SemanticallyFailedModification(modToApply, ex))
+            UpdateInformation(newHis, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
+          }
         if (updateInfo.failedMod.isEmpty) {
           updateInfo.state.applyModifier(modToApply, estimatedTip())(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
@@ -244,11 +251,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 context.system.eventStream.publish(SemanticallySuccessfulModifier(modToApply))
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
               }
-            case Failure(e) =>
-              history.reportModifierIsInvalid(modToApply, progressInfo).map { case (newHis, newProgressInfo) =>
-                context.system.eventStream.publish(SemanticallyFailedModification(modToApply, e))
-                UpdateInformation(newHis, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
+            case Failure(ex: MalformedModifierError) if ex.modifierTypeId == Transaction.ModifierTypeId =>
+              // invalid transaction in a block will likely be in mempool and should be removed
+              logger.warn(s"Invalidating transaction ${ex.modifierId} in mempool due to ${ex.getMessage}", ex)
+              reportInvalidModifier(ex).map { updateInformation =>
+                self ! EliminateTransactions(List(ex.modifierId), EliminateTransactions.FromBlockValidation)
+                updateInformation
               }
+            case Failure(ex) =>
+              reportInvalidModifier(ex)
           }
         } else success
     }
@@ -391,7 +402,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
-          history.getReader.asInstanceOf[ErgoHistoryReader],
+          history.getReader,
           settings,
           state.parameters)
         log.info("Wallet database read")
@@ -591,12 +602,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         mp.remove(utx).putWithoutCheck(utx)
       }
       updateNodeView(updatedMempool = Some(updatedPool))
-    case EliminateTransactions(ids) =>
+    case EliminateTransactions(ids, source) =>
+      val immediateFailure = source match {
+        case EliminateTransactions.FromBlockValidation => true
+        case _ => false
+      }
       val updatedPool = memoryPool().filter(unconfirmedTx => !ids.contains(unconfirmedTx.transaction.id))
       updateNodeView(updatedMempool = Some(updatedPool))
       ids.foreach { id =>
-        val e = new Exception("Became invalid")
-        context.system.eventStream.publish(FailedTransaction(id, e, immediateFailure = false))
+        context.system.eventStream.publish(
+          FailedTransaction(id, new Exception(s"Tx $id rejection coming : $source"), immediateFailure)
+        )
       }
   }
 
@@ -674,7 +690,14 @@ object ErgoNodeViewHolder {
 
     case class LocallyGeneratedModifier(pmod: BlockSection)
 
-    case class EliminateTransactions(ids: Seq[scorex.util.ModifierId])
+    case class EliminateTransactions(ids: Seq[scorex.util.ModifierId], source: ValidationSource)
+
+    object EliminateTransactions {
+      sealed trait ValidationSource
+      case object FromMiningValidation extends ValidationSource
+      case object FromBlockValidation extends ValidationSource
+      case object FromPoolValidation extends ValidationSource
+    }
 
     case object IsChainHealthy
     sealed trait HealthCheckResult

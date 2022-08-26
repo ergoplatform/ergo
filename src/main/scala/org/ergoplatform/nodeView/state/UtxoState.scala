@@ -7,6 +7,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
@@ -17,13 +18,15 @@ import scorex.core._
 import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator}
+import scorex.core.validation.{MalformedModifierError, ModifierValidator}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.ModifierId
 
+import scala.collection.breakOut
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -79,21 +82,50 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     import cats.implicits._
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
-    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
+    def checkBoxExistence(tx: ErgoTransaction, id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
       .get(ByteArrayWrapper(id))
       .orElse(boxById(id))
-      .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+      .fold[Try[ErgoBox]](
+        Failure(new MalformedModifierError(s"Box with id ${Algos.encode(id)} not found", tx.id, tx.modifierTypeId))
+      )(Success(_))
+
+    def performStateChangingOperations(stateChanges: StateChanges): Try[List[Option[ADValue]]] = {
+      // finding just one suspected transaction makes it invalid
+      def transactionError(isTxSuspected: ErgoTransaction => Boolean, cause: Throwable): Throwable = {
+        val suspectedTxs = transactions.filter(isTxSuspected)
+        if (suspectedTxs.size == 1)
+          new MalformedModifierError(cause.getMessage, suspectedTxs.head.id, Transaction.ModifierTypeId)
+        else {
+          cause
+        }
+      }
+
+      // performing operations may fail in which case we can track that failed operation back to its transaction
+      def performOperation(operation: Operation): Try[Option[ADValue]] =
+        persistentProver.performOneOperation(operation).recoverWith {
+          case NonFatal(ex) =>
+            operation match {
+              case Insert(outputBoxId, _) =>
+                Failure(transactionError(_.outputs.map(_.id).contains(outputBoxId), ex))
+              case Remove(inputBoxId) =>
+                Failure(transactionError(_.inputs.map(_.boxId).contains(inputBoxId), ex))
+              case Lookup(inputBoxId) =>
+                Failure(transactionError(_.dataInputs.map(_.boxId).contains(inputBoxId), ex))
+              case _ =>
+                Failure(ex) // cannot happen as we process only insert,remove,lookup operations
+            }
+        }
+
+      val results: List[Try[Option[ADValue]]] = stateChanges.operations.map(performOperation)(breakOut)
+      Traverse[List].sequence(results)
+    }
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
       log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
-      val resultTry =
-        ErgoState.stateChanges(transactions).map { stateChanges =>
-          val mods = stateChanges.operations
-          Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
-        }
+      val operationsProcessing = ErgoState.stateChanges(transactions).flatMap(performStateChangingOperations)
       ModifierValidator(stateContext.validationSettings)
-        .validateNoFailure(fbOperationFailed, resultTry, Transaction.ModifierTypeId)
+        .validateNoFailure(fbOperationFailed, operationsProcessing, Transaction.ModifierTypeId)
         .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry

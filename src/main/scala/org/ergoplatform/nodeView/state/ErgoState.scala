@@ -16,7 +16,7 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.validation.ValidationResult.Valid
-import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.core.validation.{MalformedModifierError, ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -91,12 +91,12 @@ object ErgoState extends ScorexLogging {
     * Tries to validate and execute transactions.
     * @param transactions to be validated and executed
     * @param currentStateContext to be used for tx execution
-    * @param checkBoxExistence function to provide ErgoBox by BoxId
+    * @param checkBoxExistence function to provide ErgoBox by BoxId and ErgoTransaction
     * @return Result of transactions execution with total cost inside
     */
   def execTransactions(transactions: Seq[ErgoTransaction],
                        currentStateContext: ErgoStateContext)
-                      (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
+                      (checkBoxExistence: (ErgoTransaction, ErgoBox.BoxId) => Try[ErgoBox]): ValidationResult[Long] = {
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
     def preAllocatedBuilder[T: ClassTag](sizeHint: Int): mutable.ArrayBuilder[T] = {
@@ -107,15 +107,16 @@ object ErgoState extends ScorexLogging {
 
     @tailrec
     def collectBoxesById(
+                 tx: ErgoTransaction,
                  remainingBoxIds: Iterator[ErgoBox.BoxId],
                  resultingBoxes: Try[mutable.ArrayBuilder[ErgoBox]]
                ): Try[IndexedSeq[ErgoBox]] = {
       if (!remainingBoxIds.hasNext) {
         resultingBoxes.map(_.result())
       } else {
-        checkBoxExistence(remainingBoxIds.next()) match {
+        checkBoxExistence(tx, remainingBoxIds.next()) match {
           case Success(box) =>
-            collectBoxesById(remainingBoxIds, resultingBoxes.map(_ += box))
+            collectBoxesById(tx, remainingBoxIds, resultingBoxes.map(_ += box))
           case Failure(ex) =>
             Failure(ex)
         }
@@ -132,9 +133,9 @@ object ErgoState extends ScorexLogging {
         val validCostResult = costResult.asInstanceOf[Valid[Long]]
         val tx = transactions(i)
         val boxesToSpendTry: Try[IndexedSeq[ErgoBox]] =
-          collectBoxesById(tx.inputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
+          collectBoxesById(tx, tx.inputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
         lazy val dataBoxesTry: Try[IndexedSeq[ErgoBox]] =
-          collectBoxesById(tx.dataInputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
+          collectBoxesById(tx, tx.dataInputs.iterator.map(_.boxId), Success(preAllocatedBuilder(tx.inputs.length)))
         lazy val boxes: Try[(IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
         costResult = tx.validateStateless()
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry, tx.id, tx.modifierTypeId)
@@ -166,7 +167,11 @@ object ErgoState extends ScorexLogging {
         toInsert.remove(wrappedBoxId) match {
           case None =>
             if (toRemove.put(wrappedBoxId, Remove(i.boxId)).nonEmpty) {
-              throw new IllegalArgumentException(s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId")
+              throw new MalformedModifierError(
+                s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId",
+                tx.id,
+                tx.modifierTypeId
+              )
             }
           case _ => // old value removed, do nothing
         }

@@ -3,7 +3,7 @@ package org.ergoplatform.network
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
@@ -96,6 +96,40 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * transaction could become acceptable with time
     */
   private val declined = mutable.TreeMap[ModifierId, Long]()
+
+
+  case class IncomingTxInfo(acceptedCost: Int, declinedCost: Int, invalidatedCost: Int) {
+    val totalCost = acceptedCost + declinedCost + invalidatedCost
+  }
+
+  object IncomingTxInfo {
+    def empty() = IncomingTxInfo(0, 0, 0)
+  }
+
+  private val txInfo = mutable.Map[ConnectedPeer, IncomingTxInfo]()
+
+  private var globalInfo = IncomingTxInfo.empty()
+
+  private def clearTransactionsInfo() = {
+    txInfo.clear()
+    globalInfo = IncomingTxInfo.empty()
+  }
+
+  private def processMempoolResult(processingResult: InitialTransactionCheckOutcome) = {
+    val costOpt = processingResult.transaction.lastCost
+    if (costOpt.isEmpty) {
+      log.warn("Cost is empty in processMempoolResult")
+    }
+    val cost = costOpt.getOrElse(1000)
+    val ng = processingResult match {
+      case _: FailedTransaction => globalInfo.copy(invalidatedCost = globalInfo.invalidatedCost + cost)
+      case _: SuccessfulTransaction => globalInfo.copy(acceptedCost = globalInfo.acceptedCost + cost)
+      case _: DeclinedTransaction => globalInfo.copy(declinedCost = globalInfo.declinedCost + cost)
+    }
+    log.debug(s"Old global cost info: $globalInfo, new $ng")
+    globalInfo = ng
+  }
+
 
   /**
     * The node stops to accept transactions if declined table reaches this max size. It prevents spam attacks trying
@@ -582,7 +616,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       } else {
         ErgoTransactionSerializer.parseBytesTry(bytes) match {
           case Success(tx) if id == tx.id =>
-            Some(UnconfirmedTransaction(tx, bytes))
+            Some(UnconfirmedTransaction(tx, bytes, Some(remote)))
           case _ =>
             // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
             penalizeMisbehavingPeer(remote)
@@ -666,9 +700,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // We download transactions only if following conditions met:
     def txAcceptanceFilter: Boolean = {
       settings.nodeSettings.stateType.holdsUtxoSet && // node holds UTXO set
-        hr.isHeadersChainSynced && // our chain is synced
         hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
         hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
+        globalInfo.totalCost <= 12000000 &&
         declined.size < MaxDeclined // the node is not stormed by transactions is has to decline
     }
 
@@ -868,7 +902,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // helper method to clear declined transactions after some off, so the node may accept them again
   private def clearDeclined(): Unit = {
-    val clearTimeout = FiniteDuration(7, MINUTES)
+    val clearTimeout = FiniteDuration(10, MINUTES)
     val now = System.currentTimeMillis()
 
     val toRemove = declined.filter { case (_, time) =>
@@ -898,30 +932,36 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case SemanticallySuccessfulModifier(mod) =>
       broadcastInvForNewModifier(mod)
       if (mod.isInstanceOf[ErgoFullBlock]) {
+        clearTransactionsInfo()
         clearDeclined()
       }
 
-    case SuccessfulTransaction(tx) =>
+    case st@SuccessfulTransaction(utx) =>
+      val tx = utx.transaction
       deliveryTracker.setHeld(tx.id, Transaction.ModifierTypeId)
+      processMempoolResult(st)
       broadcastModifierInv(tx)
 
-    case DeclinedTransaction(id: ModifierId) =>
-      declined.put(id, System.currentTimeMillis())
+    case dt@DeclinedTransaction(utx: UnconfirmedTransaction) =>
+      declined.put(utx.id, System.currentTimeMillis())
+      processMempoolResult(dt)
 
-    case FailedTransaction(id, error, immediateFailure) =>
-      if (immediateFailure) {
-        // penalize sender only in case transaction was invalidated at first validation.
-        deliveryTracker.setInvalid(id, Transaction.ModifierTypeId).foreach { peer =>
-          error match {
-            case TooHighCostError(_) =>
-              log.info(s"Penalize spamming peer $peer for too costly transaction $id")
-              penalizeSpammingPeer(peer)
-            case _ =>
-              log.info(s"Penalize peer $peer for too costly transaction $id (reason: $error)")
-              penalizeMisbehavingPeer(peer)
-          }
+    case ft@FailedTransaction(utx, error) =>
+      val id = utx.id
+      processMempoolResult(ft)
+      deliveryTracker.setInvalid(id, Transaction.ModifierTypeId).foreach { peer =>
+        error match {
+          case TooHighCostError(_) =>
+            log.info(s"Penalize spamming peer $peer for too costly transaction $id")
+            penalizeSpammingPeer(peer)
+          case _ =>
+            log.info(s"Penalize peer $peer for too costly transaction $id (reason: $error)")
+            penalizeMisbehavingPeer(peer)
         }
       }
+
+    case FailedOnRecheckTransaction(_, _) =>
+      // do nothing for now
 
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
@@ -1090,17 +1130,20 @@ object ErgoNodeViewSynchronizer {
     // hierarchy of events regarding modifiers application outcome
     trait ModificationOutcome extends NodeViewHolderEvent
 
-    /**
-      * @param immediateFailure - a flag indicating whether a transaction was invalid by the moment it was received.
-      */
-    case class FailedTransaction(transactionId: ModifierId, error: Throwable, immediateFailure: Boolean) extends ModificationOutcome
+    trait InitialTransactionCheckOutcome extends ModificationOutcome {
+      val transaction: UnconfirmedTransaction
+    }
 
-    case class SuccessfulTransaction(transaction: ErgoTransaction) extends ModificationOutcome
+    case class FailedTransaction(transaction: UnconfirmedTransaction, error: Throwable) extends InitialTransactionCheckOutcome
+
+    case class SuccessfulTransaction(transaction: UnconfirmedTransaction) extends InitialTransactionCheckOutcome
 
     /**
       * Transaction declined by the mempool (not permanently invalidated, so pool can accept it in future)
       */
-    case class DeclinedTransaction(transactionId: ModifierId) extends ModificationOutcome
+    case class DeclinedTransaction(transaction: UnconfirmedTransaction) extends InitialTransactionCheckOutcome
+
+    case class FailedOnRecheckTransaction(id : ModifierId, error: Throwable) extends ModificationOutcome
 
     case class RecoverableFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome
 

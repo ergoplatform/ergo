@@ -42,7 +42,8 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends HistoryTests
 
   //Generators
   override lazy val transactionGenerator: Gen[ErgoTransaction] = invalidErgoTransactionGen
-  override lazy val unconfirmedTxGenerator: Gen[UnconfirmedTransaction] = invalidErgoTransactionGen.map(UnconfirmedTransaction.apply)
+  override lazy val unconfirmedTxGenerator: Gen[UnconfirmedTransaction] =
+    invalidErgoTransactionGen.map(tx => UnconfirmedTransaction(tx, None))
   override lazy val memPoolGenerator: Gen[MPool] = emptyMemPoolGen
 
   override def syntacticallyValidModifier(history: HT): Header = {

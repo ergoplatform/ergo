@@ -574,8 +574,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (typeId == Transaction.ModifierTypeId) {
       // filter out transactions already in the mempool
       val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
+      val toParseCnt = (12000000 - globalInfo.totalCost) / 2000000
+      val toParse = notInThePool.take(toParseCnt)
       // parse all transactions not in the mempool and send them to node view holder
-      val parsed: Iterable[UnconfirmedTransaction] = parseTransactions(notInThePool, remote)
+      val parsed: Iterable[UnconfirmedTransaction] = parseTransactions(toParse, remote)
       viewHolderRef ! TransactionsFromRemote(parsed)
     } else {
       Constants.modifierSerializers.get(typeId) match {
@@ -720,7 +722,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val notDeclined = notApplied.filter(id => !declined.contains(id))
           log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
             s"${unknownMods.size} of them are unknown, requesting $notDeclined")
-          notDeclined
+          val txsToAsk = (12000000 - globalInfo.totalCost) / 2000000
+          notDeclined.take(txsToAsk)
         } else {
           Seq.empty
         }

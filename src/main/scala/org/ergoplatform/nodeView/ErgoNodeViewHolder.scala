@@ -586,7 +586,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def transactionsProcessing: Receive = {
     case TransactionsFromRemote(unconfirmedTx) =>
-      unconfirmedTx.foreach(txModify)
+      unconfirmedTx.foldLeft(0) { case (costAcc, tx) =>
+        val cost = if (costAcc < 8000000) {
+          val outcome = txModify(tx)
+          outcome.cost
+        } else {
+          // todo: put txs into cache
+          0
+        }
+        costAcc + cost
+      }
     case LocallyGeneratedTransaction(unconfirmedTx) =>
       sender() ! txModify(unconfirmedTx)
     case RecheckedTransactions(unconfirmedTxs) =>

@@ -6,7 +6,7 @@ import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -265,8 +265,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  protected def txModify(tx: ErgoTransaction): ProcessingOutcome = {
-    val (newPool, processingOutcome) = memoryPool().process(tx, minimalState())
+  protected def txModify(unconfirmedTx: UnconfirmedTransaction): ProcessingOutcome = {
+    val tx = unconfirmedTx.transaction
+    val (newPool, processingOutcome) = memoryPool().process(unconfirmedTx, minimalState())
     processingOutcome match {
       case ProcessingOutcome.Accepted =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
@@ -279,8 +280,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         context.system.eventStream.publish(FailedTransaction(tx.id, e, immediateFailure = true))
       case ProcessingOutcome.DoubleSpendingLoser(winnerTxs) => // do nothing
         log.debug(s"Transaction $tx declined, as other transactions $winnerTxs are paying more")
+        context.system.eventStream.publish(DeclinedTransaction(tx.id))
       case ProcessingOutcome.Declined(e) => // do nothing
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
+        context.system.eventStream.publish(DeclinedTransaction(tx.id))
     }
     processingOutcome
   }
@@ -357,10 +360,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                               blocksApplied: Seq[BlockSection],
                               memPool: ErgoMemPool,
                               state: State): ErgoMemPool = {
-    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions)
+    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions).map(UnconfirmedTransaction.apply)
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
-    memPool.putWithoutCheck(rolledBackTxs).filter(tx => !appliedTxs.exists(_.id == tx.id))
+    memPool.putWithoutCheck(rolledBackTxs)
+      .filter(unconfirmedTx => !appliedTxs.exists(_.id == unconfirmedTx.transaction.id))
   }
 
   /**
@@ -589,16 +593,21 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def transactionsProcessing: Receive = {
-    case TransactionsFromRemote(txs) =>
-      txs.foreach(txModify)
-    case LocallyGeneratedTransaction(tx) =>
-      sender() ! txModify(tx)
+    case TransactionsFromRemote(unconfirmedTx) =>
+      unconfirmedTx.foreach(txModify)
+    case LocallyGeneratedTransaction(unconfirmedTx) =>
+      sender() ! txModify(unconfirmedTx)
+    case RecheckedTransactions(unconfirmedTxs) =>
+      val updatedPool = unconfirmedTxs.foldRight(memoryPool()) { case (utx, mp) =>
+        mp.remove(utx).putWithoutCheck(utx)
+      }
+      updateNodeView(updatedMempool = Some(updatedPool))
     case EliminateTransactions(ids, source) =>
       val immediateFailure = source match {
         case EliminateTransactions.FromBlockValidation => true
         case _ => false
       }
-      val updatedPool = memoryPool().filter(tx => !ids.contains(tx.id))
+      val updatedPool = memoryPool().filter(unconfirmedTx => !ids.contains(unconfirmedTx.transaction.id))
       updateNodeView(updatedMempool = Some(updatedPool))
       ids.foreach { id =>
         context.system.eventStream.publish(
@@ -662,15 +671,22 @@ object ErgoNodeViewHolder {
     // Modifiers received from the remote peer with new elements in it
     case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
 
-    sealed trait NewTransactions{
-      val txs: Iterable[ErgoTransaction]
-    }
 
-    case class LocallyGeneratedTransaction(tx: ErgoTransaction) extends NewTransactions {
-      override val txs: Iterable[ErgoTransaction] = Iterable(tx)
-    }
+    /**
+      * Wrapper for a transaction submitted via API
+      */
+    case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction)
 
-    case class TransactionsFromRemote(override val txs: Iterable[ErgoTransaction]) extends NewTransactions
+    /**
+      * Wrapper for transactions cominng from P2P network
+      */
+    case class TransactionsFromRemote(unconfirmedTxs: Iterable[UnconfirmedTransaction])
+
+    /**
+      * Wrapper for transactions which sit in mempool for long enough time, so `CleanWorker` is re-checking their
+      * validity and then sending via this message to update the mempool
+      */
+    case class RecheckedTransactions(unconfirmedTxs: Iterable[UnconfirmedTransaction])
 
     case class LocallyGeneratedModifier(pmod: BlockSection)
 

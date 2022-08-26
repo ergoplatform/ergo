@@ -6,7 +6,7 @@ import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
@@ -100,10 +100,10 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     context become working // ignore other triggers until work is done
   }
 
-  private def broadcastTx(tx: ErgoTransaction): Unit = {
+  private def broadcastTx(unconfirmedTx: UnconfirmedTransaction): Unit = {
     val msg = Message(
       InvSpec,
-      Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
+      Right(InvData(Transaction.ModifierTypeId, Seq(unconfirmedTx.id))),
       None
     )
     networkControllerRef ! SendToNetwork(msg, Broadcast)
@@ -115,19 +115,19 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       val toBroadcast = pr.random(settings.nodeSettings.rebroadcastCount).toSeq
       stateReaderOpt match {
         case Some(utxoState: UtxoStateReader) =>
-          val stateToCheck = utxoState.withTransactions(toBroadcast)
-          toBroadcast.foreach { tx =>
-            if (tx.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
-              log.info(s"Rebroadcasting $tx")
-              broadcastTx(tx)
+          val stateToCheck = utxoState.withUnconfirmedTransactions(toBroadcast)
+          toBroadcast.foreach { unconfirmedTx =>
+            if (unconfirmedTx.transaction.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
+              log.info(s"Rebroadcasting $unconfirmedTx")
+              broadcastTx(unconfirmedTx)
             } else {
-              log.info(s"Not rebroadcasting $tx as not all the inputs are in place")
+              log.info(s"Not rebroadcasting $unconfirmedTx as not all the inputs are in place")
             }
           }
         case _ =>
-          toBroadcast.foreach { tx =>
-            log.warn(s"Rebroadcasting $tx while state is not ready or not UTXO set")
-            broadcastTx(tx)
+          toBroadcast.foreach { unconfirmedTx =>
+            log.warn(s"Rebroadcasting $unconfirmedTx while state is not ready or not UTXO set")
+            broadcastTx(unconfirmedTx)
           }
       }
     }

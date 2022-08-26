@@ -1,7 +1,6 @@
 package org.ergoplatform.http.routes
 
 import java.net.InetSocketAddress
-
 import akka.actor.{Actor, Props}
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
@@ -9,7 +8,7 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import org.ergoplatform.http.api.TransactionsApiRoute
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.Stubs
@@ -43,7 +42,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
 
   val chainedRoute: Route = {
     //constructing memory pool and node view  with the transaction tx included
-    val mp2 = memPool.put(tx).get
+    val mp2 = memPool.put(UnconfirmedTransaction(tx)).get
     class UtxoReadersStub2 extends Actor {
       def receive: PartialFunction[Any, Unit] = {
         case GetReaders => sender() ! Readers(history, utxoState, mp2, wallet)
@@ -110,7 +109,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   it should "get unconfirmed from mempool" in {
     Get(prefix + "/unconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      memPool.take(50).toSeq shouldBe responseAs[Seq[ErgoTransaction]]
+      memPool.take(50).map(_.transaction).toSeq shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
 
@@ -119,7 +118,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     val offset = 20
     Get(prefix + s"/unconfirmed?limit=$limit&offset=$offset") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      memPool.getAll.slice(offset, offset + limit) shouldBe responseAs[Seq[ErgoTransaction]]
+      memPool.getAll.slice(offset, offset + limit).map(_.transaction) shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
 }

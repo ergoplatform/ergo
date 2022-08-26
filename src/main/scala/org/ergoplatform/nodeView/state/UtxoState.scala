@@ -122,6 +122,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
+      log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
       val operationsProcessing = ErgoState.stateChanges(transactions).flatMap(performStateChangingOperations)
       ModifierValidator(stateContext.validationSettings)
         .validateNoFailure(fbOperationFailed, operationsProcessing, Transaction.ModifierTypeId)

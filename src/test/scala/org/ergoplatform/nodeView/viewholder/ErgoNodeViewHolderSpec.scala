@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.viewholder
 import java.io.File
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
@@ -146,7 +147,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       val boxes = ErgoState.newBoxes(genesis.transactions).find(_.ergoTree == Constants.TrueLeaf)
       boxes.nonEmpty shouldBe true
 
-      val tx = validTransactionFromBoxes(boxes.toIndexedSeq)
+      val tx = UnconfirmedTransaction(validTransactionFromBoxes(boxes.toIndexedSeq))
       subscribeEvents(classOf[FailedTransaction])
       nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
       expectMsg(Accepted)

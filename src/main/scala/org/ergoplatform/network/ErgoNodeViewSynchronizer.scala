@@ -590,10 +590,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (typeId == Transaction.ModifierTypeId) {
       // filter out transactions already in the mempool
       val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
-      notInThePool.headOption.foreach { case (txId, txBytes) =>
+      val (toProcess, toPutIntoCache) = if (globalInfo.totalCost < 12000000) {
+        (notInThePool.headOption, notInThePool.tail)
+      } else {
+        (None, notInThePool)
+      }
+
+      toProcess.foreach { case (txId, txBytes) =>
         parseAndSendTransaction(txId, txBytes, remote)
       }
-      notInThePool.tail.foreach { case (txId, txBytes) =>
+      toPutIntoCache.foreach { case (txId, txBytes) =>
         txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
       }
     } else {

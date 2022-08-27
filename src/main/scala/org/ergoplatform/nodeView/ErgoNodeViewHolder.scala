@@ -585,17 +585,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def transactionsProcessing: Receive = {
-    case TransactionsFromRemote(unconfirmedTx) =>
-      unconfirmedTx.foldLeft(0) { case (costAcc, tx) =>
-        val cost = if (costAcc < 8000000) {
-          val outcome = txModify(tx)
-          outcome.cost
-        } else {
-          // todo: put txs into cache
-          0
-        }
-        costAcc + cost
-      }
+    case TransactionFromRemote(unconfirmedTx) =>
+      txModify(unconfirmedTx)
     case LocallyGeneratedTransaction(unconfirmedTx) =>
       sender() ! txModify(unconfirmedTx)
     case RecheckedTransactions(unconfirmedTxs) =>
@@ -674,9 +665,9 @@ object ErgoNodeViewHolder {
     case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction)
 
     /**
-      * Wrapper for transactions cominng from P2P network
+      * Wrapper for transaction cominng from P2P network
       */
-    case class TransactionsFromRemote(unconfirmedTxs: Iterable[UnconfirmedTransaction])
+    case class TransactionFromRemote(unconfirmedTx: UnconfirmedTransaction)
 
     /**
       * Wrapper for transactions which sit in mempool for long enough time, so `CleanWorker` is re-checking their

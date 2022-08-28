@@ -106,12 +106,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     def empty() = IncomingTxInfo(0, 0, 0)
   }
 
-  private val txInfo = mutable.Map[ConnectedPeer, IncomingTxInfo]()
-
   private var globalInfo = IncomingTxInfo.empty()
 
   private def clearTransactionsInfo(): Unit = {
-    txInfo.clear()
     globalInfo = IncomingTxInfo.empty()
     processFirstTxProcessingCacheRecord() // resume cache processing
   }
@@ -725,7 +722,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       settings.nodeSettings.stateType.holdsUtxoSet && // node holds UTXO set
         hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
         hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
-        globalInfo.totalCost <= 12000000 &&
+        globalInfo.totalCost <= 16000000 &&
         txProcessingCache.size <= 50 &&
         declined.size < MaxDeclined // the node is not stormed by transactions is has to decline
     }

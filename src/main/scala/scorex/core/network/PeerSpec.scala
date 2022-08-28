@@ -91,7 +91,11 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
       val featBytesCount = r.getUShort().toShortExact
       val featChunk = r.getChunk(featBytesCount)
       //we ignore a feature found in the PeersData if we do not know how to parse it or failed to do that
-      featureSerializers.get(featId).flatMap { featureSerializer =>
+      val serializer = featureSerializers.get(featId)
+      if (serializer.isEmpty) {
+        log.debug(s"No feature serializer found for feature #$featId")
+      }
+      serializer.flatMap { featureSerializer =>
         featureSerializer.parseTry(r.newReader(featChunk)).toOption
       }
     }

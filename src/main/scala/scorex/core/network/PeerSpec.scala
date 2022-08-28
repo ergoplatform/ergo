@@ -1,10 +1,12 @@
 package scorex.core.network
 
 import java.net.{InetAddress, InetSocketAddress, URL}
+
 import scorex.core.app.{ApplicationVersionSerializer, Version}
 import scorex.core.network.peer.{LocalAddressPeerFeature, RestApiUrlPeerFeature}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.Extensions._
+import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -38,7 +40,8 @@ case class PeerSpec(agentName: String,
 
 }
 
-class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends ScorexSerializer[PeerSpec] {
+class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers)
+  extends ScorexSerializer[PeerSpec] with ScorexLogging {
   override def serialize(obj: PeerSpec, w: Writer): Unit = {
 
     w.putShortString(obj.agentName)

@@ -195,30 +195,6 @@ trait ApiCodecs extends JsonCodecs {
     } yield ErgoTransaction(ergoLikeTx)
   }
 
-  /*
-
-  // We are not using this encoder for now, but may use in future
-  implicit val unconfirmedTxEncoder: Encoder[UnconfirmedTransaction] = { unconfirmedTx =>
-    Json.obj(
-      "transaction" -> transactionEncoder(unconfirmedTx.transaction),
-      "lastCost" -> unconfirmedTx.lastCost.asJson,
-      "createdTime" -> unconfirmedTx.createdTime.asJson,
-      "lastCheckedTime" -> unconfirmedTx.lastCheckedTime.asJson,
-      "source" -> unconfirmedTx.source.asJson
-    )
-  }
-
-  // We are not using this decoder for now, but may use in future
-  implicit val unconfirmedTxDecoder: Decoder[UnconfirmedTransaction] = { cursor =>
-    for {
-      tx <- transactionDecoder(cursor)
-      lastCost <- cursor.downField("lastCost").as[Option[Int]]
-      createdTime <- cursor.downField("createdTime").as[Long]
-      lastCheckedTime <- cursor.downField("lastCheckedTime").as[Long]
-      source <- cursor.downField("source").as[Option[ConnectedPeer]]
-    } yield UnconfirmedTransaction(tx, lastCost, createdTime, lastCheckedTime, Some(tx.bytes), source)
-  }*/
-
 
 
   implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {

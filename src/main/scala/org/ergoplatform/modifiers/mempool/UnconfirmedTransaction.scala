@@ -3,7 +3,16 @@ package org.ergoplatform.modifiers.mempool
 import scorex.core.network.ConnectedPeer
 import scorex.util.{ModifierId, ScorexLogging}
 
-
+/**
+  * Wrapper for unconfirmed transaction and corresponding data
+  *
+  * @param transaction - unconfirmed transaction
+  * @param lastCost - validation cost during last check
+  * @param createdTime - when transaction entered the pool
+  * @param lastCheckedTime - when last validity check was done
+  * @param transactionBytes - transaction bytes, to avoid serializations when we send it over the wire
+  * @param source - peer which delivered the transaction (None if transaction submitted via API)
+  */
 case class UnconfirmedTransaction(transaction: ErgoTransaction,
                                   lastCost: Option[Int],
                                   createdTime: Long,

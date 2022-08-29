@@ -33,7 +33,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
-import ErgoNodeViewSynchronizer.IncomingTxInfo
+import ErgoNodeViewSynchronizer.{IncomingTxInfo, TransactionProcessingCacheRecord}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -89,10 +89,30 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   // no more than `PerPeerSyncLockTime` milliseconds ago.
   private val PerPeerSyncLockTime = 100
 
-  private val MempoolCyclesPerBlock = 12000000
-
   // when we got last modifier, both unconfirmed transactions and block sections count
   private var lastModifierGotTime: Long = 0
+
+  /**
+    * The node stops to accept transactions if declined table reaches this max size. It prevents spam attacks trying
+    * to bloat the table (or exhaust node's CPU)
+    */
+  private val MaxDeclined = 400
+
+  /**
+    * No more than this number of unparsed transactions can be cached
+    */
+  private val MaxProcessingTransactionsCacheSize = 50
+
+  /**
+    * Max cost of transactions we are going to process between blocks
+    */
+  private val MempoolCyclesPerBlock = 12000000
+
+  /**
+    * Currently max transaction cost is higher but will be eventually cut down to this value
+    */
+  private val OptimysticMaxTransactionCost = 2000000
+
 
   /**
     * Dictionary (tx id -> checking time), which is storing transactions declined by the mempool, as mempool is not
@@ -109,6 +129,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var globalInfo = IncomingTxInfo.empty()
 
   /**
+    * Cache which contains bytes of transactions we received but not parsed and processed yet
+    */
+  private val txProcessingCache = mutable.Map[ModifierId, TransactionProcessingCacheRecord]()
+
+  /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
   private def clearTransactionsInfo(): Unit = {
@@ -120,7 +145,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def processFirstTxProcessingCacheRecord(): Unit = {
     txProcessingCache.headOption.foreach { case (txId, processingCacheRecord) =>
-      parseAndSendTransaction(txId, processingCacheRecord.txBytes, processingCacheRecord.source)
+      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, processingCacheRecord.source)
       txProcessingCache -= txId
     }
   }
@@ -151,13 +176,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     log.debug(s"Old global cost info: $globalInfo, new $ng, tx processing cache size: ${txProcessingCache.size}")
     globalInfo = ng
   }
-
-
-  /**
-    * The node stops to accept transactions if declined table reaches this max size. It prevents spam attacks trying
-    * to bloat the table (or exhaust node's CPU)
-    */
-  private val MaxDeclined = 400
 
   /**
     * Register periodic events
@@ -573,9 +591,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
 
-  class TransactionProcessingCacheRecord(val txBytes: Array[Byte], val source: ConnectedPeer)
-  private val txProcessingCache = mutable.Map[ModifierId, TransactionProcessingCacheRecord]()
-
   /**
     * Logic to process block parts got from another peer.
     * Filter out non-requested block parts (with a penalty to spamming peer),
@@ -599,14 +614,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (typeId == Transaction.ModifierTypeId) {
       // filter out transactions already in the mempool
       val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
-      val (toProcess, toPutIntoCache) = if (globalInfo.totalCost < 12000000) {
+      val (toProcess, toPutIntoCache) = if (globalInfo.totalCost < MempoolCyclesPerBlock) {
+        // if we are within per-block limits, parse and process first transaction
         (notInThePool.headOption, notInThePool.tail)
       } else {
         (None, notInThePool)
       }
 
       toProcess.foreach { case (txId, txBytes) =>
-        parseAndSendTransaction(txId, txBytes, remote)
+        parseAndProcessTransaction(txId, txBytes, remote)
       }
       toPutIntoCache.foreach { case (txId, txBytes) =>
         txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
@@ -638,9 +654,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Parse transactions coming from remote, filtering out ones which are too big on the way
+    * Parse transaction coming from remote, filtering out immediately too big one, and send parsed transaction
+    * to mempool for processing
     */
-  def parseAndSendTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
+  def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
     if (bytes.length > settings.nodeSettings.maxTransactionSize) {
       deliveryTracker.setInvalid(id, Transaction.ModifierTypeId)
       penalizeMisbehavingPeer(remote)
@@ -734,8 +751,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       settings.nodeSettings.stateType.holdsUtxoSet && // node holds UTXO set
         hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
         hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
-        globalInfo.totalCost <= 16000000 &&
-        txProcessingCache.size <= 50 &&
+        globalInfo.totalCost <= MempoolCyclesPerBlock * 3 / 2 && // we can download some extra to fill cache
+        txProcessingCache.size <= MaxProcessingTransactionsCacheSize && // txs processing cache is not overfull
         declined.size < MaxDeclined // the node is not stormed by transactions is has to decline
     }
 
@@ -753,7 +770,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val notDeclined = notApplied.filter(id => !declined.contains(id))
           log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
             s"${unknownMods.size} of them are unknown, requesting $notDeclined")
-          val txsToAsk = (12000000 - globalInfo.totalCost) / 2000000
+          val txsToAsk = (MempoolCyclesPerBlock - globalInfo.totalCost) / OptimysticMaxTransactionCost
           notDeclined.take(txsToAsk)
         } else {
           Seq.empty
@@ -997,7 +1014,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
 
-
     case FailedOnRecheckTransaction(_, _) =>
       // do nothing for now
 
@@ -1128,6 +1144,11 @@ object ErgoNodeViewSynchronizer {
     def empty(): IncomingTxInfo = IncomingTxInfo(0, 0, 0)
   }
 
+  /**
+    * Transaction bytes and source peer to be recorded in a cache and processed later
+    */
+  class TransactionProcessingCacheRecord(val txBytes: Array[Byte], val source: ConnectedPeer)
+
   case object CheckModifiersToDownload
 
   object ReceivableMessages {
@@ -1193,6 +1214,9 @@ object ErgoNodeViewSynchronizer {
       */
     case class DeclinedTransaction(transaction: UnconfirmedTransaction) extends InitialTransactionCheckOutcome
 
+    /**
+      * Transaction which was failed not immediately but after sitting for some time in the mempool
+      */
     case class FailedOnRecheckTransaction(id : ModifierId, error: Throwable) extends ModificationOutcome
 
     case class RecoverableFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome

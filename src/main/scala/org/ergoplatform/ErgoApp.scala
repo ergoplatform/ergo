@@ -15,18 +15,18 @@ import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, Mode
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.slf4j.{Logger, LoggerFactory}
-import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType, PeerFeatureIds}
+import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network._
 import scorex.core.network.message._
-import scorex.core.network.peer.{PeerManagerRef, RestApiUrlPeerFeatureSerializer}
+import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
-import java.net.InetSocketAddress
 
+import java.net.InetSocketAddress
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
 
@@ -48,12 +48,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
   implicit private val actorSystem: ActorSystem = ActorSystem(scorexSettings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
 
-  private val modePeerFeature = ModePeerFeature(ergoSettings.nodeSettings)
-  private val features = Seq(modePeerFeature)
-  private val featureSerializers: PeerFeature.Serializers = Map(
-    modePeerFeature.featureId -> modePeerFeature.serializer,
-    PeerFeatureIds.RestApiUrlFeatureId -> RestApiUrlPeerFeatureSerializer
-  )
+  private val features: Seq[PeerFeature] = Seq(ModePeerFeature(ergoSettings.nodeSettings))
+  private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
 
   private val timeProvider = new NetworkTimeProvider(scorexSettings.ntp)
 

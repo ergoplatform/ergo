@@ -1,12 +1,10 @@
 package scorex.core.network
 
 import java.net.{InetAddress, InetSocketAddress, URL}
-
 import scorex.core.app.{ApplicationVersionSerializer, Version}
 import scorex.core.network.peer.{LocalAddressPeerFeature, RestApiUrlPeerFeature}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.Extensions._
-import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -40,8 +38,7 @@ case class PeerSpec(agentName: String,
 
 }
 
-class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers)
-  extends ScorexSerializer[PeerSpec] with ScorexLogging {
+class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends ScorexSerializer[PeerSpec] {
   override def serialize(obj: PeerSpec, w: Writer): Unit = {
 
     w.putShortString(obj.agentName)
@@ -94,11 +91,7 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers)
       val featBytesCount = r.getUShort().toShortExact
       val featChunk = r.getChunk(featBytesCount)
       //we ignore a feature found in the PeersData if we do not know how to parse it or failed to do that
-      val serializer = featureSerializers.get(featId)
-      if (serializer.isEmpty) {
-        log.debug(s"No feature serializer found for feature #$featId")
-      }
-      serializer.flatMap { featureSerializer =>
+      featureSerializers.get(featId).flatMap { featureSerializer =>
         featureSerializer.parseTry(r.newReader(featChunk)).toOption
       }
     }

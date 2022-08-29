@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionFromRemote}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
@@ -33,6 +33,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
+import ErgoNodeViewSynchronizer.IncomingTxInfo
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -41,7 +42,8 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success}
 
 /**
-  * Tweaks on top of Scorex' NodeViewSynchronizer made to optimize Ergo network
+  * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the
+  * client application
   */
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
@@ -87,6 +89,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   // no more than `PerPeerSyncLockTime` milliseconds ago.
   private val PerPeerSyncLockTime = 100
 
+  private val MempoolCyclesPerBlock = 12000000
+
   // when we got last modifier, both unconfirmed transactions and block sections count
   private var lastModifierGotTime: Long = 0
 
@@ -97,42 +101,50 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val declined = mutable.TreeMap[ModifierId, Long]()
 
-
-  case class IncomingTxInfo(acceptedCost: Int, declinedCost: Int, invalidatedCost: Int) {
-    val totalCost = acceptedCost + declinedCost + invalidatedCost
-  }
-
-  object IncomingTxInfo {
-    def empty() = IncomingTxInfo(0, 0, 0)
-  }
-
+  /**
+    * Counter which contains total cost of transactions entered mempool or rejected by it since last block processed.
+    * Used to avoid sudden spikes in load, limiting transactions processing time and make it comparable to block's
+    * processing time
+    */
   private var globalInfo = IncomingTxInfo.empty()
 
+  /**
+    * To be called when the node is synced and new block arrives, to reset transactions cost counter
+    */
   private def clearTransactionsInfo(): Unit = {
     globalInfo = IncomingTxInfo.empty()
-    processFirstTxProcessingCacheRecord() // resume cache processing
   }
 
-  private def processFirstTxProcessingCacheRecord() = {
-    txProcessingCache.headOption.foreach{case (txId, processingCacheRecord) =>
+  /**
+    * To be called when the node is synced and new block arrives, to resume transaction bytes cache processing
+    */
+  private def processFirstTxProcessingCacheRecord(): Unit = {
+    txProcessingCache.headOption.foreach { case (txId, processingCacheRecord) =>
       parseAndSendTransaction(txId, processingCacheRecord.txBytes, processingCacheRecord.source)
       txProcessingCache -= txId
     }
   }
 
-  private def processMempoolResult(processingResult: InitialTransactionCheckOutcome) = {
+  /**
+    * To be called when mempool reporting on finished transaction validation.
+    * This method adds validation cost to counter and send another
+    */
+  private def processMempoolResult(processingResult: InitialTransactionCheckOutcome): Unit = {
+    val ReserveCostValue = 5000
+
     val costOpt = processingResult.transaction.lastCost
     if (costOpt.isEmpty) {
+      // should not be here, and so ReserveCostValue should not be used
       log.warn("Cost is empty in processMempoolResult")
     }
-    val cost = costOpt.getOrElse(1000)
+    val cost = costOpt.getOrElse(ReserveCostValue)
     val ng = processingResult match {
       case _: FailedTransaction => globalInfo.copy(invalidatedCost = globalInfo.invalidatedCost + cost)
       case _: SuccessfulTransaction => globalInfo.copy(acceptedCost = globalInfo.acceptedCost + cost)
       case _: DeclinedTransaction => globalInfo.copy(declinedCost = globalInfo.declinedCost + cost)
     }
 
-    if(globalInfo.totalCost < 12000000) {
+    if (globalInfo.totalCost < MempoolCyclesPerBlock) {
       processFirstTxProcessingCacheRecord()
     }
 
@@ -954,8 +966,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case SemanticallySuccessfulModifier(mod) =>
       broadcastInvForNewModifier(mod)
       if (mod.isInstanceOf[ErgoFullBlock]) {
-        clearTransactionsInfo()
         clearDeclined()
+        clearTransactionsInfo()
+        processFirstTxProcessingCacheRecord() // resume cache processing
       }
 
     case st@SuccessfulTransaction(utx) =>
@@ -1102,6 +1115,18 @@ object ErgoNodeViewSynchronizer {
             deliveryTracker: DeliveryTracker)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
     context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker, deliveryTracker))
+
+  /**
+    * Container for aggregated costs of accepted, declined or invalidated transactions. Can be used to track global
+    * state of total cost of transactions received (since last block processed), or per-peer state
+    */
+  case class IncomingTxInfo(acceptedCost: Int, declinedCost: Int, invalidatedCost: Int) {
+    val totalCost: Int = acceptedCost + declinedCost + invalidatedCost
+  }
+
+  object IncomingTxInfo {
+    def empty(): IncomingTxInfo = IncomingTxInfo(0, 0, 0)
+  }
 
   case object CheckModifiersToDownload
 

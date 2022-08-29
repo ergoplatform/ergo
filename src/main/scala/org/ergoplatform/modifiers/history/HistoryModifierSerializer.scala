@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.nodeView.history.extra.{IndexedErgoAddress, IndexedErgoAddressSerializer, IndexedErgoBox, IndexedErgoBoxSerializer, IndexedErgoTransaction, IndexedErgoTransactionSerializer, IndexedErgoTree, IndexedErgoTreeSerializer, NumericBoxIndex, NumericBoxIndexSerializer, NumericTxIndex, NumericTxIndexSerializer}
+import org.ergoplatform.nodeView.history.extra.{IndexedErgoAddress, IndexedErgoAddressSerializer, IndexedErgoBox, IndexedErgoBoxSerializer, IndexedErgoTransaction, IndexedErgoTransactionSerializer, NumericBoxIndex, NumericBoxIndexSerializer, NumericTxIndex, NumericTxIndexSerializer}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 
@@ -23,9 +23,6 @@ object HistoryModifierSerializer extends ScorexSerializer[BlockSection] {
       case m: Extension =>
         w.put(Extension.modifierTypeId)
         ExtensionSerializer.serialize(m, w)
-      case m: IndexedErgoTree =>
-        w.put(IndexedErgoTree.modifierTypeId)
-        IndexedErgoTreeSerializer.serialize(m, w)
       case m: IndexedErgoAddress =>
         w.put(IndexedErgoAddress.modifierTypeId)
         IndexedErgoAddressSerializer.serialize(m, w)
@@ -56,8 +53,6 @@ object HistoryModifierSerializer extends ScorexSerializer[BlockSection] {
         BlockTransactionsSerializer.parse(r)
       case Extension.`modifierTypeId` =>
         ExtensionSerializer.parse(r)
-      case IndexedErgoTree.`modifierTypeId` =>
-        IndexedErgoTreeSerializer.parse(r)
       case IndexedErgoAddress.`modifierTypeId` =>
         IndexedErgoAddressSerializer.parse(r)
       case IndexedErgoTransaction.`modifierTypeId` =>

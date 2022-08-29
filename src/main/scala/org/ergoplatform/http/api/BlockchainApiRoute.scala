@@ -42,15 +42,18 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getBoxesByAddressUnspentR ~
       getBoxRangeR ~
       getBoxesByErgoTreeR ~
-      getBoxesByErgoTreeUnspentR
+      getBoxesByErgoTreeUnspentR ~
+      getTokenInfoByIdR
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
-  private def getAddress(addr: ErgoAddress)(implicit history: ErgoHistoryReader): Option[IndexedErgoAddress] = {
-    history.typedModifierById[IndexedErgoAddress](IndexedErgoAddressSerializer.addressToModifierId(addr))
+  private def getAddress(tree: ErgoTree)(implicit history: ErgoHistoryReader): Option[IndexedErgoAddress] = {
+    history.typedModifierById[IndexedErgoAddress](bytesToId(IndexedErgoAddressSerializer.hashErgoTree(tree)))
   }
+
+  private def getAddress(addr: ErgoAddress)(implicit history: ErgoHistoryReader): Option[IndexedErgoAddress] = getAddress(addr.script)
 
   private def getTxById(id: ModifierId)(implicit history: ErgoHistoryReader): Option[IndexedErgoTransaction] =
     history.typedModifierById[IndexedErgoTransaction](id) match {
@@ -185,8 +188,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getBoxesByErgoTree(tree: ErgoTree, offset: Long, limit: Long): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
-      history.typedModifierById[IndexedErgoTree](bytesToId(IndexedErgoTreeSerializer.ergoTreeHash(tree))) match {
-        case Some(iEt) => iEt.retrieveBoxes(history, offset, limit)
+      getAddress(tree)(history) match {
+        case Some(iEa) => iEa.retrieveBoxes(history, offset, limit)
         case None      => Seq.empty[IndexedErgoBox]
       }
     }
@@ -205,8 +208,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Long, limit: Long): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
-      history.typedModifierById[IndexedErgoTree](bytesToId(IndexedErgoTreeSerializer.ergoTreeHash(tree))) match {
-        case Some(iEt) => iEt.retrieveUtxos(history, offset, limit)
+      getAddress(tree)(history) match {
+        case Some(iEa) => iEa.retrieveUtxos(history, offset, limit)
         case None      => Seq.empty[IndexedErgoBox]
       }
     }
@@ -221,6 +224,16 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }catch {
       case e: Exception => BadRequest(s"${e.getMessage}")
     }
+  }
+
+  private def getTokenInfoById(id: ModifierId): Future[Option[IndexedToken]] = {
+    getHistory.map { history =>
+      history.typedModifierById[IndexedToken](id)
+    }
+  }
+
+  private def getTokenInfoByIdR: Route = (get & pathPrefix("box" / "byId") & modifierId) { id =>
+    ApiResponse(getTokenInfoById(id))
   }
 
 }

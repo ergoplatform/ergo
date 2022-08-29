@@ -4,7 +4,7 @@ import com.google.common.cache.CacheBuilder
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.extra.{IndexedErgoAddress, IndexedErgoTree}
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import scorex.core.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
@@ -44,7 +44,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
 
   private def cacheModifier(mod: BlockSection): Unit = mod.modifierTypeId match {
     case Header.modifierTypeId => headersCache.put(mod.id, mod)
-    case IndexedErgoAddress.modifierTypeId | IndexedErgoTree.modifierTypeId => extraCache.put(mod.id, mod)
+    case IndexedErgoAddress.modifierTypeId => extraCache.put(mod.id, mod) // only cache "big" modifiers
     case _ => blockSectionsCache.put(mod.id, mod)
   }
 

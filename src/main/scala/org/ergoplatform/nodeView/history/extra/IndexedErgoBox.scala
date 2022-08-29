@@ -16,8 +16,7 @@ class IndexedErgoBox(val inclusionHeightOpt: Option[Int],
                      var spendingTxIdOpt: Option[ModifierId],
                      var spendingHeightOpt: Option[Int],
                      val box: ErgoBox,
-                     val globalIndex: Long,
-                     val confirmations: Option[Int])
+                     val globalIndex: Long)
   extends WalletBox(TrackedBox(box.transactionId,
                                box.index,
                                inclusionHeightOpt,
@@ -25,7 +24,7 @@ class IndexedErgoBox(val inclusionHeightOpt: Option[Int],
                                spendingHeightOpt,
                                box,
                                Set.empty[ScanId]),
-                               confirmations) with BlockSection {
+                               None) with BlockSection {
 
   override def parentId: ModifierId = null
   override val modifierTypeId: ModifierTypeId = IndexedErgoBox.modifierTypeId
@@ -56,7 +55,6 @@ object IndexedErgoBoxSerializer extends ScorexSerializer[IndexedErgoBox] {
     w.putOption[Int](iEb.spendingHeightOpt)(_.putInt(_))
     ErgoBoxSerializer.serialize(iEb.box, w)
     w.putLong(iEb.globalIndex)
-    w.putOption[Int](iEb.confirmations)(_.putInt(_))
   }
 
   override def parse(r: Reader): IndexedErgoBox = {
@@ -65,8 +63,7 @@ object IndexedErgoBoxSerializer extends ScorexSerializer[IndexedErgoBox] {
     val spendingHeightOpt: Option[Int] = r.getOption[Int](r.getInt())
     val box: ErgoBox = ErgoBoxSerializer.parse(r)
     val globalIndex: Long = r.getLong()
-    val confirmations: Option[Int] = r.getOption[Int](r.getInt())
-    new IndexedErgoBox(inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, globalIndex, confirmations)
+    new IndexedErgoBox(inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, globalIndex)
   }
 }
 

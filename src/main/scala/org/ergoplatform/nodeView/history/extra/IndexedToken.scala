@@ -9,13 +9,14 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.SByte
-import sigmastate.Values.CollectionConstant
+import sigmastate.Values.ConcreteCollection
 
 case class IndexedToken(tokenId: ModifierId,
+                        boxId: ModifierId,
                         amount: Long,
                         name: String,
                         description: String,
-                        decimals: Byte) extends BlockSection {
+                        decimals: Int) extends BlockSection {
   override def parentId: ModifierId = null
   override val modifierTypeId: ModifierTypeId = IndexedToken.modifierTypeId
   override type M = IndexedToken
@@ -26,33 +27,36 @@ case class IndexedToken(tokenId: ModifierId,
 
 object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
 
-  def hasTokenEmission(box: ErgoBox): Boolean =
-    box.additionalTokens.size >= 1 && box.additionalRegisters.contains(R4) && box.additionalRegisters.contains(R5) && box.additionalRegisters.contains(R6)
+  def tokenRegistersSet(box: ErgoBox): Boolean =
+    box.additionalRegisters.contains(R4) && box.additionalRegisters.contains(R5) && box.additionalRegisters.contains(R6)
 
   def fromBox(box: ErgoBox): IndexedToken =
     IndexedToken(bytesToId(box.additionalTokens(0)._1),
+                 bytesToId(box.id),
                  box.additionalTokens(0)._2,
-                 new String(box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]].items.asInstanceOf[Seq[Byte]].toArray, "UTF-8"),
-                 new String(box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]].items.asInstanceOf[Seq[Byte]].toArray, "UTF-8"),
-                 box.additionalRegisters(R6).asInstanceOf[CollectionConstant[SByte.type]].items.asInstanceOf[Seq[Byte]].head)
+                 new String(box.additionalRegisters(R4).asInstanceOf[ConcreteCollection[SByte.type]].items.map(_.asInstanceOf[Byte]).toArray, "UTF-8"),
+                 new String(box.additionalRegisters(R5).asInstanceOf[ConcreteCollection[SByte.type]].items.map(_.asInstanceOf[Byte]).toArray, "UTF-8"),
+                 new String(box.additionalRegisters(R6).asInstanceOf[ConcreteCollection[SByte.type]].items.map(_.asInstanceOf[Byte]).toArray, "UTF-8").toInt)
 
   override def serialize(iT: IndexedToken, w: Writer): Unit = {
     w.putBytes(iT.serializedId)
+    w.putBytes(fastIdToBytes(iT.boxId))
     w.putULong(iT.amount)
     w.putUShort(iT.name.length)
     w.putBytes(iT.name.getBytes("UTF-8"))
     w.putUShort(iT.description.length)
     w.putBytes(iT.description.getBytes("UTF-8"))
-    w.putUByte(iT.decimals)
+    w.putInt(iT.decimals)
   }
 
   override def parse(r: Reader): IndexedToken = {
     val tokenId: ModifierId = bytesToId(r.getBytes(32))
+    val boxId: ModifierId = bytesToId(r.getBytes(32))
     val amount: Long = r.getULong()
     val name: String = new String(r.getBytes(r.getUShort), "UTF-8")
     val description: String = new String(r.getBytes(r.getUShort), "UTF-8")
-    val decimals: Byte = r.getUByte().toByte
-    IndexedToken(tokenId, amount, name, description, decimals)
+    val decimals: Int = r.getInt()
+    IndexedToken(tokenId, boxId, amount, name, description, decimals)
   }
 }
 

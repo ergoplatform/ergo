@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoAddress
-import org.ergoplatform.ErgoAddressEncoder.{ChecksumLength, hash256}
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
@@ -12,16 +11,17 @@ import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.Values.ErgoTree
 
 import scala.collection.mutable.ListBuffer
 import spire.syntax.all.cfor
 
-case class IndexedErgoAddress(addressHash: ModifierId,
+case class IndexedErgoAddress(treeHash: ModifierId,
                               txs: ListBuffer[Long],
                               boxes: ListBuffer[Long]) extends BlockSection {
 
   override val sizeOpt: Option[Int] = None
-  override def serializedId: Array[Byte] = fastIdToBytes(addressHash)
+  override def serializedId: Array[Byte] = fastIdToBytes(treeHash)
   override def parentId: ModifierId = null
   override val modifierTypeId: ModifierTypeId = IndexedErgoAddress.modifierTypeId
   override type M = IndexedErgoAddress
@@ -37,7 +37,7 @@ case class IndexedErgoAddress(addressHash: ModifierId,
     if (offset > txs.length) {
       val range: Array[Int] = getSegmentsForRange(offset, limit)
       cfor(0)(_ < range.length, _ + 1) { i =>
-        txs ++=: history.typedModifierById[IndexedErgoAddress](txSegmentId(addressHash, txSegmentCount - range(i))).get.txs
+        txs ++=: history.typedModifierById[IndexedErgoAddress](txSegmentId(treeHash, txSegmentCount - range(i))).get.txs
       }
     }
     slice(txs, offset, limit).map(n => NumericTxIndex.getTxByNumber(history, n).get).toArray
@@ -47,7 +47,7 @@ case class IndexedErgoAddress(addressHash: ModifierId,
     if(offset > boxes.length) {
       val range: Array[Int] = getSegmentsForRange(offset, limit)
       cfor(0)(_ < range.length, _ + 1) { i =>
-        boxes ++=: history.typedModifierById[IndexedErgoAddress](boxSegmentId(addressHash, boxSegmentCount - range(i))).get.boxes
+        boxes ++=: history.typedModifierById[IndexedErgoAddress](boxSegmentId(treeHash, boxSegmentCount - range(i))).get.boxes
       }
     }
     slice(boxes, offset, limit).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).toArray
@@ -59,7 +59,7 @@ case class IndexedErgoAddress(addressHash: ModifierId,
     var segment = boxSegmentCount
     while(data.length < limit && segment > 0) {
       segment -= 1
-      data ++=: history.typedModifierById[IndexedErgoAddress](boxSegmentId(addressHash, segment)).get.boxes
+      data ++=: history.typedModifierById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
         .map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filter(!_.trackedBox.isSpent)
     }
     slice(data, offset, limit).toArray
@@ -79,12 +79,12 @@ case class IndexedErgoAddress(addressHash: ModifierId,
     require(segmentTreshold < txs.length || segmentTreshold < boxes.length, "address does not have enough transactions or boxes for segmentation")
     val data: ListBuffer[IndexedErgoAddress] = ListBuffer.empty[IndexedErgoAddress]
     if(segmentTreshold < txs.length) {
-      data += new IndexedErgoAddress(txSegmentId(addressHash, txSegmentCount), txs.take(segmentTreshold), ListBuffer.empty[Long])
+      data += new IndexedErgoAddress(txSegmentId(treeHash, txSegmentCount), txs.take(segmentTreshold), ListBuffer.empty[Long])
       txSegmentCount += 1
       txs.remove(0, segmentTreshold)
     }
     if(segmentTreshold < boxes.length) {
-      data += new IndexedErgoAddress(boxSegmentId(addressHash, segmentTreshold), ListBuffer.empty[Long], boxes.take(segmentTreshold))
+      data += new IndexedErgoAddress(boxSegmentId(treeHash, segmentTreshold), ListBuffer.empty[Long], boxes.take(segmentTreshold))
       boxSegmentCount += 1
       boxes.remove(0, segmentTreshold)
     }
@@ -94,20 +94,15 @@ case class IndexedErgoAddress(addressHash: ModifierId,
 
 object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress] {
 
-  def addressToBytes(address: ErgoAddress): Array[Byte] = {
-    val withNetworkByte = (ExtraIndexerRef.getAddressEncoder.networkPrefix + address.addressTypePrefix).toByte +: address.contentBytes
-    withNetworkByte ++ hash256(withNetworkByte).take(ChecksumLength)
-  }
+  def hashAddress(address: ErgoAddress): Array[Byte] = Algos.hash(address.script.bytes)
 
-  def hashAddress(address: ErgoAddress): Array[Byte] = Algos.hash(addressToBytes(address))
-
-  def addressToModifierId(address: ErgoAddress): ModifierId = bytesToId(hashAddress(address))
+  def hashErgoTree(tree: ErgoTree): Array[Byte] = Algos.hash(tree.bytes)
 
   def boxSegmentId(addressHash: ModifierId, segmentNum: Int): ModifierId = bytesToId(Algos.hash(addressHash + " box segment " + segmentNum))
   def txSegmentId(addressHash: ModifierId, segmentNum: Int): ModifierId = bytesToId(Algos.hash(addressHash + " tx segment " + segmentNum))
 
   override def serialize(iEa: IndexedErgoAddress, w: Writer): Unit = {
-    w.putBytes(fastIdToBytes(iEa.addressHash))
+    w.putBytes(fastIdToBytes(iEa.treeHash))
     w.putUInt(iEa.txs.length)
     cfor(0)(_ < iEa.txs.length, _ + 1) { i => w.putLong(iEa.txs(i))}
     w.putUInt(iEa.boxes.length)

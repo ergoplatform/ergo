@@ -28,7 +28,7 @@ import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
-import org.ergoplatform.nodeView.history.extra.{ExtraIndexerRef, IndexedErgoBox, IndexedErgoTransaction}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndexerRef, IndexedErgoBox, IndexedErgoTransaction, IndexedToken}
 import org.ergoplatform.wallet.interface4j.SecretString
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.authds.merkle.MerkleProof
@@ -491,6 +491,17 @@ trait ApiCodecs extends JsonCodecs {
       "dataInputs" -> tx.dataInputs.asJson,
       "outputs" -> tx.outputs.asJson,
       "size" -> tx.txSize.asJson)
+  }
+
+  implicit val IndexedTokenEncoder: Encoder[IndexedToken] = { token =>
+    Json.obj(
+      "id" -> token.id.asJson,
+      "boxId" -> token.boxId.asJson,
+      "emissionAmount" -> token.amount.asJson,
+      "name" -> token.name.asJson,
+      "description" -> token.description.asJson,
+      "decimals" -> token.decimals.asJson
+    )
   }
 
 }

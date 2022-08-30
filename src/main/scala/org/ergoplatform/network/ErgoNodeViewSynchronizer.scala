@@ -106,7 +106,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Max cost of transactions we are going to process between blocks
     */
-  private val MempoolCyclesPerBlock = 12000000
+  private val MempoolCostPerBlock = 12000000
 
   /**
     * Currently max transaction cost is higher but will be eventually cut down to this value
@@ -126,7 +126,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Used to avoid sudden spikes in load, limiting transactions processing time and make it comparable to block's
     * processing time
     */
-  private var globalInfo = IncomingTxInfo.empty()
+  private var interblockCost = IncomingTxInfo.empty()
 
   /**
     * Cache which contains bytes of transactions we received but not parsed and processed yet
@@ -136,8 +136,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
-  private def clearTransactionsInfo(): Unit = {
-    globalInfo = IncomingTxInfo.empty()
+  private def clearInterblockCost(): Unit = {
+    interblockCost = IncomingTxInfo.empty()
   }
 
   /**
@@ -164,17 +164,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
     val cost = costOpt.getOrElse(ReserveCostValue)
     val ng = processingResult match {
-      case _: FailedTransaction => globalInfo.copy(invalidatedCost = globalInfo.invalidatedCost + cost)
-      case _: SuccessfulTransaction => globalInfo.copy(acceptedCost = globalInfo.acceptedCost + cost)
-      case _: DeclinedTransaction => globalInfo.copy(declinedCost = globalInfo.declinedCost + cost)
+      case _: FailedTransaction => interblockCost.copy(invalidatedCost = interblockCost.invalidatedCost + cost)
+      case _: SuccessfulTransaction => interblockCost.copy(acceptedCost = interblockCost.acceptedCost + cost)
+      case _: DeclinedTransaction => interblockCost.copy(declinedCost = interblockCost.declinedCost + cost)
     }
 
-    if (globalInfo.totalCost < MempoolCyclesPerBlock) {
+    log.debug(s"Old global cost info: $interblockCost, new $ng, tx processing cache size: ${txProcessingCache.size}")
+    interblockCost = ng
+
+    if (interblockCost.totalCost < MempoolCostPerBlock) {
       processFirstTxProcessingCacheRecord()
     }
-
-    log.debug(s"Old global cost info: $globalInfo, new $ng, tx processing cache size: ${txProcessingCache.size}")
-    globalInfo = ng
   }
 
   /**
@@ -614,7 +614,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (typeId == Transaction.ModifierTypeId) {
       // filter out transactions already in the mempool
       val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
-      val (toProcess, toPutIntoCache) = if (globalInfo.totalCost < MempoolCyclesPerBlock) {
+      val (toProcess, toPutIntoCache) = if (interblockCost.totalCost < MempoolCostPerBlock) {
         // if we are within per-block limits, parse and process first transaction
         (notInThePool.headOption, notInThePool.tail)
       } else {
@@ -751,7 +751,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       settings.nodeSettings.stateType.holdsUtxoSet && // node holds UTXO set
         hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
         hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
-        globalInfo.totalCost <= MempoolCyclesPerBlock * 3 / 2 && // we can download some extra to fill cache
+        interblockCost.totalCost <= MempoolCostPerBlock * 3 / 2 && // we can download some extra to fill cache
         txProcessingCache.size <= MaxProcessingTransactionsCacheSize && // txs processing cache is not overfull
         declined.size < MaxDeclined // the node is not stormed by transactions is has to decline
     }
@@ -770,7 +770,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val notDeclined = notApplied.filter(id => !declined.contains(id))
           log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
             s"${unknownMods.size} of them are unknown, requesting $notDeclined")
-          val txsToAsk = (MempoolCyclesPerBlock - globalInfo.totalCost) / OptimysticMaxTransactionCost
+          val txsToAsk = (MempoolCostPerBlock - interblockCost.totalCost) / OptimysticMaxTransactionCost
           notDeclined.take(txsToAsk)
         } else {
           Seq.empty
@@ -984,7 +984,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastInvForNewModifier(mod)
       if (mod.isInstanceOf[ErgoFullBlock]) {
         clearDeclined()
-        clearTransactionsInfo()
+        clearInterblockCost()
         processFirstTxProcessingCacheRecord() // resume cache processing
       }
 

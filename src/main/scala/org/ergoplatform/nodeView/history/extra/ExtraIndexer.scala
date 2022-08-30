@@ -47,7 +47,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
   // fast access
   private val general: ArrayBuffer[BlockSection] = ArrayBuffer.empty[BlockSection]
   private val boxes: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
-  private val addresses: ArrayBuffer[IndexedErgoAddress] = ArrayBuffer.empty[IndexedErgoAddress]
+  private val trees: ArrayBuffer[IndexedErgoAddress] = ArrayBuffer.empty[IndexedErgoAddress]
 
   private val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
 
@@ -58,23 +58,23 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     None
   }
 
-  private def findAddressOpt(id: ModifierId): Option[Int] = {
-    cfor(addresses.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
-      if(addresses(i).treeHash == id) return Some(i)
+  private def findTreeOpt(id: ModifierId): Option[Int] = {
+    cfor(trees.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
+      if(trees(i).treeHash == id) return Some(i)
     }
     None
   }
 
-  private def modCount: Int = general.length + boxes.length + addresses.length
+  private def modCount: Int = general.length + boxes.length + trees.length
 
   private def saveProgress(): Unit = {
 
     val start: Long = System.nanoTime()
 
     // perform segmentation on big modifiers
-    val addressesLen: Int = addresses.length
+    val addressesLen: Int = trees.length
     cfor(0)(_ < addressesLen, _ + 1) { i =>
-      if(addresses(i).txs.length > segmentTreshold || (addresses(i).boxes.length > segmentTreshold)) addresses ++= addresses(i).splitToSegment()
+      if(trees(i).txs.length > segmentTreshold || trees(i).boxes.length > segmentTreshold) trees ++= trees(i).splitToSegment()
     }
 
     // merge all modifiers to an Array, avoids reallocations durin concatenation (++)
@@ -82,7 +82,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     val offset: Array[Int] = Array(0, general.length, general.length + boxes.length)
     cfor(0)(_ < general.length  , _ + 1) { i => all(i + offset(0)) = general(i) }
     cfor(0)(_ < boxes.length    , _ + 1) { i => all(i + offset(1)) = boxes(i) }
-    cfor(0)(_ < addresses.length, _ + 1) { i => all(i + offset(2)) = addresses(i) }
+    cfor(0)(_ < trees.length, _ + 1) { i => all(i + offset(2)) = trees(i) }
 
     // insert modifiers and progress info to db
     indexedHeightBuffer.clear()
@@ -94,12 +94,12 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
     val end: Long = System.nanoTime()
 
-    log.info(s"Processed ${addresses.length} addresses with ${boxes.length} boxes and inserted them to database in ${(end - start) / 1000000D}ms")
+    log.info(s"Processed ${trees.length} ErgoTrees with ${boxes.length} boxes and inserted them to database in ${(end - start) / 1000000D}ms")
 
     // clear buffers for next batch
     general.clear()
     boxes.clear()
-    addresses.clear()
+    trees.clear()
 
   }
 
@@ -142,12 +142,12 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
         // box by address
         val treeHash: ModifierId = bytesToId(IndexedErgoAddressSerializer.hashErgoTree(box.ergoTree))
-        findAddressOpt(treeHash) match {
-          case Some(x) => addresses(x).addTx(globalTxIndex).addBox(globalBoxIndex) // address found in last saveLimit modifiers, update
+        findTreeOpt(treeHash) match {
+          case Some(x) => trees(x).addTx(globalTxIndex).addBox(globalBoxIndex) // address found in last saveLimit modifiers, update
           case None => // address not found in last saveLimit blocks
             history.typedModifierById[IndexedErgoAddress](treeHash) match {
-              case Some(x) => addresses += x.addTx(globalTxIndex).addBox(globalBoxIndex)//address found in DB, update
-              case None => addresses += IndexedErgoAddress(treeHash, ListBuffer(globalTxIndex), ListBuffer(globalBoxIndex)) //address not found at all, record
+              case Some(x) => trees += x.addTx(globalTxIndex).addBox(globalBoxIndex)//address found in DB, update
+              case None => trees += IndexedErgoAddress(treeHash, ListBuffer(globalTxIndex), ListBuffer(globalBoxIndex)) //address not found at all, record
             }
         }
 

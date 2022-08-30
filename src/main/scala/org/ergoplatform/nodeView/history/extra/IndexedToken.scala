@@ -6,10 +6,11 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.SByte
-import sigmastate.Values.ConcreteCollection
+import sigmastate.{SByte, SType}
+import sigmastate.Values.CollectionConstant
+import special.collection.Coll
 
 case class IndexedToken(tokenId: ModifierId,
                         boxId: ModifierId,
@@ -25,18 +26,26 @@ case class IndexedToken(tokenId: ModifierId,
   override def serializedId: Array[Byte] = fastIdToBytes(tokenId)
 }
 
-object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
+object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] with ScorexLogging {
 
   def tokenRegistersSet(box: ErgoBox): Boolean =
     box.additionalRegisters.contains(R4) && box.additionalRegisters.contains(R5) && box.additionalRegisters.contains(R6)
+
+  def getDecimals(x: SType#WrappedType): Int = {
+    try {
+      x.asInstanceOf[Coll[Byte]].toArray(0)
+    }catch {
+      case _: Throwable => x.asInstanceOf[Int]
+    }
+  }
 
   def fromBox(box: ErgoBox): IndexedToken =
     IndexedToken(bytesToId(box.additionalTokens(0)._1),
                  bytesToId(box.id),
                  box.additionalTokens(0)._2,
-                 new String(box.additionalRegisters(R4).asInstanceOf[ConcreteCollection[SByte.type]].items.map(_.asInstanceOf[Byte]).toArray, "UTF-8"),
-                 new String(box.additionalRegisters(R5).asInstanceOf[ConcreteCollection[SByte.type]].items.map(_.asInstanceOf[Byte]).toArray, "UTF-8"),
-                 new String(box.additionalRegisters(R6).asInstanceOf[ConcreteCollection[SByte.type]].items.map(_.asInstanceOf[Byte]).toArray, "UTF-8").toInt)
+                 new String(box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
+                 new String(box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
+                 getDecimals(box.additionalRegisters(R6).value))
 
   override def serialize(iT: IndexedToken, w: Writer): Unit = {
     w.putBytes(iT.serializedId)

@@ -331,21 +331,38 @@ object ErgoMemPool extends ScorexLogging {
     }
   }
 
-
+  /**
+    * Root of possible mempool transaction validation result family
+    */
   sealed trait ProcessingOutcome {
+    /**
+      * Time when transaction validation was started
+      */
     protected val validationStartTime: Long
+
+    /**
+      * We assume that validation ends when this processing result class is constructed
+      */
     private val validationEndTime: Long = System.currentTimeMillis()
 
-    val costPerMilli = 1000
+    /**
+      * 5.0 JIT costing was designed in a way that 1000 cost units are roughly corresponding to 1 ms of 1 CPU core
+      * on commodity hardware (of 2021). So if we do not know the exact cost of transaction, we can estimate it by
+      * tracking validation time and then getting estimated validation cost by multiplying the time (in ms) by 1000
+      */
+    val costPerMs = 1000
 
-    val cost: Int = {
+    /**
+      * Estimated validation cost, see comment for `costPerMs`
+      */
+    def cost: Int = {
       val timeDiff = validationEndTime - validationStartTime
-      if(timeDiff == 0) {
-        costPerMilli
+      if (timeDiff == 0) {
+        costPerMs
       } else if (timeDiff > 1000000) {
-        Int.MaxValue  // shouldn't be here, mostly to have safe .toInt below
+        Int.MaxValue // shouldn't be here, so this branch is mostly to have safe .toInt below
       } else {
-        (timeDiff * costPerMilli).toInt
+        (timeDiff * costPerMs).toInt
       }
     }
   }
@@ -356,7 +373,9 @@ object ErgoMemPool extends ScorexLogging {
       * Object signalling that a transaction is accepted to the memory pool
       */
     class Accepted(val tx: UnconfirmedTransaction,
-                   override protected val validationStartTime: Long) extends ProcessingOutcome
+                   override protected val validationStartTime: Long) extends ProcessingOutcome {
+      override val cost: Int = tx.lastCost.getOrElse(super.cost)
+    }
 
     /**
       * Class signalling that a valid transaction was rejected as it is double-spending inputs of mempool transactions
@@ -394,7 +413,8 @@ object ErgoMemPool extends ScorexLogging {
       case SortingOption.FeePerByte => log.info("Sorting mempool by fee-per-byte")
       case SortingOption.FeePerCycle => log.info("Sorting mempool by fee-per-cycle")
     }
-    new ErgoMemPool(OrderedTxPool.empty(settings),
+    new ErgoMemPool(
+      OrderedTxPool.empty(settings),
       MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()),
       sortingOption
     )(settings)

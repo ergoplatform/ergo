@@ -1215,7 +1215,8 @@ object ErgoNodeViewSynchronizer {
     case class DeclinedTransaction(transaction: UnconfirmedTransaction) extends InitialTransactionCheckOutcome
 
     /**
-      * Transaction which was failed not immediately but after sitting for some time in the mempool
+      * Transaction which was failed not immediately but after sitting for some time in the mempool or during block
+      * candidate generation
       */
     case class FailedOnRecheckTransaction(id : ModifierId, error: Throwable) extends ModificationOutcome
 

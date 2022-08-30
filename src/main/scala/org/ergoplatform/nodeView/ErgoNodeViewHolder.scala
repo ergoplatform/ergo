@@ -665,7 +665,7 @@ object ErgoNodeViewHolder {
     case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction)
 
     /**
-      * Wrapper for transaction cominng from P2P network
+      * Wrapper for transaction coming from P2P network
       */
     case class TransactionFromRemote(unconfirmedTx: UnconfirmedTransaction)
 

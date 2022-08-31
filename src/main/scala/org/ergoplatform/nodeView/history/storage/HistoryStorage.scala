@@ -87,10 +87,16 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
 
   def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
 
+  def serializeModifiers(mods: Array[BlockSection]): Array[(Array[Byte], Array[Byte])] = {
+    val arr: Array[(Array[Byte], Array[Byte])] = new Array[(Array[Byte], Array[Byte])](mods.length)
+    cfor(0)(_ < arr.length, _ + 1) { i => arr(i) = (mods(i).serializedId, HistoryModifierSerializer.toBytes(mods(i))) }
+    arr
+  }
+
   def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Array[BlockSection]): Try[Unit] = {
     objectsStore.insert(
-      objectsToInsert.map(m => m.serializedId -> HistoryModifierSerializer.toBytes(m))
+      serializeModifiers(objectsToInsert)
     ).flatMap { _ =>
       cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i))}
       if (indexesToInsert.nonEmpty) {
@@ -104,7 +110,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
 
   def insertExtra(indexesToInsert: Array[(Array[Byte], Array[Byte])],
                   objectsToInsert: Array[BlockSection]): Unit = {
-    extraStore.insert(objectsToInsert.map(m => m.serializedId -> HistoryModifierSerializer.toBytes(m)))
+    extraStore.insert(serializeModifiers(objectsToInsert))
     cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i))}
     cfor(0)(_ < indexesToInsert.length, _ + 1) { i => extraStore.insert(indexesToInsert(i)._1, indexesToInsert(i)._2)}
   }

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.extra
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
@@ -51,9 +51,9 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
   private val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
 
-  private def findBoxOpt(id: Array[Byte]): Option[Int] = {
+  private def findBoxOpt(id: ModifierId): Option[Int] = {
     cfor(boxes.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
-      if(java.util.Arrays.equals(boxes(i).serializedId, id)) return Some(i)
+      if(boxes(i).id == id) return Some(i)
     }
     None
   }
@@ -80,9 +80,9 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     // merge all modifiers to an Array, avoids reallocations durin concatenation (++)
     val all: Array[BlockSection] = new Array[BlockSection](modCount)
     val offset: Array[Int] = Array(0, general.length, general.length + boxes.length)
-    cfor(0)(_ < general.length  , _ + 1) { i => all(i + offset(0)) = general(i) }
-    cfor(0)(_ < boxes.length    , _ + 1) { i => all(i + offset(1)) = boxes(i) }
-    cfor(0)(_ < trees.length, _ + 1) { i => all(i + offset(2)) = trees(i) }
+    cfor(0)(_ < general.length, _ + 1) { i => all(i + offset(0)) = general(i) }
+    cfor(0)(_ < boxes.length  , _ + 1) { i => all(i + offset(1)) = boxes(i) }
+    cfor(0)(_ < trees.length  , _ + 1) { i => all(i + offset(2)) = trees(i) }
 
     // insert modifiers and progress info to db
     indexedHeightBuffer.clear()
@@ -118,17 +118,17 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
       //process transaction inputs
       if(indexedHeight != 1) { //only after 1st block (skip genesis box)
         cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
-          val input: Input = tx.inputs(i)
-          findBoxOpt(input.boxId) match {
+          val inputId: ModifierId = bytesToId(tx.inputs(i).boxId)
+          findBoxOpt(inputId) match {
             case Some(x) => // box found in last saveLimit modifiers, update
               boxes(x).asSpent(tx.id, indexedHeight)
               tokens ++= boxes(x).box.additionalTokens.toArray
             case None => // box not found in last saveLimit blocks
-              history.typedModifierById[IndexedErgoBox](bytesToId(input.boxId)) match {
+              history.typedModifierById[IndexedErgoBox](inputId) match {
                 case Some(x) => // box found in DB, update
                   boxes += x.asSpent(tx.id, indexedHeight)
                   tokens ++= x.box.additionalTokens.toArray
-                case None => log.warn(s"Input for box ${bytesToId(input.boxId)} not found in database") // box not found at all (this shouldn't happen)
+                case None => log.warn(s"Input for box $inputId not found in database") // box not found at all (this shouldn't happen)
               }
           }
         }
@@ -146,12 +146,13 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
           case Some(x) => trees(x).addTx(globalTxIndex).addBox(globalBoxIndex) // address found in last saveLimit modifiers, update
           case None => // address not found in last saveLimit blocks
             history.typedModifierById[IndexedErgoAddress](treeHash) match {
-              case Some(x) => trees += x.addTx(globalTxIndex).addBox(globalBoxIndex)//address found in DB, update
-              case None => trees += IndexedErgoAddress(treeHash, ListBuffer(globalTxIndex), ListBuffer(globalBoxIndex)) //address not found at all, record
+              case Some(x) => trees += x.addTx(globalTxIndex).addBox(globalBoxIndex) // address found in DB, update
+              case None => trees += IndexedErgoAddress(treeHash, ListBuffer(globalTxIndex), ListBuffer(globalBoxIndex)) // address not found at all, record
             }
         }
 
-        if(IndexedTokenSerializer.tokenRegistersSet(box))
+        // check if box is creating a new token, if yes record it
+        if(box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))
           cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
             if(!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1)))
               general += IndexedTokenSerializer.fromBox(box)

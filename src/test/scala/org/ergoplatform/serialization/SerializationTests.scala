@@ -64,6 +64,14 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
     checkSerializationRoundtripAndSize(invalidErgoTransactionGen, ErgoTransactionSerializer)
   }
 
+  property("ErgoTransaction .bytes") {
+    forAll(invalidErgoTransactionGen) { tx =>
+      val bytes = tx.bytes
+      val txRestored = ErgoTransactionSerializer.parseBytes(bytes)
+      txRestored.bytes.sameElements(bytes) shouldBe true
+    }
+  }
+
   property("ErgoSyncInfo v1 serialization") {
     checkSerializationRoundtrip(ergoSyncInfoV1Gen, ErgoSyncInfoSerializer)
   }

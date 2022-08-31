@@ -17,14 +17,13 @@ import scorex.core._
 import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.ModifierValidator
+import scorex.core.validation.{ModifierValidator}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.ModifierId
 
-import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -196,12 +195,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
         }
-        stateTry.recoverWith[UtxoState] { case NonFatal(ex) =>
+        stateTry.recoverWith[UtxoState] { case e =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(ex)} ", ex)
+            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ", e)
           persistentProver.rollback(inRoot)
             .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
-          Failure(ex)
+          Failure(e)
         }
 
       }

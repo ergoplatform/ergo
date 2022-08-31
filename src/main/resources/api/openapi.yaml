@@ -256,6 +256,42 @@ components:
           minimum: 0
           example: 83927
 
+    IndexedToken:
+      type: object
+      description: Token indexed with extra information
+      required:
+        -id
+        -boxId
+        -emissionAmount
+        -name
+        -description
+        -decimals
+      properties:
+        id:
+          description: Id of the token
+          $ref: '#/components/schemas/ModifierId'
+        boxId:
+          description: Id of the box that created the token
+          $ref: '#/components/schemas/ModifierId'
+        emissionAmount:
+          description: The total supply of the token
+          type: integer
+          format: int64
+          minimum: 1
+          example: 3500000
+        name:
+          description: The name of the token
+          type: string
+        description:
+          description: The description of the token
+          type: string
+        decimals:
+          description: The number of decimals the token supports
+          type: integer
+          format: int32
+          minimum: 0
+          example: 8
+
     UnsignedErgoTransaction:
       type: object
       description: Unsigned Ergo transaction
@@ -5648,6 +5684,39 @@ paths:
                 $ref: '#/components/schemas/IndexedErgoBox'
         '404':
           description: No unspent box found with wanted ergotree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/token/byId/{tokenId}:
+    get:
+      summary: Retrieve
+      operationId: getTokenById
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: tokenId
+          required: true
+          description: id of the wanted token
+          schema:
+            type: string
+      responses:
+        '200':
+          description: token with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedToken'
+        '404':
+          description: No token found with wanted id
           content:
             application/json:
               schema:

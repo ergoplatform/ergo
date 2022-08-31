@@ -68,7 +68,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
 
   private def getTxByIdR: Route = (get & pathPrefix("transaction" / "byId") & modifierId) { id =>
-    ApiResponse(getTxByIdF(bytesToId(Base16.decode(id).get)))
+    ApiResponse(getTxByIdF(id))
   }
 
   private def getTxByIndex(index: Long): Future[Option[IndexedErgoTransaction]] =
@@ -232,7 +232,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getTokenInfoByIdR: Route = (get & pathPrefix("box" / "byId") & modifierId) { id =>
+  private def getTokenInfoByIdR: Route = (get & pathPrefix("token" / "byId") & modifierId) { id =>
     ApiResponse(getTokenInfoById(id))
   }
 

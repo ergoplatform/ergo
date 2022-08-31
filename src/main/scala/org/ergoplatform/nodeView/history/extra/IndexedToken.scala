@@ -28,12 +28,18 @@ case class IndexedToken(tokenId: ModifierId,
 
 object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] with ScorexLogging {
 
-  def tokenRegistersSet(box: ErgoBox): Boolean =
-    box.additionalRegisters.contains(R4) && box.additionalRegisters.contains(R5) && box.additionalRegisters.contains(R6)
+  // Stop type erasure
+  trait ByteColl extends Coll[Byte]
+  trait SColl extends CollectionConstant[SByte.type]
+
+  def tokenRegistersSet(box: ErgoBox): Boolean = // these don't work
+    box.additionalRegisters.contains(R4) && box.additionalRegisters(R4).isInstanceOf[SColl] &&
+    box.additionalRegisters.contains(R5) && box.additionalRegisters(R5).isInstanceOf[SColl] &&
+    box.additionalRegisters.contains(R6) && (box.additionalRegisters(R6).value.isInstanceOf[ByteColl] || box.additionalRegisters(R6).value.isInstanceOf[Int])
 
   def getDecimals(x: SType#WrappedType): Int = {
     try {
-      x.asInstanceOf[Coll[Byte]].toArray(0)
+      x.asInstanceOf[ByteColl].toArray(0)
     }catch {
       case _: Throwable => x.asInstanceOf[Int]
     }
@@ -43,8 +49,8 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] with Scorex
     IndexedToken(bytesToId(box.additionalTokens(0)._1),
                  bytesToId(box.id),
                  box.additionalTokens(0)._2,
-                 new String(box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
-                 new String(box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
+                 new String(box.additionalRegisters(R4).asInstanceOf[SColl].value.toArray, "UTF-8"),
+                 new String(box.additionalRegisters(R5).asInstanceOf[SColl].value.toArray, "UTF-8"),
                  getDecimals(box.additionalRegisters(R6).value))
 
   override def serialize(iT: IndexedToken, w: Writer): Unit = {

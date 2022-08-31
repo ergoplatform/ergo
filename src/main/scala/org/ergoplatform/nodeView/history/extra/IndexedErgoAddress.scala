@@ -66,7 +66,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   }
 
   def addTx(tx: Long): IndexedErgoAddress = {
-    if(!txs.takeRight(5).contains(tx)) txs += tx // check for duplicates
+    if(txs(txs.length - 1) != tx) txs += tx // check for duplicates
     this
   }
 

@@ -240,8 +240,8 @@ object ExtraIndexerRef {
 
   // faster id to bytes - no safety checks
   private[extra] def fastIdToBytes(id: ModifierId): Array[Byte] = {
-    val x: Array[Byte] = Array.ofDim[Byte](id.length / 2)
-    cfor(0)(_ < x.length, _ + 2) {i => x(i / 2) = ((hexIndex(id(i)) << 4) | hexIndex(id(i + 1))).toByte}
+    val x: Array[Byte] = new Array[Byte](id.length / 2)
+    cfor(0)(_ < id.length, _ + 2) {i => x(i / 2) = ((hexIndex(id(i)) << 4) | hexIndex(id(i + 1))).toByte}
     x
   }
 

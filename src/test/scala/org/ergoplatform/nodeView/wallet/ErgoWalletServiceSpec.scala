@@ -177,7 +177,7 @@ class ErgoWalletServiceSpec
               inputsRaw = encodedBoxes,
               dataInputsRaw = Seq.empty,
               sign = true
-            ).get.asInstanceOf[ErgoTransaction])
+            ).get.asInstanceOf[ErgoTransaction], None)
 
           // let's create wallet state with an unconfirmed transaction in mempool
           val wState = initialState(store, versionedStore, Some(new FakeMempool(Seq(unconfirmedTx))))

@@ -8,7 +8,7 @@ import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCode
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.ErgoAlgos
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
@@ -193,26 +193,6 @@ trait ApiCodecs extends JsonCodecs {
     for {
       ergoLikeTx <- cursor.as[ErgoLikeTransaction]
     } yield ErgoTransaction(ergoLikeTx)
-  }
-
-  // We are not using this encoder for now, but may use in future
-  implicit val unconfirmedTxEncoder: Encoder[UnconfirmedTransaction] = { unconfirmedTx =>
-    Json.obj(
-      "transaction" -> transactionEncoder(unconfirmedTx.transaction),
-      "lastCost" -> unconfirmedTx.lastCost.asJson,
-      "createdTime" -> unconfirmedTx.createdTime.asJson,
-      "lastCheckedTime" -> unconfirmedTx.lastCheckedTime.asJson
-    )
-  }
-
-  // We are not using this decoder for now, but may use in future
-  implicit val unconfirmedTxDecoder: Decoder[UnconfirmedTransaction] = { cursor =>
-    for {
-      tx <- transactionDecoder(cursor)
-      lastCost <- cursor.downField("lastCost").as[Option[Int]]
-      createdTime <- cursor.downField("createdTime").as[Long]
-      lastCheckedTime <- cursor.downField("lastCheckedTime").as[Long]
-    } yield UnconfirmedTransaction(tx, lastCost, createdTime, lastCheckedTime, Some(tx.bytes))
   }
 
 

@@ -3,7 +3,7 @@ package scorex.testkit.properties
 import akka.actor._
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.BlockSection
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalacheck.Gen
@@ -60,7 +60,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: SuccessfulTransaction") {
     withFixture { ctx =>
       import ctx._
-      node ! SuccessfulTransaction(tx)
+      node ! SuccessfulTransaction(UnconfirmedTransaction(tx, None))
       ncProbe.fishForMessage(3 seconds) { case m => m.isInstanceOf[SendToNetwork] }
     }
   }
@@ -68,7 +68,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: FailedTransaction") {
     withFixture { ctx =>
       import ctx._
-      node ! FailedTransaction(tx.id, new Exception, immediateFailure = true)
+      node ! FailedTransaction(UnconfirmedTransaction(tx, None), new Exception)
       // todo: NVS currently does nothing in this case. Should check banning.
     }
   }

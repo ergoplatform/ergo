@@ -13,8 +13,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGe
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome.{Accepted, Invalidated}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
@@ -71,7 +70,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val wallet = new WalletStub
 
   val txs: Seq[ErgoTransaction] = validTransactionsFromBoxHolder(boxesHolderGen.sample.get)._1
-  val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs.map(UnconfirmedTransaction.apply)).get
+  val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs.map(tx => UnconfirmedTransaction(tx, None))).get
 
   val digestReaders = Readers(history, digestState, memPool, wallet)
 
@@ -120,8 +119,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class NodeViewStub extends Actor {
     def receive: Receive = {
-      case LocallyGeneratedTransaction(_) =>
-        sender() ! Accepted
+      case LocallyGeneratedTransaction(utx) =>
+        sender() ! new ProcessingOutcome.Accepted(utx, System.currentTimeMillis())
       case _ =>
     }
   }
@@ -129,7 +128,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   class FailingNodeViewStub extends Actor {
     def receive: Receive = {
       case LocallyGeneratedTransaction(_) =>
-        sender() ! Invalidated(new Error("Transaction invalid"))
+        sender() ! new ProcessingOutcome.Invalidated(new Error("Transaction invalid"), System.currentTimeMillis())
       case _ =>
     }
   }

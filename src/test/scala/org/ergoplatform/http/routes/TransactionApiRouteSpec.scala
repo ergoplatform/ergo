@@ -42,7 +42,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
 
   val chainedRoute: Route = {
     //constructing memory pool and node view  with the transaction tx included
-    val mp2 = memPool.put(UnconfirmedTransaction(tx)).get
+    val mp2 = memPool.put(UnconfirmedTransaction(tx, None)).get
     class UtxoReadersStub2 extends Actor {
       def receive: PartialFunction[Any, Unit] = {
         case GetReaders => sender() ! Readers(history, utxoState, mp2, wallet)

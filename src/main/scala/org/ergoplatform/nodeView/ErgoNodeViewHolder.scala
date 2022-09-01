@@ -258,21 +258,24 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val tx = unconfirmedTx.transaction
     val (newPool, processingOutcome) = memoryPool().process(unconfirmedTx, minimalState())
     processingOutcome match {
-      case ProcessingOutcome.Accepted =>
+      case acc: ProcessingOutcome.Accepted =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
         val newVault = vault().scanOffchain(tx)
         updateNodeView(updatedVault = Some(newVault), updatedMempool = Some(newPool))
-        context.system.eventStream.publish(SuccessfulTransaction(tx))
-      case ProcessingOutcome.Invalidated(e) =>
+        context.system.eventStream.publish(SuccessfulTransaction(acc.tx))
+      case i: ProcessingOutcome.Invalidated =>
+        val e = i.e
         log.debug(s"Transaction $tx invalidated. Cause: ${e.getMessage}")
         updateNodeView(updatedMempool = Some(newPool))
-        context.system.eventStream.publish(FailedTransaction(tx.id, e, immediateFailure = true))
-      case ProcessingOutcome.DoubleSpendingLoser(winnerTxs) => // do nothing
+        context.system.eventStream.publish(FailedTransaction(unconfirmedTx.withCost(i.cost), e))
+      case dbl: ProcessingOutcome.DoubleSpendingLoser => // do nothing
+        val winnerTxs = dbl.winnerTxIds
         log.debug(s"Transaction $tx declined, as other transactions $winnerTxs are paying more")
-        context.system.eventStream.publish(DeclinedTransaction(tx.id))
-      case ProcessingOutcome.Declined(e) => // do nothing
+        context.system.eventStream.publish(DeclinedTransaction(unconfirmedTx.withCost(dbl.cost)))
+      case dcl: ProcessingOutcome.Declined => // do nothing
+        val e = dcl.e
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
-        context.system.eventStream.publish(DeclinedTransaction(tx.id))
+        context.system.eventStream.publish(DeclinedTransaction(unconfirmedTx.withCost(dcl.cost)))
     }
     processingOutcome
   }
@@ -349,7 +352,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                               blocksApplied: Seq[BlockSection],
                               memPool: ErgoMemPool,
                               state: State): ErgoMemPool = {
-    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions).map(UnconfirmedTransaction.apply)
+    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions).map(tx => UnconfirmedTransaction(tx, None))
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
     memPool.putWithoutCheck(rolledBackTxs)
@@ -582,8 +585,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def transactionsProcessing: Receive = {
-    case TransactionsFromRemote(unconfirmedTx) =>
-      unconfirmedTx.foreach(txModify)
+    case TransactionFromRemote(unconfirmedTx) =>
+      txModify(unconfirmedTx)
     case LocallyGeneratedTransaction(unconfirmedTx) =>
       sender() ! txModify(unconfirmedTx)
     case RecheckedTransactions(unconfirmedTxs) =>
@@ -594,9 +597,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     case EliminateTransactions(ids) =>
       val updatedPool = memoryPool().filter(unconfirmedTx => !ids.contains(unconfirmedTx.transaction.id))
       updateNodeView(updatedMempool = Some(updatedPool))
+      val e = new Exception("Became invalid")
       ids.foreach { id =>
-        val e = new Exception("Became invalid")
-        context.system.eventStream.publish(FailedTransaction(id, e, immediateFailure = false))
+        context.system.eventStream.publish(FailedOnRecheckTransaction(id, e))
       }
   }
 
@@ -662,9 +665,9 @@ object ErgoNodeViewHolder {
     case class LocallyGeneratedTransaction(tx: UnconfirmedTransaction)
 
     /**
-      * Wrapper for transactions cominng from P2P network
+      * Wrapper for transaction coming from P2P network
       */
-    case class TransactionsFromRemote(unconfirmedTxs: Iterable[UnconfirmedTransaction])
+    case class TransactionFromRemote(unconfirmedTx: UnconfirmedTransaction)
 
     /**
       * Wrapper for transactions which sit in mempool for long enough time, so `CleanWorker` is re-checking their

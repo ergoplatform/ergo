@@ -25,8 +25,8 @@ import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
-import java.net.InetSocketAddress
 
+import java.net.InetSocketAddress
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
 

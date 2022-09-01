@@ -49,10 +49,10 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
       (nodeViewActorRef ? LocallyGeneratedTransaction(unconfirmedTx))
         .mapTo[ProcessingOutcome]
         .flatMap {
-          case Accepted => Future.successful(unconfirmedTx.transaction.id)
-          case DoubleSpendingLoser(_) => Future.failed(new IllegalArgumentException("Double spending attempt"))
-          case Declined(ex) => Future.failed(ex)
-          case Invalidated(ex) => Future.failed(ex)
+          case _: Accepted => Future.successful(unconfirmedTx.transaction.id)
+          case _: DoubleSpendingLoser => Future.failed(new IllegalArgumentException("Double spending attempt"))
+          case d: Declined => Future.failed(d.e)
+          case i: Invalidated => Future.failed(i.e)
         }
     completeOrRecoverWith(resultFuture) { ex =>
       ApiError.BadRequest(ex.getMessage)
@@ -78,9 +78,9 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
           val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
           utxo.withMempool(mp)
             .validateWithCost(tx, maxTxCost)
-            .map(cost => UnconfirmedTransaction(tx, Some(cost), now, now, bytes))
+            .map(cost => UnconfirmedTransaction(tx, Some(cost), now, now, bytes, source = None))
         case _ =>
-          tx.statelessValidity().map(_ => UnconfirmedTransaction(tx, None, now, now, bytes))
+          tx.statelessValidity().map(_ => UnconfirmedTransaction(tx, None, now, now, bytes, source = None))
       }
   }
 

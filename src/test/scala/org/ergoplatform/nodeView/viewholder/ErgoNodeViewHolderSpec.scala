@@ -145,10 +145,10 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       val boxes = ErgoState.newBoxes(genesis.transactions).find(_.ergoTree == Constants.TrueLeaf)
       boxes.nonEmpty shouldBe true
 
-      val tx = UnconfirmedTransaction(validTransactionFromBoxes(boxes.toIndexedSeq))
+      val tx = UnconfirmedTransaction(validTransactionFromBoxes(boxes.toIndexedSeq), None)
       subscribeEvents(classOf[FailedTransaction])
       nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
-      expectMsg(Accepted)
+      expectMsgType[Accepted]
       getPoolSize shouldBe 1
     }
   }

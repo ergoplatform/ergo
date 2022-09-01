@@ -34,7 +34,7 @@ trait MempoolFilterPerformanceTest
     var m: ErgoMemPool = memPool
     (0 until 1000) foreach { _ =>
       forAll(transactionGenerator) { tx: ErgoTransaction =>
-        m = m.put(UnconfirmedTransaction(tx)).get
+        m = m.put(UnconfirmedTransaction(tx, None)).get
       }
     }
     m.size should be > 1000
@@ -45,7 +45,7 @@ trait MempoolFilterPerformanceTest
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val m = initializedMempool.get
     forAll(transactionGenerator) { tx: ErgoTransaction =>
-      val (time, _) = profile(m.filter(Seq(UnconfirmedTransaction(tx))))
+      val (time, _) = profile(m.filter(Seq(UnconfirmedTransaction(tx, None))))
       assert(time < thresholdSecs)
     }
   }
@@ -54,7 +54,7 @@ trait MempoolFilterPerformanceTest
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     var m = initializedMempool.get
     forAll(transactionGenerator) { tx: ErgoTransaction =>
-      val unconfirmedTx = UnconfirmedTransaction(tx)
+      val unconfirmedTx = UnconfirmedTransaction(tx, None)
       m = m.put(unconfirmedTx).get
       val (time, _) = profile(m.filter(Seq(unconfirmedTx)))
       assert(time < thresholdSecs)

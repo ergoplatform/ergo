@@ -111,7 +111,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Currently max transaction cost is higher but will be eventually cut down to this value
     */
-  private val OptimysticMaxTransactionCost = 2000000
+  private val OptimisticMaxTransactionCost = 2000000
 
 
   /**
@@ -770,7 +770,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val notDeclined = notApplied.filter(id => !declined.contains(id))
           log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
             s"${unknownMods.size} of them are unknown, requesting $notDeclined")
-          val txsToAsk = (MempoolCostPerBlock - interblockCost.totalCost) / OptimysticMaxTransactionCost
+          val txsToAsk = (MempoolCostPerBlock - interblockCost.totalCost) / OptimisticMaxTransactionCost
           notDeclined.take(txsToAsk)
         } else {
           Seq.empty

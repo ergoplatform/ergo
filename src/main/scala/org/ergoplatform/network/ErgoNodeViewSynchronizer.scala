@@ -3,7 +3,7 @@ package org.ergoplatform.network
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionsFromRemote}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
@@ -33,6 +33,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
+import ErgoNodeViewSynchronizer.{IncomingTxInfo, TransactionProcessingCacheRecord}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -41,7 +42,8 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success}
 
 /**
-  * Tweaks on top of Scorex' NodeViewSynchronizer made to optimize Ergo network
+  * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the
+  * client application
   */
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
@@ -91,6 +93,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var lastModifierGotTime: Long = 0
 
   /**
+    * The node stops to accept transactions if declined table reaches this max size. It prevents spam attacks trying
+    * to bloat the table (or exhaust node's CPU)
+    */
+  private val MaxDeclined = 400
+
+  /**
+    * No more than this number of unparsed transactions can be cached
+    */
+  private val MaxProcessingTransactionsCacheSize = 50
+
+  /**
+    * Max cost of transactions we are going to process between blocks
+    */
+  private val MempoolCostPerBlock = 12000000
+
+  /**
+    * Currently max transaction cost is higher but will be eventually cut down to this value
+    */
+  private val OptimisticMaxTransactionCost = 2000000
+
+
+  /**
     * Dictionary (tx id -> checking time), which is storing transactions declined by the mempool, as mempool is not
     * storing this information. We keep declined transactions in the dictionary for few blocks just, as declined
     * transaction could become acceptable with time
@@ -98,10 +122,60 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val declined = mutable.TreeMap[ModifierId, Long]()
 
   /**
-    * The node stops to accept transactions if declined table reaches this max size. It prevents spam attacks trying
-    * to bloat the table (or exhaust node's CPU)
+    * Counter which contains total cost of transactions entered mempool or rejected by it since last block processed.
+    * Used to avoid sudden spikes in load, limiting transactions processing time and make it comparable to block's
+    * processing time
     */
-  private val MaxDeclined = 400
+  private var interblockCost = IncomingTxInfo.empty()
+
+  /**
+    * Cache which contains bytes of transactions we received but not parsed and processed yet
+    */
+  private val txProcessingCache = mutable.Map[ModifierId, TransactionProcessingCacheRecord]()
+
+  /**
+    * To be called when the node is synced and new block arrives, to reset transactions cost counter
+    */
+  private def clearInterblockCost(): Unit = {
+    interblockCost = IncomingTxInfo.empty()
+  }
+
+  /**
+    * To be called when the node is synced and new block arrives, to resume transaction bytes cache processing
+    */
+  private def processFirstTxProcessingCacheRecord(): Unit = {
+    txProcessingCache.headOption.foreach { case (txId, processingCacheRecord) =>
+      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, processingCacheRecord.source)
+      txProcessingCache -= txId
+    }
+  }
+
+  /**
+    * To be called when mempool reporting on finished transaction validation.
+    * This method adds validation cost to counter and send another
+    */
+  private def processMempoolResult(processingResult: InitialTransactionCheckOutcome): Unit = {
+    val ReserveCostValue = 5000
+
+    val costOpt = processingResult.transaction.lastCost
+    if (costOpt.isEmpty) {
+      // should not be here, and so ReserveCostValue should not be used
+      log.warn("Cost is empty in processMempoolResult")
+    }
+    val cost = costOpt.getOrElse(ReserveCostValue)
+    val ng = processingResult match {
+      case _: FailedTransaction => interblockCost.copy(invalidatedCost = interblockCost.invalidatedCost + cost)
+      case _: SuccessfulTransaction => interblockCost.copy(acceptedCost = interblockCost.acceptedCost + cost)
+      case _: DeclinedTransaction => interblockCost.copy(declinedCost = interblockCost.declinedCost + cost)
+    }
+
+    log.debug(s"Old global cost info: $interblockCost, new $ng, tx processing cache size: ${txProcessingCache.size}")
+    interblockCost = ng
+
+    if (interblockCost.totalCost < MempoolCostPerBlock) {
+      processFirstTxProcessingCacheRecord()
+    }
+  }
 
   /**
     * Register periodic events
@@ -540,9 +614,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (typeId == Transaction.ModifierTypeId) {
       // filter out transactions already in the mempool
       val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
-      // parse all transactions not in the mempool and send them to node view holder
-      val parsed: Iterable[UnconfirmedTransaction] = parseTransactions(notInThePool, remote)
-      viewHolderRef ! TransactionsFromRemote(parsed)
+      val (toProcess, toPutIntoCache) = if (interblockCost.totalCost < MempoolCostPerBlock) {
+        // if we are within per-block limits, parse and process first transaction
+        (notInThePool.headOption, notInThePool.tail)
+      } else {
+        (None, notInThePool)
+      }
+
+      toProcess.foreach { case (txId, txBytes) =>
+        parseAndProcessTransaction(txId, txBytes, remote)
+      }
+      toPutIntoCache.foreach { case (txId, txBytes) =>
+        txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
+      }
     } else {
       Constants.modifierSerializers.get(typeId) match {
         case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
@@ -570,25 +654,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Parse transactions coming from remote, filtering out ones which are too big on the way
+    * Parse transaction coming from remote, filtering out immediately too big one, and send parsed transaction
+    * to mempool for processing
     */
-  def parseTransactions(txs: Map[ModifierId, Array[Byte]], remote: ConnectedPeer): Iterable[UnconfirmedTransaction] = {
-    txs.flatMap{ case (id, bytes) =>
-      if (bytes.length > settings.nodeSettings.maxTransactionSize) {
-        deliveryTracker.setInvalid(id, Transaction.ModifierTypeId)
-        penalizeMisbehavingPeer(remote)
-        log.warn(s"Transaction size ${bytes.length} from ${remote.toString} exceeds limit ${settings.nodeSettings.maxTransactionSize}")
-        None
-      } else {
-        ErgoTransactionSerializer.parseBytesTry(bytes) match {
-          case Success(tx) if id == tx.id =>
-            Some(UnconfirmedTransaction(tx, bytes))
-          case _ =>
-            // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
-            penalizeMisbehavingPeer(remote)
-            log.warn(s"Failed to parse transaction with declared id ${encoder.encodeId(id)} from ${remote.toString}")
-            None
-        }
+  def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
+    if (bytes.length > settings.nodeSettings.maxTransactionSize) {
+      deliveryTracker.setInvalid(id, Transaction.ModifierTypeId)
+      penalizeMisbehavingPeer(remote)
+      log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
+                s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
+    } else {
+      ErgoTransactionSerializer.parseBytesTry(bytes) match {
+        case Success(tx) if id == tx.id =>
+          val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
+          viewHolderRef ! TransactionFromRemote(utx)
+        case _ =>
+          // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
+          penalizeMisbehavingPeer(remote)
+          log.warn(s"Failed to parse transaction with declared id ${encoder.encodeId(id)} from ${remote.toString}")
       }
     }
   }
@@ -666,9 +749,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // We download transactions only if following conditions met:
     def txAcceptanceFilter: Boolean = {
       settings.nodeSettings.stateType.holdsUtxoSet && // node holds UTXO set
-        hr.isHeadersChainSynced && // our chain is synced
         hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
         hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
+        interblockCost.totalCost <= MempoolCostPerBlock * 3 / 2 && // we can download some extra to fill cache
+        txProcessingCache.size <= MaxProcessingTransactionsCacheSize && // txs processing cache is not overfull
         declined.size < MaxDeclined // the node is not stormed by transactions is has to decline
     }
 
@@ -686,7 +770,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val notDeclined = notApplied.filter(id => !declined.contains(id))
           log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
             s"${unknownMods.size} of them are unknown, requesting $notDeclined")
-          notDeclined
+          val txsToAsk = (MempoolCostPerBlock - interblockCost.totalCost) / OptimisticMaxTransactionCost
+          notDeclined.take(txsToAsk)
         } else {
           Seq.empty
         }
@@ -868,7 +953,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // helper method to clear declined transactions after some off, so the node may accept them again
   private def clearDeclined(): Unit = {
-    val clearTimeout = FiniteDuration(7, MINUTES)
+    val clearTimeout = FiniteDuration(10, MINUTES)
     val now = System.currentTimeMillis()
 
     val toRemove = declined.filter { case (_, time) =>
@@ -899,29 +984,38 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastInvForNewModifier(mod)
       if (mod.isInstanceOf[ErgoFullBlock]) {
         clearDeclined()
+        clearInterblockCost()
+        processFirstTxProcessingCacheRecord() // resume cache processing
       }
 
-    case SuccessfulTransaction(tx) =>
+    case st@SuccessfulTransaction(utx) =>
+      val tx = utx.transaction
       deliveryTracker.setHeld(tx.id, Transaction.ModifierTypeId)
+      processMempoolResult(st)
       broadcastModifierInv(tx)
 
-    case DeclinedTransaction(id: ModifierId) =>
-      declined.put(id, System.currentTimeMillis())
+    case dt@DeclinedTransaction(utx: UnconfirmedTransaction) =>
+      declined.put(utx.id, System.currentTimeMillis())
+      processMempoolResult(dt)
 
-    case FailedTransaction(id, error, immediateFailure) =>
-      if (immediateFailure) {
-        // penalize sender only in case transaction was invalidated at first validation.
-        deliveryTracker.setInvalid(id, Transaction.ModifierTypeId).foreach { peer =>
-          error match {
-            case TooHighCostError(_) =>
-              log.info(s"Penalize spamming peer $peer for too costly transaction $id")
-              penalizeSpammingPeer(peer)
-            case _ =>
-              log.info(s"Penalize peer $peer for too costly transaction $id (reason: $error)")
-              penalizeMisbehavingPeer(peer)
-          }
+    case ft@FailedTransaction(utx, error) =>
+      val id = utx.id
+      processMempoolResult(ft)
+
+      utx.source.foreach { peer =>
+        // no need to call deliveryTracker.setInvalid, as mempool will consider invalidated tx in contains()
+        error match {
+          case TooHighCostError(_) =>
+            log.info(s"Penalize spamming peer $peer for too costly transaction $id")
+            penalizeSpammingPeer(peer)
+          case _ =>
+            log.info(s"Penalize peer $peer for too costly transaction $id (reason: $error)")
+            penalizeMisbehavingPeer(peer)
         }
       }
+
+    case FailedOnRecheckTransaction(_, _) =>
+      // do nothing for now
 
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
@@ -1038,6 +1132,23 @@ object ErgoNodeViewSynchronizer {
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
     context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker, deliveryTracker))
 
+  /**
+    * Container for aggregated costs of accepted, declined or invalidated transactions. Can be used to track global
+    * state of total cost of transactions received (since last block processed), or per-peer state
+    */
+  case class IncomingTxInfo(acceptedCost: Int, declinedCost: Int, invalidatedCost: Int) {
+    val totalCost: Int = acceptedCost + declinedCost + invalidatedCost
+  }
+
+  object IncomingTxInfo {
+    def empty(): IncomingTxInfo = IncomingTxInfo(0, 0, 0)
+  }
+
+  /**
+    * Transaction bytes and source peer to be recorded in a cache and processed later
+    */
+  class TransactionProcessingCacheRecord(val txBytes: Array[Byte], val source: ConnectedPeer)
+
   case object CheckModifiersToDownload
 
   object ReceivableMessages {
@@ -1090,17 +1201,24 @@ object ErgoNodeViewSynchronizer {
     // hierarchy of events regarding modifiers application outcome
     trait ModificationOutcome extends NodeViewHolderEvent
 
-    /**
-      * @param immediateFailure - a flag indicating whether a transaction was invalid by the moment it was received.
-      */
-    case class FailedTransaction(transactionId: ModifierId, error: Throwable, immediateFailure: Boolean) extends ModificationOutcome
+    trait InitialTransactionCheckOutcome extends ModificationOutcome {
+      val transaction: UnconfirmedTransaction
+    }
 
-    case class SuccessfulTransaction(transaction: ErgoTransaction) extends ModificationOutcome
+    case class FailedTransaction(transaction: UnconfirmedTransaction, error: Throwable) extends InitialTransactionCheckOutcome
+
+    case class SuccessfulTransaction(transaction: UnconfirmedTransaction) extends InitialTransactionCheckOutcome
 
     /**
       * Transaction declined by the mempool (not permanently invalidated, so pool can accept it in future)
       */
-    case class DeclinedTransaction(transactionId: ModifierId) extends ModificationOutcome
+    case class DeclinedTransaction(transaction: UnconfirmedTransaction) extends InitialTransactionCheckOutcome
+
+    /**
+      * Transaction which was failed not immediately but after sitting for some time in the mempool or during block
+      * candidate generation
+      */
+    case class FailedOnRecheckTransaction(id : ModifierId, error: Throwable) extends ModificationOutcome
 
     case class RecoverableFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome
 

@@ -14,5 +14,6 @@ class MempoolPerformanceBench extends AnyPropSpec
   override val memPool: ErgoMemPool = ErgoMemPool.empty(settings)
   override val memPoolGenerator: Gen[ErgoMemPool] = emptyMemPoolGen
   override val transactionGenerator: Gen[ErgoTransaction] = invalidErgoTransactionGen
-  override val unconfirmedTxGenerator: Gen[UnconfirmedTransaction] = invalidErgoTransactionGen.map(UnconfirmedTransaction.apply)
+  override val unconfirmedTxGenerator: Gen[UnconfirmedTransaction] =
+    invalidErgoTransactionGen.map(tx => UnconfirmedTransaction(tx, None))
 }

@@ -79,6 +79,7 @@ libraryDependencies ++= Seq(
   "com.iheart" %% "ficus" % "1.4.7",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
+  "com.github.ben-manes.caffeine" % "caffeine" % "3.1.1",
   "com.github.scopt" %% "scopt" % "4.0.1",
 
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",

@@ -193,8 +193,8 @@ object PeersSpec {
   * The `Peers` message is a reply to a `GetPeer` message and relays connection information about peers
   * on the network.
   */
-class PeersSpec(featureSerializers: PeerFeature.Serializers, peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
-  private val peerSpecSerializer = new PeerSpecSerializer(featureSerializers)
+class PeersSpec(peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
+  private val peerSpecSerializer = PeerSpecSerializer
 
   override val messageCode: Message.MessageCode = PeersSpec.messageCode
 
@@ -214,25 +214,18 @@ class PeersSpec(featureSerializers: PeerFeature.Serializers, peersLimit: Int) ex
   }
 }
 
-object HandshakeSerializer {
-
-  val messageCode: MessageCode = 75: Byte
-  val messageName: String = "Handshake"
-  val maxHandshakeSize: Int = 8096
-}
-
 /**
   * The `Handshake` message provides information about the transmitting node
   * to the receiving node at the beginning of a connection. Until both peers
   * have exchanged `Handshake` messages, no other messages will be accepted.
   */
-class HandshakeSerializer(featureSerializers: PeerFeature.Serializers) extends MessageSpecV1[Handshake] {
-  import HandshakeSerializer.maxHandshakeSize
+object HandshakeSerializer extends MessageSpecV1[Handshake] {
+  override val messageCode: MessageCode = 75: Byte
+  override val messageName: String = "Handshake"
 
-  private val peersDataSerializer = new PeerSpecSerializer(featureSerializers)
+  val maxHandshakeSize: Int = 8096
 
-  override val messageCode: MessageCode = HandshakeSerializer.messageCode
-  override val messageName: String = HandshakeSerializer.messageName
+  private val peersDataSerializer = PeerSpecSerializer
 
   /**
     * Serializing handshake into a byte writer.

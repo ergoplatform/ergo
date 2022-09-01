@@ -15,13 +15,13 @@ import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, Mode
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.slf4j.{Logger, LoggerFactory}
-import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType, PeerFeatureIds}
+import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network._
 import scorex.core.network.message._
-import scorex.core.network.peer.{PeerManagerRef, RestApiUrlPeerFeatureSerializer}
+import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
@@ -50,10 +50,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val modePeerFeature = ModePeerFeature(ergoSettings.nodeSettings)
   private val features = Seq(modePeerFeature)
-  private val featureSerializers: PeerFeature.Serializers = Map(
-    modePeerFeature.featureId -> modePeerFeature.serializer,
-    PeerFeatureIds.RestApiUrlFeatureId -> RestApiUrlPeerFeatureSerializer
-  )
 
   private val timeProvider = new NetworkTimeProvider(scorexSettings.ntp)
 
@@ -70,7 +66,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val basicSpecs = {
     Seq(
       GetPeersSpec,
-      new PeersSpec(featureSerializers, scorexSettings.network.maxPeerSpecObjects),
+      new PeersSpec(scorexSettings.network.maxPeerSpecObjects),
       InvSpec,
       RequestModifierSpec,
       ModifiersSpec
@@ -122,7 +118,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   if (ergoSettings.scorexSettings.network.peerDiscovery) {
     // Launching PeerSynchronizer actor which is then registering itself at network controller
-    PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network, featureSerializers)
+    PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network)
   }
 
   private val apiRoutes: Seq[ApiRoute] = Seq(

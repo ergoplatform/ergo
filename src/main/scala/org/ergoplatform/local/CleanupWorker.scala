@@ -62,7 +62,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     * @return - updated valid transactions and invalidated transaction ids
     */
   private def validatePool(validator: TransactionValidation,
-                           mempool: ErgoMemPoolReader): (Array[UnconfirmedTransaction], Array[ModifierId]) = {
+                           mempool: ErgoMemPoolReader): (Seq[UnconfirmedTransaction], Seq[ModifierId]) = {
 
     val now = System.currentTimeMillis()
 
@@ -104,7 +104,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     }
 
     val res = validationLoop(txsToValidate, mutable.ArrayBuilder.make(), mutable.ArrayBuilder.make(), 0L)
-    res._1.result() -> res._2.result()
+    wrapRefArray(res._1.result()) -> wrapRefArray(res._2.result())
   }
 
 }

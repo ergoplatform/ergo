@@ -12,6 +12,7 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.{Failure, Success}
 
 /**
@@ -82,26 +83,28 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
     def validationLoop(txs: Seq[UnconfirmedTransaction],
-                       validated: Seq[UnconfirmedTransaction],
-                       invalidated: Seq[ModifierId],
-                       costAcc: Long): (Seq[UnconfirmedTransaction], Seq[ModifierId]) = {
+                       validated: mutable.ArrayBuilder[UnconfirmedTransaction],
+                       invalidated: mutable.ArrayBuilder[ModifierId],
+                       costAcc: Long
+                      ): (mutable.ArrayBuilder[UnconfirmedTransaction], mutable.ArrayBuilder[ModifierId]) = {
       txs match {
         case head :: tail if costAcc < CostLimit =>
           state.validateWithCost(head.transaction, nodeSettings.maxTransactionCost) match {
             case Success(txCost) =>
-              val updTx = head.onRecheck(txCost)
-              validationLoop(tail, validated :+ updTx, invalidated, txCost + costAcc)
+              val updTx = head.withCost(txCost)
+              validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)
             case Failure(e) =>
               val txId = head.id
               log.info(s"Transaction $txId invalidated: ${e.getMessage}")
-              validationLoop(tail, validated, invalidated :+ txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
+              validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
           }
         case _ =>
           validated -> invalidated
       }
     }
 
-    validationLoop(txsToValidate, Seq.empty, Seq.empty, 0L)
+    val res = validationLoop(txsToValidate, mutable.ArrayBuilder.make(), mutable.ArrayBuilder.make(), 0L)
+    wrapRefArray(res._1.result()) -> wrapRefArray(res._2.result())
   }
 
 }

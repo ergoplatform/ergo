@@ -25,8 +25,8 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val txs = validTransactionsFromUtxoState(wus)
     val pool0 = ErgoMemPool.empty(settings)
     val poolAfter = txs.foldLeft(pool0) { case (pool, tx) =>
-      val (p, outcome) = pool.process(UnconfirmedTransaction(tx), us)
-      if (outcome != ProcessingOutcome.Accepted) {
+      val (p, outcome) = pool.process(UnconfirmedTransaction(tx, None), us)
+      if (!outcome.isInstanceOf[ProcessingOutcome.Accepted]) {
         throw new Exception("Transaction not accepted")
       }
       p
@@ -36,7 +36,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     // light mode
     val poolLight = ErgoMemPool.empty(lightModeSettings)
     txs.foreach { tx =>
-      poolLight.process(UnconfirmedTransaction(tx), us)._2 shouldBe ProcessingOutcome.Accepted
+      poolLight.process(UnconfirmedTransaction(tx, None), us)._2.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
     }
   }
 
@@ -61,7 +61,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       ))
 
     var poolSize = ErgoMemPool.empty(sortBySizeSettings)
-    poolSize = poolSize.process(UnconfirmedTransaction(tx), wus)._1
+    poolSize = poolSize.process(UnconfirmedTransaction(tx, None), wus)._1
     val size = tx.size
     poolSize.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, size).weight
 
@@ -71,7 +71,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       ))
 
     var poolCost = ErgoMemPool.empty(sortByCostSettings)
-    poolCost = poolCost.process(UnconfirmedTransaction(tx), wus)._1
+    poolCost = poolCost.process(UnconfirmedTransaction(tx, None), wus)._1
     val cost = wus.validateWithCost(tx, Int.MaxValue).get
     poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, cost).weight
   }
@@ -83,10 +83,10 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val txs = validTransactionsFromUtxoState(wus)
     var pool = ErgoMemPool.empty(settings)
     txs.foreach { tx =>
-      pool = pool.putWithoutCheck(Seq(UnconfirmedTransaction(tx)))
+      pool = pool.putWithoutCheck(Seq(UnconfirmedTransaction(tx, None)))
     }
     txs.foreach { tx =>
-      pool.process(UnconfirmedTransaction(tx), us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+      pool.process(UnconfirmedTransaction(tx, None), us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
     }
   }
 
@@ -117,13 +117,13 @@ class ErgoMemPoolSpec extends AnyFlatSpec
           IndexedSeq(feeOut)
         )
 
-        val tx1 = UnconfirmedTransaction(ErgoTransaction(tx1Like.inputs, tx1Like.outputCandidates))
-        val tx2 = UnconfirmedTransaction(ErgoTransaction(ErgoTransaction(tx2Like.inputs, tx2Like.outputCandidates)))
+        val tx1 = UnconfirmedTransaction(ErgoTransaction(tx1Like.inputs, tx1Like.outputCandidates), None)
+        val tx2 = UnconfirmedTransaction(ErgoTransaction(ErgoTransaction(tx2Like.inputs, tx2Like.outputCandidates)), None)
 
         val pool0 = ErgoMemPool.empty(settings)
         val (pool, tx1Outcome) = pool0.process(tx1, us)
 
-        tx1Outcome shouldBe ProcessingOutcome.Accepted
+        tx1Outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
 
         // tx1 and tx2 are spending the same input, and paying the same fee.
         // So if tx2 is about a bigger or equal size, it should be rejected as it is paying less for a byte.
@@ -132,7 +132,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
           pool.process(tx2, us)._2.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
         } else {
           val (updPool, outcome) = pool.process(tx2, us)
-          outcome shouldBe ProcessingOutcome.Accepted
+          outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
           updPool.size shouldBe 1
           updPool.take(1).head.transaction.id shouldBe tx2.transaction.id
         }
@@ -144,7 +144,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val us = createUtxoState(parameters)._1
     var pool = ErgoMemPool.empty(settings)
     forAll(invalidBlockTransactionsGen) { blockTransactions =>
-      val unconfirmedTxs = blockTransactions.txs.map(UnconfirmedTransaction.apply)
+      val unconfirmedTxs = blockTransactions.txs.map(tx => UnconfirmedTransaction(tx, None))
       unconfirmedTxs.foreach(tx => pool = pool.process(tx, us)._1)
       unconfirmedTxs.foreach(tx =>
         pool.process(tx, us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true)
@@ -156,7 +156,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val genesis = validFullBlock(None, us, bh)
     val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
     val txs = validTransactionsFromUtxoState(wus)
-    val unconfirmedTxs = txs.map(UnconfirmedTransaction.apply)
+    val unconfirmedTxs = txs.map(tx => UnconfirmedTransaction(tx, None))
 
     val maxSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = Long.MaxValue))
     val pool = ErgoMemPool.empty(maxSettings)
@@ -171,7 +171,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val pool2 = ErgoMemPool.empty(minSettings)
     unconfirmedTxs.foreach { tx =>
       val (_, outcome) = pool2.process(tx, us)
-      outcome shouldBe ProcessingOutcome.Accepted
+      outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
     }
   }
 
@@ -180,7 +180,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val pool = ErgoMemPool.empty(settings)
     forAll(invalidBlockTransactionsGen) { blockTransactions =>
       blockTransactions.txs.forall{tx =>
-        val valRes = pool.process(UnconfirmedTransaction(tx), us)._2
+        val valRes = pool.process(UnconfirmedTransaction(tx, None), us)._2
         valRes.isInstanceOf[ProcessingOutcome.Invalidated] ||
           valRes.isInstanceOf[ProcessingOutcome.Declined]} shouldBe true
     }
@@ -188,7 +188,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
 
   it should "accept only unique transactions" in {
     val pool = ErgoMemPool.empty(settings)
-    val tx = UnconfirmedTransaction(invalidErgoTransactionGen.sample.get)
+    val tx = UnconfirmedTransaction(invalidErgoTransactionGen.sample.get, None)
     pool.putWithoutCheck(Seq(tx, tx, tx)).size shouldBe 1
   }
 
@@ -202,8 +202,8 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       acc :+ masterTx.copy(outputCandidates = IndexedSeq(
         new ErgoBoxCandidate(idx * 10000 + 1, proposition, c.creationHeight, c.additionalTokens, c.additionalRegisters)))
     }
-    val lessPrioritizedTxs = txsWithAscendingPriority.init.map(UnconfirmedTransaction.apply)
-    val mostPrioritizedTx = UnconfirmedTransaction(txsWithAscendingPriority.last)
+    val lessPrioritizedTxs = txsWithAscendingPriority.init.map(tx => UnconfirmedTransaction(tx, None))
+    val mostPrioritizedTx = UnconfirmedTransaction(txsWithAscendingPriority.last, None)
     pool = pool.putWithoutCheck(lessPrioritizedTxs)
 
     pool.size shouldBe 4
@@ -217,7 +217,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val (us, bh) = createUtxoState(parameters)
     val genesis = validFullBlock(None, us, bh)
     val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
-    val txs = validTransactionsFromUtxoState(wus).map(UnconfirmedTransaction.apply)
+    val txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
     var pool = ErgoMemPool.empty(settings)
     txs.foreach { tx =>
       pool = pool.putWithoutCheck(Seq(tx))
@@ -226,9 +226,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       val spendingBox = tx.transaction.outputs.head
       val unconfirmedTransaction = UnconfirmedTransaction(tx.transaction.copy(
         inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
-        outputCandidates = IndexedSeq(spendingBox)))
+        outputCandidates = IndexedSeq(spendingBox)), None)
       val (newPool, outcome) = pool.process(unconfirmedTransaction, us)
-      outcome shouldBe ProcessingOutcome.Accepted
+      outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
       pool = newPool
     }
   }
@@ -237,7 +237,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val (us, bh) = createUtxoState(parameters)
     val genesis = validFullBlock(None, us, bh)
     val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
-    var txs = validTransactionsFromUtxoState(wus).map(UnconfirmedTransaction.apply)
+    var txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
     val family_depth = 10
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
@@ -248,9 +248,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       txs = txs.map(tx => {
         val spendingBox = tx.transaction.outputs.head
         val newTx = UnconfirmedTransaction(tx.transaction.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
-          outputCandidates = IndexedSeq(spendingBox)))
+          outputCandidates = IndexedSeq(spendingBox)), None)
         val (newPool, outcome) = pool.process(newTx, us)
-        outcome shouldBe ProcessingOutcome.Accepted
+        outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
         pool = newPool
         newTx
       })
@@ -261,7 +261,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       val sb = tx.outputs.head
       val txToDecline = tx.copy(inputs = IndexedSeq(new Input(sb.id, emptyProverResult)),
         outputCandidates = IndexedSeq(new ErgoBoxCandidate(sb.value, sb.ergoTree, sb.creationHeight, sb.additionalTokens, sb.additionalRegisters)))
-      val res = pool.process(UnconfirmedTransaction(txToDecline), us)._2
+      val res = pool.process(UnconfirmedTransaction(txToDecline, None), us)._2
       res.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
       res.asInstanceOf[ProcessingOutcome.Declined].e.getMessage.contains("pays less") shouldBe true
       pool.size shouldBe (family_depth + 1) * txs.size
@@ -272,7 +272,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val (us, bh) = createUtxoState(parameters)
     val genesis = validFullBlock(None, us, bh)
     val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
-    var txs = validTransactionsFromUtxoState(wus).map(UnconfirmedTransaction.apply)
+    var txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
     var allTxs = txs
     val family_depth = 10
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
@@ -284,9 +284,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       txs = txs.map(tx => {
         val spendingBox = tx.transaction.outputs.head
         val newTx = UnconfirmedTransaction(tx.transaction.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
-          outputCandidates = IndexedSeq(spendingBox)))
+          outputCandidates = IndexedSeq(spendingBox)), None)
         val (newPool, outcome) = pool.process(newTx, us)
-        outcome shouldBe ProcessingOutcome.Accepted
+        outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
         pool = newPool
         allTxs = allTxs :+ newTx
         newTx
@@ -305,7 +305,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val (us, bh) = createUtxoState(parameters)
     val genesis = validFullBlock(None, us, bh)
     val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
-    var txs = validTransactionsFromUtxoState(wus).map(UnconfirmedTransaction.apply)
+    var txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
     val family_depth = 10
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
@@ -321,9 +321,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         val out1 = new ErgoBoxCandidate(55000, feeProp, sc.creationHeight)
 
         val newTx = UnconfirmedTransaction(tx.transaction.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
-          outputCandidates = IndexedSeq(out0, out1)))
+          outputCandidates = IndexedSeq(out0, out1)), None)
         val (newPool, outcome) = pool.process(newTx, us)
-        outcome shouldBe ProcessingOutcome.Accepted
+        outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
         pool = newPool
         newTx
       })
@@ -347,7 +347,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val (us, bh) = createUtxoState(parameters)
     val genesis = validFullBlock(None, us, bh)
     val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
-    var txs = validTransactionsFromUtxoState(wus).map(UnconfirmedTransaction.apply)
+    var txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
     var allTxs = txs
     val family_depth = 10
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
@@ -359,9 +359,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       txs = txs.map(tx => {
         val spendingBox = tx.transaction.outputs.head
         val newTx = UnconfirmedTransaction(tx.transaction.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
-          outputCandidates = IndexedSeq(spendingBox)))
+          outputCandidates = IndexedSeq(spendingBox)), None)
         val (newPool, outcome) = pool.process(newTx, us)
-        outcome shouldBe ProcessingOutcome.Accepted
+        outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
         pool = newPool
         allTxs = allTxs :+ newTx
         newTx

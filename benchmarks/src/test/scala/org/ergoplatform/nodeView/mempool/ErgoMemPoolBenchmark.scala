@@ -43,7 +43,7 @@ object ErgoMemPoolBenchmark
 
   private def bench(txsInIncomeOrder: Seq[ErgoTransaction]): Unit = {
     var pool = ErgoMemPool.empty(settings)
-    txsInIncomeOrder.foreach(tx => pool = pool.put(UnconfirmedTransaction(tx)).get)
+    txsInIncomeOrder.foreach(tx => pool = pool.put(UnconfirmedTransaction(tx, None)).get)
   }
 
   performance of "ErgoMemPool awaiting" in {

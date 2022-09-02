@@ -29,7 +29,7 @@ trait MempoolRemovalTest extends AnyPropSpec
       var m: ErgoMemPool = memPool
       // var h: ErgoHistory = historyGen.sample.get
       forAll(transactionGenerator) { tx: ErgoTransaction =>
-        m = m.put(UnconfirmedTransaction(tx)).get
+        m = m.put(UnconfirmedTransaction(tx, None)).get
       }
       // var prevMempoolSize = m.size
       // val b = modifierWithTransactions(Some(m), None)

@@ -173,7 +173,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
       requests,
       inputsRaw,
       dataInputsRaw,
-      tx => Future(Success(UnconfirmedTransaction(tx))),
+      tx => Future(Success(UnconfirmedTransaction(tx, source = None))),
       utx => ApiResponse(utx.transaction)
     )
   }

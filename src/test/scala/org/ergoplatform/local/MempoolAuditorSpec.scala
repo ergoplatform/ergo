@@ -66,13 +66,13 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val temporarilyValidTx = validTransactionFromBoxes(validTx.outputs, outputsProposition = proveDlogGen.sample.get)
 
     subscribeEvents(classOf[FailedTransaction])
-    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(validTx))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(validTx, None))
     testProbe.expectMsgClass(cleanupDuration, newTx)
-    expectMsgType[ProcessingOutcome.Accepted.type]
+    expectMsgType[ProcessingOutcome.Accepted]
 
-    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(temporarilyValidTx))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(temporarilyValidTx, None))
     testProbe.expectMsgClass(cleanupDuration, newTx)
-    expectMsgType[ProcessingOutcome.Accepted.type]
+    expectMsgType[ProcessingOutcome.Accepted]
 
     getPoolSize shouldBe 2
 
@@ -102,7 +102,8 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val us = us0.applyModifier(b1, None)(_ => ()).get
 
     val bxs = bh1.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
-    val txs = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1.map(UnconfirmedTransaction.apply)
+    val txs = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1
+      .map(tx => UnconfirmedTransaction(tx, None))
 
     implicit val system = ActorSystem()
     val probe = TestProbe()

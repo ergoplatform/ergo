@@ -148,7 +148,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   // Check if transaction is double-spending inputs spent in the mempool.
   // If so, the new transacting is replacing older ones if it has bigger weight (fee/byte) than them on average.
   // Otherwise, the new transaction being rejected.
-  private def acceptIfNoDoubleSpend(unconfirmedTransaction: UnconfirmedTransaction): (ErgoMemPool, ProcessingOutcome) = {
+  private def acceptIfNoDoubleSpend(unconfirmedTransaction: UnconfirmedTransaction,
+                                    validationStartTime: Long): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTransaction.transaction
 
     val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
@@ -164,17 +165,19 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
         val p = pool.put(unconfirmedTransaction, feeF).remove(doubleSpendingTxs)
         val updPool = new ErgoMemPool(p, stats, sortingOption)
-        updPool -> ProcessingOutcome.Accepted
+        updPool -> new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
       } else {
-        this -> ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id))
+        this -> new ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id), validationStartTime)
       }
     } else {
       val poolSizeLimit = nodeSettings.mempoolCapacity
       if (pool.size == poolSizeLimit &&
         weighted(tx, feeF).weight <= pool.orderedTransactions.lastKey.weight) {
-        this -> ProcessingOutcome.Declined(new Exception("Transaction pays less than any other in the pool being full"))
+        val exc = new Exception("Transaction pays less than any other in the pool being full")
+        this -> new ProcessingOutcome.Declined(exc, validationStartTime)
       } else {
-        new ErgoMemPool(pool.put(unconfirmedTransaction, feeF), stats, sortingOption) -> ProcessingOutcome.Accepted
+        val updPool = new ErgoMemPool(pool.put(unconfirmedTransaction, feeF), stats, sortingOption)
+        updPool -> new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
       }
     }
   }
@@ -182,9 +185,12 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   def process(unconfirmedTx: UnconfirmedTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTx.transaction
     log.info(s"Processing mempool transaction: $tx")
+    val validationStartTime = System.currentTimeMillis()
+
     val blacklistedTransactions = nodeSettings.blacklistedTransactions
     if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
-      this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(new Exception("blacklisted tx"))
+      val exc = new Exception("blacklisted tx")
+      this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(exc, validationStartTime)
     } else {
       val fee = extractFee(tx)
       val minFee = settings.nodeSettings.minimalFeeAmount
@@ -199,33 +205,38 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
                 utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), costLimit, None) match {
-                  case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx.onRecheck(cost))
-                  case Failure(ex) => this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(ex)
+                  case Success(cost) =>
+                    acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
+                  case Failure(ex) =>
+                    this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
                 }
               } else {
-                this -> ProcessingOutcome.Declined(new Exception("not all utxos in place yet"))
+                val exc = new Exception("not all utxos in place yet")
+                this -> new ProcessingOutcome.Declined(exc, validationStartTime)
               }
             case validator: TransactionValidation =>
               // transaction validation currently works only for UtxoState, so this branch currently
               // will not be triggered probably
               validator.validateWithCost(tx, costLimit) match {
-                case Success(cost) => acceptIfNoDoubleSpend(unconfirmedTx.onRecheck(cost))
-                case Failure(ex) => this.invalidate(unconfirmedTx) -> ProcessingOutcome.Invalidated(ex)
+                case Success(cost) =>
+                  acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
+                case Failure(ex) =>
+                  this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
               }
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
               // peers though, so such transactions can come from the local wallet only.
-              acceptIfNoDoubleSpend(unconfirmedTx)
+              acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime)
           }
         } else {
-          this -> ProcessingOutcome.Declined(
-            new Exception(s"Pool can not accept transaction ${tx.id}, it is invalidated earlier or the pool is full"))
+          val exc = new Exception(s"Pool can not accept transaction ${tx.id}, it is invalidated earlier or the pool is full")
+          this -> new ProcessingOutcome.Declined(exc, validationStartTime)
         }
       } else {
-        this -> ProcessingOutcome.Declined(
-          new Exception(s"Min fee not met: ${minFee.toDouble / CoinsInOneErgo} ergs required, " +
-            s"${fee.toDouble / CoinsInOneErgo} ergs given")
-        )
+        val exc = new Exception(s"Min fee not met: ${minFee.toDouble / CoinsInOneErgo} ergs required, " +
+          s"${fee.toDouble / CoinsInOneErgo} ergs given")
+
+        this -> new ProcessingOutcome.Declined(exc, validationStartTime)
       }
     }
   }
@@ -320,15 +331,51 @@ object ErgoMemPool extends ScorexLogging {
     }
   }
 
+  /**
+    * Root of possible mempool transaction validation result family
+    */
+  sealed trait ProcessingOutcome {
+    /**
+      * Time when transaction validation was started
+      */
+    protected val validationStartTime: Long
 
-  sealed trait ProcessingOutcome
+    /**
+      * We assume that validation ends when this processing result class is constructed
+      */
+    private val validationEndTime: Long = System.currentTimeMillis()
+
+    /**
+      * 5.0 JIT costing was designed in a way that 1000 cost units are roughly corresponding to 1 ms of 1 CPU core
+      * on commodity hardware (of 2021). So if we do not know the exact cost of transaction, we can estimate it by
+      * tracking validation time and then getting estimated validation cost by multiplying the time (in ms) by 1000
+      */
+    val costPerMs = 1000
+
+    /**
+      * Estimated validation cost, see comment for `costPerMs`
+      */
+    def cost: Int = {
+      val timeDiff = validationEndTime - validationStartTime
+      if (timeDiff == 0) {
+        costPerMs
+      } else if (timeDiff > 1000000) {
+        Int.MaxValue // shouldn't be here, so this branch is mostly to have safe .toInt below
+      } else {
+        (timeDiff * costPerMs).toInt
+      }
+    }
+  }
 
   object ProcessingOutcome {
 
     /**
       * Object signalling that a transaction is accepted to the memory pool
       */
-    case object Accepted extends ProcessingOutcome
+    class Accepted(val tx: UnconfirmedTransaction,
+                   override protected val validationStartTime: Long) extends ProcessingOutcome {
+      override val cost: Int = tx.lastCost.getOrElse(super.cost)
+    }
 
     /**
       * Class signalling that a valid transaction was rejected as it is double-spending inputs of mempool transactions
@@ -336,18 +383,21 @@ object ErgoMemPool extends ScorexLogging {
       *
       * @param winnerTxIds - identifiers of transactions won in replace-by-fee auction
       */
-    case class DoubleSpendingLoser(winnerTxIds: Set[ModifierId]) extends ProcessingOutcome
+    class DoubleSpendingLoser(val winnerTxIds: Set[ModifierId],
+                              override protected val validationStartTime: Long) extends ProcessingOutcome
 
     /**
       * Class signalling that a transaction declined from being accepted into the memory pool
       */
-    case class Declined(e: Throwable) extends ProcessingOutcome
+    class Declined(val e: Throwable,
+                   override protected val validationStartTime: Long) extends ProcessingOutcome
 
 
     /**
       * Class signalling that a transaction turned out to be invalid when checked in the mempool
       */
-    case class Invalidated(e: Throwable) extends ProcessingOutcome
+    class Invalidated(val e: Throwable,
+                      override protected val validationStartTime: Long) extends ProcessingOutcome
 
   }
 
@@ -363,7 +413,8 @@ object ErgoMemPool extends ScorexLogging {
       case SortingOption.FeePerByte => log.info("Sorting mempool by fee-per-byte")
       case SortingOption.FeePerCycle => log.info("Sorting mempool by fee-per-cycle")
     }
-    new ErgoMemPool(OrderedTxPool.empty(settings),
+    new ErgoMemPool(
+      OrderedTxPool.empty(settings),
       MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()),
       sortingOption
     )(settings)

@@ -5697,7 +5697,7 @@ paths:
 
   /blockchain/token/byId/{tokenId}:
     get:
-      summary: Retrieve
+      summary: Retrieve minting information about a token
       operationId: getTokenById
       tags:
         - blockchain

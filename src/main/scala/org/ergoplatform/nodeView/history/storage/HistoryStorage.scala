@@ -31,12 +31,12 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
 
   private val blockSectionsCache =
     Caffeine.newBuilder()
-      .maximumSize(config.history.headersCacheSize)
+      .maximumSize(config.history.blockSectionsCacheSize)
       .build[String, BlockSection]()
 
   private val indexCache =
     Caffeine.newBuilder()
-      .maximumSize(config.history.headersCacheSize)
+      .maximumSize(config.history.indexesCacheSize)
       .build[ByteArrayWrapper, Array[Byte]]
 
   private def cacheModifier(mod: BlockSection): Unit = mod.modifierTypeId match {

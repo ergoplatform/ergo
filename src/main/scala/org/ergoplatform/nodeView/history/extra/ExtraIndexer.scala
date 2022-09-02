@@ -107,6 +107,8 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
   private def index(bt: BlockTransactions, height: Int): Unit = {
 
+    if(height < indexedHeight) return // do not process older blocks again after caught up (actor message queue)
+
     cfor(0)(_ < bt.txs.size, _ + 1) { n =>
 
       val tx: ErgoTransaction = bt.txs(n)
@@ -115,7 +117,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
       general += IndexedErgoTransaction(tx.id, indexedHeight, globalTxIndex)
       general += NumericTxIndex(globalTxIndex, tx.id)
 
-      tokens.clear()
+      inputTokens.clear()
 
       //process transaction inputs
       if(indexedHeight != 1) { //only after 1st block (skip genesis box)

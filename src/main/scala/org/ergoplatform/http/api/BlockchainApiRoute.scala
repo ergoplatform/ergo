@@ -17,7 +17,6 @@ import sigmastate.Values.ErgoTree
 import sigmastate.serialization.ErgoTreeSerializer
 
 import scala.concurrent.Future
-import scala.util.{Failure, Success}
 
 case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, extraIndexerOpt: Option[ActorRef])
                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -28,7 +27,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private val MaxItems = 16384
 
-  val addressEncoder: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
+  override val ae: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
 
 
   override val route: Route = pathPrefix("blockchain") {
@@ -88,14 +87,11 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getTxsByAddressR: Route = (get & pathPrefix("transaction" / "byAddress") & path(Segment) & paging) { (address, offset, limit) =>
+  private def getTxsByAddressR: Route = (get & pathPrefix("transaction" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems transactions can be requested")
     }else {
-      addressEncoder.fromString(address) match {
-        case Success(addr) => ApiResponse(getTxsByAddress(addr, offset, limit))
-        case Failure(_) => BadRequest("Incorrect address format")
-      }
+      ApiResponse(getTxsByAddress(address, offset, limit))
     }
   }
 
@@ -142,14 +138,11 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByAddressR: Route = (get & pathPrefix("box" / "byAddress") & path(Segment) & paging) { (address, offset, limit) =>
+  private def getBoxesByAddressR: Route = (get & pathPrefix("box" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     }else {
-      addressEncoder.fromString(address) match {
-        case Success(addr) => ApiResponse(getBoxesByAddress(addr, offset, limit))
-        case Failure(_)    => BadRequest("Incorrect address format")
-      }
+      ApiResponse(getBoxesByAddress(address, offset, limit))
     }
   }
 
@@ -161,14 +154,11 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByAddressUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byAddress") & path(Segment) & paging) { (address, offset, limit) =>
+  private def getBoxesByAddressUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     }else {
-      addressEncoder.fromString(address) match {
-        case Success(addr) => ApiResponse(getBoxesByAddressUnspent(addr, offset, limit))
-        case Failure(_) => BadRequest("Incorrect address format")
-      }
+      ApiResponse(getBoxesByAddressUnspent(address, offset, limit))
     }
   }
 

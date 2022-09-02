@@ -66,7 +66,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   }
 
   def addTx(tx: Long): IndexedErgoAddress = {
-    if(txs(txs.length - 1) != tx) txs += tx // check for duplicates
+    if(txs.last != tx) txs += tx // check for duplicates
     this
   }
 
@@ -84,7 +84,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
       txs.remove(0, segmentTreshold)
     }
     if(segmentTreshold < boxes.length) {
-      data += new IndexedErgoAddress(boxSegmentId(treeHash, segmentTreshold), ListBuffer.empty[Long], boxes.take(segmentTreshold))
+      data += new IndexedErgoAddress(boxSegmentId(treeHash, boxSegmentCount), ListBuffer.empty[Long], boxes.take(segmentTreshold))
       boxSegmentCount += 1
       boxes.remove(0, segmentTreshold)
     }
@@ -98,8 +98,8 @@ object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress]
 
   def hashErgoTree(tree: ErgoTree): Array[Byte] = Algos.hash(tree.bytes)
 
-  def boxSegmentId(addressHash: ModifierId, segmentNum: Int): ModifierId = bytesToId(Algos.hash(addressHash + " box segment " + segmentNum))
-  def txSegmentId(addressHash: ModifierId, segmentNum: Int): ModifierId = bytesToId(Algos.hash(addressHash + " tx segment " + segmentNum))
+  def boxSegmentId(hash: ModifierId, segmentNum: Int): ModifierId = bytesToId(Algos.hash(hash + " box segment " + segmentNum))
+  def txSegmentId(hash: ModifierId, segmentNum: Int): ModifierId = bytesToId(Algos.hash(hash + " tx segment " + segmentNum))
 
   override def serialize(iEa: IndexedErgoAddress, w: Writer): Unit = {
     w.putBytes(fastIdToBytes(iEa.treeHash))

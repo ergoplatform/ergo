@@ -8,8 +8,8 @@ import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.{SByte, SType}
 import sigmastate.Values.CollectionConstant
+import sigmastate.{SByte, SType}
 import special.collection.Coll
 
 case class IndexedToken(tokenId: ModifierId,
@@ -28,14 +28,29 @@ case class IndexedToken(tokenId: ModifierId,
 
 object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] with ScorexLogging {
 
+  def tokenRegistersSet(box: ErgoBox): Boolean = {
+
+    // registers exist
+    if(!box.additionalRegisters.contains(R4) ||
+       !box.additionalRegisters.contains(R5) ||
+       !box.additionalRegisters.contains(R6))
+      return false
+
+    // registers correct type
+    try {
+      box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]]
+      box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]]
+      getDecimals(box.additionalRegisters(R6).value)
+    }catch {
+      case _: Throwable => return false
+    }
+
+    // ok
+    true
+  }
+
   // Stop type erasure
   trait ByteColl extends Coll[Byte]
-  trait SColl extends CollectionConstant[SByte.type]
-
-  def tokenRegistersSet(box: ErgoBox): Boolean = // these don't work
-    box.additionalRegisters.contains(R4) && box.additionalRegisters(R4).isInstanceOf[SColl] &&
-    box.additionalRegisters.contains(R5) && box.additionalRegisters(R5).isInstanceOf[SColl] &&
-    box.additionalRegisters.contains(R6) && (box.additionalRegisters(R6).value.isInstanceOf[ByteColl] || box.additionalRegisters(R6).value.isInstanceOf[Int])
 
   def getDecimals(x: SType#WrappedType): Int = {
     try {
@@ -49,8 +64,8 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] with Scorex
     IndexedToken(bytesToId(box.additionalTokens(0)._1),
                  bytesToId(box.id),
                  box.additionalTokens(0)._2,
-                 new String(box.additionalRegisters(R4).asInstanceOf[SColl].value.toArray, "UTF-8"),
-                 new String(box.additionalRegisters(R5).asInstanceOf[SColl].value.toArray, "UTF-8"),
+                 new String(box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
+                 new String(box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
                  getDecimals(box.additionalRegisters(R6).value))
 
   override def serialize(iT: IndexedToken, w: Writer): Unit = {

@@ -122,7 +122,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
 
   private def getBoxByIdR: Route = (get & pathPrefix("box" / "byId") & modifierId) { id =>
-    ApiResponse(getBoxByIdF(bytesToId(Base16.decode(id).get)))
+    ApiResponse(getBoxByIdF(id))
   }
 
   private def getBoxByIndex(index: Long): Future[Option[IndexedErgoBox]] =
@@ -237,4 +237,3 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
 }
-

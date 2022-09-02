@@ -1070,7 +1070,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
 
         val txSigned = await(wallet.signTransaction(utx, Seq(es2), hints1, Some(Seq(in)), None)).get
 
-        txSigned.statelessValidity.isSuccess shouldBe true
+        txSigned.statelessValidity().isSuccess shouldBe true
       }
     }
   }
@@ -1117,7 +1117,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         val hints = hintsExtracted.addHintsForInput(0, cmts1.allHintsForInput(0))
 
         val txSigned = await(wallet.signTransaction(utx, Seq(es1), hints, Some(Seq(in)), None)).get
-        txSigned.statelessValidity.isSuccess shouldBe true
+        txSigned.statelessValidity().isSuccess shouldBe true
       }
     }
   }

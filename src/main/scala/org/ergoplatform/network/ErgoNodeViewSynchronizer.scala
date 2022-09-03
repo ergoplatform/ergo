@@ -978,7 +978,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         minModifiersPerBucket,
         maxModifiersPerBucket
       )(getPeersForDownloadingBlocks) { howManyPerType =>
-        historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
+        historyReader.nextModifiersToDownload(howManyPerType, historyReader.estimatedTip(), downloadRequired(historyReader))
       }
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections

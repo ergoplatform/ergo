@@ -623,12 +623,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def handleHealthCheck: Receive = {
+    case IsChainHealthy if chainProgress.isEmpty =>
+      val repairNeeded = ErgoHistory.repairIfNeeded(history())
+      val error = s"Trying to repair node that is stuck already from the start, repair needed : $repairNeeded"
+      log.warn(error)
+      sender() ! ChainIsStuck(error)
     case IsChainHealthy =>
-      log.info(s"Check that chain is healthy, progress is $chainProgress")
-      val healthCheckReply = chainProgress.map { progress =>
-        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), timeProvider, settings)
-      }.getOrElse(ChainIsStuck("Node already stuck when started"))
-      sender() ! healthCheckReply
+      log.info(s"Checking that chain is healthy, progress is ${chainProgress.get}")
+      sender() ! ErgoNodeViewHolder.checkChainIsHealthy(chainProgress.get, history(), timeProvider, settings)
   }
 
   override def receive: Receive =

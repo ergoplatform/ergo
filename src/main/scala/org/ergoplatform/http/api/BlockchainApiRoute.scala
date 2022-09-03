@@ -11,10 +11,8 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
-import sigmastate.serialization.ErgoTreeSerializer
 
 import scala.concurrent.Future
 
@@ -184,15 +182,11 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByErgoTreeR: Route = (get & pathPrefix("box" / "byErgoTree") & path(Segment) & paging) { (tree, offset, limit) =>
-    try {
-      if(limit > MaxItems) {
-        BadRequest(s"No more than $MaxItems boxes can be requested")
-      }else {
-        ApiResponse(getBoxesByErgoTree(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(tree).get), offset, limit))
-      }
-    }catch {
-      case e: Exception => BadRequest(s"${e.getMessage}")
+  private def getBoxesByErgoTreeR: Route = (get & pathPrefix("box" / "byErgoTree") & ergoTree & paging) { (tree, offset, limit) =>
+    if(limit > MaxItems) {
+      BadRequest(s"No more than $MaxItems boxes can be requested")
+    }else {
+      ApiResponse(getBoxesByErgoTree(tree, offset, limit))
     }
   }
 
@@ -204,21 +198,17 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByErgoTreeUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byErgoTree") & path(Segment) & paging) { (tree, offset, limit) =>
-    try {
-      if(limit > MaxItems) {
-        BadRequest(s"No more than $MaxItems boxes can be requested")
-      }else {
-        ApiResponse(getBoxesByErgoTreeUnspent(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(tree).get), offset, limit))
-      }
-    }catch {
-      case e: Exception => BadRequest(s"${e.getMessage}")
+  private def getBoxesByErgoTreeUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging) { (tree, offset, limit) =>
+    if(limit > MaxItems) {
+      BadRequest(s"No more than $MaxItems boxes can be requested")
+    }else {
+      ApiResponse(getBoxesByErgoTreeUnspent(tree, offset, limit))
     }
   }
 
   private def getTokenInfoById(id: ModifierId): Future[Option[IndexedToken]] = {
     getHistory.map { history =>
-      history.typedModifierById[IndexedToken](id)
+      history.typedModifierById[IndexedToken](IndexedTokenSerializer.uniqueId(id))
     }
   }
 

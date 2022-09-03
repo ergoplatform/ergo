@@ -48,7 +48,6 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
   private val general: ArrayBuffer[BlockSection] = ArrayBuffer.empty[BlockSection]
   private val boxes: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
   private val trees: ArrayBuffer[IndexedErgoAddress] = ArrayBuffer.empty[IndexedErgoAddress]
-  private val tokens: ArrayBuffer[IndexedToken] = ArrayBuffer.empty[IndexedToken]
 
   private val inputTokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
 
@@ -66,7 +65,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     None
   }
 
-  private def modCount: Int = general.length + boxes.length + trees.length + tokens.length
+  private def modCount: Int = general.length + boxes.length + trees.length
 
   private def saveProgress(): Unit = {
 
@@ -80,11 +79,10 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
     // merge all modifiers to an Array, avoids reallocations durin concatenation (++)
     val all: Array[BlockSection] = new Array[BlockSection](modCount)
-    val offset: Array[Int] = Array(0, general.length, general.length + boxes.length, general.length + boxes.length + trees.length)
+    val offset: Array[Int] = Array(0, general.length, general.length + boxes.length)
     cfor(0)(_ < general.length, _ + 1) { i => all(i + offset(0)) = general(i) }
     cfor(0)(_ < boxes.length  , _ + 1) { i => all(i + offset(1)) = boxes(i) }
     cfor(0)(_ < trees.length  , _ + 1) { i => all(i + offset(2)) = trees(i) }
-    cfor(0)(_ < tokens.length , _ + 1) { i => all(i + offset(3)) = tokens(i) }
 
     // insert modifiers and progress info to db
     indexedHeightBuffer.clear()
@@ -102,7 +100,6 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     general.clear()
     boxes.clear()
     trees.clear()
-    tokens.clear()
   }
 
   private def index(bt: BlockTransactions, height: Int): Unit = {
@@ -159,7 +156,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
         if(box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))
           cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
             if(!inputTokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1))) {
-              tokens += IndexedTokenSerializer.fromBox(box)
+              general += IndexedTokenSerializer.fromBox(box)
             }
           }
 

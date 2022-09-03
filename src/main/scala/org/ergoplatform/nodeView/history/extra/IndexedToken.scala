@@ -4,13 +4,14 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
+import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
+import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.Values.CollectionConstant
+import sigmastate.Values.{CollectionConstant, EvaluatedValue}
 import sigmastate.{SByte, SType}
-import special.collection.Coll
 
 case class IndexedToken(tokenId: ModifierId,
                         boxId: ModifierId,
@@ -23,10 +24,13 @@ case class IndexedToken(tokenId: ModifierId,
   override type M = IndexedToken
   override def serializer: ScorexSerializer[IndexedToken] = IndexedTokenSerializer
   override val sizeOpt: Option[Int] = None
-  override def serializedId: Array[Byte] = fastIdToBytes(tokenId)
+  override def serializedId: Array[Byte] = fastIdToBytes(uniqueId(tokenId))
 }
 
-object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] with ScorexLogging {
+object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
+
+  // necessary, because token ids are sometimes identical to box ids, which causes overwrites
+  def uniqueId(tokenId: ModifierId): ModifierId = bytesToId(Algos.hash(tokenId + "token"))
 
   def tokenRegistersSet(box: ErgoBox): Boolean = {
 
@@ -40,7 +44,7 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] with Scorex
     try {
       box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]]
       box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]]
-      getDecimals(box.additionalRegisters(R6).value)
+      getDecimals(box.additionalRegisters(R6))
     }catch {
       case _: Throwable => return false
     }
@@ -49,14 +53,11 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] with Scorex
     true
   }
 
-  // Stop type erasure
-  trait ByteColl extends Coll[Byte]
-
-  def getDecimals(x: SType#WrappedType): Int = {
+  def getDecimals(reg: EvaluatedValue[_ <: SType]): Int = {
     try {
-      x.asInstanceOf[ByteColl].toArray(0)
+      new String(reg.asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8").toInt
     }catch {
-      case _: Throwable => x.asInstanceOf[Int]
+      case _: Throwable => reg.value.asInstanceOf[Int]
     }
   }
 
@@ -66,10 +67,10 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] with Scorex
                  box.additionalTokens(0)._2,
                  new String(box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
                  new String(box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
-                 getDecimals(box.additionalRegisters(R6).value))
+                 getDecimals(box.additionalRegisters(R6)))
 
   override def serialize(iT: IndexedToken, w: Writer): Unit = {
-    w.putBytes(iT.serializedId)
+    w.putBytes(fastIdToBytes(iT.tokenId))
     w.putBytes(fastIdToBytes(iT.boxId))
     w.putULong(iT.amount)
     w.putUShort(iT.name.length)

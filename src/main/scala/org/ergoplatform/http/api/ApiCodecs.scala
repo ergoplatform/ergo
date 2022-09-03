@@ -496,7 +496,7 @@ trait ApiCodecs extends JsonCodecs {
 
   implicit val IndexedTokenEncoder: Encoder[IndexedToken] = { token =>
     Json.obj(
-      "id" -> token.id.asJson,
+      "id" -> token.tokenId.asJson,
       "boxId" -> token.boxId.asJson,
       "emissionAmount" -> token.amount.asJson,
       "name" -> token.name.asJson,

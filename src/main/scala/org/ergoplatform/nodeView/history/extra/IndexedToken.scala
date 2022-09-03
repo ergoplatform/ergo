@@ -67,7 +67,7 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
                  box.additionalTokens(0)._2,
                  new String(box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
                  new String(box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
-                 getDecimals(box.additionalRegisters(R6)))
+                 math.max(getDecimals(box.additionalRegisters(R6)), 0))
 
   override def serialize(iT: IndexedToken, w: Writer): Unit = {
     w.putBytes(fastIdToBytes(iT.tokenId))

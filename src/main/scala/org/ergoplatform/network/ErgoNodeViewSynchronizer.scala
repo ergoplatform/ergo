@@ -591,6 +591,54 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
 
+  private def transactionsFromRemote(requestedModifiers: Map[ModifierId, Array[Byte]],
+                                     mp: ErgoMemPool,
+                                     remote: ConnectedPeer): Unit = {
+    // filter out transactions already in the mempool
+    val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
+    val (toProcess, toPutIntoCache) = if (interblockCost.totalCost < MempoolCostPerBlock) {
+      // if we are within per-block limits, parse and process first transaction
+      (notInThePool.headOption, notInThePool.tail)
+    } else {
+      (None, notInThePool)
+    }
+
+    toProcess.foreach { case (txId, txBytes) =>
+      parseAndProcessTransaction(txId, txBytes, remote)
+    }
+    toPutIntoCache.foreach { case (txId, txBytes) =>
+      txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
+    }
+  }
+
+  private def blockSectionsFromRemote(hr: ErgoHistory,
+                                      typeId: ModifierTypeId,
+                                      requestedModifiers: Map[ModifierId, Array[Byte]],
+                                      remote: ConnectedPeer): Unit  = {
+    Constants.modifierSerializers.get(typeId) match {
+      case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
+        // parse all modifiers and put them to modifiers cache
+        val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)
+
+        // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
+        val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
+        if (valid.nonEmpty) {
+          viewHolderRef ! ModifiersFromRemote(valid)
+          // send sync message to the peer to get new headers quickly
+          if (valid.head.isInstanceOf[Header]) {
+            val syncInfo = if (syncV2Supported(remote)) {
+              getV2SyncInfo(hr, full = false)
+            } else {
+              getV1SyncInfo(hr)
+            }
+            sendSyncToPeer(remote, syncInfo)
+          }
+        }
+      case _ =>
+        log.error(s"Undefined serializer for modifier of type $typeId")
+    }
+  }
+
   /**
     * Logic to process block parts got from another peer.
     * Filter out non-requested block parts (with a penalty to spamming peer),
@@ -612,44 +660,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
 
     if (typeId == Transaction.ModifierTypeId) {
-      // filter out transactions already in the mempool
-      val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
-      val (toProcess, toPutIntoCache) = if (interblockCost.totalCost < MempoolCostPerBlock) {
-        // if we are within per-block limits, parse and process first transaction
-        (notInThePool.headOption, notInThePool.tail)
-      } else {
-        (None, notInThePool)
-      }
-
-      toProcess.foreach { case (txId, txBytes) =>
-        parseAndProcessTransaction(txId, txBytes, remote)
-      }
-      toPutIntoCache.foreach { case (txId, txBytes) =>
-        txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
-      }
+      transactionsFromRemote(requestedModifiers, mp, remote)
     } else {
-      Constants.modifierSerializers.get(typeId) match {
-        case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
-          // parse all modifiers and put them to modifiers cache
-          val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)
-
-          // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
-          val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
-          if (valid.nonEmpty) {
-            viewHolderRef ! ModifiersFromRemote(valid)
-            // send sync message to the peer to get new headers quickly
-            if (valid.head.isInstanceOf[Header]) {
-              val syncInfo = if (syncV2Supported(remote)) {
-                getV2SyncInfo(hr, full = false)
-              } else {
-                getV1SyncInfo(hr)
-              }
-              sendSyncToPeer(remote, syncInfo)
-            }
-          }
-        case _ =>
-          log.error(s"Undefined serializer for modifier of type $typeId")
-      }
+     blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
     }
   }
 

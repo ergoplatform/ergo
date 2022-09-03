@@ -34,6 +34,8 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
   private var globalBoxIndex: Long = 0L
   private val globalBoxIndexBuffer: ByteBuffer = ByteBuffer.allocate(8)
 
+  private var lastWroteToDB: Int = 0
+
   private val saveLimit: Int = cacheSettings.history.extraCacheSize * 10
 
   private var caughtUp: Boolean = false
@@ -100,11 +102,13 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     general.clear()
     boxes.clear()
     trees.clear()
+
+    lastWroteToDB = indexedHeight
   }
 
   private def index(bt: BlockTransactions, height: Int): Unit = {
 
-    if(height < indexedHeight) return // do not process older blocks again after caught up (actor message queue)
+    if(caughtUp && height <= indexedHeight) return // do not process older blocks again after caught up (due to actor message queue)
 
     cfor(0)(_ < bt.txs.size, _ + 1) { n =>
 
@@ -168,7 +172,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
     }
 
-    log.info(s"Buffered block #$indexedHeight / $chainHeight [txs: ${bt.txs.size}, boxes: ${bt.txs.map(_.outputs.size).sum}] (buffer: $modCount / $saveLimit)")
+    log.info(s"Buffered block #$height / $chainHeight [txs: ${bt.txs.size}, boxes: ${bt.txs.map(_.outputs.size).sum}] (buffer: $modCount / $saveLimit)")
 
     if(caughtUp) {
 
@@ -204,7 +208,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
   }
 
   override def postStop(): Unit = {
-    log.info(s"Stopped extra indexer at height ${indexedHeight - 1}")
+    log.info(s"Stopped extra indexer at height $lastWroteToDB")
   }
 
   override def receive: Receive = {

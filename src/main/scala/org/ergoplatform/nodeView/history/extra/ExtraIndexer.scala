@@ -124,12 +124,12 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
             case Some(x) => // box found in last saveLimit modifiers, update
               boxes(x).asSpent(tx.id, indexedHeight)
               inputTokens ++= boxes(x).box.additionalTokens.toArray
-            case None => // box not found in last saveLimit blocks
+            case None => // box not found in last saveLimit modifiers
               history.typedModifierById[IndexedErgoBox](inputId) match {
                 case Some(x) => // box found in DB, update
                   boxes += x.asSpent(tx.id, indexedHeight)
                   inputTokens ++= x.box.additionalTokens.toArray
-                case None => log.warn(s"Input for box $inputId not found in database") // box not found at all (this shouldn't happen)
+                case None => log.warn(s"Unknown box used as input: $inputId") // box not found at all (this shouldn't happen)
               }
           }
         }
@@ -145,7 +145,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
         val treeHash: ModifierId = bytesToId(IndexedErgoAddressSerializer.hashErgoTree(box.ergoTree))
         findTreeOpt(treeHash) match {
           case Some(x) => trees(x).addTx(globalTxIndex).addBox(globalBoxIndex) // address found in last saveLimit modifiers, update
-          case None => // address not found in last saveLimit blocks
+          case None => // address not found in last saveLimit modifiers
             history.typedModifierById[IndexedErgoAddress](treeHash) match {
               case Some(x) => trees += x.addTx(globalTxIndex).addBox(globalBoxIndex) // address found in DB, update
               case None => trees += IndexedErgoAddress(treeHash, ListBuffer(globalTxIndex), ListBuffer(globalBoxIndex)) // address not found at all, record
@@ -260,10 +260,10 @@ object ExtraIndexerRefHolder {
   private var _actor: Option[ActorRef] = None
   private var running: Boolean = false
 
-  def start(history: ErgoHistory): Unit = if(_actor.isDefined && !running) {
+  private[history] def start(history: ErgoHistory): Unit = if(_actor.isDefined && !running) {
     _actor.get ! Start(history)
     running = true
   }
 
-  protected[extra] def init(actor: ActorRef): Unit = _actor = Some(actor)
+  private[extra] def init(actor: ActorRef): Unit = _actor = Some(actor)
 }

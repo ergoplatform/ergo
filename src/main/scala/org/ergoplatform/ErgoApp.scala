@@ -132,7 +132,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
-    BlockchainApiRoute(readersHolderRef, ergoSettings, indexerRefOpt),
+    BlockchainApiRoute(readersHolderRef, ergoSettings),
     ErgoPeersApiRoute(peerManagerRef, networkControllerRef, syncTracker, deliveryTracker, scorexSettings.restApi),
     InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),

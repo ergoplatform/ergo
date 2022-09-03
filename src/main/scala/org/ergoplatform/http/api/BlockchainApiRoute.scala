@@ -16,7 +16,7 @@ import sigmastate.Values.ErgoTree
 
 import scala.concurrent.Future
 
-case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, extraIndexerOpt: Option[ActorRef])
+case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi

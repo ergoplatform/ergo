@@ -44,7 +44,8 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     * @param condition filter only ModifierIds that pass this condition
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
-  def nextModifiersToDownload(howManyPerType: Int, condition: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
+  def nextModifiersToDownload(howManyPerType: Int,
+                              condition: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
     @tailrec
     def continuation(height: Int, acc: Map[ModifierTypeId, Vector[ModifierId]]): Map[ModifierTypeId, Vector[ModifierId]] = {
       // return if at least one of Modifier types reaches howManyPerType limit for modifier ids

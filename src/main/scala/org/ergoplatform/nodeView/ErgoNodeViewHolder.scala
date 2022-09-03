@@ -19,17 +19,14 @@ import scorex.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
+import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import scorex.core.consensus.ProgressInfo
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
-
 import java.io.File
-import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
-
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
@@ -213,20 +210,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  /**
-    * Get estimated height of headers-chain, if it is synced
-    * @return height of last header known, if headers-chain is synced, or None if not synced
-    */
-  private def estimatedTip(): Option[Height] = {
-    Try { //error may happen if history not initialized
-      if(history().isHeadersChainSynced) {
-        Some(history().headersHeight)
-      } else {
-        None
-      }
-    }.getOrElse(None)
-  }
-
   private def applyState(history: ErgoHistory,
                          stateToApply: State,
                          suffixTrimmed: IndexedSeq[BlockSection],
@@ -238,7 +221,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         f
       case (success@Success(updateInfo), modToApply) =>
         if (updateInfo.failedMod.isEmpty) {
-          updateInfo.state.applyModifier(modToApply, estimatedTip())(lm => pmodModify(lm.pmod, local = true)) match {
+          val chainTipOpt = history.estimatedTip()
+          updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 context.system.eventStream.publish(SemanticallySuccessfulModifier(modToApply))
@@ -533,7 +517,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         }
         toApply.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
           log.info(s"Applying block ${m.height} during node start-up to restore consistent state: ${m.id}")
-          acc.flatMap(_.applyModifier(m, estimatedTip())(lm => self ! lm))
+          val chainTipOpt = history.estimatedTip()
+          acc.flatMap(_.applyModifier(m, chainTipOpt)(lm => self ! lm))
         }
     }
   }
@@ -566,14 +551,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case Success(state) =>
         log.info("Recovering state using current epoch")
         chainToApply.foldLeft[Try[DigestState]](Success(state)) { case (acc, m) =>
-          acc.flatMap(_.applyModifier(m, estimatedTip())(lm => self ! lm))
+          acc.flatMap(_.applyModifier(m, history.estimatedTip())(lm => self ! lm))
         }
       case Failure(exception) => // recover using whole headers chain
         log.warn(s"Failed to recover state from current epoch, using whole chain: ${exception.getMessage}")
         val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
         val genesisState = DigestState.create(None, None, stateDir(settings), constants)
         wholeChain.foldLeft[Try[DigestState]](Success(genesisState)) { case (acc, m) =>
-          acc.flatMap(_.applyModifier(m, estimatedTip())(lm => self ! lm))
+          acc.flatMap(_.applyModifier(m, history.estimatedTip())(lm => self ! lm))
         }
     }
   }

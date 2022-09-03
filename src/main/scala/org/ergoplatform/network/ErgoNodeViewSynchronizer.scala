@@ -965,7 +965,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  protected def viewHolderEvents(historyReader: ErgoHistory, mempoolReader: ErgoMemPool, blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
+  protected def viewHolderEvents(historyReader: ErgoHistory,
+                                 mempoolReader: ErgoMemPool,
+                                 blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
 
@@ -976,7 +978,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         minModifiersPerBucket,
         maxModifiersPerBucket
       )(getPeersForDownloadingBlocks) { howManyPerType =>
-        historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
+        historyReader.nextModifiersToDownload(howManyPerType, historyReader.estimatedTip(), downloadRequired(historyReader))
       }
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections

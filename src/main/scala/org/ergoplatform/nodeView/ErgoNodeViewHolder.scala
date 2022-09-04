@@ -340,8 +340,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   protected def updateMemPool(blocksRemoved: Seq[BlockSection],
                               blocksApplied: Seq[BlockSection],
-                              memPool: ErgoMemPool,
-                              state: State): ErgoMemPool = {
+                              memPool: ErgoMemPool): ErgoMemPool = {
     val rolledBackTxs = blocksRemoved.flatMap(extractTransactions).map(tx => UnconfirmedTransaction(tx, None))
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
@@ -359,9 +358,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
 
     val wallet = ErgoWallet.readOrGenerate(
-      history.getReader.asInstanceOf[ErgoHistoryReader],
-      settings,
-      LaunchParameters)
+      history.getReader, settings, LaunchParameters)
 
     val memPool = ErgoMemPool.empty(settings)
 
@@ -429,7 +426,20 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
               newStateTry match {
                 case Success(newMinState) =>
-                  val newMemPool = updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool(), newMinState)
+
+                  // we assume that wallet scan may be started if fullblocks-chain is no more
+                  // than 20 blocks behind headers-chain
+                  val almostSyncedGap = 20
+
+                  val headersHeight = newHistory.headersHeight
+                  val fullBlockHeight = newHistory.fullBlockHeight
+                  val almostSynced = (headersHeight - fullBlockHeight) < almostSyncedGap
+
+                  val newMemPool = if(almostSynced) {
+                    updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool())
+                  } else {
+                    memoryPool()
+                  }
 
                   @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
                   val v = vault()
@@ -442,13 +452,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     v
                   }
 
-                  // we assume that wallet scan may be started if fullblocks-chain is no more
-                  // than 20 blocks behind headers-chain
-                  val almostSyncedGap = 20
-
-                  val headersHeight = newHistory.headersHeight
-                  val fullBlockHeight = newHistory.fullBlockHeight
-                  if ((headersHeight - fullBlockHeight) < almostSyncedGap) {
+                  if (almostSynced) {
                     blocksApplied.foreach(newVault.scanPersistent)
                   }
 

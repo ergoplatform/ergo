@@ -666,7 +666,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (typeId == Transaction.ModifierTypeId) {
       transactionsFromRemote(requestedModifiers, mp, remote)
     } else {
-     blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
+      blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
     }
   }
 
@@ -984,7 +984,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case CheckModifiersToDownload =>
       val now = System.currentTimeMillis()
-      if(now - lastCheckForModifiersToDownload >= 500) {
+      if (now - lastCheckForModifiersToDownload >= 500) {
         val maxModifiersToDownload = deliveryTracker.modifiersToDownload
         lastCheckForModifiersToDownload = now
         requestDownload(
@@ -998,6 +998,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
     case SemanticallySuccessfulModifier(modifierTypeId, header) =>
+      log.debug(s"ssm: $modifierTypeId , ${header.id}" )
       if (modifierTypeId == ErgoFullBlock.modifierTypeId) {
         if(header.isNew(timeProvider, 1.hour)) {
           broadcastModifierInv(Header.modifierTypeId, header.id)

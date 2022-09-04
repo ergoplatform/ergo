@@ -3,6 +3,7 @@ package scorex.testkit.properties
 import akka.actor._
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -76,7 +77,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: SyntacticallySuccessfulModifier") {
     withFixture { ctx =>
       import ctx._
-      node ! SyntacticallySuccessfulModifier(mod)
+      node ! SyntacticallySuccessfulModifier(mod.modifierTypeId, mod.id)
       // todo ? : NVS currently does nothing in this case. Should it do?
     }
   }
@@ -92,7 +93,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: SemanticallySuccessfulModifier") {
     withFixture { ctx =>
       import ctx._
-      node ! SemanticallySuccessfulModifier(mod)
+      node ! SemanticallySuccessfulModifier(mod.modifierTypeId, mod.asInstanceOf[Header]) //todo: fix
       ncProbe.fishForMessage(3 seconds) { case m => m.isInstanceOf[SendToNetwork] }
     }
   }

@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
-import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
+import scorex.core.{ModifierTypeId, NodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.ErgoStateReader
@@ -212,9 +212,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(healthCheckDelay, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
   }
 
-  protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
-    val msg = Message(InvSpec, Right(InvData(m.modifierTypeId, Seq(m.id))), None)
+  protected def broadcastModifierInv(modTypeId: ModifierTypeId, modId: ModifierId): Unit = {
+    val msg = Message(InvSpec, Right(InvData(modTypeId, Seq(modId))), None)
     networkControllerRef ! SendToNetwork(msg, Broadcast)
+  }
+
+  protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
+    broadcastModifierInv(m.modifierTypeId, m.id)
   }
 
   /**
@@ -938,14 +942,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.PermanentPenalty)
   }
 
-  protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
-    mod match {
-      case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) =>
-        fb.toSeq.foreach(s => broadcastModifierInv(s))
-      case _ =>
-    }
-  }
-
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>
       syncTracker.updateStatus(remote, status = Unknown, height = None)
@@ -995,9 +991,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
-    case SemanticallySuccessfulModifier(mod) =>
-      broadcastInvForNewModifier(mod)
-      if (mod.isInstanceOf[ErgoFullBlock]) {
+    case SemanticallySuccessfulModifier(modifierTypeId, header) =>
+      if (modifierTypeId == ErgoFullBlock.modifierTypeId) {
+        if(header.isNew(timeProvider, 1.hour)) {
+          broadcastModifierInv(Header.modifierTypeId, header.id)
+          header.sectionIds.foreach{case (_, id) => broadcastModifierInv(Header.modifierTypeId, id)}
+        }
         clearDeclined()
         clearInterblockCost()
         processFirstTxProcessingCacheRecord() // resume cache processing
@@ -1032,8 +1031,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case FailedOnRecheckTransaction(_, _) =>
       // do nothing for now
 
-    case SyntacticallySuccessfulModifier(mod) =>
-      deliveryTracker.setHeld(mod.id, mod.modifierTypeId)
+    case SyntacticallySuccessfulModifier(modTypeId, modId) =>
+      deliveryTracker.setHeld(modId, modTypeId)
 
     case RecoverableFailedModification(mod, e) =>
       logger.debug(s"Setting recoverable failed modifier ${mod.id} as Unknown", e)
@@ -1205,8 +1204,6 @@ object ErgoNodeViewSynchronizer {
 
     case object RollbackFailed extends NodeViewHolderEvent
 
-    case class StartingPersistentModifierApplication(modifier: BlockSection) extends NodeViewHolderEvent
-
     /**
       * After application of batch of modifiers from cache to History, NodeViewHolder sends this message,
       * which contains modifiers cleared from cache
@@ -1241,9 +1238,9 @@ object ErgoNodeViewSynchronizer {
 
     case class SemanticallyFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome
 
-    case class SyntacticallySuccessfulModifier(modifier: BlockSection) extends ModificationOutcome
+    case class SyntacticallySuccessfulModifier(typeId: ModifierTypeId, modifierId: ModifierId) extends ModificationOutcome
 
-    case class SemanticallySuccessfulModifier(modifier: BlockSection) extends ModificationOutcome
+    case class SemanticallySuccessfulModifier(typeId: ModifierTypeId, header: Header) extends ModificationOutcome
 
   }
 

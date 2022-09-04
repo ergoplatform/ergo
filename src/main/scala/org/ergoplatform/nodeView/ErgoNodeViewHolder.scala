@@ -316,7 +316,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           mods.foreach(m => modifiersCache.put(m.id, m))
 
           log.debug(s"Cache size before: ${modifiersCache.size}")
-
           applyFromCacheLoop()
           val cleared = modifiersCache.cleanOverfull()
 

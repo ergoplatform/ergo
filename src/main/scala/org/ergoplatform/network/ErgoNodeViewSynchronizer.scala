@@ -623,6 +623,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
         val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
         if (valid.nonEmpty) {
+          log.debug(s"Sending ${valid.size} modifiers to view holder")
           viewHolderRef ! ModifiersFromRemote(valid)
           // send sync message to the peer to get new headers quickly
           if (valid.head.isInstanceOf[Header]) {
@@ -985,6 +986,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
 
     case CheckModifiersToDownload =>
+      log.debug("CheckModifiersToDownload")
       val maxModifiersToDownload = deliveryTracker.modifiersToDownload
       requestDownload(
         maxModifiersToDownload,

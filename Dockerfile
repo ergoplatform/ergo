@@ -1,4 +1,4 @@
-FROM mozilla/sbt:11.0.8_1.3.13 as builder
+FROM mozilla/sbt:11.0.13_1.6.2 as builder
 WORKDIR /mnt
 COPY build.sbt findbugs-exclude.xml ./
 COPY project/ project/
@@ -12,11 +12,11 @@ COPY . ./
 RUN sbt assembly
 RUN mv `find target/scala-*/stripped/ -name ergo-*.jar` ergo.jar
 
-FROM openjdk:11-jre-slim
-RUN adduser --disabled-password --home /home/ergo --uid 9052 --gecos "ErgoPlatform" ergo && \
+FROM openjdk:11-oraclelinux8
+RUN adduser --home-dir /home/ergo --uid 9052 ergo && \
     install -m 0750 -o ergo -g ergo -d /home/ergo/.ergo
 USER ergo
-EXPOSE 9020 9052 9030 9053
+EXPOSE 9020 9021 9052 9030 9053
 WORKDIR /home/ergo
 VOLUME ["/home/ergo/.ergo"]
 ENV MAX_HEAP 3G

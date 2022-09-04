@@ -3,7 +3,6 @@ package org.ergoplatform.bench
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.Utils
 import org.ergoplatform.Utils.BenchReport
-import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.util.ScorexLogging
 
@@ -31,7 +30,7 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
     case BenchActor.Start =>
       start = System.nanoTime()
       log.info(s"Starting bench..")
-    case SemanticallySuccessfulModifier(_: ErgoFullBlock) =>
+    case SemanticallySuccessfulModifier(_, _) =>
       self ! BenchActor.Inc
     case BenchActor.Inc =>
       counter += 1

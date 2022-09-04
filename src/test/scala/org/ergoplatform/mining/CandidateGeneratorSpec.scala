@@ -192,10 +192,10 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         testProbe.fishForMessage(blockValidationDelay) {
           case StatusReply.Success(()) =>
             testProbe.expectMsgPF(candidateGenDelay) {
-              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+              case SemanticallySuccessfulModifier(_, header) if header.id != block.header.parentId =>
             }
             true
-          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+          case SemanticallySuccessfulModifier(_, header) if header.id != block.header.parentId =>
             testProbe.expectMsg(StatusReply.Success(()))
             true
         }
@@ -237,10 +237,10 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         testProbe.fishForMessage(blockValidationDelay) {
           case StatusReply.Success(()) =>
             testProbe.expectMsgPF(candidateGenDelay) {
-              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+              case SemanticallySuccessfulModifier(_, header) if header.id != block.header.parentId =>
             }
             true
-          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+          case SemanticallySuccessfulModifier(_, header) if header.id != block.header.parentId =>
             testProbe.expectMsg(StatusReply.Success(()))
             true
         }

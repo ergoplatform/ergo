@@ -72,7 +72,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     syncTracker,
     deliveryTracker)(ec) {
 
-    override protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
+    protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
       mod match {
         case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) =>
           fb.toSeq.foreach(s => broadcastModifierInv(s))

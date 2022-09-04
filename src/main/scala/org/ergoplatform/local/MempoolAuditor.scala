@@ -66,7 +66,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   override def receive: Receive = awaiting
 
   private def awaiting: Receive = {
-    case SemanticallySuccessfulModifier(_: ErgoFullBlock) | SemanticallySuccessfulModifier(_: Header) =>
+    case SemanticallySuccessfulModifier(typeId, _) if (typeId == ErgoFullBlock.modifierTypeId || typeId == Header.modifierTypeId)  =>
       stateReaderOpt = None
       poolReaderOpt = None
       nodeViewHolderRef ! GetNodeViewChanges(history = false, state = true, mempool = true, vault = false)

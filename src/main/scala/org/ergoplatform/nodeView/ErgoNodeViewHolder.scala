@@ -225,7 +225,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
-                context.system.eventStream.publish(SemanticallySuccessfulModifier(modToApply))
+                val header = history.getHeaderFor(modToApply).get // todo: .get
+                context.system.eventStream.publish(SemanticallySuccessfulModifier(modToApply.modifierTypeId,  header))
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
               }
             case Failure(e) =>
@@ -404,18 +405,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (pmod.modifierTypeId == ADProofs.modifierTypeId && local && settings.networkType == NetworkType.MainNet) {
         val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
         history().dumpToDb(pmod.serializedId, bytes)
-        context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
-        context.system.eventStream.publish(SemanticallySuccessfulModifier(pmod))
-      } else {
+        context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
 
-        context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
+        val header = history.getHeaderFor(pmod).get // todo: .get
+        context.system.eventStream.publish(SemanticallySuccessfulModifier(pmod.modifierTypeId, header))
+      } else {
 
         log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")
 
         history().append(pmod) match {
           case Success((historyBeforeStUpdate, progressInfo)) =>
             log.debug(s"Going to apply modifications to the state: $progressInfo")
-            context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
+            context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
 
             if (progressInfo.toApply.nonEmpty) {
               val (newHistory, newStateTry, blocksApplied) =

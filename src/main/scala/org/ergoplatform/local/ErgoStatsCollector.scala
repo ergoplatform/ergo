@@ -143,11 +143,11 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   }
 
   def onSemanticallySuccessfulModification: Receive = {
-    case SemanticallySuccessfulModifier(fb: ErgoFullBlock) =>
+    case SemanticallySuccessfulModifier(typeId, header) if typeId == ErgoFullBlock.modifierTypeId =>
       nodeInfo = nodeInfo.copy(
-        stateRoot = Some(Algos.encode(fb.header.stateRoot)),
-        stateVersion = Some(fb.encodedId))
-    case SemanticallySuccessfulModifier(_) =>
+        stateRoot = Some(Algos.encode(header.stateRoot)),
+        stateVersion = Some(header.encodedId))
+    case SemanticallySuccessfulModifier(_, _) =>
       // Ignore other modifiers
   }
 

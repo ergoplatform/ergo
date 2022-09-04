@@ -274,10 +274,10 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
         testProbe.fishForMessage(blockValidationDelay) {
           case StatusReply.Success(()) =>
             testProbe.expectMsgPF(candidateGenDelay) {
-              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+              case SemanticallySuccessfulModifier(_, header) if header.id != block.header.parentId =>
             }
             true
-          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+          case SemanticallySuccessfulModifier(_, header) if header.id != block.header.parentId =>
             testProbe.expectMsg(StatusReply.Success(()))
             true
         }
@@ -429,7 +429,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
       val v2Block = testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-      val h2 = v2Block.modifier.asInstanceOf[ErgoFullBlock].header
+      val h2 = v2Block.header
       h2.version shouldBe 2
       h2.minerPk shouldBe defaultMinerPk.value
     }

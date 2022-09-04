@@ -85,7 +85,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: SyntacticallyFailedModification") {
     withFixture { ctx =>
       import ctx._
-      node ! SyntacticallyFailedModification(mod, new Exception)
+      node ! SyntacticallyFailedModification(mod.modifierTypeId, mod.id, new Exception)
       // todo: NVS currently does nothing in this case. Should check banning.
     }
   }
@@ -101,7 +101,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: SemanticallyFailedModification") {
     withFixture { ctx =>
       import ctx._
-      node ! SemanticallyFailedModification(mod, new Exception)
+      node ! SemanticallyFailedModification(mod.modifierTypeId, mod.id, new Exception)
       // todo: NVS currently does nothing in this case. Should check banning.
     }
   }

@@ -311,9 +311,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           applyFromCacheLoop()
 
           val cleared = modifiersCache.cleanOverfull()
-          context.system.eventStream.publish(ModifiersRemovedFromCache(cleared))
+          val upd = BlockSectionsProcessingCacheUpdate(modifiersCache.size, Header.modifierTypeId -> cleared.map(_.id))
+          context.system.eventStream.publish(upd)
           log.debug(s"Cache size after: ${modifiersCache.size}")
-        case _ =>
+        case Some(head) =>
           mods.foreach(m => modifiersCache.put(m.id, m))
 
           log.debug(s"Cache size before: ${modifiersCache.size}")
@@ -323,9 +324,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           if (cleared.nonEmpty) {
             log.debug(s"Cleared from cache: ${modifiersCache.size} block sections")
-            context.system.eventStream.publish(ModifiersRemovedFromCache(cleared))
           }
+          val upd = BlockSectionsProcessingCacheUpdate(modifiersCache.size, head.modifierTypeId -> cleared.map(_.id))
+          context.system.eventStream.publish(upd)
           log.debug(s"Cache size after: ${modifiersCache.size}")
+        case None =>
+          log.debug("None path in processRemoteModifiers")
       }
   }
 

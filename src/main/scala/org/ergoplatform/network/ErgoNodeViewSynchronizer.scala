@@ -200,7 +200,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
-    context.system.eventStream.subscribe(self, classOf[ModifiersRemovedFromCache])
+    context.system.eventStream.subscribe(self, classOf[BlockSectionsProcessingCacheUpdate])
 
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
 
@@ -974,6 +974,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  private var lastCheckForModifiersToDownload = 0L
+
   protected def viewHolderEvents(historyReader: ErgoHistory,
                                  mempoolReader: ErgoMemPool,
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
@@ -981,13 +983,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
 
     case CheckModifiersToDownload =>
-      val maxModifiersToDownload = deliveryTracker.modifiersToDownload
-      requestDownload(
-        maxModifiersToDownload,
-        minModifiersPerBucket,
-        maxModifiersPerBucket
-      )(getPeersForDownloadingBlocks) { howManyPerType =>
-        historyReader.nextModifiersToDownload(howManyPerType, historyReader.estimatedTip(), downloadRequired(historyReader))
+      val now = System.currentTimeMillis()
+      if(now - lastCheckForModifiersToDownload >= 500) {
+        val maxModifiersToDownload = deliveryTracker.modifiersToDownload
+        lastCheckForModifiersToDownload = now
+        requestDownload(
+          maxModifiersToDownload,
+          minModifiersPerBucket,
+          maxModifiersPerBucket
+        )(getPeersForDownloadingBlocks) { howManyPerType =>
+          historyReader.nextModifiersToDownload(howManyPerType, historyReader.estimatedTip(), downloadRequired(historyReader))
+        }
       }
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
@@ -1052,11 +1058,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
       context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
 
-    case ModifiersRemovedFromCache(cleared: Seq[BlockSection]) =>
+    case BlockSectionsProcessingCacheUpdate(cacheSize, cleared) =>
       // stop processing for cleared modifiers
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
-      cleared.foreach(m => deliveryTracker.setUnknown(m.id, m.modifierTypeId))
-      requestMoreModifiers(historyReader)
+      val modTypeId = cleared._1
+      cleared._2.foreach(mId => deliveryTracker.setUnknown(mId, modTypeId))
+      if (cacheSize < 100 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 500)) {
+        requestMoreModifiers(historyReader)
+      }
 
     case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
       // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
@@ -1204,12 +1213,6 @@ object ErgoNodeViewSynchronizer {
 
     case object RollbackFailed extends NodeViewHolderEvent
 
-    /**
-      * After application of batch of modifiers from cache to History, NodeViewHolder sends this message,
-      * which contains modifiers cleared from cache
-      */
-    case class ModifiersRemovedFromCache(cleared: Seq[BlockSection])
-
     // hierarchy of events regarding modifiers application outcome
     trait ModificationOutcome extends NodeViewHolderEvent
 
@@ -1242,6 +1245,7 @@ object ErgoNodeViewSynchronizer {
 
     case class SemanticallySuccessfulModifier(typeId: ModifierTypeId, header: Header) extends ModificationOutcome
 
+    case class BlockSectionsProcessingCacheUpdate(cacheSize: Int, cleared: (ModifierTypeId, Seq[ModifierId]))
   }
 
 }

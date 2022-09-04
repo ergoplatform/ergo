@@ -1040,17 +1040,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case SyntacticallySuccessfulModifier(modTypeId, modId) =>
       deliveryTracker.setHeld(modId, modTypeId)
 
-    case RecoverableFailedModification(mod, e) =>
-      logger.debug(s"Setting recoverable failed modifier ${mod.id} as Unknown", e)
-      deliveryTracker.setUnknown(mod.id, mod.modifierTypeId)
+    case RecoverableFailedModification(modTypeId, modId, e) =>
+      logger.debug(s"Setting recoverable failed modifier ${modId} as Unknown", e)
+      deliveryTracker.setUnknown(modId, modTypeId)
 
-    case SyntacticallyFailedModification(mod, e) =>
-      logger.debug(s"Invalidating syntactically failed modifier ${mod.id}", e)
-      deliveryTracker.setInvalid(mod.id, mod.modifierTypeId).foreach(penalizeMisbehavingPeer)
+    case SyntacticallyFailedModification(modTypeId, modId, e) =>
+      logger.debug(s"Invalidating syntactically failed modifier ${modId}", e)
+      deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
-    case SemanticallyFailedModification(mod, e) =>
-      logger.debug(s"Invalidating semantically failed modifier ${mod.id}", e)
-      deliveryTracker.setInvalid(mod.id, mod.modifierTypeId).foreach(penalizeMisbehavingPeer)
+    case SemanticallyFailedModification(modTypeId, modId, e) =>
+      logger.debug(s"Invalidating semantically failed modifier ${modId}", e)
+      deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
       context.become(initialized(newHistoryReader, mempoolReader, blockAppliedTxsCache))
@@ -1235,11 +1235,11 @@ object ErgoNodeViewSynchronizer {
       */
     case class FailedOnRecheckTransaction(id : ModifierId, error: Throwable) extends ModificationOutcome
 
-    case class RecoverableFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome
+    case class RecoverableFailedModification(typeId: ModifierTypeId, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
 
-    case class SyntacticallyFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome
+    case class SyntacticallyFailedModification(typeId: ModifierTypeId, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
 
-    case class SemanticallyFailedModification(modifier: BlockSection, error: Throwable) extends ModificationOutcome
+    case class SemanticallyFailedModification(typeId: ModifierTypeId, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
 
     case class SyntacticallySuccessfulModifier(typeId: ModifierTypeId, modifierId: ModifierId) extends ModificationOutcome
 

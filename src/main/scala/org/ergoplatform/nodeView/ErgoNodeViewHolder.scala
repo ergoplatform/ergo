@@ -231,7 +231,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
               }
             case Failure(e) =>
               history.reportModifierIsInvalid(modToApply, progressInfo).map { case (newHis, newProgressInfo) =>
-                context.system.eventStream.publish(SemanticallyFailedModification(modToApply, e))
+                context.system.eventStream.publish(SemanticallyFailedModification(modToApply.modifierTypeId, modToApply.id, e))
                 UpdateInformation(newHis, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
               }
           }
@@ -459,7 +459,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 case Failure(e) =>
                   log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
                   updateNodeView(updatedHistory = Some(newHistory))
-                  context.system.eventStream.publish(SemanticallyFailedModification(pmod, e))
+                  context.system.eventStream.publish(SemanticallyFailedModification(pmod.modifierTypeId, pmod.id, e))
               }
             } else {
               requestDownloads(progressInfo)
@@ -470,10 +470,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             ErgoApp.shutdownSystem()(context.system)
           case Failure(e: RecoverableModifierError) =>
             log.warn(s"Can`t yet apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
-            context.system.eventStream.publish(RecoverableFailedModification(pmod, e))
+            context.system.eventStream.publish(RecoverableFailedModification(pmod.modifierTypeId, pmod.id, e))
           case Failure(e) =>
             log.warn(s"Can`t apply invalid persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
-            context.system.eventStream.publish(SyntacticallyFailedModification(pmod, e))
+            context.system.eventStream.publish(SyntacticallyFailedModification(pmod.modifierTypeId, pmod.id, e))
         }
       }
     } else {

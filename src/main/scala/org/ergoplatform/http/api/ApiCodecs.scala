@@ -481,7 +481,7 @@ trait ApiCodecs extends JsonCodecs {
 
   implicit val indexedTxEncoder: Encoder[IndexedErgoTransaction] = { tx =>
     Json.obj(
-      "id" -> tx.id.asJson,
+      "id" -> tx.txid.asJson,
       "blockId" -> tx.blockId.asJson,
       "inclusionHeight" -> tx.inclusionHeight.asJson,
       "timestamp" -> tx.timestamp.asJson,
@@ -491,7 +491,8 @@ trait ApiCodecs extends JsonCodecs {
       "inputs" -> tx.inputs.asJson,
       "dataInputs" -> tx.dataInputs.asJson,
       "outputs" -> tx.outputs.asJson,
-      "size" -> tx.txSize.asJson)
+      "size" -> tx.txSize.asJson
+    )
   }
 
   implicit val IndexedTokenEncoder: Encoder[IndexedToken] = { token =>

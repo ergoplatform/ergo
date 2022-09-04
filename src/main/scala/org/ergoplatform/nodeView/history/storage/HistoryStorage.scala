@@ -58,7 +58,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
   }
 
   def modifierBytesById(id: ModifierId): Option[Array[Byte]] = {
-    objectsStore.get(idToBytes(id)).map(_.tail) // removing modifier type byte with .tail
+    objectsStore.get(idToBytes(id)).map(_.tail).orElse(extraStore.get(idToBytes(id))) // removing modifier type byte with .tail (only in objectsStore)
   }
 
   def modifierById(id: ModifierId): Option[BlockSection] =

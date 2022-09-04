@@ -6,6 +6,7 @@ import akka.pattern.ask
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{GlobalBoxIndexKey, GlobalTxIndexKey}
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
@@ -13,7 +14,9 @@ import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
+import spire.implicits.cfor
 
+import java.nio.ByteBuffer
 import scala.concurrent.Future
 
 case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
@@ -21,7 +24,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  val paging: Directive[(Long, Long)] = parameters("offset".as[Long] ? 0L, "limit".as[Long] ? 10L)
+  val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 5)
 
   private val MaxItems = 16384
 
@@ -58,7 +61,6 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       case None     => None
     }
 
-
   private def getTxByIdF(id: ModifierId) : Future[Option[IndexedErgoTransaction]] =
     getHistory.map { history =>
       getTxById(id)(history)
@@ -68,20 +70,26 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getTxByIdF(id))
   }
 
-  private def getTxByIndex(index: Long): Future[Option[IndexedErgoTransaction]] =
+  private def getTxByIndex(index: Long)(history: ErgoHistoryReader): Option[IndexedErgoTransaction] =
+    getTxById(history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(index))).get.m)(history)
+
+  private def getLastTx(history: ErgoHistoryReader): IndexedErgoTransaction =
+    getTxByIndex(ByteBuffer.wrap(history.modifierBytesById(bytesToId(GlobalTxIndexKey)).getOrElse(Array.fill[Byte](8){0})).getLong)(history).get
+
+  private def getTxByIndexF(index: Long): Future[Option[IndexedErgoTransaction]] =
     getHistory.map { history =>
-      getTxById(history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(index))).get.m)(history)
+      getTxByIndex(index)(history)
     }
 
   private def getTxByIndexR: Route = (pathPrefix("transaction" / "byIndex" / LongNumber) & get) { index =>
-    ApiResponse(getTxByIndex(index))
+    ApiResponse(getTxByIndexF(index))
   }
 
-  private def getTxsByAddress(addr: ErgoAddress, offset: Long, limit: Long): Future[Option[Seq[IndexedErgoTransaction]]] =
+  private def getTxsByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[Seq[IndexedErgoTransaction]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => Some(addr.retrieveTxs(history, offset, limit))
-        case None       => None
+        case Some(addr) => addr.retrieveTxs(history, offset, limit)
+        case None       => Seq.empty[IndexedErgoTransaction]
       }
     }
 
@@ -93,10 +101,14 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getTxRange(offset: Long, limit: Long): Future[Seq[ModifierId]] =
+  private def getTxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
     getHistory.map { history =>
-      val base: Int = (history.fullBlockHeight - offset).toInt
-      for(n <- (base - limit) to base) yield history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n))).get.m
+      val base: Int = getLastTx(history).globalIndex.toInt - offset
+      val txIds: Array[ModifierId] = new Array[ModifierId](limit)
+      cfor(0)(_ < limit, _ + 1) { i =>
+        txIds(i) = history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(base - limit + i))).get.m
+      }
+      txIds
     }
 
   private def getTxRangeR: Route = (pathPrefix("transaction" / "range") & paging) { (offset, limit) =>
@@ -119,16 +131,19 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getBoxByIdF(id))
   }
 
-  private def getBoxByIndex(index: Long): Future[Option[IndexedErgoBox]] =
+  private def getBoxByIndex(index: Long)(history: ErgoHistoryReader): Option[IndexedErgoBox] =
+    getBoxById(history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(index))).get.m)(history)
+
+  private def getBoxByIndexF(index: Long): Future[Option[IndexedErgoBox]] =
     getHistory.map { history =>
-      getBoxById(history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(index))).get.m)(history)
+      getBoxByIndex(index)(history)
     }
 
   private def getBoxByIndexR: Route = (pathPrefix("box" / "byIndex" / LongNumber) & get) { index =>
-    ApiResponse(getBoxByIndex(index))
+    ApiResponse(getBoxByIndexF(index))
   }
 
-  private def getBoxesByAddress(addr: ErgoAddress, offset: Long, limit: Long): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
         case Some(addr) => addr.retrieveBoxes(history, offset, limit)
@@ -144,7 +159,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Long, limit: Long): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Int, limit: Int): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
         case Some(addr) => addr.retrieveUtxos(history, offset, limit)
@@ -160,10 +175,17 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxRange(offset: Long, limit: Long): Future[Seq[ModifierId]] =
+  private def getLastBox(history: ErgoHistoryReader): IndexedErgoBox =
+    getBoxByIndex(ByteBuffer.wrap(history.modifierBytesById(bytesToId(GlobalBoxIndexKey)).getOrElse(Array.fill[Byte](8){0})).getLong)(history).get
+
+  private def getBoxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
     getHistory.map { history =>
-      val base: Int = (history.fullBlockHeight - offset).toInt
-      for(n <- (base - limit) to base) yield history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n))).get.m
+      val base: Int = getLastBox(history).globalIndex.toInt - offset
+      val boxIds: Array[ModifierId] = new Array[ModifierId](limit)
+      cfor(0)(_ < limit, _ + 1) { i =>
+        boxIds(i) = history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(base - limit + i))).get.m
+      }
+      boxIds
     }
 
   private def getBoxRangeR: Route = (pathPrefix("box" / "range") & paging) { (offset, limit) =>
@@ -174,7 +196,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByErgoTree(tree: ErgoTree, offset: Long, limit: Long): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByErgoTree(tree: ErgoTree, offset: Int, limit: Int): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(tree)(history) match {
         case Some(iEa) => iEa.retrieveBoxes(history, offset, limit)
@@ -190,7 +212,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Long, limit: Long): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Int, limit: Int): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(tree)(history) match {
         case Some(iEa) => iEa.retrieveUtxos(history, offset, limit)

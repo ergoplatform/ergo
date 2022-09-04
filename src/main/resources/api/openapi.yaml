@@ -5312,7 +5312,7 @@ paths:
           description: amount of elements to skip from the start
           schema:
             type: integer
-            format: int64
+            format: int32
             default: 0
         - in: query
           name: limit
@@ -5320,8 +5320,8 @@ paths:
           description: amount of elements to retrieve
           schema:
             type: integer
-            format: int64
-            default: 10
+            format: int32
+            default: 5
       responses:
         '200':
           description: transactions associated with wanted address
@@ -5358,7 +5358,7 @@ paths:
           description: amount of elements to skip from the start
           schema:
             type: integer
-            format: int64
+            format: int32
             default: 0
         - in: query
           name: limit
@@ -5366,18 +5366,18 @@ paths:
           description: amount of elements to retrieve
           schema:
             type: integer
-            format: int64
-            default: 10
+            format: int32
+            default: 5
       responses:
         '200':
-          description: transactions in wanted range
+          description: transactions ids in wanted range
           content:
             application/json:
               schema:
                 type: array
-                description: Array of transactions
+                description: Array of transaction ids
                 items:
-                  $ref: '#/components/schemas/IndexedErgoTransaction'
+                  $ref: '#/components/schemas/ModifierId'
           default:
             description: Error
             content:
@@ -5470,7 +5470,7 @@ paths:
           description: amount of elements to skip from the start
           schema:
             type: integer
-            format: int64
+            format: int32
             default: 0
         - in: query
           name: limit
@@ -5478,8 +5478,8 @@ paths:
           description: amount of elements to retrieve
           schema:
             type: integer
-            format: int64
-            default: 10
+            format: int32
+            default: 5
       responses:
         '200':
           description: boxes associated with wanted address
@@ -5522,7 +5522,7 @@ paths:
           description: amount of elements to skip from the start
           schema:
             type: integer
-            format: int64
+            format: int32
             default: 0
         - in: query
           name: limit
@@ -5530,8 +5530,8 @@ paths:
           description: amount of elements to retrieve
           schema:
             type: integer
-            format: int64
-            default: 10
+            format: int32
+            default: 5
       responses:
         '200':
           description: unspent boxes associated with wanted address
@@ -5568,7 +5568,7 @@ paths:
           description: amount of elements to skip from the start
           schema:
             type: integer
-            format: int64
+            format: int32
             default: 0
         - in: query
           name: limit
@@ -5576,18 +5576,18 @@ paths:
           description: amount of elements to retrieve
           schema:
             type: integer
-            format: int64
-            default: 10
+            format: int32
+            default: 5
       responses:
         '200':
-          description: boxes in wanted range
+          description: box ids in wanted range
           content:
             application/json:
               schema:
                 type: array
-                description: Array of boxes
+                description: Array of box ids
                 items:
-                  $ref: '#/components/schemas/IndexedErgoBox'
+                  $ref: '#/components/schemas/ModifierId'
           default:
             description: Error
             content:
@@ -5615,7 +5615,7 @@ paths:
           description: amount of elements to skip from the start
           schema:
             type: integer
-            format: int64
+            format: int32
             default: 0
         - in: query
           name: limit
@@ -5623,8 +5623,8 @@ paths:
           description: amount of elements to retrieve
           schema:
             type: integer
-            format: int64
-            default: 10
+            format: int32
+            default: 5
       responses:
         '200':
           description: boxes with wanted ergotree
@@ -5665,7 +5665,7 @@ paths:
           description: amount of elements to skip from the start
           schema:
             type: integer
-            format: int64
+            format: int32
             default: 0
         - in: query
           name: limit
@@ -5673,8 +5673,8 @@ paths:
           description: amount of elements to retrieve
           schema:
             type: integer
-            format: int64
-            default: 10
+            format: int32
+            default: 5
       responses:
         '200':
           description: unspent boxes with wanted ergotree

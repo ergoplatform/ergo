@@ -1,19 +1,19 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.DataInput
+import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.ModifierTypeId
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
 case class IndexedErgoTransaction(txid: ModifierId,
                                   height: Int,
-                                  globalIndex: Long) extends BlockSection {
+                                  globalIndex: Long) extends BlockSection with ScorexLogging {
 
   override val modifierTypeId: ModifierTypeId = IndexedErgoTransaction.modifierTypeId
   override def serializedId: Array[Byte] = fastIdToBytes(txid)
@@ -22,7 +22,7 @@ case class IndexedErgoTransaction(txid: ModifierId,
   override type M = IndexedErgoTransaction
   override def serializer: ScorexSerializer[IndexedErgoTransaction] = IndexedErgoTransactionSerializer
 
-  private var _blockId: ModifierId = _
+  private var _blockId: ModifierId = ModifierId @@ ""
   private var _inclusionHeight: Int = 0
   private var _timestamp: Header.Timestamp = 0L
   private var _index: Int = 0
@@ -44,19 +44,18 @@ case class IndexedErgoTransaction(txid: ModifierId,
 
   def retrieveBody(history: ErgoHistoryReader): IndexedErgoTransaction = {
 
-    val block: ErgoFullBlock = history.typedModifierById[Header](history.headerIdsAtHeight(height).head).flatMap(history.getFullBlock).get
-    val indexInBlock: Int = block.transactions.indices.find(block.transactions(_).id.equals(txid)).get
-    val tx: ErgoTransaction = block.transactions(indexInBlock)
+    val header: Header = history.typedModifierById[Header](history.bestHeaderIdAtHeight(height).get).get
+    val blockTxs: BlockTransactions = history.typedModifierById[BlockTransactions](header.transactionsId).get
 
-    _blockId = block.id
-    _inclusionHeight = block.height
-    _timestamp = block.header.timestamp
-    _index = indexInBlock
-    _numConfirmations = history.bestFullBlockOpt.get.height - block.height
-    _inputs = tx.inputs.map(input => history.typedModifierById[IndexedErgoBox](bytesToId(input.boxId)).get)
-    _dataInputs = tx.dataInputs
-    _outputs = tx.outputs.map(output => history.typedModifierById[IndexedErgoBox](bytesToId(output.id)).get)
-    _txSize = tx.size
+    _blockId = header.id
+    _inclusionHeight = height
+    _timestamp = header.timestamp
+    _index = blockTxs.txs.indices.find(blockTxs.txs(_).id == txid).get
+    _numConfirmations = history.bestFullBlockOpt.get.height - height
+    _inputs = blockTxs.txs(_index).inputs.map(input => history.typedModifierById[IndexedErgoBox](bytesToId(input.boxId)).get)
+    _dataInputs = blockTxs.txs(_index).dataInputs
+    _outputs = blockTxs.txs(_index).outputs.map(output => history.typedModifierById[IndexedErgoBox](bytesToId(output.id)).get)
+    _txSize = blockTxs.txs(_index).size
 
     this
   }

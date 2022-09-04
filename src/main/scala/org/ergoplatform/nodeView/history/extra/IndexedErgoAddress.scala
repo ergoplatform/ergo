@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{box
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
@@ -18,7 +18,7 @@ import spire.syntax.all.cfor
 
 case class IndexedErgoAddress(treeHash: ModifierId,
                               txs: ListBuffer[Long],
-                              boxes: ListBuffer[Long]) extends BlockSection {
+                              boxes: ListBuffer[Long]) extends BlockSection with ScorexLogging {
 
   override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = fastIdToBytes(treeHash)
@@ -33,27 +33,33 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   def txCount(): Long = segmentTreshold * txSegmentCount + txs.length
   def boxCount(): Long = segmentTreshold * boxSegmentCount + boxes.length
 
-  def retrieveTxs(history: ErgoHistoryReader, offset: Long, limit: Long): Array[IndexedErgoTransaction] = {
-    if (offset > txs.length) {
+  def retrieveTxs(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoTransaction] = {
+    if (offset + limit > txs.length && txSegmentCount > 0) {
       val range: Array[Int] = getSegmentsForRange(offset, limit)
       cfor(0)(_ < range.length, _ + 1) { i =>
-        txs ++=: history.typedModifierById[IndexedErgoAddress](txSegmentId(treeHash, txSegmentCount - range(i))).get.txs
+        txs ++=: (history.typedModifierById[IndexedErgoAddress](txSegmentId(treeHash, txSegmentCount - range(i))) match {
+          case Some(iEa) => iEa.txs
+          case None      => ListBuffer.empty[Long]
+        })
       }
     }
-    slice(txs, offset, limit).map(n => NumericTxIndex.getTxByNumber(history, n).get).toArray
+    slice(txs, offset, limit).map(n => NumericTxIndex.getTxByNumber(history, n).get.retrieveBody(history)).toArray
   }
 
-  def retrieveBoxes(history: ErgoHistoryReader, offset: Long, limit: Long): Array[IndexedErgoBox] = {
-    if(offset > boxes.length) {
+  def retrieveBoxes(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoBox] = {
+    if(offset + limit > boxes.length && boxSegmentCount > 0) {
       val range: Array[Int] = getSegmentsForRange(offset, limit)
       cfor(0)(_ < range.length, _ + 1) { i =>
-        boxes ++=: history.typedModifierById[IndexedErgoAddress](boxSegmentId(treeHash, boxSegmentCount - range(i))).get.boxes
+        boxes ++=: (history.typedModifierById[IndexedErgoAddress](boxSegmentId(treeHash, boxSegmentCount - range(i))) match {
+          case Some(iEb) => iEb.boxes
+          case None      => ListBuffer.empty[Long]
+        })
       }
     }
     slice(boxes, offset, limit).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).toArray
   }
 
-  def retrieveUtxos(history: ErgoHistoryReader, offset: Long, limit: Long): Array[IndexedErgoBox] = {
+  def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoBox] = {
     val data: ListBuffer[IndexedErgoBox] = ListBuffer.empty[IndexedErgoBox]
     data ++= boxes.map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filter(!_.trackedBox.isSpent)
     var segment = boxSegmentCount
@@ -94,9 +100,8 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
 object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress] {
 
-  def hashAddress(address: ErgoAddress): Array[Byte] = Algos.hash(address.script.bytes)
-
   def hashErgoTree(tree: ErgoTree): Array[Byte] = Algos.hash(tree.bytes)
+  def hashAddress(address: ErgoAddress): Array[Byte] = hashErgoTree(address.script)
 
   def boxSegmentId(hash: ModifierId, segmentNum: Int): ModifierId = bytesToId(Algos.hash(hash + " box segment " + segmentNum))
   def txSegmentId(hash: ModifierId, segmentNum: Int): ModifierId = bytesToId(Algos.hash(hash + " tx segment " + segmentNum))
@@ -132,10 +137,10 @@ object IndexedErgoAddress {
 
   val segmentTreshold: Int = 512
 
-  def getSegmentsForRange(offset: Long, limit: Long): Array[Int] =
+  def getSegmentsForRange(offset: Int, limit: Int): Array[Int] =
     (math.ceil((offset + limit) * 1F / segmentTreshold).toInt to math.ceil((offset + 1F) / segmentTreshold).toInt by -1).toArray.reverse
 
-  def slice[T](arr: Iterable[T], offset: Long, limit: Long): Iterable[T] =
-    arr.slice((arr.size - offset - limit).toInt, (arr.size - offset + 1).toInt)
+  def slice[T](arr: Iterable[T], offset: Int, limit: Int): Iterable[T] =
+    arr.slice(arr.size - offset - limit, arr.size - offset)
 
 }

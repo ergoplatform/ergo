@@ -16,8 +16,6 @@ case class NumericTxIndex(n: Long, m: ModifierId) extends BlockSection {
   override val modifierTypeId: ModifierTypeId = NumericTxIndex.modifierTypeId
   override type M = NumericTxIndex
   override def serializer: ScorexSerializer[NumericTxIndex] = NumericTxIndexSerializer
-
-  def hashValue: Array[Byte] = Array.empty[Byte]
 }
 object NumericTxIndexSerializer extends ScorexSerializer[NumericTxIndex] {
 
@@ -49,8 +47,6 @@ case class NumericBoxIndex(n: Long, m: ModifierId) extends BlockSection {
   override val modifierTypeId: ModifierTypeId = NumericBoxIndex.modifierTypeId
   override type M = NumericBoxIndex
   override def serializer: ScorexSerializer[NumericBoxIndex] = NumericBoxIndexSerializer
-
-  def hashValue: Array[Byte] = Array.empty[Byte]
 }
 object NumericBoxIndexSerializer extends ScorexSerializer[NumericBoxIndex] {
 

@@ -321,6 +321,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           val cleared = modifiersCache.cleanOverfull()
 
           if (cleared.nonEmpty) {
+            log.debug(s"Cleared from cache: ${modifiersCache.size} block sections")
             context.system.eventStream.publish(ModifiersRemovedFromCache(cleared))
           }
           log.debug(s"Cache size after: ${modifiersCache.size}")

@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.network.Broadcast
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedState, RecheckMempool}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{RecheckMempool}
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import scorex.core.network.message.{InvData, InvSpec, Message}
 import scorex.core.transaction.Transaction

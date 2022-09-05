@@ -622,7 +622,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     Constants.modifierSerializers.get(typeId) match {
       case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
         // parse all modifiers and put them to modifiers cache
-        val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)
+        val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, serializer, remote)
 
         // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
         val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
@@ -700,7 +700,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return collection of parsed modifiers
     */
   def parseModifiers[M <: NodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
-                                            typeId: ModifierTypeId,
                                             serializer: ScorexSerializer[M],
                                             remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>

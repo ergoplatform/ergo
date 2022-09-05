@@ -97,12 +97,12 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       val p = TestProbe()
 
       system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier])
-      system.eventStream.subscribe(eventListener.ref, classOf[SemanticallySuccessfulModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[FullBlockApplied])
       p.send(node, GetDataFromCurrentView[ST, BlockSection] { v => totallyValidModifiers(v.history, v.state, 2).head })
       val mod = p.expectMsgClass(classOf[BlockSection])
       p.send(node, LocallyGeneratedModifier(mod))
       eventListener.expectMsgType[SyntacticallySuccessfulModifier]
-      eventListener.expectMsgType[SemanticallySuccessfulModifier]
+      eventListener.expectMsgType[FullBlockApplied]
     }
   }
 
@@ -127,12 +127,12 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       val p = TestProbe()
 
       system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier])
-      system.eventStream.subscribe(eventListener.ref, classOf[SemanticallySuccessfulModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[FullBlockApplied])
       p.send(node, GetDataFromCurrentView[ST, BlockSection] { v => totallyValidModifiers(v.history, v.state, 2).head })
       val mod = p.expectMsgClass(classOf[BlockSection])
       p.send(node, LocallyGeneratedModifier(mod))
       eventListener.expectMsgType[SyntacticallySuccessfulModifier]
-      eventListener.expectMsgType[SemanticallySuccessfulModifier]
+      eventListener.expectMsgType[FullBlockApplied]
     }
   }
 

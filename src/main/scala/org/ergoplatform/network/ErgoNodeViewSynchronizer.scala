@@ -4,7 +4,7 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransactionSerializer, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
@@ -996,17 +996,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
-    case SemanticallySuccessfulModifier(modifierTypeId, header) =>
-      log.debug(s"ssm: $modifierTypeId , ${header.id}" )
-      if (modifierTypeId == ErgoFullBlock.modifierTypeId) {
-        if(header.isNew(timeProvider, 1.hour)) {
-          broadcastModifierInv(Header.modifierTypeId, header.id)
-          header.sectionIds.foreach{case (_, id) => broadcastModifierInv(Header.modifierTypeId, id)}
-        }
-        clearDeclined()
-        clearInterblockCost()
-        processFirstTxProcessingCacheRecord() // resume cache processing
+    case FullBlockApplied(header) =>
+      if (header.isNew(timeProvider, 1.hour)) {
+        broadcastModifierInv(Header.modifierTypeId, header.id)
+        header.sectionIds.foreach { case (_, id) => broadcastModifierInv(Header.modifierTypeId, id) }
       }
+      clearDeclined()
+      clearInterblockCost()
+      processFirstTxProcessingCacheRecord() // resume cache processing
 
     case st@SuccessfulTransaction(utx) =>
       val tx = utx.transaction
@@ -1243,7 +1240,7 @@ object ErgoNodeViewSynchronizer {
 
     case class SyntacticallySuccessfulModifier(typeId: ModifierTypeId, modifierId: ModifierId) extends ModificationOutcome
 
-    case class SemanticallySuccessfulModifier(typeId: ModifierTypeId, header: Header) extends ModificationOutcome
+    case class FullBlockApplied(header: Header) extends ModificationOutcome
 
     case class BlockSectionsProcessingCacheUpdate(cacheSize: Int, cleared: (ModifierTypeId, Seq[ModifierId]))
   }

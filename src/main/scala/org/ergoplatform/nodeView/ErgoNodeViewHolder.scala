@@ -146,9 +146,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
            G
           / \
-    *   G
+         *   G
         /     \
-    *       G
+       *       G
 
     where path with G-s is about canonical chain (G means semantically valid modifier), path with * is sidechain (* means
     that semantic validity is unknown). New modifier is coming to the sidechain, it sends rollback to the root +
@@ -225,8 +225,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
-                val header = history.getHeaderFor(modToApply).get // todo: .get
-                context.system.eventStream.publish(SemanticallySuccessfulModifier(modToApply.modifierTypeId,  header))
+                if(modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
+                  context.system.eventStream.publish(FullBlockApplied(modToApply.asInstanceOf[ErgoFullBlock].header))
+                }
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
               }
             case Failure(e) =>
@@ -408,9 +409,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
         history().dumpToDb(pmod.serializedId, bytes)
         context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
-
-        val header = history.getHeaderFor(pmod).get // todo: .get
-        context.system.eventStream.publish(SemanticallySuccessfulModifier(pmod.modifierTypeId, header))
       } else {
 
         log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")

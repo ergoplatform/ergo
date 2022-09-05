@@ -4,15 +4,13 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
-import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.network.Broadcast
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, SemanticallySuccessfulModifier}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FullBlockApplied}
 import org.ergoplatform.nodeView.state.UtxoStateReader
 import scorex.core.network.message.{InvData, InvSpec, Message}
 import scorex.core.transaction.Transaction
@@ -60,13 +58,13 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, settings.nodeSettings)))
 
   override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
+    context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
   }
 
   override def receive: Receive = awaiting
 
   private def awaiting: Receive = {
-    case SemanticallySuccessfulModifier(typeId, _) if (typeId == ErgoFullBlock.modifierTypeId || typeId == Header.modifierTypeId)  =>
+    case FullBlockApplied(_) =>
       stateReaderOpt = None
       poolReaderOpt = None
       nodeViewHolderRef ! GetNodeViewChanges(history = false, state = true, mempool = true, vault = false)

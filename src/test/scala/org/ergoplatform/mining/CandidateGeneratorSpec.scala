@@ -18,7 +18,7 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
@@ -28,8 +28,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
 
   implicit private val timeout: Timeout = defaultTimeout
 
-  private val newBlockSignal: Class[SemanticallySuccessfulModifier] =
-    classOf[SemanticallySuccessfulModifier]
+  private val newBlockSignal: Class[FullBlockApplied] = classOf[FullBlockApplied]
   private val newBlockDelay: FiniteDuration        = 30.seconds
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
@@ -192,10 +191,10 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         testProbe.fishForMessage(blockValidationDelay) {
           case StatusReply.Success(()) =>
             testProbe.expectMsgPF(candidateGenDelay) {
-              case SemanticallySuccessfulModifier(_, header) if header.id != block.header.parentId =>
+              case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
-          case SemanticallySuccessfulModifier(_, header) if header.id != block.header.parentId =>
+          case FullBlockApplied(header) if header.id != block.header.parentId =>
             testProbe.expectMsg(StatusReply.Success(()))
             true
         }
@@ -237,10 +236,10 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         testProbe.fishForMessage(blockValidationDelay) {
           case StatusReply.Success(()) =>
             testProbe.expectMsgPF(candidateGenDelay) {
-              case SemanticallySuccessfulModifier(_, header) if header.id != block.header.parentId =>
+              case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
-          case SemanticallySuccessfulModifier(_, header) if header.id != block.header.parentId =>
+          case FullBlockApplied(header) if header.id != block.header.parentId =>
             testProbe.expectMsg(StatusReply.Success(()))
             true
         }

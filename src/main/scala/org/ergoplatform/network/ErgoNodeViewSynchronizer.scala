@@ -1245,6 +1245,8 @@ object ErgoNodeViewSynchronizer {
     case class FullBlockApplied(header: Header) extends ModificationOutcome
 
     case class BlockSectionsProcessingCacheUpdate(cacheSize: Int, cleared: (ModifierTypeId, Seq[ModifierId]))
+
+    case class RecheckMempool(state: ErgoStateReader, mempool: ErgoMemPoolReader) extends NodeViewChange
   }
 
 }

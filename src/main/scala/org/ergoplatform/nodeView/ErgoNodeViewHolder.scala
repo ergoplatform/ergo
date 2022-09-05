@@ -453,6 +453,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     blocksApplied.foreach(newVault.scanPersistent)
                   }
 
+                  if(headersHeight == fullBlockHeight) {
+                    context.system.eventStream.publish(RecheckMempool(newMinState, newMemPool))
+                  }
+
                   log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
                   updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
                   chainProgress =

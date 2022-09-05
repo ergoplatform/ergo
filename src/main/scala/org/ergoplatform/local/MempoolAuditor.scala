@@ -7,11 +7,10 @@ import org.ergoplatform.local.MempoolAuditor.CleanupDone
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.network.Broadcast
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FullBlockApplied}
-import org.ergoplatform.nodeView.state.UtxoStateReader
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedState, RecheckMempool}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import scorex.core.network.message.{InvData, InvSpec, Message}
 import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
@@ -51,33 +50,23 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       Restart
   }
 
-  private var stateReaderOpt: Option[TransactionValidation] = None
   private var poolReaderOpt: Option[ErgoMemPoolReader] = None
+  private var stateReaderOpt: Option[ErgoStateReader] = None
 
   private val worker: ActorRef =
     context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, settings.nodeSettings)))
 
   override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
+    context.system.eventStream.subscribe(self, classOf[RecheckMempool])
   }
 
   override def receive: Receive = awaiting
 
   private def awaiting: Receive = {
-    case FullBlockApplied(_) =>
-      stateReaderOpt = None
-      poolReaderOpt = None
-      nodeViewHolderRef ! GetNodeViewChanges(history = false, state = true, mempool = true, vault = false)
-
-    case ChangedMempool(mp: ErgoMemPoolReader) =>
-      poolReaderOpt = Some(mp)
-      stateReaderOpt.foreach(st => initiateCleanup(st, mp))
-
-    case ChangedState(st: TransactionValidation) =>
+    case RecheckMempool(st: TransactionValidation, mp: ErgoMemPoolReader) =>
       stateReaderOpt = Some(st)
-      poolReaderOpt.foreach(mp => initiateCleanup(st, mp))
-
-    case ChangedState(_) | ChangedMempool(_) => // do nothing
+      poolReaderOpt = Some(mp)
+      initiateCleanup(st, mp)
   }
 
   private def working: Receive = {
@@ -85,8 +74,6 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       log.info("Cleanup done. Switching to awaiting mode")
       //rebroadcast transactions
       rebroadcastTransactions()
-      stateReaderOpt = None
-      poolReaderOpt = None
       context become awaiting
 
     case _ => // ignore other triggers until work is done

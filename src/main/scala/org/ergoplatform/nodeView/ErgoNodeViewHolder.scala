@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
+import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -26,6 +27,7 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
+
 import java.io.File
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
@@ -40,7 +42,7 @@ import scala.util.{Failure, Success, Try}
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)
-  extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
+  extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] with ScorexLogging with ScorexEncoding with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
 

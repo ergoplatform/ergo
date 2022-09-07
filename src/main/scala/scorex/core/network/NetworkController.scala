@@ -20,7 +20,8 @@ import scorex.util.ScorexLogging
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Random, Try}
-
+import akka.dispatch.RequiresMessageQueue
+import akka.dispatch.BoundedMessageQueueSemantics
 /**
   * Control all network interaction
   * must be singleton
@@ -29,7 +30,7 @@ class NetworkController(scorexSettings: ScorexSettings,
                         peerManagerRef: ActorRef,
                         scorexContext: ScorexContext,
                         tcpManager: ActorRef
-                       )(implicit ec: ExecutionContext) extends Actor with ScorexLogging {
+                       )(implicit ec: ExecutionContext) extends Actor  with RequiresMessageQueue[BoundedMessageQueueSemantics] with ScorexLogging {
 
   import NetworkController.ReceivableMessages._
   import PeerConnectionHandler.ReceivableMessages.CloseConnection
@@ -560,6 +561,7 @@ object NetworkControllerRef {
             scorexContext: ScorexContext,
             tcpManager: ActorRef)(implicit ec: ExecutionContext): Props = {
     Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager))
+      .withDispatcher("p2p-dispatcher")
   }
 
   def apply(name: String,

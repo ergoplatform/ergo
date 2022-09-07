@@ -25,6 +25,9 @@ import java.net.URL
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
+import akka.dispatch.RequiresMessageQueue
+import akka.dispatch.BoundedMessageQueueSemantics
+
 /**
   * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
   */
@@ -33,7 +36,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
                          syncTracker: ErgoSyncTracker,
                          settings: ErgoSettings,
                          timeProvider: NetworkTimeProvider)
-  extends Actor with ScorexLogging {
+  extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] with ScorexLogging {
 
   override def preStart(): Unit = {
     val ec: ExecutionContextExecutor = context.dispatcher

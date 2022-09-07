@@ -34,6 +34,7 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import ErgoNodeViewSynchronizer.{IncomingTxInfo, TransactionProcessingCacheRecord}
+import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -53,7 +54,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncTracker: ErgoSyncTracker,
                                deliveryTracker: DeliveryTracker
                               )(implicit ex: ExecutionContext)
-  extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
+  extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] with Synchronizer with ScorexLogging with ScorexEncoding {
 
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
     maxNrOfRetries = 10,
@@ -525,6 +526,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                           modifierIds: Seq[ModifierId],
                           peer: ConnectedPeer,
                           checksDone: Int = 0): Unit = {
+    log.debug(s"Requesting block sections of type $modifierTypeId : $modifierIds")
     if(checksDone > 0 && modifierIds.length > 1) {
       log.warn(s"Incorrect state, checksDone > 0 && modifierIds.length > 1 , for $modifierIds of type $modifierTypeId")
     }
@@ -984,7 +986,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case CheckModifiersToDownload =>
       val now = System.currentTimeMillis()
-      if (now - lastCheckForModifiersToDownload >= 500) {
+      if (now - lastCheckForModifiersToDownload >= 2000) {
         log.debug("CheckModifiersToDownload")
         val maxModifiersToDownload = deliveryTracker.modifiersToDownload
         lastCheckForModifiersToDownload = now

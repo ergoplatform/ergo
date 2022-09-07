@@ -277,5 +277,6 @@ object PeerConnectionHandlerRef {
             connectionDescription: ConnectionDescription
            )(implicit ec: ExecutionContext): Props =
     Props(new PeerConnectionHandler(settings, networkControllerRef, scorexContext, connectionDescription))
+      .withDispatcher("p2p-dispatcher")
 
 }

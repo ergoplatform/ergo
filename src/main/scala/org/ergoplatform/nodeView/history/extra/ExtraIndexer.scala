@@ -13,7 +13,6 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.ReceivableMessage
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.segmentTreshold
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
-import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
 import java.nio.ByteBuffer
@@ -124,16 +123,28 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
       if(height != 1) { //only after 1st block (skip genesis box)
         cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
           val inputId: ModifierId = bytesToId(tx.inputs(i).boxId)
+          var boxIndex: Int = 0
           findBoxOpt(inputId) match {
             case Some(x) => // box found in last saveLimit modifiers, update
               boxes(x).asSpent(tx.id, height)
+              boxIndex = x
               tokens ++= boxes(x).box.additionalTokens.toArray
             case None => // box not found in last saveLimit modifiers
               history.typedModifierById[IndexedErgoBox](inputId) match {
                 case Some(x) => // box found in DB, update
                   boxes += x.asSpent(tx.id, height)
+                  boxIndex = boxes.length - 1
                   tokens ++= x.box.additionalTokens.toArray
                 case None => log.warn(s"Unknown box used as input: $inputId") // box not found at all (this shouldn't happen)
+              }
+          }
+          val treeHash: ModifierId = bytesToId(IndexedErgoAddressSerializer.hashErgoTree(boxes(boxIndex).box.ergoTree))
+          findTreeOpt(treeHash) match {
+            case Some(x) => trees(x).addTx(globalTxIndex).spendBox(boxes(boxIndex).box) // address found in last saveLimit modifiers, update
+            case None => // address not found in last saveLimit modifiers
+              history.typedModifierById[IndexedErgoAddress](treeHash) match {
+                case Some(x) => trees += x.addTx(globalTxIndex).spendBox(boxes(boxIndex).box) // address found in DB, update
+                case None => // address not found at all (this shouldn't happen)
               }
           }
         }
@@ -148,11 +159,11 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
         // box by address
         val treeHash: ModifierId = bytesToId(IndexedErgoAddressSerializer.hashErgoTree(box.ergoTree))
         findTreeOpt(treeHash) match {
-          case Some(x) => trees(x).addTx(globalTxIndex).addBox(globalBoxIndex) // address found in last saveLimit modifiers, update
+          case Some(x) => trees(x).addTx(globalTxIndex).addBox(boxes.last) // address found in last saveLimit modifiers, update
           case None => // address not found in last saveLimit modifiers
             history.typedModifierById[IndexedErgoAddress](treeHash) match {
-              case Some(x) => trees += x.addTx(globalTxIndex).addBox(globalBoxIndex) // address found in DB, update
-              case None => trees += IndexedErgoAddress(treeHash, ListBuffer(globalTxIndex), ListBuffer(globalBoxIndex)) // address not found at all, record
+              case Some(x) => trees += x.addTx(globalTxIndex).addBox(boxes.last) // address found in DB, update
+              case None => trees += IndexedErgoAddress(treeHash, ListBuffer(globalTxIndex), ListBuffer.empty[Long], Some(BalanceInfo.fromBox(box))).addBox(boxes.last) // address not found at all, record
             }
         }
 
@@ -253,9 +264,9 @@ object ExtraIndexerRef {
     x
   }
 
-  val IndexedHeightKey: Array[Byte] = ByteArrayWrapper.apply(Algos.hash("indexed height")).data
-  val GlobalTxIndexKey: Array[Byte] = ByteArrayWrapper.apply(Algos.hash("txns height")).data
-  val GlobalBoxIndexKey: Array[Byte] = ByteArrayWrapper.apply(Algos.hash("boxes height")).data
+  val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")
+  val GlobalTxIndexKey: Array[Byte] = Algos.hash("txns height")
+  val GlobalBoxIndexKey: Array[Byte] = Algos.hash("boxes height")
 
   def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {
     val actor = system.actorOf(Props.create(classOf[ExtraIndex], chainSettings, cacheSettings))

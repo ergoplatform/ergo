@@ -9,11 +9,11 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.ModifierTypeId
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util.{ModifierId, bytesToId}
 
 case class IndexedErgoTransaction(txid: ModifierId,
                                   height: Int,
-                                  globalIndex: Long) extends BlockSection with ScorexLogging {
+                                  globalIndex: Long) extends BlockSection {
 
   override val modifierTypeId: ModifierTypeId = IndexedErgoTransaction.modifierTypeId
   override def serializedId: Array[Byte] = fastIdToBytes(txid)

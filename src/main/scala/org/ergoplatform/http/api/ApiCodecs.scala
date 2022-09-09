@@ -479,19 +479,33 @@ trait ApiCodecs extends JsonCodecs {
     ))
   }
 
-  implicit val indexedTxEncoder: Encoder[IndexedErgoTransaction] = { tx =>
+  implicit val indexedBoxSeqEncoder: Encoder[(Seq[IndexedErgoBox],Long)] = { iEbSeq =>
     Json.obj(
-      "id" -> tx.txid.asJson,
-      "blockId" -> tx.blockId.asJson,
-      "inclusionHeight" -> tx.inclusionHeight.asJson,
-      "timestamp" -> tx.timestamp.asJson,
-      "index" -> tx.index.asJson,
-      "globalIndex" -> tx.globalIndex.asJson,
-      "numConfirmations" -> tx.numConfirmations.asJson,
-      "inputs" -> tx.inputs.asJson,
-      "dataInputs" -> tx.dataInputs.asJson,
-      "outputs" -> tx.outputs.asJson,
-      "size" -> tx.txSize.asJson
+      "items" -> iEbSeq._1.asJson,
+      "total" -> iEbSeq._2.asJson
+    )
+  }
+
+  implicit val indexedTxEncoder: Encoder[IndexedErgoTransaction] = { iEt =>
+    Json.obj(
+      "id" -> iEt.txid.asJson,
+      "blockId" -> iEt.blockId.asJson,
+      "inclusionHeight" -> iEt.inclusionHeight.asJson,
+      "timestamp" -> iEt.timestamp.asJson,
+      "index" -> iEt.index.asJson,
+      "globalIndex" -> iEt.globalIndex.asJson,
+      "numConfirmations" -> iEt.numConfirmations.asJson,
+      "inputs" -> iEt.inputs.asJson,
+      "dataInputs" -> iEt.dataInputs.asJson,
+      "outputs" -> iEt.outputs.asJson,
+      "size" -> iEt.txSize.asJson
+    )
+  }
+
+  implicit val indexedTxSeqEncoder: Encoder[(Seq[IndexedErgoTransaction],Long)] = { iEtSeq =>
+    Json.obj(
+      "items" -> iEtSeq._1.asJson,
+      "total" -> iEtSeq._2.asJson
     )
   }
 
@@ -505,6 +519,24 @@ trait ApiCodecs extends JsonCodecs {
       "decimals" -> token.decimals.asJson
     )
   }
+
+  /*implicit val BalanceInfoEncoder: Encoder[BalanceInfo] = { bal =>
+    Json.obj(
+      "confirmed" -> Json.obj(
+        "nanoErgs" -> bal.nanoErgs.asJson,
+        "tokens" -> bal.tokens.map(t => {
+          val iT: IndexedToken = history.typedModifierById[IndexedToken](bytesToId(t._1)).get
+          Json.obj(
+            "tokenId" -> iT.tokenId.asJson,
+            "amount" -> t._2.asJson,
+            "decimals" -> iT.decimals.asJson,
+            "name" -> iT.name.asJson
+          )
+        })
+      ),
+      "unconfirmed" -> Json.obj() // TODO
+    )
+  }*/
 
 }
 

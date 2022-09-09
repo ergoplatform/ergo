@@ -3,17 +3,14 @@ package scorex.core
 import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.consensus.ContainsModifiers
-import scorex.core.validation.RecoverableModifierError
-import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.util.{Failure, Success}
 
 /**
   * A cache which is storing persistent modifiers not applied to history yet.
   *
-  * This trait is not thread-save so it should be used only as a local field of an actor
+  * This trait is not thread-safe so it should be used only as a local field of an actor
   * and its methods should not be called from lambdas, Future, Future.map, etc.
   *
   */
@@ -113,35 +110,5 @@ trait LRUCache extends ModifiersCache {
 
     removeUntilCorrectSize(List())
   }
-}
 
-class DefaultModifiersCache(override val maxSize: Int)
-  extends ModifiersCache with LRUCache with ScorexLogging {
-
-  /**
-    * Default implementation is just about to scan. Not efficient at all and should be probably rewritten in a
-    * concrete application.
-    *
-    * @param history - an interface to history which could be needed to define a candidate
-    * @return - candidate if it is found
-    */
-  @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
-  override def findCandidateKey(history: ErgoHistory): Option[K] = {
-
-    cache.find { case (k, v) =>
-      history.applicableTry(v) match {
-        case Failure(e) if e.isInstanceOf[RecoverableModifierError] =>
-          // do nothing - modifier may be applied in future
-          false
-        case Failure(e) =>
-          // non-recoverable error - remove modifier from cache
-          // TODO blaklist peer who sent it
-          log.warn(s"Modifier ${v.encodedId} became permanently invalid and will be removed from cache", e)
-          remove(k)
-          false
-        case Success(_) =>
-          true
-      }
-    }.map(_._1)
-  }
 }

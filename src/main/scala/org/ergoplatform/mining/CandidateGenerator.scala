@@ -266,7 +266,7 @@ object CandidateGenerator extends ScorexLogging {
           timeProvider,
           ergoSettings
         )
-      ),
+      ).withDispatcher("critical-dispatcher"),
       s"CandidateGenerator-${Random.alphanumeric.take(5).mkString}"
     )
 

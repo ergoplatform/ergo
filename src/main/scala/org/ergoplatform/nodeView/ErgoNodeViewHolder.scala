@@ -26,6 +26,7 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
+
 import java.io.File
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
@@ -275,13 +276,21 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[BlockSection]@unchecked) =>
       @tailrec
-      def applyFromCacheLoop(): Unit = {
-        modifiersCache.popCandidate(history()) match {
-          case Some(mod) =>
-            pmodModify(mod, local = false)
-            applyFromCacheLoop()
-          case None =>
-            ()
+      def applyFromCacheLoop(limit: Int = 10000): Unit = {
+        if(limit <= 0 ){
+          ()
+        } else {
+          val at0 = System.currentTimeMillis()
+          modifiersCache.popCandidate(history()) match {
+            case Some(mod) =>
+              pmodModify(mod, local = false)
+              val at = System.currentTimeMillis()
+              log.debug(s"Modifier application time for ${mod.id}: ${at - at0}")
+              val diff = (at - at0).toInt
+              applyFromCacheLoop(limit - diff)
+            case None =>
+              ()
+          }
         }
       }
 
@@ -320,7 +329,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           log.debug(s"Cache size before: ${modifiersCache.size}")
 
-          applyFromCacheLoop()
+          val at0 = System.currentTimeMillis()
+          applyFromCacheLoop(750)
+          val at = System.currentTimeMillis()
+          log.debug(s"Application time: ${at-at0}")
+
           val cleared = modifiersCache.cleanOverfull()
 
           if (cleared.nonEmpty) {
@@ -452,6 +465,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
                   if (almostSynced) {
                     blocksApplied.foreach(newVault.scanPersistent)
+                  }
+
+                  if(headersHeight == fullBlockHeight) {
+                    context.system.eventStream.publish(RecheckMempool(newMinState, newMemPool))
                   }
 
                   log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
@@ -740,10 +757,10 @@ object ErgoNodeViewRef {
 
   def props(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider): Props =
-    settings.nodeSettings.stateType match {
+    (settings.nodeSettings.stateType match {
       case StateType.Digest => digestProps(settings, timeProvider)
       case StateType.Utxo => utxoProps(settings, timeProvider)
-    }
+    }).withDispatcher("critical-dispatcher")
 
   def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
     system.actorOf(props(settings, timeProvider))

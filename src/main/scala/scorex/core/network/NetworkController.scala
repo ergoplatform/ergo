@@ -561,7 +561,6 @@ object NetworkControllerRef {
             scorexContext: ScorexContext,
             tcpManager: ActorRef)(implicit ec: ExecutionContext): Props = {
     Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager))
-      .withDispatcher("p2p-dispatcher")
   }
 
   def apply(name: String,

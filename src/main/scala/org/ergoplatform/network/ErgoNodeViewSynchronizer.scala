@@ -561,9 +561,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
-      if (deliveryTracker.status(modifierId, modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
-        requestBlockSection(modifierTypeId, modifierId, checksDone = 0, None)
-      }
+      if(modifiersCacheSize < 50) {
+        if (deliveryTracker.status(modifierId, modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
+          requestBlockSection(modifierTypeId, modifierId, checksDone = 0, None)
+        }
+      } //todo: else cache?
   }
 
   /**
@@ -623,22 +625,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                       remote: ConnectedPeer): Unit  = {
     Constants.modifierSerializers.get(typeId) match {
       case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
-        // parse all modifiers and put them to modifiers cache
-        val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, serializer, remote)
+        if(modifiersCacheSize <= 48) {
+          // parse all modifiers and put them to modifiers cache
+          val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, serializer, remote)
 
-        // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
-        val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
-        if (valid.nonEmpty) {
-          log.debug(s"Sending ${valid.size} modifiers to view holder")
-          viewHolderRef ! ModifiersFromRemote(valid)
-          // send sync message to the peer to get new headers quickly
-          if (valid.head.isInstanceOf[Header]) {
-            val syncInfo = if (syncV2Supported(remote)) {
-              getV2SyncInfo(hr, full = false)
-            } else {
-              getV1SyncInfo(hr)
+          // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
+          val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
+          if (valid.nonEmpty) {
+            log.debug(s"Sending ${valid.size} modifiers to view holder, vh cache size: $modifiersCacheSize")
+            modifiersCacheSize += valid.size
+            viewHolderRef ! ModifiersFromRemote(valid)
+            // send sync message to the peer to get new headers quickly
+            if (valid.head.isInstanceOf[Header]) {
+              val syncInfo = if (syncV2Supported(remote)) {
+                getV2SyncInfo(hr, full = false)
+              } else {
+                getV1SyncInfo(hr)
+              }
+              sendSyncToPeer(remote, syncInfo)
             }
-            sendSyncToPeer(remote, syncInfo)
+          }
+        } else {
+          requestedModifiers.keys.foreach {mId =>
+            deliveryTracker.setUnknown(mId, typeId)
           }
         }
       case _ =>
@@ -977,6 +986,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private var lastCheckForModifiersToDownload = 0L
+  private var modifiersCacheSize = 0
 
   protected def viewHolderEvents(historyReader: ErgoHistory,
                                  mempoolReader: ErgoMemPool,
@@ -986,7 +996,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case CheckModifiersToDownload =>
       val now = System.currentTimeMillis()
-      if (now - lastCheckForModifiersToDownload >= 2000) {
+      if (now - lastCheckForModifiersToDownload >= 1000 && modifiersCacheSize < 30) {
         log.debug("CheckModifiersToDownload")
         val maxModifiersToDownload = deliveryTracker.modifiersToDownload
         lastCheckForModifiersToDownload = now
@@ -1064,7 +1074,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       val modTypeId = cleared._1
       cleared._2.foreach(mId => deliveryTracker.setUnknown(mId, modTypeId))
-      if (cacheSize < 100 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 500)) {
+      modifiersCacheSize = cacheSize
+      if (cacheSize < 50 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 500)) {
         requestMoreModifiers(historyReader)
       }
 

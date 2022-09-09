@@ -6,7 +6,6 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.Http.ServerBinding
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.LoggerContext
-import kamon.Kamon
 import org.ergoplatform.http._
 import org.ergoplatform.http.api._
 import org.ergoplatform.local._
@@ -238,7 +237,6 @@ object ErgoApp extends ScorexLogging {
     CoordinatedShutdown(system).run(reason)
 
   def main(args: Array[String]): Unit = {
-    Kamon.init()
     argParser.parse(args, Args()).foreach { argsParsed =>
       new ErgoApp(argsParsed).run()
     }

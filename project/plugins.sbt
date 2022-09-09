@@ -1,7 +1,5 @@
 logLevel := Level.Warn
 
-addSbtPlugin("io.kamon" % "sbt-kanela-runner" % "2.0.14")
-
 addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.5.1")
 
 addSbtPlugin("se.marcuslonnberg" % "sbt-docker" % "1.4.1")

@@ -88,7 +88,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
-      Seq.empty
+      Nil
     } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)

@@ -39,7 +39,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.util.{Failure, Random, Success}
+import scala.util.{Failure, Success}
 
 /**
   * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the
@@ -438,10 +438,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           lastSyncHeaderApplied = Some(continuationHeader.height)
           viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
           val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
+          log.info(s"Downloading block sections for header ${continuationHeader.encodedId}")
           modifiersToDownload.foreach {
             case (modifierTypeId, modifierId) =>
               if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
-                log.info(s"Downloading block section for header ${continuationHeader.encodedId} : ($modifierId, $modifierTypeId)")
                 requestBlockSection(modifierTypeId, Seq(modifierId), peer)
               }
           }
@@ -460,40 +460,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     syncTracker.peersByStatus
       .get(Older)
       .getOrElse(Array(callingPeer))
-  }
-
-  /**
-    * @return a peer to download block sections from.
-    */
-  private def getPeerForDownloadingBlocks(peerToAvoid: Option[ConnectedPeer]): Option[ConnectedPeer] = {
-
-    def filterOutFn(cp: ConnectedPeer) = {
-      blockSectionsDownloadFilter.condition(cp) && !peerToAvoid.contains(cp)
-    }
-
-    // helper function to take a peer from a group of peers of the same status (e.g. older than us)
-    def peerFrom(peers: Seq[ConnectedPeer]): Option[ConnectedPeer] = {
-      // first, we are choosing random peer
-      // if the peer is not ok (e.g. of some old version having problems)
-      // choose first peer which is okay
-      // so usually returns randomized peer, with fallback to deterministic one
-      val randomPeer = peers(Random.nextInt(peers.size))
-      if (filterOutFn(randomPeer)) {
-        Some(randomPeer)
-      } else {
-        peers.find(filterOutFn)
-      }
-    }
-
-    val peersByStatus = syncTracker.peersByStatus
-
-    val olderOrEqual = peersByStatus.getOrElse(Older, Seq.empty) ++ peersByStatus.getOrElse(Equal, Seq.empty)
-
-    peerFrom(olderOrEqual).orElse {
-      log.warn("No peers which are equal or older are found when trying to download a block section")
-      val unknownOrFork = peersByStatus.getOrElse(Unknown, Seq.empty) ++ peersByStatus.getOrElse(Fork, Seq.empty)
-      peerFrom(unknownOrFork)
-    }
   }
 
   /**
@@ -540,31 +506,30 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  /**
-    * Our node needs block sections of type `modifierTypeId` with id `modifierId`.
-    * Request this modifier from random peer.
-    */
-  def requestBlockSection(modifierTypeId: ModifierTypeId,
-                          modifierId: ModifierId,
-                          checksDone: Int,
-                          previousPeer: Option[ConnectedPeer]): Unit = {
-    getPeerForDownloadingBlocks(previousPeer) match {
-      case Some(peerToAsk) =>
-        log.debug(s"Going to download $modifierId from $peerToAsk , previous attempts: $checksDone")
-        requestBlockSection(modifierTypeId, Seq(modifierId), peerToAsk, checksDone)
-      case None =>
-        log.error("No peer found to download a block section from. " +
-                  "DeliveryTracker: " + deliveryTracker + " SyncTracker: " + syncTracker)
-    }
-  }
-
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
-    case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
-      if(modifiersCacheSize < 50) {
-        if (deliveryTracker.status(modifierId, modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
-          requestBlockSection(modifierTypeId, modifierId, checksDone = 0, None)
+    case DownloadRequest(modifiersToFetch: Map[ModifierTypeId, Seq[ModifierId]]) =>
+      if(modifiersCacheSize <= 36) {
+        log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
+        requestDownload(
+          maxModifiers = deliveryTracker.modifiersToDownload,
+          minModifiersPerBucket,
+          maxModifiersPerBucket
+        )(getPeersForDownloadingBlocks) { howManyPerType =>
+          modifiersToFetch.flatMap{case (tid, mids) =>
+            val updMids = mids.filter { mid =>
+              deliveryTracker.status(mid, tid, Seq(historyReader)) == ModifiersStatus.Unknown
+            }
+            if (updMids.isEmpty) {
+              None
+            } else {
+              Some(tid -> updMids)
+            }
+          }
         }
-      } //todo: else cache?
+      } else {
+        //todo: else cache?
+        log.debug("Skipping downloading via DownloadRequest due to cache overflow")
+      }
   }
 
   /**
@@ -919,7 +884,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           if (checksDone < maxDeliveryChecks) {
             log.info(s"Rescheduling request for $modifierId")
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
-            requestBlockSection(modifierTypeId, modifierId, checksDone, Some(peer))
+            requestBlockSection(modifierTypeId, Seq(modifierId), peer, checksDone)
           } else {
             log.error(s"Exceeded max delivery attempts($maxDeliveryChecks) limit for $modifierId")
             if (modifierTypeId == Header.modifierTypeId) {
@@ -992,15 +957,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
-
     case CheckModifiersToDownload =>
       val now = System.currentTimeMillis()
-      if (now - lastCheckForModifiersToDownload >= 1000 && modifiersCacheSize < 30) {
+      if (now - lastCheckForModifiersToDownload >= 1000 && modifiersCacheSize < 24) {
         log.debug("CheckModifiersToDownload")
-        val maxModifiersToDownload = deliveryTracker.modifiersToDownload
         lastCheckForModifiersToDownload = now
         requestDownload(
-          maxModifiersToDownload,
+          maxModifiers = deliveryTracker.modifiersToDownload,
           minModifiersPerBucket,
           maxModifiersPerBucket
         )(getPeersForDownloadingBlocks) { howManyPerType =>

@@ -24,11 +24,12 @@ import scorex.core.consensus.ProgressInfo
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.core.validation.RecoverableModifierError
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
-
 import java.io.File
+
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -130,13 +131,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
 
-  protected def requestDownloads(pi: ProgressInfo[BlockSection]): Unit =
-    pi.toDownload.foreach { case (tid, id) =>
-      context.system.eventStream.publish(DownloadRequest(tid, id))
+  protected def requestDownloads(pi: ProgressInfo[BlockSection]): Unit = {
+    val toDownload = mutable.Map[ModifierTypeId, Seq[ModifierId]]()
+    pi.toDownload.foreach { case (tid, mid) =>
+      toDownload.put(tid, toDownload.getOrElse(tid, Seq()) :+ mid)
     }
+    context.system.eventStream.publish(DownloadRequest(toDownload.toMap))
+  }
+
+
 
   private def trimChainSuffix(suffix: IndexedSeq[BlockSection],
-                              rollbackPoint: scorex.util.ModifierId): IndexedSeq[BlockSection] = {
+                              rollbackPoint: ModifierId): IndexedSeq[BlockSection] = {
     val idx = suffix.indexWhere(_.id == rollbackPoint)
     if (idx == -1) IndexedSeq.empty else suffix.drop(idx)
   }
@@ -687,7 +693,7 @@ object ErgoNodeViewHolder {
 
     case class LocallyGeneratedModifier(pmod: BlockSection)
 
-    case class EliminateTransactions(ids: Seq[scorex.util.ModifierId])
+    case class EliminateTransactions(ids: Seq[ModifierId])
 
     case object IsChainHealthy
     sealed trait HealthCheckResult
@@ -695,10 +701,9 @@ object ErgoNodeViewHolder {
     case class ChainIsStuck(reason: String) extends HealthCheckResult
   }
 
-  case class BlockAppliedTransactions(txs: Seq[scorex.util.ModifierId]) extends NodeViewHolderEvent
+  case class BlockAppliedTransactions(txs: Seq[ModifierId]) extends NodeViewHolderEvent
 
-  case class DownloadRequest(modifierTypeId: ModifierTypeId,
-                             modifierId: scorex.util.ModifierId) extends NodeViewHolderEvent
+  case class DownloadRequest(modifiersToFetch: Map[ModifierTypeId, Seq[ModifierId]]) extends NodeViewHolderEvent
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
 

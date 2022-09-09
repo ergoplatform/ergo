@@ -25,6 +25,9 @@ import java.net.URL
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
+import akka.dispatch.RequiresMessageQueue
+import akka.dispatch.BoundedMessageQueueSemantics
+
 /**
   * Class that subscribes to NodeViewHolderEvents and collects them to provide fast response to API requests.
   */
@@ -33,7 +36,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
                          syncTracker: ErgoSyncTracker,
                          settings: ErgoSettings,
                          timeProvider: NetworkTimeProvider)
-  extends Actor with ScorexLogging {
+  extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] with ScorexLogging {
 
   override def preStart(): Unit = {
     val ec: ExecutionContextExecutor = context.dispatcher
@@ -42,7 +45,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedHistory])
     context.system.eventStream.subscribe(self, classOf[ChangedState])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool])
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
+    context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
   }
@@ -143,12 +146,10 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   }
 
   def onSemanticallySuccessfulModification: Receive = {
-    case SemanticallySuccessfulModifier(fb: ErgoFullBlock) =>
+    case FullBlockApplied(header) =>
       nodeInfo = nodeInfo.copy(
-        stateRoot = Some(Algos.encode(fb.header.stateRoot)),
-        stateVersion = Some(fb.encodedId))
-    case SemanticallySuccessfulModifier(_) =>
-      // Ignore other modifiers
+        stateRoot = Some(Algos.encode(header.stateRoot)),
+        stateVersion = Some(header.encodedId))
   }
 
 }

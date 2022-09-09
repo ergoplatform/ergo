@@ -3,8 +3,7 @@ package org.ergoplatform.bench
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.Utils
 import org.ergoplatform.Utils.BenchReport
-import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
 import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
@@ -22,7 +21,7 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
   val timeout: FiniteDuration = 2 hours
 
   override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
+    context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
     context.system.scheduler.scheduleOnce(timeout, self, BenchActor.Timeout)
     ()
   }
@@ -31,7 +30,7 @@ class BenchActor(threshold: Int) extends Actor with ScorexLogging {
     case BenchActor.Start =>
       start = System.nanoTime()
       log.info(s"Starting bench..")
-    case SemanticallySuccessfulModifier(_: ErgoFullBlock) =>
+    case FullBlockApplied(_) =>
       self ! BenchActor.Inc
     case BenchActor.Inc =>
       counter += 1

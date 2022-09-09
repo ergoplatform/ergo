@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings}
 import scorex.util.{ModifierId, ScorexLogging}
@@ -17,7 +17,7 @@ import scala.collection.immutable.TreeMap
   * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its output box
   * @param inputs               - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its input box id
   */
-case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
+case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTransaction],
                          transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
                          invalidatedTxIds: ApproximateCacheLike[String],
                          outputs: TreeMap[BoxId, WeightedTxId],
@@ -32,7 +32,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
 
   def size: Int = orderedTransactions.size
 
-  def get(id: ModifierId): Option[ErgoTransaction] = {
+  def get(id: ModifierId): Option[UnconfirmedTransaction] = {
     transactionsRegistry.get(id).flatMap(orderedTransactions.get(_))
   }
 
@@ -45,18 +45,19 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     * put() is preceded by canAccept method which enforces that newly added transaction will not be immediately
     * thrown from the pool.
     *
-    * @param tx - transaction to add
+    * @param unconfirmedTx - transaction to add
     * @return - modified pool
     */
-  def put(tx: ErgoTransaction, feeFactor: Int): OrderedTxPool = {
+  def put(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int): OrderedTxPool = {
+    val tx = unconfirmedTx.transaction
     val wtx = weighted(tx, feeFactor)
     val newPool = OrderedTxPool(
-      orderedTransactions.updated(wtx, tx),
+      orderedTransactions.updated(wtx, unconfirmedTx),
       transactionsRegistry.updated(wtx.id, wtx),
       invalidatedTxIds,
       outputs ++ tx.outputs.map(_.id -> wtx),
       inputs ++ tx.inputs.map(_.boxId -> wtx)
-    ).updateFamily(tx, wtx.weight)
+    ).updateFamily(unconfirmedTx, wtx.weight)
     if (newPool.orderedTransactions.size > mempoolCapacity) {
       val victim = newPool.orderedTransactions.last._2
       newPool.remove(victim)
@@ -65,16 +66,17 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     }
   }
 
-  def remove(txs: Seq[ErgoTransaction]): OrderedTxPool = {
+  def remove(txs: Seq[UnconfirmedTransaction]): OrderedTxPool = {
     txs.foldLeft(this) { case (pool, tx) => pool.remove(tx) }
   }
 
   /**
     * Removes transaction from the pool
     *
-    * @param tx - Transaction to remove
+    * @param unconfirmedTx - Transaction to remove
     */
-  def remove(tx: ErgoTransaction): OrderedTxPool = {
+  def remove(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
+    val tx = unconfirmedTx.transaction
     transactionsRegistry.get(tx.id) match {
       case Some(wtx) =>
         OrderedTxPool(
@@ -83,12 +85,13 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
           invalidatedTxIds,
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(tx, -wtx.weight)
+        ).updateFamily(unconfirmedTx, -wtx.weight)
       case None => this
     }
   }
 
-  def invalidate(tx: ErgoTransaction): OrderedTxPool =
+  def invalidate(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
+    val tx = unconfirmedTx.transaction
     transactionsRegistry.get(tx.id) match {
       case Some(wtx) =>
         OrderedTxPool(
@@ -97,12 +100,13 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
           invalidatedTxIds.put(tx.id),
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(tx, -wtx.weight)
+        ).updateFamily(unconfirmedTx, -wtx.weight)
       case None =>
         OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
     }
+  }
 
-  def filter(condition: ErgoTransaction => Boolean): OrderedTxPool = {
+  def filter(condition: UnconfirmedTransaction => Boolean): OrderedTxPool = {
     orderedTransactions.foldLeft(this)((pool, entry) => {
       val tx = entry._2
       if (condition(tx)) pool else pool.remove(tx)
@@ -116,14 +120,21 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     * TODO: the latter should not happen likely as we clean pool immediately as it becomes overfull.
     *
     */
-  def canAccept(tx: ErgoTransaction): Boolean = {
-    !isInvalidated(tx.id) && !contains(tx.id) && size <= mempoolCapacity
+  def canAccept(unconfirmedTx: UnconfirmedTransaction): Boolean = {
+    val tx = unconfirmedTx.transaction
+    !contains(tx.id) && size <= mempoolCapacity
   }
 
-  def contains(id: ModifierId): Boolean = transactionsRegistry.contains(id)
+  /**
+    *
+    * @param id - transaction id
+    * @return - true, if transaction is in the pool or invalidated earlier, false otherwise
+    */
+  def contains(id: ModifierId): Boolean = {
+    transactionsRegistry.contains(id) || isInvalidated(id)
+  }
 
   def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)
-
 
   /**
     *
@@ -133,23 +144,25 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     * To achieve this goal we recursively add weight of new transaction to all transactions which
     * outputs it directly or indirectly spending.
     *
-    * @param tx
+    * @param unconfirmedTx
     * @param weight
     * @return
     */
-  private def updateFamily(tx: ErgoTransaction, weight: Long): OrderedTxPool = {
+  private def updateFamily(unconfirmedTx: UnconfirmedTransaction, weight: Long): OrderedTxPool = {
+    val tx = unconfirmedTx.transaction
     tx.inputs.foldLeft(this)((pool, input) =>
       pool.outputs.get(input.boxId).fold(pool)(wtx => {
         pool.orderedTransactions.get(wtx) match {
-          case Some(parent) =>
+          case Some(ut) =>
+            val parent = ut.transaction
             val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerFactor, wtx.created)
-            val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> parent),
+            val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> ut),
               pool.transactionsRegistry.updated(parent.id, newWtx),
               invalidatedTxIds,
               parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
               parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
             )
-            newPool.updateFamily(parent, weight)
+            newPool.updateFamily(ut, weight)
           case None =>
             //shouldn't be the case, but better not to hide this possibility
             log.error("Could not find transaction in pool.orderedTransactions, please report to devs")
@@ -189,11 +202,15 @@ object OrderedTxPool {
     val frontCacheSize = cacheSettings.invalidModifiersCacheSize
     val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
     OrderedTxPool(
-      TreeMap.empty[WeightedTxId, ErgoTransaction],
+      TreeMap.empty[WeightedTxId, UnconfirmedTransaction],
       TreeMap.empty[ModifierId, WeightedTxId],
       ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration),
       TreeMap.empty[BoxId, WeightedTxId],
       TreeMap.empty[BoxId, WeightedTxId])(settings)
+  }
+
+  def weighted(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int)(implicit ms: MonetarySettings): WeightedTxId = {
+    weighted(unconfirmedTx.transaction, feeFactor)
   }
 
   /**

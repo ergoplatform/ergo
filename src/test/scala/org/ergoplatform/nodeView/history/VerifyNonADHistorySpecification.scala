@@ -122,13 +122,13 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
       newAcc.adjust(mType)(_.fold(Seq(mId))(_ :+ mId))
     }
 
-    history.nextModifiersToDownload(1, (_, id) => !history.contains(id))
+    history.nextModifiersToDownload(1, None, (_, id) => !history.contains(id))
       .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS.mapValues(_.take(1)).view.force
 
-    history.nextModifiersToDownload(2 * (BlocksToKeep - 1), (_, id) => !history.contains(id))
+    history.nextModifiersToDownload(2 * (BlocksToKeep - 1), None, (_, id) => !history.contains(id))
       .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS
 
-    history.nextModifiersToDownload(2, (_, id) => !history.contains(id) && (id != missedChain.head.blockTransactions.id))
+    history.nextModifiersToDownload(2, None, (_, id) => !history.contains(id) && (id != missedChain.head.blockTransactions.id))
       .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS.mapValues(_.take(2).filter( _ != missedChain.head.blockTransactions.id)).view.force
   }
 

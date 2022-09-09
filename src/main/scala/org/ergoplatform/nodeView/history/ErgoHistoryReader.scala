@@ -423,6 +423,16 @@ trait ErgoHistoryReader
     }
   }
 
+  def getHeaderFor(blockSection: BlockSection): Option[Header] = {
+    blockSection match {
+      case h: Header => Some(h)
+      case fb: ErgoFullBlock => Some(fb.header)
+      case ext: Extension => typedModifierById[Header](ext.headerId)
+      case bt: BlockTransactions => typedModifierById[Header](bt.headerId)
+      case proofs: ADProofs => typedModifierById[Header](proofs.headerId)
+    }
+  }
+
   def getFullBlock(header: Header): Option[ErgoFullBlock] = {
     (typedModifierById[BlockTransactions](header.transactionsId),
       typedModifierById[Extension](header.extensionId),
@@ -595,6 +605,20 @@ trait ErgoHistoryReader
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
     val proofParams = PoPowParams(m, k)
     nipopowAlgos.prove(histReader = this, headerIdOpt = headerIdOpt)(proofParams)
+  }
+
+  /**
+    * Get estimated height of headers-chain, if it is synced
+    * @return height of last header known, if headers-chain is synced, or None if not synced
+    */
+  def estimatedTip(): Option[Height] = {
+    Try { //error may happen if history not initialized
+      if(isHeadersChainSynced) {
+        Some(headersHeight)
+      } else {
+        None
+      }
+    }.getOrElse(None)
   }
 
 }

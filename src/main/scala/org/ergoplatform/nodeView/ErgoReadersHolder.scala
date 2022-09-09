@@ -11,9 +11,12 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.util.ScorexLogging
 
+import akka.dispatch.RequiresMessageQueue
+import akka.dispatch.BoundedMessageQueueSemantics
+
 import scala.concurrent.duration._
 
-class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLogging {
+class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] with ScorexLogging {
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[NodeViewChange])

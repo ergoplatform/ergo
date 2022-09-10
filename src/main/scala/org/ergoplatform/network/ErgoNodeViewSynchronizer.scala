@@ -508,14 +508,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifiersToFetch: Map[ModifierTypeId, Seq[ModifierId]]) =>
-      if(modifiersCacheSize <= 36) {
+      if (modifiersCacheSize <= 36) {
         log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
         requestDownload(
           maxModifiers = deliveryTracker.modifiersToDownload,
           minModifiersPerBucket,
           maxModifiersPerBucket
         )(getPeersForDownloadingBlocks) { howManyPerType =>
-          modifiersToFetch.flatMap{case (tid, mids) =>
+          modifiersToFetch.flatMap { case (tid, mids) =>
             val updMids = mids.filter { mid =>
               deliveryTracker.status(mid, tid, Seq(historyReader)) == ModifiersStatus.Unknown
             }
@@ -589,7 +589,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                       remote: ConnectedPeer): Unit  = {
     Constants.modifierSerializers.get(typeId) match {
       case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
-        if(modifiersCacheSize <= 48) {
+        if (modifiersCacheSize <= 48) {
           // parse all modifiers and put them to modifiers cache
           val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, serializer, remote)
 
@@ -610,7 +610,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             }
           }
         } else {
-          requestedModifiers.keys.foreach {mId =>
+          requestedModifiers.keys.foreach { mId =>
             deliveryTracker.setUnknown(mId, typeId)
           }
         }
@@ -1031,13 +1031,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
       context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
 
-    case BlockSectionsProcessingCacheUpdate(cacheSize, cleared) =>
+    case BlockSectionsProcessingCacheUpdate(headersCacheSize, blockSectionsCacheSize, cleared) =>
       // stop processing for cleared modifiers
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       val modTypeId = cleared._1
       cleared._2.foreach(mId => deliveryTracker.setUnknown(mId, modTypeId))
-      modifiersCacheSize = cacheSize
-      if (cacheSize < 50 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 500)) {
+      modifiersCacheSize = blockSectionsCacheSize
+      if (headersCacheSize < 3184 ||
+          (modifiersCacheSize < 50 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 500))) {
         requestMoreModifiers(historyReader)
       }
 
@@ -1219,7 +1220,9 @@ object ErgoNodeViewSynchronizer {
 
     case class FullBlockApplied(header: Header) extends ModificationOutcome
 
-    case class BlockSectionsProcessingCacheUpdate(cacheSize: Int, cleared: (ModifierTypeId, Seq[ModifierId]))
+    case class BlockSectionsProcessingCacheUpdate(headersCacheSize: Int,
+                                                  blockSectionsCacheSize: Int,
+                                                  cleared: (ModifierTypeId, Seq[ModifierId]))
 
     case class RecheckMempool(state: ErgoStateReader, mempool: ErgoMemPoolReader) extends NodeViewChange
   }

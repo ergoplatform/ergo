@@ -48,20 +48,50 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
   private val boxes: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
   private val trees: ArrayBuffer[IndexedErgoAddress] = ArrayBuffer.empty[IndexedErgoAddress]
 
+  // input tokens in a tx
   private val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
 
-  private def findBoxOpt(id: ModifierId): Option[Int] = {
+  // returns index of box in boxes
+  private def findAndSpendBox(id: ModifierId, txId: ModifierId, height: Int): Int = {
     cfor(boxes.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
-      if(boxes(i).id == id) return Some(i)
+      if(boxes(i).id == id) { // box found in last saveLimit modifiers, update
+        tokens ++= boxes(i).asSpent(txId, height).box.additionalTokens.toArray
+        return i
+      }
     }
-    None
+    history.typedModifierById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
+      case Some(x) => // box found in DB, update
+        boxes += x.asSpent(txId, height)
+        tokens ++= x.box.additionalTokens.toArray
+        boxes.length - 1
+      case None => // box not found at all (this shouldn't happen)
+        log.warn(s"Unknown box used as input: $id")
+        -1
+    }
   }
 
-  private def findTreeOpt(id: ModifierId): Option[Int] = {
+  private def findAndUpdateTree(id: ModifierId, boxToSpend: Option[ErgoBox]): Unit = {
     cfor(trees.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
-      if(trees(i).treeHash == id) return Some(i)
+      if(trees(i).treeHash == id) { // address found in last saveLimit modifiers
+        if(boxToSpend.isDefined)
+          trees(i).addTx(globalTxIndex).spendBox(boxToSpend.get) // spend box
+        else
+          trees(i).addTx(globalTxIndex).addBox(boxes.last) // receive box
+        return
+      }
     }
-    None
+    history.typedModifierById[IndexedErgoAddress](id) match { // address not found in last saveLimit modifiers
+      case Some(x) =>
+        if(boxToSpend.isDefined) // address found in DB
+          trees += x.addTx(globalTxIndex).spendBox(boxToSpend.get) // spend box
+        else
+          trees += x.addTx(globalTxIndex).addBox(boxes.last) // receive box
+      case None => // address not found at all
+        if(boxToSpend.isEmpty)
+          trees += IndexedErgoAddress(id, ListBuffer(globalTxIndex), ListBuffer.empty[Long], Some(BalanceInfo.empty)).addBox(boxes.last) // receive box
+        else
+          log.warn(s"Unknown address spent box ${boxes.last.id}") // spend box should never happen by an unknown address
+    }
   }
 
   private def modCount: Int = general.length + boxes.length + trees.length
@@ -123,30 +153,8 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
       if(height != 1) { //only after 1st block (skip genesis box)
         cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
           val inputId: ModifierId = bytesToId(tx.inputs(i).boxId)
-          var boxIndex: Int = 0
-          findBoxOpt(inputId) match {
-            case Some(x) => // box found in last saveLimit modifiers, update
-              boxes(x).asSpent(tx.id, height)
-              boxIndex = x
-              tokens ++= boxes(x).box.additionalTokens.toArray
-            case None => // box not found in last saveLimit modifiers
-              history.typedModifierById[IndexedErgoBox](inputId) match {
-                case Some(x) => // box found in DB, update
-                  boxes += x.asSpent(tx.id, height)
-                  boxIndex = boxes.length - 1
-                  tokens ++= x.box.additionalTokens.toArray
-                case None => log.warn(s"Unknown box used as input: $inputId") // box not found at all (this shouldn't happen)
-              }
-          }
-          val treeHash: ModifierId = bytesToId(IndexedErgoAddressSerializer.hashErgoTree(boxes(boxIndex).box.ergoTree))
-          findTreeOpt(treeHash) match {
-            case Some(x) => trees(x).addTx(globalTxIndex).spendBox(boxes(boxIndex).box) // address found in last saveLimit modifiers, update
-            case None => // address not found in last saveLimit modifiers
-              history.typedModifierById[IndexedErgoAddress](treeHash) match {
-                case Some(x) => trees += x.addTx(globalTxIndex).spendBox(boxes(boxIndex).box) // address found in DB, update
-                case None => // address not found at all (this shouldn't happen)
-              }
-          }
+          val boxIndex: Int = findAndSpendBox(inputId, tx.id, height)
+          if(boxIndex >= 0) findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(boxes(boxIndex).box.ergoTree)), Some(boxes(boxIndex).box)) // spend box and add tx
         }
       }
 
@@ -157,15 +165,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
         general += NumericBoxIndex(globalBoxIndex, bytesToId(box.id)) // box id by global box number
 
         // box by address
-        val treeHash: ModifierId = bytesToId(IndexedErgoAddressSerializer.hashErgoTree(box.ergoTree))
-        findTreeOpt(treeHash) match {
-          case Some(x) => trees(x).addTx(globalTxIndex).addBox(boxes.last) // address found in last saveLimit modifiers, update
-          case None => // address not found in last saveLimit modifiers
-            history.typedModifierById[IndexedErgoAddress](treeHash) match {
-              case Some(x) => trees += x.addTx(globalTxIndex).addBox(boxes.last) // address found in DB, update
-              case None => trees += IndexedErgoAddress(treeHash, ListBuffer(globalTxIndex), ListBuffer.empty[Long], Some(BalanceInfo.fromBox(box))).addBox(boxes.last) // address not found at all, record
-            }
-        }
+        findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(box.ergoTree)), None)
 
         // check if box is creating a new token, if yes record it
         if(box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))

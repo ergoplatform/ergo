@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.{ErgoAddress, ErgoBox}
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -10,7 +9,7 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{box
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
@@ -20,7 +19,7 @@ import spire.syntax.all.cfor
 case class IndexedErgoAddress(treeHash: ModifierId,
                               txs: ListBuffer[Long],
                               boxes: ListBuffer[Long],
-                              balanceInfo: Option[BalanceInfo]) extends BlockSection with ScorexLogging {
+                              balanceInfo: Option[BalanceInfo]) extends BlockSection {
 
   override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = fastIdToBytes(treeHash)
@@ -78,20 +77,12 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
   def addBox(iEb: IndexedErgoBox): IndexedErgoAddress = {
     boxes += iEb.globalIndex
-    balanceInfo.get.nanoErgs += iEb.box.value
-    cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
-      val id: TokenId = iEb.box.additionalTokens(i)._1
-      balanceInfo.get.tokens.put(id, balanceInfo.get.tokens.getOrElse(id, 0L) + iEb.box.additionalTokens(i)._2)
-    }
+    balanceInfo.get.add(iEb.box)
     this
   }
 
   def spendBox(box: ErgoBox): IndexedErgoAddress = {
-    balanceInfo.get.nanoErgs -= box.value
-    cfor(0)(_ < box.additionalTokens.length, _ + 1) { i =>
-      val id: TokenId = box.additionalTokens(i)._1
-      balanceInfo.get.tokens.put(id, balanceInfo.get.tokens.getOrElse(id, 0L) - box.additionalTokens(i)._2)
-    }
+    balanceInfo.get.subtract(box)
     this
   }
 

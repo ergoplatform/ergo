@@ -67,16 +67,18 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
                  box.additionalTokens(0)._2,
                  new String(box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
                  new String(box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
-                 math.max(getDecimals(box.additionalRegisters(R6)), 0))
+                 getDecimals(box.additionalRegisters(R6)))
 
   override def serialize(iT: IndexedToken, w: Writer): Unit = {
     w.putBytes(fastIdToBytes(iT.tokenId))
     w.putBytes(fastIdToBytes(iT.boxId))
     w.putULong(iT.amount)
-    w.putUShort(iT.name.length)
-    w.putBytes(iT.name.getBytes("UTF-8"))
-    w.putUShort(iT.description.length)
-    w.putBytes(iT.description.getBytes("UTF-8"))
+    val name: Array[Byte] = iT.name.getBytes("UTF-8")
+    w.putUShort(name.length)
+    w.putBytes(name)
+    val description: Array[Byte] = iT.description.getBytes("UTF-8")
+    w.putUShort(description.length)
+    w.putBytes(description)
     w.putInt(iT.decimals)
   }
 
@@ -84,8 +86,10 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
     val tokenId: ModifierId = bytesToId(r.getBytes(32))
     val boxId: ModifierId = bytesToId(r.getBytes(32))
     val amount: Long = r.getULong()
-    val name: String = new String(r.getBytes(r.getUShort), "UTF-8")
-    val description: String = new String(r.getBytes(r.getUShort), "UTF-8")
+    val nameLen: Int = r.getUShort()
+    val name: String = new String(r.getBytes(nameLen), "UTF-8")
+    val descLen: Int = r.getUShort()
+    val description: String = new String(r.getBytes(descLen), "UTF-8")
     val decimals: Int = r.getInt()
     IndexedToken(tokenId, boxId, amount, name, description, decimals)
   }

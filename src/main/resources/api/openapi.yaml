@@ -200,6 +200,37 @@ components:
             example: 1
             default: 1
 
+    BalanceInfo:
+      type: object
+      description: Balance information
+      required:
+        - nanoErgs
+        - tokens
+      properties:
+        nanoErgs:
+          type: integer
+          format: int64
+          description: Balance of nanoERGs
+        tokens:
+          type: array
+          description: Balance of tokens
+          items:
+            type: object
+            properties:
+              tokenId:
+                $ref: '#/components/schemas/ModifierId'
+                description: Identifier of the token
+              amount:
+                type: integer
+                format: int64
+                description: Amount of the token
+              decimals:
+                type: integer
+                description: Number of decimals of the token
+              name:
+                type: string
+                description: Name of the token, if any
+
     IndexedErgoBox:
       type: object
       description: Box indexed with extra information
@@ -5328,10 +5359,16 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                description: Array of transactions
-                items:
-                  $ref: '#/components/schemas/IndexedErgoTransaction'
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of transactions
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoTransaction'
+                  total:
+                    type: integer
+                    description: Total count of transactions
         '404':
           description: No transactions found for wanted address
           content:
@@ -5486,10 +5523,16 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                description: Array of boxes
-                items:
-                  $ref: '#/components/schemas/IndexedErgoTransaction'
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoTransaction'
+                  total:
+                    type: integer
+                    description: Total number of boxes
         '404':
           description: No boxes found for wanted address
           content:
@@ -5631,13 +5674,16 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IndexedErgoBox'
-        '404':
-          description: No box found with wanted ergotree
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoBox'
+                  total:
+                    type: integer
+                    description: Total number of boxes
         default:
           description: Error
           content:
@@ -5721,6 +5767,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/balance/{address}:
+    get:
+      summary: Retrieve confirmed and unconfirmed balance of an address
+      operationId: getAddressBalanceTotal
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: adderess with balance
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: balance information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  confirmed:
+                    $ref: '#/components/schemas/BalanceInfo'
+                  unconfirmed:
+                    $ref: '#/components/schemas/BalanceInfo'
         default:
           description: Error
           content:

@@ -4,10 +4,11 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
-import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{GlobalBoxIndexKey, GlobalTxIndexKey}
 import org.ergoplatform.nodeView.history.extra._
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -43,11 +44,15 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getBoxRangeR ~
       getBoxesByErgoTreeR ~
       getBoxesByErgoTreeUnspentR ~
-      getTokenInfoByIdR
+      getTokenInfoByIdR ~
+      getAddressBalanceTotalR
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
+
+  private def getHistoryWithMempool: Future[(ErgoHistoryReader,ErgoMemPoolReader)] =
+    (readersHolder ? GetReaders).mapTo[Readers].map(r => (r.h, r.m))
 
   private def getAddress(tree: ErgoTree)(history: ErgoHistoryReader): Option[IndexedErgoAddress] = {
     history.typedModifierById[IndexedErgoAddress](bytesToId(IndexedErgoAddressSerializer.hashErgoTree(tree)))
@@ -196,11 +201,11 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByErgoTree(tree: ErgoTree, offset: Int, limit: Int): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByErgoTree(tree: ErgoTree, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
     getHistory.map { history =>
       getAddress(tree)(history) match {
-        case Some(iEa) => iEa.retrieveBoxes(history, offset, limit).reverse
-        case None      => Seq.empty[IndexedErgoBox]
+        case Some(iEa) => (iEa.retrieveBoxes(history, offset, limit).reverse, iEa.boxCount())
+        case None      => (Seq.empty[IndexedErgoBox], 0L)
       }
     }
 
@@ -236,6 +241,31 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getTokenInfoByIdR: Route = (get & pathPrefix("token" / "byId") & modifierId) { id =>
     ApiResponse(getTokenInfoById(id))
+  }
+
+  private def getUnconfirmedForAddress(address: ErgoAddress)(mempool: ErgoMemPoolReader): BalanceInfo = {
+    val bal: BalanceInfo = BalanceInfo.empty
+    mempool.getAll.map(_.transaction).foreach(tx => {
+      tx.outputs.foreach(box => {
+        if(IndexedErgoBoxSerializer.getAddress(box.ergoTree).equals(address)) bal.add(box)
+      })
+    })
+    bal
+  }
+
+  private def getAddressBalanceTotal(address: ErgoAddress): Future[(BalanceInfo,BalanceInfo)] = {
+    getHistoryWithMempool.map { case (history, mempool) =>
+      getAddress(address)(history) match {
+        case Some(addr) =>
+          (addr.balanceInfo.get.retreiveAdditionalTokenInfo(history), getUnconfirmedForAddress(address)(mempool).retreiveAdditionalTokenInfo(history))
+        case None =>
+          (BalanceInfo.empty, getUnconfirmedForAddress(address)(mempool).retreiveAdditionalTokenInfo(history))
+      }
+    }
+  }
+
+  private def getAddressBalanceTotalR: Route =  (get & pathPrefix("balance") & ergoAddress) { address =>
+    ApiResponse(getAddressBalanceTotal(address))
   }
 
 }

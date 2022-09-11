@@ -28,7 +28,7 @@ import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
-import org.ergoplatform.nodeView.history.extra.{ExtraIndexerRef, IndexedErgoBox, IndexedErgoTransaction, IndexedToken}
+import org.ergoplatform.nodeView.history.extra.{BalanceInfo, ExtraIndexerRef, IndexedErgoBox, IndexedErgoTransaction, IndexedToken}
 import org.ergoplatform.wallet.interface4j.SecretString
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.authds.merkle.MerkleProof
@@ -520,23 +520,26 @@ trait ApiCodecs extends JsonCodecs {
     )
   }
 
-  /*implicit val BalanceInfoEncoder: Encoder[BalanceInfo] = { bal =>
+  implicit val BalanceInfoEncoder: Encoder[BalanceInfo] = { bal =>
     Json.obj(
-      "confirmed" -> Json.obj(
-        "nanoErgs" -> bal.nanoErgs.asJson,
-        "tokens" -> bal.tokens.map(t => {
-          val iT: IndexedToken = history.typedModifierById[IndexedToken](bytesToId(t._1)).get
-          Json.obj(
-            "tokenId" -> iT.tokenId.asJson,
-            "amount" -> t._2.asJson,
-            "decimals" -> iT.decimals.asJson,
-            "name" -> iT.name.asJson
-          )
-        })
-      ),
-      "unconfirmed" -> Json.obj() // TODO
+      "nanoErgs" -> bal.nanoErgs.asJson,
+      "tokens" -> bal.tokens.map(token => {
+        Json.obj(
+          "tokenId" -> token._1.asJson,
+          "amount" -> token._2.asJson,
+          "decimals" -> bal.additionalTokenInfo(token._1)._2.asJson,
+          "name" -> bal.additionalTokenInfo(token._1)._1.asJson
+        )
+      }).asJson
     )
-  }*/
+  }
+
+  implicit val TotalBalanceInfoEncoder: Encoder[(BalanceInfo,BalanceInfo)] = { tBal =>
+    Json.obj(
+      "confirmed" -> tBal._1.asJson,
+      "unconfirmed" -> tBal._2.asJson
+    )
+  }
 
 }
 

@@ -4,7 +4,7 @@ import io.circe.Encoder
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import scorex.core.PersistentNodeViewModifier
+import scorex.core.{ModifierTypeId, PersistentNodeViewModifier}
 
 
 /**
@@ -20,6 +20,20 @@ object BlockSection {
     case adp: ADProofs => ADProofs.jsonEncoder(adp)
     case ext: Extension => Extension.jsonEncoder(ext)
     case other => throw new Exception(s"Unknown block section type: $other")
+  }
+
+  def typeToString(blockSectionTypeId: ModifierTypeId): String = {
+    if (blockSectionTypeId == Header.modifierTypeId) {
+      "Header"
+    } else if (blockSectionTypeId == BlockTransactions.modifierTypeId) {
+      "BlockTransactions"
+    } else if (blockSectionTypeId == ADProofs.modifierTypeId) {
+      "ADProofs"
+    } else if (blockSectionTypeId == Extension.modifierTypeId) {
+      "Extension"
+    } else {
+      "unknown!"
+    }
   }
 
 }

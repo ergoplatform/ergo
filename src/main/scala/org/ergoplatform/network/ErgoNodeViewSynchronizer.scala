@@ -1038,7 +1038,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       cleared._2.foreach(mId => deliveryTracker.setUnknown(mId, modTypeId))
       modifiersCacheSize = blockSectionsCacheSize
       if (headersCacheSize < 3184 ||
-          (modifiersCacheSize < 50 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 500))) {
+          (modifiersCacheSize < 36 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 500))) {
         requestMoreModifiers(historyReader)
       }
 

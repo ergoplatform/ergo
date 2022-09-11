@@ -354,7 +354,7 @@ object DeliveryTracker {
   def empty(settings: ErgoSettings): DeliveryTracker = {
     new DeliveryTracker(
       settings.cacheSettings.network,
-      192
+      512
     )
   }
 

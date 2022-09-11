@@ -215,18 +215,15 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     log.info("Indexer caught up with chain")
   }
 
-  override def preStart(): Unit = {
+  override def preStart(): Unit =
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
-  }
 
-  override def postStop(): Unit = {
+  override def postStop(): Unit =
     log.info(s"Stopped extra indexer at height $lastWroteToDB")
-  }
 
   override def receive: Receive = {
-    case SemanticallySuccessfulModifier(fb: ErgoFullBlock) =>
-      if(caughtUp) // after the indexer caught up with the chain, stay up to date
-        index(fb.blockTransactions, fb.height)
+    case SemanticallySuccessfulModifier(fb: ErgoFullBlock) if caughtUp =>
+      index(fb.blockTransactions, fb.height) // after the indexer caught up with the chain, stay up to date
     case Start(history: ErgoHistory) =>
       _history = history
       run()

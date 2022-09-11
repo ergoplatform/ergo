@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.ErgoBox.{BoxId, TokenId}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.modifiers.history.BlockTransactions
@@ -52,20 +52,20 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
   private val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
 
   // returns index of box in boxes
-  private def findAndSpendBox(id: ModifierId, txId: ModifierId, height: Int): Int = {
+  private def findAndSpendBox(id: BoxId, txId: ModifierId, height: Int): Int = {
     cfor(boxes.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
-      if(boxes(i).id == id) { // box found in last saveLimit modifiers, update
+      if(java.util.Arrays.equals(boxes(i).serializedId, id)) { // box found in last saveLimit modifiers, update
         tokens ++= boxes(i).asSpent(txId, height).box.additionalTokens.toArray
         return i
       }
     }
-    history.typedModifierById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
+    history.typedModifierById[IndexedErgoBox](bytesToId(id)) match { // box not found in last saveLimit modifiers
       case Some(x) => // box found in DB, update
         boxes += x.asSpent(txId, height)
         tokens ++= x.box.additionalTokens.toArray
         boxes.length - 1
       case None => // box not found at all (this shouldn't happen)
-        log.warn(s"Unknown box used as input: $id")
+        log.warn(s"Unknown box used as input: ${bytesToId(id)}")
         -1
     }
   }
@@ -152,8 +152,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
       //process transaction inputs
       if(height != 1) { //only after 1st block (skip genesis box)
         cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
-          val inputId: ModifierId = bytesToId(tx.inputs(i).boxId)
-          val boxIndex: Int = findAndSpendBox(inputId, tx.id, height)
+          val boxIndex: Int = findAndSpendBox(tx.inputs(i).boxId, tx.id, height)
           if(boxIndex >= 0) findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(boxes(boxIndex).box.ergoTree)), Some(boxes(boxIndex).box)) // spend box and add tx
         }
       }

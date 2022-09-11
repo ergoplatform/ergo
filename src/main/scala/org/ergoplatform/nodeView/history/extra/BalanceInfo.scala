@@ -73,14 +73,6 @@ object BalanceInfoSerializer extends ScorexSerializer[BalanceInfo] {
 
 object BalanceInfo {
 
-  def fromBox(box: ErgoBox): BalanceInfo = {
-    val tokens: java.util.HashMap[TokenId,Long] = new java.util.HashMap[TokenId,Long]
-    cfor(0)(_ < box.additionalTokens.length, _ + 1) { i =>
-      tokens.put(box.additionalTokens(i)._1, box.additionalTokens(i)._2)
-    }
-    new BalanceInfo(box.value, mapAsScalaMap(tokens))
-  }
-
   def empty: BalanceInfo = new BalanceInfo(0, mutable.Map.empty[TokenId,Long])
 
 }

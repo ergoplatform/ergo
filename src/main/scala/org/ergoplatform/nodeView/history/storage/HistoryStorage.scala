@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.storage
 
-import com.google.common.cache.CacheBuilder
+import com.github.benmanes.caffeine.cache.Caffeine
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
@@ -24,17 +24,20 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
     with AutoCloseable
     with ScorexEncoding {
 
-  private val headersCache = CacheBuilder.newBuilder()
-    .maximumSize(config.history.headersCacheSize)
-    .build[String, BlockSection]
+  private val headersCache =
+    Caffeine.newBuilder()
+      .maximumSize(config.history.headersCacheSize)
+      .build[String, BlockSection]()
 
-  private val blockSectionsCache = CacheBuilder.newBuilder()
-    .maximumSize(config.history.blockSectionsCacheSize)
-    .build[String, BlockSection]
+  private val blockSectionsCache =
+    Caffeine.newBuilder()
+      .maximumSize(config.history.blockSectionsCacheSize)
+      .build[String, BlockSection]()
 
-  private val indexCache = CacheBuilder.newBuilder()
-    .maximumSize(config.history.indexesCacheSize)
-    .build[ByteArrayWrapper, Array[Byte]]
+  private val indexCache =
+    Caffeine.newBuilder()
+      .maximumSize(config.history.indexesCacheSize)
+      .build[ByteArrayWrapper, Array[Byte]]
 
   private def cacheModifier(mod: BlockSection): Unit = mod.modifierTypeId match {
     case Header.modifierTypeId => headersCache.put(mod.id, mod)

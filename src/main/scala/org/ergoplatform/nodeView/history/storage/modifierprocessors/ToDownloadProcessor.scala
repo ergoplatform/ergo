@@ -64,7 +64,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
             val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter { case (mtid, mid) => condition(mtid, mid) }
             // add new modifiers to download to accumulator
             val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId)) }
-            continuation(height + 1, newAcc)
+            continuation(height + 1, newAcc, maxHeight)
           } else {
             acc
           }
@@ -77,7 +77,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         // do not download full blocks if no headers-chain synced yet and suffix enabled or SPV mode
         Map.empty
       case Some(fb) if fb.height < (estimatedTip.getOrElse(0) - 128) =>
-        continuation(fb.height + 1, Map.empty, fb.height + 96)
+        continuation(fb.height + 1, Map.empty, fb.height + 108)
       case Some(fb) =>
         // download children blocks of last 100 full blocks applied to the best chain
         val minHeight = Math.max(1, fb.header.height - 100)

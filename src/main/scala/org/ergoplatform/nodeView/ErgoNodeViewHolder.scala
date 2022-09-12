@@ -61,7 +61,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   private val headersCache = new ErgoModifiersCache(8192)
 
-  private val modifiersCache = new ErgoModifiersCache(512)
+  private val modifiersCache = new ErgoModifiersCache(384)
 
   /**
     * The main data structure a node software is taking care about, a node view consists

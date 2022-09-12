@@ -43,7 +43,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getProofForTxR ~
       getFullBlockByHeaderIdR ~
       getModifierByIdR ~
-      getBlockSectionsByHeaderIdR
+      getBlockSectionsByHeaderIdR ~
+      getValidityByIdR
   }
 
   private val maxHeadersInOneQuery = ergoSettings.chainSettings.epochLength * 2
@@ -76,6 +77,9 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   private def getBlockSectionsById(headerId: ModifierId): Future[Option[Seq[(ModifierTypeId, ModifierId)]]] =
     getHistory.map(_.typedModifierById[Header](headerId)).map(_.map(_.sectionIds))
+
+  private def getValidityById(blockSectionId: ModifierId): Future[String] =
+    getHistory.map(_.isSemanticallyValid(blockSectionId).toString)
 
   private def getProofForTx(headerId: ModifierId, txId: ModifierId): Future[Option[MerkleProof[Digest32]]] =
     getModifierById(headerId).flatMap {
@@ -158,6 +162,10 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     ApiResponse(getBlockSectionsById(id).map(_.map(_.map{case (modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
       BlockSection.typeToString(modifierTypeId) -> modifierId
     })))
+  }
+
+  def getValidityByIdR: Route = (pathPrefix("validity") & modifierId & get) { id =>
+    ApiResponse(getValidityById(id))
   }
 
   def getProofForTxR: Route = (modifierId & pathPrefix("proofFor") & modifierId & get) { (headerId, txId) =>

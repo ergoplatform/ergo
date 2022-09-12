@@ -445,7 +445,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
         history().append(pmod) match {
           case Success((historyBeforeStUpdate, progressInfo)) =>
-            log.debug(s"Going to apply modifications to the state: $progressInfo")
+            log.debug(s"Going to apply modifications to the state: $progressInfo , to apply: ")
             context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
 
             if (progressInfo.toApply.nonEmpty) {

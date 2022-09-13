@@ -35,9 +35,8 @@ import scala.util.{Failure, Success, Try}
 /**
   * Composite local view of the node
   *
-  * Contains instances for History, ErgoState, Vault, MemoryPool.
-  * The instances are read-only for external world.
-  * Updates of the composite view instances are to be performed atomically.
+  * Contains instances for History, ErgoState, Wallet, MemoryPool.
+  * Updates them atomically.
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
@@ -484,7 +483,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     blocksApplied.foreach(newVault.scanPersistent)
                   }
 
-                  if(headersHeight == fullBlockHeight) {
+                  // if blockchain is synced,
+                  // send an order to clean mempool up from transactions possibly become invalid
+                  if (headersHeight == fullBlockHeight) {
                     context.system.eventStream.publish(RecheckMempool(newMinState, newMemPool))
                   }
 

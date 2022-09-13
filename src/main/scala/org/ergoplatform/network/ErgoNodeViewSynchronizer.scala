@@ -1216,12 +1216,27 @@ object ErgoNodeViewSynchronizer {
 
     case class SyntacticallySuccessfulModifier(typeId: ModifierTypeId, modifierId: ModifierId) extends ModificationOutcome
 
+    /**
+      * Signal sent by node view holder when a full block is applied to state
+      * @param header - full block's header
+      */
     case class FullBlockApplied(header: Header) extends ModificationOutcome
 
+    /**
+      * Signal sent after block sections processing (validation and application to state) done
+      * @param headersCacheSize - headers cache size after processing
+      * @param blockSectionsCacheSize - block sections cache size after processing
+      * @param cleared - blocks removed from cache being overfull
+      */
     case class BlockSectionsProcessingCacheUpdate(headersCacheSize: Int,
                                                   blockSectionsCacheSize: Int,
                                                   cleared: (ModifierTypeId, Seq[ModifierId]))
 
+    /**
+      * Command to re-check mempool to clean transactions become invalid while sitting in the mempool up
+      * @param state - up-to-date state to check transaction against
+      * @param mempool - mempool to check
+      */
     case class RecheckMempool(state: ErgoStateReader, mempool: ErgoMemPoolReader) extends NodeViewChange
   }
 

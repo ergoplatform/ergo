@@ -7,12 +7,11 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
+import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import scorex.core.ModifierTypeId
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -42,9 +41,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getBlockTransactionsByHeaderIdR ~
       getProofForTxR ~
       getFullBlockByHeaderIdR ~
-      getModifierByIdR ~
-      getBlockSectionsByHeaderIdR ~
-      getValidityByIdR
+      getModifierByIdR
   }
 
   private val maxHeadersInOneQuery = ergoSettings.chainSettings.epochLength * 2
@@ -74,12 +71,6 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   private def getModifierById(modifierId: ModifierId): Future[Option[BlockSection]] =
     getHistory.map(_.modifierById(modifierId))
-
-  private def getBlockSectionsById(headerId: ModifierId): Future[Option[Seq[(ModifierTypeId, ModifierId)]]] =
-    getHistory.map(_.typedModifierById[Header](headerId)).map(_.map(_.sectionIds))
-
-  private def getValidityById(blockSectionId: ModifierId): Future[String] =
-    getHistory.map(_.isSemanticallyValid(blockSectionId).toString)
 
   private def getProofForTx(headerId: ModifierId, txId: ModifierId): Future[Option[MerkleProof[Digest32]]] =
     getModifierById(headerId).flatMap {
@@ -156,16 +147,6 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   def getModifierByIdR: Route = (pathPrefix("modifier") & modifierId & get) { id =>
     ApiResponse(getModifierById(id))
-  }
-
-  def getBlockSectionsByHeaderIdR: Route = (pathPrefix("blockSections") & modifierId & get) { id =>
-    ApiResponse(getBlockSectionsById(id).map(_.map(_.map{case (modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
-      BlockSection.typeToString(modifierTypeId) -> modifierId
-    })))
-  }
-
-  def getValidityByIdR: Route = (pathPrefix("validity") & modifierId & get) { id =>
-    ApiResponse(getValidityById(id))
   }
 
   def getProofForTxR: Route = (modifierId & pathPrefix("proofFor") & modifierId & get) { (headerId, txId) =>

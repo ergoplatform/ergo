@@ -50,7 +50,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
   // when our node received a modifier we put it to `received`
   protected val received: mutable.Map[ModifierTypeId, Map[ModifierId, ConnectedPeer]] = mutable.Map()
 
-  private val desiredSizeOfExpectingHeaderQueue: Int = desiredSizeOfExpectingModifierQueue * 16
+  private val desiredSizeOfExpectingHeaderQueue: Int = desiredSizeOfExpectingModifierQueue * 8
 
   /** Bloom Filter based cache with invalid modifier ids */
   private var invalidModifierCache = emptyExpiringApproximateCache
@@ -354,7 +354,7 @@ object DeliveryTracker {
   def empty(settings: ErgoSettings): DeliveryTracker = {
     new DeliveryTracker(
       settings.cacheSettings.network,
-      84
+      settings.scorexSettings.network.desiredInvObjects
     )
   }
 

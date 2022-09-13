@@ -873,7 +873,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
           if (checksDone < maxDeliveryChecks) {
-            log.info(s"Rescheduling request for $modifierId")
+            val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
+              getPeersForDownloadingHeaders(peer).toSeq
+            } else {
+              getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
+            }
+            val newPeerIndex = scala.util.Random.nextInt(newPeerCandidates.size)
+            val newPeer = newPeerCandidates(newPeerIndex)
+            log.info(s"Rescheduling request for $modifierId , new peer $newPeer")
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
             requestBlockSection(modifierTypeId, Seq(modifierId), peer, checksDone)
           } else {
@@ -950,7 +957,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
     case CheckModifiersToDownload =>
       val now = System.currentTimeMillis()
-      if (now - lastCheckForModifiersToDownload >= 1000) {
+      if (now - lastCheckForModifiersToDownload >= 100) {
         log.debug("CheckModifiersToDownload")
         lastCheckForModifiersToDownload = now
         requestDownload(
@@ -1029,7 +1036,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       cleared._2.foreach(mId => deliveryTracker.setUnknown(mId, modTypeId))
       modifiersCacheSize = blockSectionsCacheSize
       if (headersCacheSize < 3184 ||
-          (modifiersCacheSize < 36 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 500))) {
+          (modifiersCacheSize < 96 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 100))) {
         requestMoreModifiers(historyReader)
       }
 

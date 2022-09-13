@@ -52,23 +52,22 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
                      acc: Map[ModifierTypeId, Vector[ModifierId]],
                      maxHeight: Int = Int.MaxValue): Map[ModifierTypeId, Vector[ModifierId]] = {
       // return if at least one of Modifier types reaches howManyPerType limit for modifier ids
-      if (acc.values.exists(_.lengthCompare(howManyPerType) >= 0)) {
-        acc.mapValues(_.take(howManyPerType)).view.force
+      if(height > maxHeight) {
+        acc
       } else {
-        val headersAtThisHeight = headerIdsAtHeight(height).flatMap(id => typedModifierById[Header](id))
-
-        if (headersAtThisHeight.nonEmpty) {
-          val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter{ case (mtid, mid) => condition(mtid, mid) }
-          // add new modifiers to download to accumulator
-          val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId)) }
-          val nextHeight = height + 1
-          if (nextHeight <= maxHeight) {
-            continuation(nextHeight, newAcc)
-          } else {
-            newAcc
-          }
+        if (acc.values.exists(_.lengthCompare(howManyPerType) >= 0)) {
+          acc.mapValues(_.take(howManyPerType)).view.force
         } else {
-          acc
+          val headersAtThisHeight = headerIdsAtHeight(height).flatMap(id => typedModifierById[Header](id))
+
+          if (headersAtThisHeight.nonEmpty) {
+            val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter { case (mtid, mid) => condition(mtid, mid) }
+            // add new modifiers to download to accumulator
+            val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId)) }
+            continuation(height + 1, newAcc, maxHeight)
+          } else {
+            acc
+          }
         }
       }
     }

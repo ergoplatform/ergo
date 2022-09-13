@@ -882,7 +882,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             val newPeer = newPeerCandidates(newPeerIndex)
             log.info(s"Rescheduling request for $modifierId , new peer $newPeer")
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
-            requestBlockSection(modifierTypeId, Seq(modifierId), peer, checksDone)
+            requestBlockSection(modifierTypeId, Seq(modifierId), newPeer, checksDone)
           } else {
             log.error(s"Exceeded max delivery attempts($maxDeliveryChecks) limit for $modifierId")
             if (modifierTypeId == Header.modifierTypeId) {

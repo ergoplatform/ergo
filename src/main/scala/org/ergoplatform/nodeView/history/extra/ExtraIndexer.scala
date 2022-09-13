@@ -88,7 +88,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
           trees += x.addTx(globalTxIndex).addBox(boxes.last) // receive box
       case None => // address not found at all
         if(boxToSpend.isEmpty)
-          trees += IndexedErgoAddress(id, ListBuffer(globalTxIndex), ListBuffer.empty[Long], Some(BalanceInfo.empty)).addBox(boxes.last) // receive box
+          trees += IndexedErgoAddress(id, ListBuffer(globalTxIndex), ListBuffer.empty[Long], Some(new BalanceInfo)).addBox(boxes.last) // receive box
         else
           log.warn(s"Unknown address spent box ${boxes.last.id}") // spend box should never happen by an unknown address
     }

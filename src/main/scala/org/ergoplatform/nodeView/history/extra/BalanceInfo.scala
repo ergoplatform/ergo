@@ -10,12 +10,11 @@ import scorex.util.serialization.{Reader, Writer}
 import spire.implicits.cfor
 
 import scala.collection.mutable
-import scala.collection.JavaConverters.mapAsScalaMap
 
-class BalanceInfo(var nanoErgs: Long,
-                  val tokens: mutable.Map[TokenId,Long]) {
+class BalanceInfo(var nanoErgs: Long = 0L,
+                  val tokens: mutable.HashMap[TokenId,Long] = mutable.HashMap.empty[TokenId,Long]) {
 
-  val additionalTokenInfo: mutable.Map[TokenId,(String,Int)] = mutable.Map.empty[TokenId,(String,Int)]
+  val additionalTokenInfo: mutable.HashMap[TokenId,(String,Int)] = mutable.HashMap.empty[TokenId,(String,Int)]
 
   def retreiveAdditionalTokenInfo(history: ErgoHistoryReader): BalanceInfo = {
     additionalTokenInfo ++= tokens.map(token => {
@@ -25,24 +24,22 @@ class BalanceInfo(var nanoErgs: Long,
     this
   }
 
-  def add(box: ErgoBox): BalanceInfo = {
+  def add(box: ErgoBox): Unit = {
     nanoErgs += box.value
     cfor(0)(_ < box.additionalTokens.length, _ + 1) { i =>
       tokens.put(box.additionalTokens(i)._1, tokens.getOrElse(box.additionalTokens(i)._1, 0L) + box.additionalTokens(i)._2)
     }
-    this
   }
 
-  def subtract(box: ErgoBox): BalanceInfo = {
+  def subtract(box: ErgoBox): Unit = {
     nanoErgs -= box.value
     cfor(0)(_ < box.additionalTokens.length, _ + 1) { i =>
-      val newVal: Long = tokens.getOrElse(box.additionalTokens(i)._1, 0L) - box.additionalTokens(i)._2
+      val newVal: Long = tokens(box.additionalTokens(i)._1) - box.additionalTokens(i)._2
       if(newVal == 0)
         tokens.remove(box.additionalTokens(i)._1)
       else
         tokens.put(box.additionalTokens(i)._1, newVal)
     }
-    this
   }
 
 }
@@ -52,27 +49,19 @@ object BalanceInfoSerializer extends ScorexSerializer[BalanceInfo] {
   override def serialize(bI: BalanceInfo, w: Writer): Unit = {
     w.putLong(bI.nanoErgs)
     w.putInt(bI.tokens.size)
-    val arr: Array[(TokenId,Long)] = bI.tokens.toArray
-    cfor(0)(_ < arr.length, _ + 1) { i =>
-      w.putBytes(arr(i)._1)
-      w.putLong(arr(i)._2)
+    bI.tokens.foreach { case (id,amount) =>
+      w.putBytes(id)
+      w.putLong(amount)
     }
   }
 
   override def parse(r: Reader): BalanceInfo = {
-    val nanoErgs: Long = r.getLong()
+    val bI: BalanceInfo = new BalanceInfo(r.getLong())
     val tokensLen: Int = r.getInt()
-    val tokens: java.util.HashMap[TokenId,Long] = new java.util.HashMap[TokenId,Long]
     cfor(0)(_ < tokensLen, _ + 1) { _ =>
-      tokens.put(Digest32 @@ r.getBytes(32), r.getLong())
+      bI.tokens.put(Digest32 @@ r.getBytes(32), r.getLong())
     }
-    new BalanceInfo(nanoErgs, mapAsScalaMap(tokens))
+    bI
   }
-
-}
-
-object BalanceInfo {
-
-  def empty: BalanceInfo = new BalanceInfo(0, mutable.Map.empty[TokenId,Long])
 
 }

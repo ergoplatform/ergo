@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
@@ -24,19 +24,20 @@ import scorex.core.consensus.ProgressInfo
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.core.validation.RecoverableModifierError
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
 import java.io.File
+
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
   * Composite local view of the node
   *
-  * Contains instances for History, ErgoState, Vault, MemoryPool.
-  * The instances are read-only for external world.
-  * Updates of the composite view instances are to be performed atomically.
+  * Contains instances for History, ErgoState, Wallet, MemoryPool.
+  * Updates them atomically.
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
@@ -58,8 +59,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   /**
     * Cache for modifiers. If modifiers are coming out-of-order, they are to be stored in this cache.
     */
-  protected lazy val modifiersCache =
-    new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
+  private val headersCache = new ErgoModifiersCache(8192)
+
+  private val modifiersCache = new ErgoModifiersCache(384)
 
   /**
     * The main data structure a node software is taking care about, a node view consists
@@ -130,13 +132,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
 
-  protected def requestDownloads(pi: ProgressInfo[BlockSection]): Unit =
-    pi.toDownload.foreach { case (tid, id) =>
-      context.system.eventStream.publish(DownloadRequest(tid, id))
+  protected def requestDownloads(pi: ProgressInfo[BlockSection]): Unit = {
+    val toDownload = mutable.Map[ModifierTypeId, Seq[ModifierId]]()
+    pi.toDownload.foreach { case (tid, mid) =>
+      toDownload.put(tid, toDownload.getOrElse(tid, Seq()) :+ mid)
     }
+    context.system.eventStream.publish(DownloadRequest(toDownload.toMap))
+  }
+
+
 
   private def trimChainSuffix(suffix: IndexedSeq[BlockSection],
-                              rollbackPoint: scorex.util.ModifierId): IndexedSeq[BlockSection] = {
+                              rollbackPoint: ModifierId): IndexedSeq[BlockSection] = {
     val idx = suffix.indexWhere(_.id == rollbackPoint)
     if (idx == -1) IndexedSeq.empty else suffix.drop(idx)
   }
@@ -232,6 +239,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
               }
             case Failure(e) =>
+              log.warn(s"Invalid modifier! Typeid: ${modToApply.modifierTypeId} id: ${modToApply.id} ", e)
               history.reportModifierIsInvalid(modToApply, progressInfo).map { case (newHis, newProgressInfo) =>
                 context.system.eventStream.publish(SemanticallyFailedModification(modToApply.modifierTypeId, modToApply.id, e))
                 UpdateInformation(newHis, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
@@ -276,18 +284,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[BlockSection]@unchecked) =>
       @tailrec
-      def applyFromCacheLoop(limit: Int = 10000): Unit = {
+      def applyFromCacheLoop(cache: ErgoModifiersCache, limit: Int): Unit = {
         if(limit <= 0 ){
           ()
         } else {
           val at0 = System.currentTimeMillis()
-          modifiersCache.popCandidate(history()) match {
+          cache.popCandidate(history()) match {
             case Some(mod) =>
               pmodModify(mod, local = false)
               val at = System.currentTimeMillis()
               log.debug(s"Modifier application time for ${mod.id}: ${at - at0}")
               val diff = (at - at0).toInt
-              applyFromCacheLoop(limit - diff)
+              applyFromCacheLoop(cache, limit - diff)
             case None =>
               ()
           }
@@ -311,26 +319,31 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   linkBroken = true
                 }
                 // put into cache headers not applied
-                modifiersCache.put(header.id, header)
+                headersCache.put(header.id, header)
               }
             }
           } else {
-            sorted.foreach(h => modifiersCache.put(h.id, h))
+            sorted.foreach(h => headersCache.put(h.id, h))
           }
 
-          applyFromCacheLoop()
+          applyFromCacheLoop(headersCache, 10000)
 
-          val cleared = modifiersCache.cleanOverfull()
-          val upd = BlockSectionsProcessingCacheUpdate(modifiersCache.size, Header.modifierTypeId -> cleared.map(_.id))
+          val cleared = headersCache.cleanOverfull()
+          val upd = BlockSectionsProcessingCacheUpdate(
+            headersCache.size,
+            modifiersCache.size,
+            Header.modifierTypeId -> cleared.map(_.id)
+          )
           context.system.eventStream.publish(upd)
-          log.debug(s"Cache size after: ${modifiersCache.size}")
+          log.debug(s"Cache size after: ${headersCache.size}")
+
         case Some(head) =>
           mods.foreach(m => modifiersCache.put(m.id, m))
 
           log.debug(s"Cache size before: ${modifiersCache.size}")
 
           val at0 = System.currentTimeMillis()
-          applyFromCacheLoop(750)
+          applyFromCacheLoop(modifiersCache, 750)
           val at = System.currentTimeMillis()
           log.debug(s"Application time: ${at-at0}")
 
@@ -339,7 +352,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           if (cleared.nonEmpty) {
             log.debug(s"Cleared from cache: ${modifiersCache.size} block sections")
           }
-          val upd = BlockSectionsProcessingCacheUpdate(modifiersCache.size, head.modifierTypeId -> cleared.map(_.id))
+          val upd = BlockSectionsProcessingCacheUpdate(
+            headersCache.size,
+            modifiersCache.size,
+            head.modifierTypeId -> cleared.map(_.id)
+          )
           context.system.eventStream.publish(upd)
           log.debug(s"Cache size after: ${modifiersCache.size}")
         case None =>
@@ -395,7 +412,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
-          history.getReader.asInstanceOf[ErgoHistoryReader],
+          history.getReader,
           settings,
           state.parameters)
         log.info("Wallet database read")
@@ -428,7 +445,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
         history().append(pmod) match {
           case Success((historyBeforeStUpdate, progressInfo)) =>
-            log.debug(s"Going to apply modifications to the state: $progressInfo")
+            log.debug(s"Going to apply modifications to the state: $progressInfo , to apply: ")
             context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
 
             if (progressInfo.toApply.nonEmpty) {
@@ -467,7 +484,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     blocksApplied.foreach(newVault.scanPersistent)
                   }
 
-                  if(headersHeight == fullBlockHeight) {
+                  // if blockchain is synced,
+                  // send an order to clean mempool up from transactions possibly become invalid
+                  if (headersHeight == fullBlockHeight) {
                     context.system.eventStream.publish(RecheckMempool(newMinState, newMemPool))
                   }
 
@@ -687,7 +706,7 @@ object ErgoNodeViewHolder {
 
     case class LocallyGeneratedModifier(pmod: BlockSection)
 
-    case class EliminateTransactions(ids: Seq[scorex.util.ModifierId])
+    case class EliminateTransactions(ids: Seq[ModifierId])
 
     case object IsChainHealthy
     sealed trait HealthCheckResult
@@ -695,10 +714,9 @@ object ErgoNodeViewHolder {
     case class ChainIsStuck(reason: String) extends HealthCheckResult
   }
 
-  case class BlockAppliedTransactions(txs: Seq[scorex.util.ModifierId]) extends NodeViewHolderEvent
+  case class BlockAppliedTransactions(txs: Seq[ModifierId]) extends NodeViewHolderEvent
 
-  case class DownloadRequest(modifierTypeId: ModifierTypeId,
-                             modifierId: scorex.util.ModifierId) extends NodeViewHolderEvent
+  case class DownloadRequest(modifiersToFetch: Map[ModifierTypeId, Seq[ModifierId]]) extends NodeViewHolderEvent
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
 

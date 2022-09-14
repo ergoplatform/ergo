@@ -423,16 +423,6 @@ trait ErgoHistoryReader
     }
   }
 
-  def getHeaderFor(blockSection: BlockSection): Option[Header] = {
-    blockSection match {
-      case h: Header => Some(h)
-      case fb: ErgoFullBlock => Some(fb.header)
-      case ext: Extension => typedModifierById[Header](ext.headerId)
-      case bt: BlockTransactions => typedModifierById[Header](bt.headerId)
-      case proofs: ADProofs => typedModifierById[Header](proofs.headerId)
-    }
-  }
-
   def getFullBlock(header: Header): Option[ErgoFullBlock] = {
     (typedModifierById[BlockTransactions](header.transactionsId),
       typedModifierById[Extension](header.extensionId),

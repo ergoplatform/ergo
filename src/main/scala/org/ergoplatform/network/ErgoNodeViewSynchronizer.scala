@@ -34,13 +34,12 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import ErgoNodeViewSynchronizer.{IncomingTxInfo, TransactionProcessingCacheRecord}
-import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.util.{Failure, Random, Success}
+import scala.util.{Failure, Success}
 
 /**
   * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the
@@ -54,7 +53,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncTracker: ErgoSyncTracker,
                                deliveryTracker: DeliveryTracker
                               )(implicit ex: ExecutionContext)
-  extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] with Synchronizer with ScorexLogging with ScorexEncoding {
+  extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
 
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
     maxNrOfRetries = 10,
@@ -135,6 +134,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val txProcessingCache = mutable.Map[ModifierId, TransactionProcessingCacheRecord]()
 
   /**
+    * Variable which is caching height of last header which was extracted from sync info message
+    */
+  private var lastSyncHeaderApplied: Option[Int] = Option.empty
+
+  /**
+    * Timestamp of last CheckModifiersToDownload command processing, used to not to process it too extensively
+    */
+  private var lastCheckForModifiersToDownload = 0L
+
+  /**
+    * How many block sections stored in processing queue, imprecise number as updated only when
+    * this actor is getting data from view holder actor
+    */
+  private var modifiersCacheSize = 0
+
+  /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
   private def clearInterblockCost(): Unit = {
@@ -156,14 +171,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * This method adds validation cost to counter and send another
     */
   private def processMempoolResult(processingResult: InitialTransactionCheckOutcome): Unit = {
-    val ReserveCostValue = 5000
+    val FallbackCostValue = 5000
 
     val costOpt = processingResult.transaction.lastCost
     if (costOpt.isEmpty) {
       // should not be here, and so ReserveCostValue should not be used
       log.warn("Cost is empty in processMempoolResult")
     }
-    val cost = costOpt.getOrElse(ReserveCostValue)
+    val cost = costOpt.getOrElse(FallbackCostValue)
     val ng = processingResult match {
       case _: FailedTransaction => interblockCost.copy(invalidatedCost = interblockCost.invalidatedCost + cost)
       case _: SuccessfulTransaction => interblockCost.copy(acceptedCost = interblockCost.acceptedCost + cost)
@@ -418,10 +433,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  /**
-    * Variable which is caching height of last header which was extracted from sync info message
-    */
-  private var lastSyncHeaderApplied: Option[Int] = Option.empty
 
   /**
     * Calculates new continuation header from syncInfo message if any, validates it and sends it
@@ -439,10 +450,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           lastSyncHeaderApplied = Some(continuationHeader.height)
           viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
           val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
+          log.info(s"Downloading block sections for header ${continuationHeader.encodedId}")
           modifiersToDownload.foreach {
             case (modifierTypeId, modifierId) =>
               if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
-                log.info(s"Downloading block section for header ${continuationHeader.encodedId} : ($modifierId, $modifierTypeId)")
                 requestBlockSection(modifierTypeId, Seq(modifierId), peer)
               }
           }
@@ -454,47 +465,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Headers should be downloaded from an Older node, it is triggered by received sync message from an older node
     *
-    * @param callingPeer that can be used to download headers, it must be Older
+    * @param callingPeer fallback peer that can be used to download headers, it must be Older
     * @return available peers to download headers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): Iterable[ConnectedPeer] = {
-    syncTracker.peersByStatus
-      .get(Older)
-      .getOrElse(Array(callingPeer))
-  }
-
-  /**
-    * @return a peer to download block sections from.
-    */
-  private def getPeerForDownloadingBlocks(peerToAvoid: Option[ConnectedPeer]): Option[ConnectedPeer] = {
-
-    def filterOutFn(cp: ConnectedPeer) = {
-      blockSectionsDownloadFilter.condition(cp) && !peerToAvoid.contains(cp)
-    }
-
-    // helper function to take a peer from a group of peers of the same status (e.g. older than us)
-    def peerFrom(peers: Seq[ConnectedPeer]): Option[ConnectedPeer] = {
-      // first, we are choosing random peer
-      // if the peer is not ok (e.g. of some old version having problems)
-      // choose first peer which is okay
-      // so usually returns randomized peer, with fallback to deterministic one
-      val randomPeer = peers(Random.nextInt(peers.size))
-      if (filterOutFn(randomPeer)) {
-        Some(randomPeer)
-      } else {
-        peers.find(filterOutFn)
-      }
-    }
-
-    val peersByStatus = syncTracker.peersByStatus
-
-    val olderOrEqual = peersByStatus.getOrElse(Older, Seq.empty) ++ peersByStatus.getOrElse(Equal, Seq.empty)
-
-    peerFrom(olderOrEqual).orElse {
-      log.warn("No peers which are equal or older are found when trying to download a block section")
-      val unknownOrFork = peersByStatus.getOrElse(Unknown, Seq.empty) ++ peersByStatus.getOrElse(Fork, Seq.empty)
-      peerFrom(unknownOrFork)
-    }
+    syncTracker.peersByStatus.getOrElse(Older, Array(callingPeer))
   }
 
   /**
@@ -541,31 +516,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  /**
-    * Our node needs block sections of type `modifierTypeId` with id `modifierId`.
-    * Request this modifier from random peer.
-    */
-  def requestBlockSection(modifierTypeId: ModifierTypeId,
-                          modifierId: ModifierId,
-                          checksDone: Int,
-                          previousPeer: Option[ConnectedPeer]): Unit = {
-    getPeerForDownloadingBlocks(previousPeer) match {
-      case Some(peerToAsk) =>
-        log.debug(s"Going to download $modifierId from $peerToAsk , previous attempts: $checksDone")
-        requestBlockSection(modifierTypeId, Seq(modifierId), peerToAsk, checksDone)
-      case None =>
-        log.error("No peer found to download a block section from. " +
-                  "DeliveryTracker: " + deliveryTracker + " SyncTracker: " + syncTracker)
-    }
-  }
-
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
-    case DownloadRequest(modifierTypeId: ModifierTypeId, modifierId: ModifierId) =>
-      if(modifiersCacheSize < 50) {
-        if (deliveryTracker.status(modifierId, modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
-          requestBlockSection(modifierTypeId, modifierId, checksDone = 0, None)
+    case DownloadRequest(modifiersToFetch: Map[ModifierTypeId, Seq[ModifierId]]) =>
+      log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
+      if(modifiersToFetch.nonEmpty) {
+        requestDownload(
+          maxModifiers = deliveryTracker.modifiersToDownload,
+          minModifiersPerBucket,
+          maxModifiersPerBucket
+        )(getPeersForDownloadingBlocks) { howManyPerType =>
+          // leave block section ids only not touched before
+          modifiersToFetch.flatMap { case (tid, mids) =>
+            val updMids = mids.filter { mid =>
+              deliveryTracker.status(mid, tid, Seq(historyReader)) == ModifiersStatus.Unknown
+            }
+            if (updMids.isEmpty) {
+              None
+            } else {
+              Some(tid -> updMids)
+            }
+          }
         }
-      } //todo: else cache?
+      }
   }
 
   /**
@@ -625,31 +597,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                       remote: ConnectedPeer): Unit  = {
     Constants.modifierSerializers.get(typeId) match {
       case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
-        if(modifiersCacheSize <= 48) {
-          // parse all modifiers and put them to modifiers cache
-          val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, serializer, remote)
+        // parse all modifiers and put them to modifiers cache
+        val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, serializer, remote)
 
-          // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
-          val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
-          if (valid.nonEmpty) {
-            log.debug(s"Sending ${valid.size} modifiers to view holder, vh cache size: $modifiersCacheSize")
-            modifiersCacheSize += valid.size
-            viewHolderRef ! ModifiersFromRemote(valid)
-            // send sync message to the peer to get new headers quickly
-            if (valid.head.isInstanceOf[Header]) {
-              val syncInfo = if (syncV2Supported(remote)) {
-                getV2SyncInfo(hr, full = false)
-              } else {
-                getV1SyncInfo(hr)
-              }
-              sendSyncToPeer(remote, syncInfo)
+        // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
+        val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
+        if (valid.nonEmpty) {
+          log.debug(s"Sending ${valid.size} modifiers to view holder, vh cache size: $modifiersCacheSize")
+          modifiersCacheSize += valid.size // we increase estimated cache size now, before getting a precise number
+          viewHolderRef ! ModifiersFromRemote(valid)
+          // send sync message to the peer to get new headers quickly
+          if (valid.head.isInstanceOf[Header]) {
+            val syncInfo = if (syncV2Supported(remote)) {
+              getV2SyncInfo(hr, full = false)
+            } else {
+              getV1SyncInfo(hr)
             }
-          }
-        } else {
-          requestedModifiers.keys.foreach {mId =>
-            deliveryTracker.setUnknown(mId, typeId)
+            sendSyncToPeer(remote, syncInfo)
           }
         }
+
       case _ =>
         log.error(s"Undefined serializer for modifier of type $typeId")
     }
@@ -821,7 +788,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def requestMoreModifiers(historyReader: ErgoHistory): Unit = {
     if (historyReader.isHeadersChainSynced) {
-      // our requested list is half empty - request more missed modifiers
       self ! CheckModifiersToDownload
     } else {
       // headers chain is not synced yet, but our requested list is half empty - ask for more headers
@@ -918,9 +884,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
           if (checksDone < maxDeliveryChecks) {
-            log.info(s"Rescheduling request for $modifierId")
+            // randomly choose a peer for another download attempt
+            val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
+              getPeersForDownloadingHeaders(peer).toSeq
+            } else {
+              getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
+            }
+            val newPeerIndex = scala.util.Random.nextInt(newPeerCandidates.size)
+            val newPeer = newPeerCandidates(newPeerIndex)
+            log.info(s"Rescheduling request for $modifierId , new peer $newPeer")
             deliveryTracker.setUnknown(modifierId, modifierTypeId)
-            requestBlockSection(modifierTypeId, modifierId, checksDone, Some(peer))
+            requestBlockSection(modifierTypeId, Seq(modifierId), newPeer, checksDone)
           } else {
             log.error(s"Exceeded max delivery attempts($maxDeliveryChecks) limit for $modifierId")
             if (modifierTypeId == Header.modifierTypeId) {
@@ -985,27 +959,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  private var lastCheckForModifiersToDownload = 0L
-  private var modifiersCacheSize = 0
-
   protected def viewHolderEvents(historyReader: ErgoHistory,
                                  mempoolReader: ErgoMemPool,
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
-
     case CheckModifiersToDownload =>
       val now = System.currentTimeMillis()
-      if (now - lastCheckForModifiersToDownload >= 1000 && modifiersCacheSize < 30) {
-        log.debug("CheckModifiersToDownload")
-        val maxModifiersToDownload = deliveryTracker.modifiersToDownload
+      if (now - lastCheckForModifiersToDownload >= 50) { // do not process command more often than every 50 ms
         lastCheckForModifiersToDownload = now
         requestDownload(
-          maxModifiersToDownload,
+          maxModifiers = deliveryTracker.modifiersToDownload,
           minModifiersPerBucket,
           maxModifiersPerBucket
         )(getPeersForDownloadingBlocks) { howManyPerType =>
-          historyReader.nextModifiersToDownload(howManyPerType, historyReader.estimatedTip(), downloadRequired(historyReader))
+          val tip = historyReader.estimatedTip()
+          historyReader.nextModifiersToDownload(howManyPerType, tip, downloadRequired(historyReader))
         }
       }
 
@@ -1069,13 +1038,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
       context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
 
-    case BlockSectionsProcessingCacheUpdate(cacheSize, cleared) =>
+    case BlockSectionsProcessingCacheUpdate(headersCacheSize, blockSectionsCacheSize, cleared) =>
       // stop processing for cleared modifiers
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       val modTypeId = cleared._1
       cleared._2.foreach(mId => deliveryTracker.setUnknown(mId, modTypeId))
-      modifiersCacheSize = cacheSize
-      if (cacheSize < 50 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 500)) {
+      modifiersCacheSize = blockSectionsCacheSize
+      if (headersCacheSize < 3184 ||
+          (modifiersCacheSize < 96 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 50))) {
         requestMoreModifiers(historyReader)
       }
 
@@ -1255,10 +1225,27 @@ object ErgoNodeViewSynchronizer {
 
     case class SyntacticallySuccessfulModifier(typeId: ModifierTypeId, modifierId: ModifierId) extends ModificationOutcome
 
+    /**
+      * Signal sent by node view holder when a full block is applied to state
+      * @param header - full block's header
+      */
     case class FullBlockApplied(header: Header) extends ModificationOutcome
 
-    case class BlockSectionsProcessingCacheUpdate(cacheSize: Int, cleared: (ModifierTypeId, Seq[ModifierId]))
+    /**
+      * Signal sent after block sections processing (validation and application to state) done
+      * @param headersCacheSize - headers cache size after processing
+      * @param blockSectionsCacheSize - block sections cache size after processing
+      * @param cleared - blocks removed from cache being overfull
+      */
+    case class BlockSectionsProcessingCacheUpdate(headersCacheSize: Int,
+                                                  blockSectionsCacheSize: Int,
+                                                  cleared: (ModifierTypeId, Seq[ModifierId]))
 
+    /**
+      * Command to re-check mempool to clean transactions become invalid while sitting in the mempool up
+      * @param state - up-to-date state to check transaction against
+      * @param mempool - mempool to check
+      */
     case class RecheckMempool(state: ErgoStateReader, mempool: ErgoMemPoolReader) extends NodeViewChange
   }
 

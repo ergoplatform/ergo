@@ -80,7 +80,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   }
 
   private def initiateCleanup(validator: TransactionValidation, mempool: ErgoMemPoolReader): Unit = {
-    log.info("Initiating cleanup. Switching to working mode")
+    log.info("Initiating mempool cleanup")
     worker ! RunCleanup(validator, mempool)
     context become working // ignore other triggers until work is done
   }

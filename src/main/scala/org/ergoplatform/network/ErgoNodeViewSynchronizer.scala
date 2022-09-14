@@ -134,6 +134,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val txProcessingCache = mutable.Map[ModifierId, TransactionProcessingCacheRecord]()
 
   /**
+    * Variable which is caching height of last header which was extracted from sync info message
+    */
+  private var lastSyncHeaderApplied: Option[Int] = Option.empty
+
+  /**
+    * Timestamp of last CheckModifiersToDownload command processing, used to not to process it too extensively
+    */
+  private var lastCheckForModifiersToDownload = 0L
+
+  /**
+    * How many block sections stored in processing queue, imprecise number as updated only when
+    * this actor is getting data from view holder actor
+    */
+  private var modifiersCacheSize = 0
+
+  /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
   private def clearInterblockCost(): Unit = {
@@ -155,14 +171,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * This method adds validation cost to counter and send another
     */
   private def processMempoolResult(processingResult: InitialTransactionCheckOutcome): Unit = {
-    val ReserveCostValue = 5000
+    val FallbackCostValue = 5000
 
     val costOpt = processingResult.transaction.lastCost
     if (costOpt.isEmpty) {
       // should not be here, and so ReserveCostValue should not be used
       log.warn("Cost is empty in processMempoolResult")
     }
-    val cost = costOpt.getOrElse(ReserveCostValue)
+    val cost = costOpt.getOrElse(FallbackCostValue)
     val ng = processingResult match {
       case _: FailedTransaction => interblockCost.copy(invalidatedCost = interblockCost.invalidatedCost + cost)
       case _: SuccessfulTransaction => interblockCost.copy(acceptedCost = interblockCost.acceptedCost + cost)
@@ -417,10 +433,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  /**
-    * Variable which is caching height of last header which was extracted from sync info message
-    */
-  private var lastSyncHeaderApplied: Option[Int] = Option.empty
 
   /**
     * Calculates new continuation header from syncInfo message if any, validates it and sends it
@@ -453,13 +465,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Headers should be downloaded from an Older node, it is triggered by received sync message from an older node
     *
-    * @param callingPeer that can be used to download headers, it must be Older
+    * @param callingPeer fallback peer that can be used to download headers, it must be Older
     * @return available peers to download headers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): Iterable[ConnectedPeer] = {
-    syncTracker.peersByStatus
-      .get(Older)
-      .getOrElse(Array(callingPeer))
+    syncTracker.peersByStatus.getOrElse(Older, Array(callingPeer))
   }
 
   /**
@@ -515,6 +525,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           minModifiersPerBucket,
           maxModifiersPerBucket
         )(getPeersForDownloadingBlocks) { howManyPerType =>
+          // leave block section ids only not touched before
           modifiersToFetch.flatMap { case (tid, mids) =>
             val updMids = mids.filter { mid =>
               deliveryTracker.status(mid, tid, Seq(historyReader)) == ModifiersStatus.Unknown
@@ -593,7 +604,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
         if (valid.nonEmpty) {
           log.debug(s"Sending ${valid.size} modifiers to view holder, vh cache size: $modifiersCacheSize")
-          modifiersCacheSize += valid.size
+          modifiersCacheSize += valid.size // we increase estimated cache size now, before getting a precise number
           viewHolderRef ! ModifiersFromRemote(valid)
           // send sync message to the peer to get new headers quickly
           if (valid.head.isInstanceOf[Header]) {
@@ -873,6 +884,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
           if (checksDone < maxDeliveryChecks) {
+            // randomly choose a peer for another download attempt
             val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
               getPeersForDownloadingHeaders(peer).toSeq
             } else {
@@ -947,9 +959,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  private var lastCheckForModifiersToDownload = 0L
-  private var modifiersCacheSize = 0
-
   protected def viewHolderEvents(historyReader: ErgoHistory,
                                  mempoolReader: ErgoMemPool,
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
@@ -957,15 +966,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
     case CheckModifiersToDownload =>
       val now = System.currentTimeMillis()
-      if (now - lastCheckForModifiersToDownload >= 100) {
-        log.debug("CheckModifiersToDownload")
+      if (now - lastCheckForModifiersToDownload >= 50) { // do not process command more often than every 50 ms
         lastCheckForModifiersToDownload = now
         requestDownload(
           maxModifiers = deliveryTracker.modifiersToDownload,
           minModifiersPerBucket,
           maxModifiersPerBucket
         )(getPeersForDownloadingBlocks) { howManyPerType =>
-          historyReader.nextModifiersToDownload(howManyPerType, historyReader.estimatedTip(), downloadRequired(historyReader))
+          val tip = historyReader.estimatedTip()
+          historyReader.nextModifiersToDownload(howManyPerType, tip, downloadRequired(historyReader))
         }
       }
 
@@ -1036,7 +1045,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       cleared._2.foreach(mId => deliveryTracker.setUnknown(mId, modTypeId))
       modifiersCacheSize = blockSectionsCacheSize
       if (headersCacheSize < 3184 ||
-          (modifiersCacheSize < 96 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 100))) {
+          (modifiersCacheSize < 96 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 50))) {
         requestMoreModifiers(historyReader)
       }
 

@@ -19,7 +19,7 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
@@ -1246,7 +1246,7 @@ object ErgoNodeViewSynchronizer {
       * @param state - up-to-date state to check transaction against
       * @param mempool - mempool to check
       */
-    case class RecheckMempool(state: ErgoStateReader, mempool: ErgoMemPoolReader) extends NodeViewChange
+    case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader) extends NodeViewChange
   }
 
 }

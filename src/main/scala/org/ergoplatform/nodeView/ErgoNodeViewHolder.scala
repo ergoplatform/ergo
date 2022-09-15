@@ -485,8 +485,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
                   // if blockchain is synced,
                   // send an order to clean mempool up from transactions possibly become invalid
-                  if (headersHeight == fullBlockHeight) {
-                    context.system.eventStream.publish(RecheckMempool(newMinState, newMemPool))
+                  // we can check mempool transactions only in "utxo" mode
+                  newMinState match {
+                    case utxoStateReader: UtxoStateReader if headersHeight == fullBlockHeight =>
+                      val recheckCommand = RecheckMempool(utxoStateReader, newMemPool)
+                      context.system.eventStream.publish(recheckCommand)
+                    case _ =>
                   }
 
                   log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")

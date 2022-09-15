@@ -9,11 +9,10 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.network.Broadcast
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{RecheckMempool}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.RecheckMempool
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import scorex.core.network.message.{InvData, InvSpec, Message}
 import scorex.core.transaction.Transaction
-import scorex.core.transaction.state.TransactionValidation
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
@@ -63,7 +62,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   override def receive: Receive = awaiting
 
   private def awaiting: Receive = {
-    case RecheckMempool(st: TransactionValidation, mp: ErgoMemPoolReader) =>
+    case RecheckMempool(st: UtxoStateReader, mp: ErgoMemPoolReader) =>
       stateReaderOpt = Some(st)
       poolReaderOpt = Some(mp)
       initiateCleanup(st, mp)
@@ -79,7 +78,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     case _ => // ignore other triggers until work is done
   }
 
-  private def initiateCleanup(validator: TransactionValidation, mempool: ErgoMemPoolReader): Unit = {
+  private def initiateCleanup(validator: UtxoStateReader, mempool: ErgoMemPoolReader): Unit = {
     log.info("Initiating mempool cleanup")
     worker ! RunCleanup(validator, mempool)
     context become working // ignore other triggers until work is done

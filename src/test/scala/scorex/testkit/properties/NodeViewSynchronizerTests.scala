@@ -3,6 +3,7 @@ package scorex.testkit.properties
 import akka.actor._
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -76,7 +77,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: SyntacticallySuccessfulModifier") {
     withFixture { ctx =>
       import ctx._
-      node ! SyntacticallySuccessfulModifier(mod)
+      node ! SyntacticallySuccessfulModifier(mod.modifierTypeId, mod.id)
       // todo ? : NVS currently does nothing in this case. Should it do?
     }
   }
@@ -84,7 +85,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: SyntacticallyFailedModification") {
     withFixture { ctx =>
       import ctx._
-      node ! SyntacticallyFailedModification(mod, new Exception)
+      node ! SyntacticallyFailedModification(mod.modifierTypeId, mod.id, new Exception)
       // todo: NVS currently does nothing in this case. Should check banning.
     }
   }
@@ -92,7 +93,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: SemanticallySuccessfulModifier") {
     withFixture { ctx =>
       import ctx._
-      node ! SemanticallySuccessfulModifier(mod)
+      node ! FullBlockApplied(mod.asInstanceOf[Header]) //todo: fix
       ncProbe.fishForMessage(3 seconds) { case m => m.isInstanceOf[SendToNetwork] }
     }
   }
@@ -100,7 +101,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: SemanticallyFailedModification") {
     withFixture { ctx =>
       import ctx._
-      node ! SemanticallyFailedModification(mod, new Exception)
+      node ! SemanticallyFailedModification(mod.modifierTypeId, mod.id, new Exception)
       // todo: NVS currently does nothing in this case. Should check banning.
     }
   }

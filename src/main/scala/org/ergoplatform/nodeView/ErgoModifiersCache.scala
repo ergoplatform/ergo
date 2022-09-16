@@ -3,12 +3,13 @@ package org.ergoplatform.nodeView
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
-import scorex.core.DefaultModifiersCache
+import scorex.core.{LRUCache, ModifiersCache}
 import scorex.core.validation.MalformedModifierError
+import scorex.util.ScorexLogging
 
 import scala.util.Failure
 
-class ErgoModifiersCache(override val maxSize: Int) extends DefaultModifiersCache(maxSize) {
+class ErgoModifiersCache(override val maxSize: Int) extends ModifiersCache with LRUCache with ScorexLogging {
 
   override def findCandidateKey(history: ErgoHistory): Option[K] = {
     def tryToApply(k: K, v: BlockSection): Boolean = {

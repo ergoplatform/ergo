@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
-import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, SemanticallySuccessfulModifier}
+import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, FullBlockApplied}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -99,7 +99,7 @@ class CandidateGenerator(
       )
       self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
       context.system.eventStream
-        .subscribe(self, classOf[SemanticallySuccessfulModifier])
+        .subscribe(self, classOf[FullBlockApplied])
       context.system.eventStream.subscribe(self, classOf[NodeViewChange])
     case Readers(_, _, _, _) =>
       log.error("Invalid readers state, mining is possible in UTXO mode only")
@@ -123,12 +123,12 @@ class CandidateGenerator(
       * When new block is applied, either one mined by us or received from peers isn't equal to our candidate's parent,
       * we need to generate new candidate and possibly also discard existing solution if it is also behind
       */
-    case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
+    case FullBlockApplied(header) =>
       log.info(
-        s"Preparing new candidate on getting new block at ${mod.height}"
+        s"Preparing new candidate on getting new block at ${header.height}"
       )
-      if (needNewCandidate(state.cache, mod)) {
-        if (needNewSolution(state.solvedBlock, mod))
+      if (needNewCandidate(state.cache, header)) {
+        if (needNewSolution(state.solvedBlock, header.id))
           context.become(initialized(state.copy(cache = None, solvedBlock = None)))
         else
           context.become(initialized(state.copy(cache = None)))
@@ -136,9 +136,6 @@ class CandidateGenerator(
       } else {
         context.become(initialized(state))
       }
-
-    case SemanticallySuccessfulModifier(_) =>
-    // Just ignore all other modifiers.
 
     case gen @ GenerateCandidate(txsToInclude, reply) =>
       val senderOpt = if (reply) Some(sender()) else None
@@ -269,7 +266,7 @@ object CandidateGenerator extends ScorexLogging {
           timeProvider,
           ergoSettings
         )
-      ),
+      ).withDispatcher("critical-dispatcher"),
       s"CandidateGenerator-${Random.alphanumeric.take(5).mkString}"
     )
 
@@ -288,18 +285,19 @@ object CandidateGenerator extends ScorexLogging {
   /** we need new candidate if given block is not parent of our cached block */
   def needNewCandidate(
     cache: Option[Candidate],
-    bestFullBlock: ErgoFullBlock
+    bestFullBlockHeader: Header
   ): Boolean = {
     val parentHeaderIdOpt = cache.map(_.candidateBlock).flatMap(_.parentOpt).map(_.id)
-    !parentHeaderIdOpt.contains(bestFullBlock.header.id)
+    !parentHeaderIdOpt.contains(bestFullBlockHeader.id)
   }
 
   /** Solution is valid only if bestFullBlock on the chain is its parent */
   def needNewSolution(
     solvedBlock: Option[ErgoFullBlock],
-    bestFullBlock: ErgoFullBlock
-  ): Boolean =
-    solvedBlock.nonEmpty && !solvedBlock.map(_.parentId).contains(bestFullBlock.id)
+    bestFullBlockId: ModifierId
+  ): Boolean = {
+    solvedBlock.nonEmpty && !solvedBlock.map(_.parentId).contains(bestFullBlockId)
+  }
 
   /** Calculate average mining time from latest block header timestamps */
   def getBlockMiningTimeAvg(

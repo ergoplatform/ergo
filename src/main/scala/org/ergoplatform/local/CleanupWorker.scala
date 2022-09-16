@@ -8,7 +8,6 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.settings.NodeConfigurationSettings
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, RecheckedTransactions}
-import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -41,7 +40,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     case a: Any => log.warn(s"Strange input: $a")
   }
 
-  private def runCleanup(validator: TransactionValidation,
+  private def runCleanup(validator: UtxoStateReader,
                          mempool: ErgoMemPoolReader): Unit = {
     val (validated, toEliminate) = validatePool(validator, mempool)
 
@@ -61,7 +60,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     *
     * @return - updated valid transactions and invalidated transaction ids
     */
-  private def validatePool(validator: TransactionValidation,
+  private def validatePool(validator: UtxoStateReader,
                            mempool: ErgoMemPoolReader): (Seq[UnconfirmedTransaction], Seq[ModifierId]) = {
 
     val now = System.currentTimeMillis()
@@ -75,10 +74,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
     // Take into account other transactions from the pool.
     // This provides possibility to validate transactions which are spending off-chain outputs.
-    val state = validator match {
-      case u: UtxoStateReader => u.withUnconfirmedTransactions(allPoolTxs)
-      case _ => validator
-    }
+    val state = validator.withUnconfirmedTransactions(allPoolTxs)
 
     //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
@@ -127,6 +123,6 @@ object CleanupWorker {
     * @param validator - a state implementation which provides transaction validation
     * @param mempool - mempool reader instance
     */
-  case class RunCleanup(validator: TransactionValidation, mempool: ErgoMemPoolReader)
+  case class RunCleanup(validator: UtxoStateReader, mempool: ErgoMemPoolReader)
 
 }

@@ -179,16 +179,16 @@ object ErgoSettings extends ScorexLogging
     }
   }
 
-  protected[settings] def invalidRestApiUrl(url: URL): Boolean = {
-    val uri = url.toURI
-    val inetAddress = InetAddress.getByName(url.getHost)
-    Option(uri.getQuery).exists(_.nonEmpty) ||
-      Option(uri.getPath).exists(_.nonEmpty) ||
-      Option(uri.getFragment).exists(_.nonEmpty) ||
-      inetAddress.isAnyLocalAddress ||
-      inetAddress.isLoopbackAddress ||
-      inetAddress.isSiteLocalAddress
-  }
+  protected[settings] def invalidRestApiUrl(url: URL): Boolean =
+    Try(url.toURI).map { uri =>
+      val inetAddress = InetAddress.getByName(url.getHost)
+      Option(uri.getQuery).exists(_.nonEmpty) ||
+        Option(uri.getPath).exists(_.nonEmpty) ||
+        Option(uri.getFragment).exists(_.nonEmpty) ||
+        inetAddress.isAnyLocalAddress ||
+        inetAddress.isLoopbackAddress ||
+        inetAddress.isSiteLocalAddress
+      }.getOrElse(false)
 
   private def consistentSettings(settings: ErgoSettings,
                                  desiredNetworkTypeOpt: Option[NetworkType]): ErgoSettings = {

@@ -2,6 +2,7 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{EmptyBlockSectionProcessor, FullBlockPruningProcessor, ToDownloadProcessor}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
 import org.scalacheck.Gen
@@ -47,7 +48,8 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None,
-      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024
+      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
+      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024
 )
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null

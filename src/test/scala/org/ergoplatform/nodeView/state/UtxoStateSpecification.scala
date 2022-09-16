@@ -93,18 +93,18 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         testBox(foundersBox.value - remaining, rewardPk, height, Seq())
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
-      val tx = defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get
-      val validationRes1 = us.validateWithCost(ErgoTransaction(tx), 100000)
+      val tx = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
+      val validationRes1 = us.validateWithCost(tx, 100000)
       validationRes1 shouldBe 'success
       val txCost = validationRes1.get
 
-      val validationRes2 = us.validateWithCost(ErgoTransaction(tx), txCost - 1)
+      val validationRes2 = us.validateWithCost(tx, txCost - 1)
       validationRes2 shouldBe 'failure
       validationRes2.toEither.left.get.isInstanceOf[TooHighCostError] shouldBe true
 
-      us.validateWithCost(ErgoTransaction(tx), txCost + 1) shouldBe 'success
+      us.validateWithCost(tx, txCost + 1) shouldBe 'success
 
-      us.validateWithCost(ErgoTransaction(tx), txCost) shouldBe 'success
+      us.validateWithCost(tx, txCost) shouldBe 'success
 
       height = height + 1
     }

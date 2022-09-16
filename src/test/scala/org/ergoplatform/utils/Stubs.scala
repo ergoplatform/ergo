@@ -8,12 +8,12 @@ import org.ergoplatform.mining.CandidateGenerator.Candidate
 import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome.{Accepted, Invalidated}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
@@ -70,7 +70,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val wallet = new WalletStub
 
   val txs: Seq[ErgoTransaction] = validTransactionsFromBoxHolder(boxesHolderGen.sample.get)._1
-  val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
+  val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs.map(tx => UnconfirmedTransaction(tx, None))).get
 
   val digestReaders = Readers(history, digestState, memPool, wallet)
 
@@ -119,8 +119,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class NodeViewStub extends Actor {
     def receive: Receive = {
-      case LocallyGeneratedTransaction(_) =>
-        sender() ! Accepted
+      case LocallyGeneratedTransaction(utx) =>
+        sender() ! new ProcessingOutcome.Accepted(utx, System.currentTimeMillis())
       case _ =>
     }
   }
@@ -128,7 +128,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   class FailingNodeViewStub extends Actor {
     def receive: Receive = {
       case LocallyGeneratedTransaction(_) =>
-        sender() ! Invalidated(new Error("Transaction invalid"))
+        sender() ! new ProcessingOutcome.Invalidated(new Error("Transaction invalid"), System.currentTimeMillis())
       case _ =>
     }
   }
@@ -368,7 +368,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
-      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024
+      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
+      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024
 )
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null

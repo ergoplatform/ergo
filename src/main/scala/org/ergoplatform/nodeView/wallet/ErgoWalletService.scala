@@ -586,11 +586,11 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   override def getUnconfirmedTransactions(state: ErgoWalletState, scanId: ScanId): Seq[AugWalletTransaction] = {
     state.mempoolReaderOpt.flatMap { mempool =>
       state.storage.getScan(scanId).map { scan =>
-        mempool.getAllPrioritized.filter { tx =>
-          tx.outputs.exists(scan.trackingRule.filter)
-        }.map { tx =>
+        mempool.getAllPrioritized.filter { unconfirmedTx =>
+          unconfirmedTx.transaction.outputs.exists(scan.trackingRule.filter)
+        }.map { unconfirmedTx =>
           // unconfirmed transaction has 0 confirmations
-          AugWalletTransaction(WalletTransaction(tx, state.fullHeight, Seq(scanId)), 0)
+          AugWalletTransaction(WalletTransaction(unconfirmedTx.transaction, state.fullHeight, Seq(scanId)), 0)
         }
       }
     }.getOrElse(Nil)

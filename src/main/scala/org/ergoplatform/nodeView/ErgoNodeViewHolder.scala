@@ -132,6 +132,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
   protected def requestDownloads(pi: ProgressInfo[BlockSection]): Unit = {
+    //TODO: actually, pi.toDownload contains only 1 modifierid per type,
+    //TODO: see the only case where toDownload is not empty during ProgressInfo construction
+    //TODO: so the code below can be optimized
     val toDownload = mutable.Map[ModifierTypeId, Seq[ModifierId]]()
     pi.toDownload.foreach { case (tid, mid) =>
       toDownload.put(tid, toDownload.getOrElse(tid, Seq()) :+ mid)

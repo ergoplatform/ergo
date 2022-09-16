@@ -867,7 +867,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         } else {
           // A block section is not delivered on time.
           log.info(s"Peer ${peer.toString} has not delivered modifier " +
-                   s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time, status tracker: $syncTracker")
+                   s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time")
 
           // Number of block section delivery checks increased or initialized,
           // except the case where we can have issues with connectivity,

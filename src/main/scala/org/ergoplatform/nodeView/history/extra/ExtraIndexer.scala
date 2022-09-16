@@ -51,46 +51,54 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
   // input tokens in a tx
   private val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
 
+  private def findBox(id: BoxId): Option[Int] = {
+    cfor(boxes.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
+      if (java.util.Arrays.equals(boxes(i).serializedId, id))
+        return Some(i) // box found in last saveLimit modifiers
+    }
+    None
+  }
+
   // returns index of box in boxes
   private def findAndSpendBox(id: BoxId, txId: ModifierId, height: Int): Int = {
-    cfor(boxes.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
-      if(java.util.Arrays.equals(boxes(i).serializedId, id)) { // box found in last saveLimit modifiers, update
+    findBox(id) match {
+      case Some(i) =>
         tokens ++= boxes(i).asSpent(txId, height).box.additionalTokens.toArray
-        return i
-      }
-    }
-    history.typedModifierById[IndexedErgoBox](bytesToId(id)) match { // box not found in last saveLimit modifiers
-      case Some(x) => // box found in DB, update
-        boxes += x.asSpent(txId, height)
-        tokens ++= x.box.additionalTokens.toArray
-        boxes.length - 1
-      case None => // box not found at all (this shouldn't happen)
-        log.warn(s"Unknown box used as input: ${bytesToId(id)}")
-        -1
+        i
+      case None =>
+        history.typedModifierById[IndexedErgoBox](bytesToId(id)) match { // box not found in last saveLimit modifiers
+          case Some(x) => // box found in DB, update
+            boxes += x.asSpent(txId, height)
+            tokens ++= x.box.additionalTokens.toArray
+            boxes.length - 1
+          case None => // box not found at all (this shouldn't happen)
+            log.warn(s"Unknown box used as input: ${bytesToId(id)}")
+            -1
+        }
     }
   }
 
-  private def findAndUpdateTree(id: ModifierId, boxToSpend: Option[ErgoBox]): Unit = {
+  private def findAndUpdateTree(id: ModifierId, txIndex: Long, spendOrReceive: Either[ErgoBox,IndexedErgoBox]): Unit = {
     cfor(trees.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
       if(trees(i).treeHash == id) { // address found in last saveLimit modifiers
-        if(boxToSpend.isDefined)
-          trees(i).addTx(globalTxIndex).spendBox(boxToSpend.get) // spend box
-        else
-          trees(i).addTx(globalTxIndex).addBox(boxes.last) // receive box
+        spendOrReceive match {
+          case Left(box) => trees(i).addTx(txIndex).spendBox(box) // spend box
+          case Right(iEb) => trees(i).addTx(txIndex).addBox(iEb) // receive box
+        }
         return
       }
     }
     history.typedModifierById[IndexedErgoAddress](id) match { // address not found in last saveLimit modifiers
       case Some(x) =>
-        if(boxToSpend.isDefined) // address found in DB
-          trees += x.addTx(globalTxIndex).spendBox(boxToSpend.get) // spend box
-        else
-          trees += x.addTx(globalTxIndex).addBox(boxes.last) // receive box
+        spendOrReceive match {
+          case Left(box) => trees += x.addTx(txIndex).spendBox(box) // spend box
+          case Right(iEb) => trees += x.addTx(txIndex).addBox(iEb) // receive box
+        }
       case None => // address not found at all
-        if(boxToSpend.isEmpty)
-          trees += IndexedErgoAddress(id, ListBuffer(globalTxIndex), ListBuffer.empty[Long], Some(new BalanceInfo)).addBox(boxes.last) // receive box
-        else
-          log.warn(s"Unknown address spent box ${boxes.last.id}") // spend box should never happen by an unknown address
+        spendOrReceive match {
+          case Left(box) => log.warn(s"Unknown address spent box ${bytesToId(box.id)}") // spend box should never happen by an unknown address
+          case Right(iEb) => trees += IndexedErgoAddress(id, ListBuffer(txIndex), ListBuffer.empty[Long], Some(new BalanceInfo)).addBox(iEb) // receive box
+        }
     }
   }
 
@@ -139,7 +147,8 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
     var boxCount: Int = 0
 
-    cfor(0)(_ < bt.txs.size, _ + 1) { n =>
+    // record transactions and boxes
+    cfor(0)(_ < bt.txs.length, _ + 1) { n =>
 
       val tx: ErgoTransaction = bt.txs(n)
 
@@ -147,32 +156,13 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
       general += IndexedErgoTransaction(tx.id, height, globalTxIndex)
       general += NumericTxIndex(globalTxIndex, tx.id)
 
-      tokens.clear()
-
-      //process transaction inputs
-      if(height != 1) { //only after 1st block (skip genesis box)
-        cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
-          val boxIndex: Int = findAndSpendBox(tx.inputs(i).boxId, tx.id, height)
-          if(boxIndex >= 0) findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(boxes(boxIndex).box.ergoTree)), Some(boxes(boxIndex).box)) // spend box and add tx
-        }
-      }
-
       //process transaction outputs
-      cfor(0)(_ < tx.outputs.size, _ + 1) { i =>
+      cfor(0)(_ < tx.outputs.length, _ + 1) { i =>
+
         val box: ErgoBox = tx.outputs(i)
+
         boxes += new IndexedErgoBox(Some(height), None, None, box, globalBoxIndex) // box by id
         general += NumericBoxIndex(globalBoxIndex, bytesToId(box.id)) // box id by global box number
-
-        // box by address
-        findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(box.ergoTree)), None)
-
-        // check if box is creating a new token, if yes record it
-        if(box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))
-          cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
-            if(!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1))) {
-              general += IndexedTokenSerializer.fromBox(box)
-            }
-          }
 
         globalBoxIndex += 1
         boxCount += 1
@@ -180,6 +170,40 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
       }
 
       globalTxIndex += 1
+
+    }
+
+    // process transactions and boxes by address backwards because the explorer does this
+    cfor(bt.txs.length - 1)(_ >= 0, _ - 1) { n =>
+
+      val tx: ErgoTransaction = bt.txs(n)
+
+      tokens.clear()
+
+      //process transaction inputs for addresses and tokens
+      if(height != 1) { //only after 1st block (skip genesis box)
+        cfor(0)(_ < tx.inputs.length, _ + 1) { i =>
+          val boxIndex: Int = findAndSpendBox(tx.inputs(i).boxId, tx.id, height)
+          if(boxIndex >= 0) findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(boxes(boxIndex).box.ergoTree)), globalTxIndex - n - 1, Left(boxes(boxIndex).box)) // spend box and add tx
+        }
+      }
+
+      //process transaction outputs for addresses and tokens
+      cfor(0)(_ < tx.outputs.length, _ + 1) { i =>
+
+        val box: ErgoBox = tx.outputs(i)
+
+        // box by address
+        findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(box.ergoTree)), globalTxIndex - n - 1, Right(boxes(findBox(box.id).get)))
+
+        // check if box is creating a new token, if yes record it
+        if(box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))
+          cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
+            if(!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1)))
+              general += IndexedTokenSerializer.fromBox(box)
+          }
+
+      }
 
     }
 
@@ -193,7 +217,9 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
          history.fullBlockHeight == history.headersHeight) // write to db every block after caught up
         saveProgress()
 
-    }else if(modCount >= saveLimit) saveProgress() // active syncing, write to db after modifier limit
+    }else
+      if(modCount >= saveLimit)
+        saveProgress() // active syncing, write to db after modifier limit
 
   }
 
@@ -219,7 +245,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
 
   override def postStop(): Unit =
-    log.info(s"Stopped extra indexer at height $lastWroteToDB")
+    log.info(s"Stopped extra indexer at height ${if(lastWroteToDB > 0) lastWroteToDB else indexedHeight}")
 
   override def receive: Receive = {
     case SemanticallySuccessfulModifier(fb: ErgoFullBlock) if caughtUp =>

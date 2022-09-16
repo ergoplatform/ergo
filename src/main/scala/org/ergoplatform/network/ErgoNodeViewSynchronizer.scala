@@ -141,13 +141,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Timestamp of last CheckModifiersToDownload command processing, used to not to process it too extensively
     */
-  private var lastCheckForModifiersToDownload = 0L
+  private var lastCheckForModifiersToDownload: Long = 0L
 
   /**
     * How many block sections stored in processing queue, imprecise number as updated only when
     * this actor is getting data from view holder actor
     */
-  private var modifiersCacheSize = 0
+  private var modifiersCacheSize: Int = 0
 
   /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
@@ -1039,13 +1039,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
 
     case BlockSectionsProcessingCacheUpdate(headersCacheSize, blockSectionsCacheSize, cleared) =>
+      val HeadersCacheSizeToDownloadMore = 3184
+      val BlockSectionsCacheSizeToDownloadMore = 96
+
+      //download more block sections if processing cache has enough space
+      def downloadMore: Boolean = {
+        headersCacheSize < HeadersCacheSizeToDownloadMore ||
+          (modifiersCacheSize < BlockSectionsCacheSizeToDownloadMore &&
+            (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 50))
+      }
+
       // stop processing for cleared modifiers
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       val modTypeId = cleared._1
       cleared._2.foreach(mId => deliveryTracker.setUnknown(mId, modTypeId))
       modifiersCacheSize = blockSectionsCacheSize
-      if (headersCacheSize < 3184 ||
-          (modifiersCacheSize < 96 && (System.currentTimeMillis() - lastCheckForModifiersToDownload >= 50))) {
+      if (downloadMore) {
         requestMoreModifiers(historyReader)
       }
 
@@ -1221,8 +1230,14 @@ object ErgoNodeViewSynchronizer {
 
     case class SyntacticallyFailedModification(typeId: ModifierTypeId, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
 
+    /**
+      * Signal associated with stateful validation of a block section
+      */
     case class SemanticallyFailedModification(typeId: ModifierTypeId, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
 
+    /**
+      * Signal associated with stateless validation of a block section
+      */
     case class SyntacticallySuccessfulModifier(typeId: ModifierTypeId, modifierId: ModifierId) extends ModificationOutcome
 
     /**

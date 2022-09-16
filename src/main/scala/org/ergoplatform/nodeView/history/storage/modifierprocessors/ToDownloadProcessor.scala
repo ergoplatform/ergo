@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
@@ -50,6 +51,9 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
     val FullBlocksToDownloadAhead = 192 // how many full blocks to download forwards during active sync
 
+    
+    def farAwayFromBeingSynced(fb: ErgoFullBlock) = fb.height < (estimatedTip.getOrElse(0) - 128)
+
     @tailrec
     def continuation(height: Int,
                      acc: Map[ModifierTypeId, Vector[ModifierId]],
@@ -79,8 +83,8 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
       case _ if !isHeadersChainSynced || !nodeSettings.verifyTransactions =>
         // do not download full blocks if no headers-chain synced yet and suffix enabled or SPV mode
         Map.empty
-      case Some(fb) if fb.height < (estimatedTip.getOrElse(0) - 128) =>
-        // when far away from
+      case Some(fb) if farAwayFromBeingSynced(fb) =>
+        // when far away from blockchain tip
         continuation(fb.height + 1, Map.empty, fb.height + FullBlocksToDownloadAhead)
       case Some(fb) =>
         // when blockchain is about to be synced,

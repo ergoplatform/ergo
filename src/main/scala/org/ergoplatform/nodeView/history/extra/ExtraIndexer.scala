@@ -78,12 +78,12 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     }
   }
 
-  private def findAndUpdateTree(id: ModifierId, txIndex: Long, spendOrReceive: Either[ErgoBox,IndexedErgoBox]): Unit = {
+  private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[ErgoBox,IndexedErgoBox]): Unit = {
     cfor(trees.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
       if(trees(i).treeHash == id) { // address found in last saveLimit modifiers
         spendOrReceive match {
-          case Left(box) => trees(i).addTx(txIndex).spendBox(box) // spend box
-          case Right(iEb) => trees(i).addTx(txIndex).addBox(iEb) // receive box
+          case Left(box) => trees(i).addTx(globalTxIndex).spendBox(box) // spend box
+          case Right(iEb) => trees(i).addTx(globalTxIndex).addBox(iEb) // receive box
         }
         return
       }
@@ -91,13 +91,13 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     history.typedModifierById[IndexedErgoAddress](id) match { // address not found in last saveLimit modifiers
       case Some(x) =>
         spendOrReceive match {
-          case Left(box) => trees += x.addTx(txIndex).spendBox(box) // spend box
-          case Right(iEb) => trees += x.addTx(txIndex).addBox(iEb) // receive box
+          case Left(box) => trees += x.addTx(globalTxIndex).spendBox(box) // spend box
+          case Right(iEb) => trees += x.addTx(globalTxIndex).addBox(iEb) // receive box
         }
       case None => // address not found at all
         spendOrReceive match {
           case Left(box) => log.warn(s"Unknown address spent box ${bytesToId(box.id)}") // spend box should never happen by an unknown address
-          case Right(iEb) => trees += IndexedErgoAddress(id, ListBuffer(txIndex), ListBuffer.empty[Long], Some(new BalanceInfo)).addBox(iEb) // receive box
+          case Right(iEb) => trees += IndexedErgoAddress(id, ListBuffer(globalTxIndex), ListBuffer.empty[Long], Some(new BalanceInfo)).addBox(iEb) // receive box
         }
     }
   }
@@ -111,7 +111,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     // perform segmentation on big modifiers
     val addressesLen: Int = trees.length
     cfor(0)(_ < addressesLen, _ + 1) { i =>
-      if(trees(i).txs.length > segmentTreshold || trees(i).boxes.length > segmentTreshold) trees ++= trees(i).splitToSegment()
+      if(trees(i).txs.length > segmentTreshold || trees(i).boxes.length > segmentTreshold) trees ++= trees(i).splitToSegments()
     }
 
     // merge all modifiers to an Array, avoids reallocations durin concatenation (++)
@@ -156,13 +156,32 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
       general += IndexedErgoTransaction(tx.id, height, globalTxIndex)
       general += NumericTxIndex(globalTxIndex, tx.id)
 
+      tokens.clear()
+
+      //process transaction inputs
+      if(height != 1) { //only after 1st block (skip genesis box)
+        cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
+          val boxIndex: Int = findAndSpendBox(tx.inputs(i).boxId, tx.id, height)
+          if(boxIndex >= 0) findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(boxes(boxIndex).box.ergoTree)), Left(boxes(boxIndex).box)) // spend box and add tx
+        }
+      }
+
       //process transaction outputs
-      cfor(0)(_ < tx.outputs.length, _ + 1) { i =>
-
+      cfor(0)(_ < tx.outputs.size, _ + 1) { i =>
         val box: ErgoBox = tx.outputs(i)
-
         boxes += new IndexedErgoBox(Some(height), None, None, box, globalBoxIndex) // box by id
         general += NumericBoxIndex(globalBoxIndex, bytesToId(box.id)) // box id by global box number
+
+        // box by address
+        findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(box.ergoTree)), Right(boxes(findBox(box.id).get)))
+
+        // check if box is creating a new token, if yes record it
+        if(box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))
+          cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
+            if(!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1))) {
+              general += IndexedTokenSerializer.fromBox(box)
+            }
+          }
 
         globalBoxIndex += 1
         boxCount += 1
@@ -173,39 +192,8 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
     }
 
-    // process transactions and boxes by address backwards because the explorer does this
-    cfor(bt.txs.length - 1)(_ >= 0, _ - 1) { n =>
-
-      val tx: ErgoTransaction = bt.txs(n)
-
-      tokens.clear()
-
-      //process transaction inputs for addresses and tokens
-      if(height != 1) { //only after 1st block (skip genesis box)
-        cfor(0)(_ < tx.inputs.length, _ + 1) { i =>
-          val boxIndex: Int = findAndSpendBox(tx.inputs(i).boxId, tx.id, height)
-          if(boxIndex >= 0) findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(boxes(boxIndex).box.ergoTree)), globalTxIndex - n - 1, Left(boxes(boxIndex).box)) // spend box and add tx
-        }
-      }
-
-      //process transaction outputs for addresses and tokens
-      cfor(0)(_ < tx.outputs.length, _ + 1) { i =>
-
-        val box: ErgoBox = tx.outputs(i)
-
-        // box by address
-        findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(box.ergoTree)), globalTxIndex - n - 1, Right(boxes(findBox(box.id).get)))
-
-        // check if box is creating a new token, if yes record it
-        if(box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))
-          cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
-            if(!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1)))
-              general += IndexedTokenSerializer.fromBox(box)
-          }
-
-      }
-
-    }
+    // reverses new box and transaction indexes in addresses (needed because the explorer uses this format)
+    cfor(0)(_ < trees.length, _ + 1) { i => trees(i).finalizeNewTxsAndBoxes() }
 
     log.info(s"Buffered block #$height / $chainHeight [txs: ${bt.txs.length}, boxes: $boxCount] (buffer: $modCount / $saveLimit)")
 

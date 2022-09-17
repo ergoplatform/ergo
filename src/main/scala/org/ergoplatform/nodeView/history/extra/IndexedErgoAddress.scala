@@ -28,6 +28,9 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   override type M = IndexedErgoAddress
   override def serializer: ScorexSerializer[IndexedErgoAddress] = IndexedErgoAddressSerializer
 
+  private val txsTemp: ListBuffer[Long] = ListBuffer.empty[Long]
+  private val boxesTemp: ListBuffer[Long] = ListBuffer.empty[Long]
+
   private[extra] var boxSegmentCount: Int = 0
   private[extra] var txSegmentCount: Int = 0
 
@@ -71,12 +74,12 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   }
 
   def addTx(tx: Long): IndexedErgoAddress = {
-    if(txs.last != tx) txs += tx // check for duplicates
+    if(txsTemp.lastOption.getOrElse(txs.last) != tx) txsTemp.+=:(tx) // check for duplicates
     this
   }
 
   def addBox(iEb: IndexedErgoBox): IndexedErgoAddress = {
-    boxes += iEb.globalIndex
+    boxesTemp.+=:(iEb.globalIndex)
     balanceInfo.get.add(iEb.box)
     this
   }
@@ -86,15 +89,22 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     this
   }
 
-  def splitToSegment(): Array[IndexedErgoAddress] = {
+  def finalizeNewTxsAndBoxes(): Unit = {
+    txs ++= txsTemp
+    boxes ++= boxesTemp
+    txsTemp.clear()
+    boxesTemp.clear()
+  }
+
+  def splitToSegments(): Array[IndexedErgoAddress] = {
     require(segmentTreshold < txs.length || segmentTreshold < boxes.length, "address does not have enough transactions or boxes for segmentation")
     val data: ListBuffer[IndexedErgoAddress] = ListBuffer.empty[IndexedErgoAddress]
-    if(segmentTreshold < txs.length) {
+    while(txs.length > segmentTreshold) {
       data += new IndexedErgoAddress(txSegmentId(treeHash, txSegmentCount), txs.take(segmentTreshold), ListBuffer.empty[Long], None)
       txSegmentCount += 1
       txs.remove(0, segmentTreshold)
     }
-    if(segmentTreshold < boxes.length) {
+    while(boxes.length > segmentTreshold) {
       data += new IndexedErgoAddress(boxSegmentId(treeHash, boxSegmentCount), ListBuffer.empty[Long], boxes.take(segmentTreshold), None)
       boxSegmentCount += 1
       boxes.remove(0, segmentTreshold)

@@ -2,11 +2,12 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoBox.{BoxId, TokenId}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.ReceivableMessages.Start
@@ -193,7 +194,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     }
 
     // reverses new box and transaction indexes in addresses (needed because the explorer uses this format)
-    cfor(0)(_ < trees.length, _ + 1) { i => trees(i).finalizeNewTxsAndBoxes() }
+    cfor(0)(_ < trees.length, _ + 1) { i => trees(i).reverseNewTxsAndBoxes() }
 
     log.info(s"Buffered block #$height / $chainHeight [txs: ${bt.txs.length}, boxes: $boxCount] (buffer: $modCount / $saveLimit)")
 
@@ -230,14 +231,14 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
   }
 
   override def preStart(): Unit =
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
+    context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
 
   override def postStop(): Unit =
     log.info(s"Stopped extra indexer at height ${if(lastWroteToDB > 0) lastWroteToDB else indexedHeight}")
 
   override def receive: Receive = {
-    case SemanticallySuccessfulModifier(fb: ErgoFullBlock) if caughtUp =>
-      index(fb.blockTransactions, fb.height) // after the indexer caught up with the chain, stay up to date
+    case FullBlockApplied(header: Header) if caughtUp =>
+      index(history.typedModifierById[BlockTransactions](header.transactionsId).get, header.height) // after the indexer caught up with the chain, stay up to date
     case Start(history: ErgoHistory) =>
       _history = history
       run()

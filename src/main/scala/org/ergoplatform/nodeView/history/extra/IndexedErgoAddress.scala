@@ -28,8 +28,8 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   override type M = IndexedErgoAddress
   override def serializer: ScorexSerializer[IndexedErgoAddress] = IndexedErgoAddressSerializer
 
-  private val txsTemp: ListBuffer[Long] = ListBuffer.empty[Long]
-  private val boxesTemp: ListBuffer[Long] = ListBuffer.empty[Long]
+  private var newTxCount: Int = 0
+  private var newBoxCount: Int = 0
 
   private[extra] var boxSegmentCount: Int = 0
   private[extra] var txSegmentCount: Int = 0
@@ -74,12 +74,16 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   }
 
   def addTx(tx: Long): IndexedErgoAddress = {
-    if(txsTemp.lastOption.getOrElse(txs.last) != tx) txsTemp.+=:(tx) // check for duplicates
+    if(txs.last != tx) { // check for duplicates
+      txs += tx
+      newTxCount += 1
+    }
     this
   }
 
   def addBox(iEb: IndexedErgoBox): IndexedErgoAddress = {
-    boxesTemp.+=:(iEb.globalIndex)
+    boxes += iEb.globalIndex
+    newBoxCount += 1
     balanceInfo.get.add(iEb.box)
     this
   }
@@ -89,11 +93,20 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     this
   }
 
-  def finalizeNewTxsAndBoxes(): Unit = {
-    txs ++= txsTemp
-    boxes ++= boxesTemp
-    txsTemp.clear()
-    boxesTemp.clear()
+  def reverseNewTxsAndBoxes(): Unit = {
+
+    val arr: ListBuffer[Long] = txs.takeRight(newTxCount).reverse
+    txs.remove(txs.length - newTxCount, newTxCount)
+    txs ++= arr
+    newTxCount = 0
+
+    arr.clear()
+
+    arr ++= boxes.takeRight(newBoxCount).reverse
+    boxes.remove(boxes.length - newBoxCount, newBoxCount)
+    boxes ++= arr
+    newBoxCount = 0
+
   }
 
   def splitToSegments(): Array[IndexedErgoAddress] = {

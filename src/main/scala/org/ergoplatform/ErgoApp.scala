@@ -243,9 +243,10 @@ object ErgoApp extends ScorexLogging {
                     (implicit system: ActorSystem): Future[Done] =
     CoordinatedShutdown(system).run(reason)
 
-  def main(args: Array[String]): Unit =
+  def main(args: Array[String]): Unit = {
     argParser.parse(args, Args()).foreach { argsParsed =>
       new ErgoApp(argsParsed).run()
+    }
   }
 
 }

@@ -597,6 +597,20 @@ trait ErgoHistoryReader
     nipopowAlgos.prove(histReader = this, headerIdOpt = headerIdOpt)(proofParams)
   }
 
+  /**
+    * Get estimated height of headers-chain, if it is synced
+    * @return height of last header known, if headers-chain is synced, or None if not synced
+    */
+  def estimatedTip(): Option[Height] = {
+    Try { //error may happen if history not initialized
+      if(isHeadersChainSynced) {
+        Some(headersHeight)
+      } else {
+        None
+      }
+    }.getOrElse(None)
+  }
+
 }
 
 object ErgoHistoryReader {

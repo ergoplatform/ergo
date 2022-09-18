@@ -22,7 +22,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
 import sigmastate.SigmaAnd
 import sigmastate.Values.{ErgoTree, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol
@@ -38,7 +38,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
   implicit private val timeout: Timeout = defaultTimeout
 
-  private val newBlockSignal: Class[SemanticallySuccessfulModifier] = classOf[SemanticallySuccessfulModifier]
+  private val newBlockSignal: Class[FullBlockApplied] = classOf[FullBlockApplied]
   private val newBlockDelay: FiniteDuration = 30 seconds
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
@@ -274,10 +274,10 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
         testProbe.fishForMessage(blockValidationDelay) {
           case StatusReply.Success(()) =>
             testProbe.expectMsgPF(candidateGenDelay) {
-              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+              case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
-          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+          case FullBlockApplied(header) if header.id != block.header.parentId =>
             testProbe.expectMsg(StatusReply.Success(()))
             true
         }
@@ -429,7 +429,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
       val v2Block = testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-      val h2 = v2Block.modifier.asInstanceOf[ErgoFullBlock].header
+      val h2 = v2Block.header
       h2.version shouldBe 2
       h2.minerPk shouldBe defaultMinerPk.value
     }

@@ -982,7 +982,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case FullBlockApplied(header) =>
       if (header.isNew(timeProvider, 1.hour)) {
         broadcastModifierInv(Header.modifierTypeId, header.id)
-        header.sectionIds.foreach { case (_, id) => broadcastModifierInv(Header.modifierTypeId, id) }
+        header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id) }
       }
       clearDeclined()
       clearInterblockCost()

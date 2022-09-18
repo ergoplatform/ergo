@@ -9,17 +9,19 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{box
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import spire.syntax.all.cfor
+
+import scala.language.postfixOps
 
 case class IndexedErgoAddress(treeHash: ModifierId,
                               txs: ListBuffer[Long],
                               boxes: ListBuffer[Long],
-                              balanceInfo: Option[BalanceInfo]) extends BlockSection {
+                              balanceInfo: Option[BalanceInfo]) extends BlockSection with ScorexLogging {
 
   override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = fastIdToBytes(treeHash)
@@ -28,8 +30,8 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   override type M = IndexedErgoAddress
   override def serializer: ScorexSerializer[IndexedErgoAddress] = IndexedErgoAddressSerializer
 
-  private var newTxCount: Int = 0
-  private var newBoxCount: Int = 0
+  private val newTxs: ArrayBuffer[(ModifierId, Long)] = ArrayBuffer.empty[(ModifierId, Long)]
+  private val newBoxes: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
 
   private[extra] var boxSegmentCount: Int = 0
   private[extra] var txSegmentCount: Int = 0
@@ -73,56 +75,46 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     slice(data, offset, limit).toArray
   }
 
-  def addTx(tx: Long): IndexedErgoAddress = {
-    if(txs.last != tx) { // check for duplicates
-      txs += tx
-      newTxCount += 1
-    }
+  private[extra] def addTx(txId: ModifierId, txNum: Long): IndexedErgoAddress = {
+    if((newTxs.nonEmpty && newTxs(newTxs.length - 1)._2 != txNum) || (txs.nonEmpty && txs.last != txNum)) // check for duplicates
+      newTxs += Tuple2(txId,txNum)
     this
   }
 
-  def addBox(iEb: IndexedErgoBox): IndexedErgoAddress = {
-    boxes += iEb.globalIndex
-    newBoxCount += 1
+  private[extra] def addBox(iEb: IndexedErgoBox): IndexedErgoAddress = {
+    newBoxes += iEb.globalIndex
     balanceInfo.get.add(iEb.box)
     this
   }
 
-  def spendBox(box: ErgoBox): IndexedErgoAddress = {
+  private[extra] def spendBox(box: ErgoBox): IndexedErgoAddress = {
     balanceInfo.get.subtract(box)
     this
   }
 
-  def reverseNewTxsAndBoxes(): Unit = {
-
-    val arr: ListBuffer[Long] = txs.takeRight(newTxCount).reverse
-    txs.remove(txs.length - newTxCount, newTxCount)
-    txs ++= arr
-    newTxCount = 0
-
-    arr.clear()
-
-    arr ++= boxes.takeRight(newBoxCount).reverse
-    boxes.remove(boxes.length - newBoxCount, newBoxCount)
-    boxes ++= arr
-    newBoxCount = 0
-
+  private[extra] def sortNewTxsAndBoxes(): Unit = {
+    txs ++= newTxs.sortBy(_._1).map(_._2)
+    boxes ++= newBoxes
+    newTxs.clear()
+    newBoxes.clear()
   }
 
-  def splitToSegments(): Array[IndexedErgoAddress] = {
-    require(segmentTreshold < txs.length || segmentTreshold < boxes.length, "address does not have enough transactions or boxes for segmentation")
-    val data: ListBuffer[IndexedErgoAddress] = ListBuffer.empty[IndexedErgoAddress]
-    while(txs.length > segmentTreshold) {
-      data += new IndexedErgoAddress(txSegmentId(treeHash, txSegmentCount), txs.take(segmentTreshold), ListBuffer.empty[Long], None)
+  private[extra] def splitToSegments(): Array[IndexedErgoAddress] = {
+    val data: Array[IndexedErgoAddress] = new Array[IndexedErgoAddress]((txs.length / segmentTreshold) + (boxes.length / segmentTreshold))
+    var i: Int = 0
+    while(txs.length >= segmentTreshold) {
+      data(i) = new IndexedErgoAddress(txSegmentId(treeHash, txSegmentCount), txs.take(segmentTreshold), ListBuffer.empty[Long], None)
+      i += 1
       txSegmentCount += 1
       txs.remove(0, segmentTreshold)
     }
-    while(boxes.length > segmentTreshold) {
-      data += new IndexedErgoAddress(boxSegmentId(treeHash, boxSegmentCount), ListBuffer.empty[Long], boxes.take(segmentTreshold), None)
+    while(boxes.length >= segmentTreshold) {
+      data(i) = new IndexedErgoAddress(boxSegmentId(treeHash, boxSegmentCount), ListBuffer.empty[Long], boxes.take(segmentTreshold), None)
+      i += 1
       boxSegmentCount += 1
       boxes.remove(0, segmentTreshold)
     }
-    data.toArray
+    data
   }
 }
 

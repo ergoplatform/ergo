@@ -83,8 +83,8 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     cfor(trees.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
       if(trees(i).treeHash == id) { // address found in last saveLimit modifiers
         spendOrReceive match {
-          case Left(box) => trees(i).addTx(globalTxIndex).spendBox(box) // spend box
-          case Right(iEb) => trees(i).addTx(globalTxIndex).addBox(iEb) // receive box
+          case Left(box) => trees(i).addTx(box.transactionId,globalTxIndex).spendBox(box) // spend box
+          case Right(iEb) => trees(i).addTx(iEb.box.transactionId,globalTxIndex).addBox(iEb) // receive box
         }
         return
       }
@@ -92,8 +92,8 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     history.typedModifierById[IndexedErgoAddress](id) match { // address not found in last saveLimit modifiers
       case Some(x) =>
         spendOrReceive match {
-          case Left(box) => trees += x.addTx(globalTxIndex).spendBox(box) // spend box
-          case Right(iEb) => trees += x.addTx(globalTxIndex).addBox(iEb) // receive box
+          case Left(box) => trees += x.addTx(box.transactionId,globalTxIndex).spendBox(box) // spend box
+          case Right(iEb) => trees += x.addTx(iEb.box.transactionId,globalTxIndex).addBox(iEb) // receive box
         }
       case None => // address not found at all
         spendOrReceive match {
@@ -193,8 +193,8 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
     }
 
-    // reverses new box and transaction indexes in addresses (needed because the explorer uses this format)
-    cfor(0)(_ < trees.length, _ + 1) { i => trees(i).reverseNewTxsAndBoxes() }
+    // changes the order of new box and transaction indexes in addresses (needed because the explorer uses this format)
+    cfor(0)(_ < trees.length, _ + 1) { i => trees(i).sortNewTxsAndBoxes() }
 
     log.info(s"Buffered block #$height / $chainHeight [txs: ${bt.txs.length}, boxes: $boxCount] (buffer: $modCount / $saveLimit)")
 

@@ -1261,7 +1261,7 @@ object ErgoNodeViewSynchronizer {
       * @param state - up-to-date state to check transaction against
       * @param mempool - mempool to check
       */
-    case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader) extends NodeViewChange
+    case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
   }
 
 }

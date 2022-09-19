@@ -2,7 +2,9 @@ package org.ergoplatform.mining.difficulty
 
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, Height}
-import org.ergoplatform.settings.ChainSettings
+import org.ergoplatform.settings.{Args, ChainSettings, ErgoSettings, NetworkType}
+import scorex.core.utils.NetworkTimeProvider
+import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration.FiniteDuration
@@ -86,3 +88,42 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
 object LinearDifficultyControl {
   val PrecisionConstant: Int = 1000000000
 }
+
+
+
+
+object v2testing extends App {
+  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+
+  private val ergoSettings: ErgoSettings = ErgoSettings.read(Args(Some("/home/kushti/ergo/mainnet/mainnet.conf"), Some(NetworkType.MainNet)))
+
+  val ntp = new NetworkTimeProvider(ergoSettings.scorexSettings.ntp)
+
+  val ldc = new LinearDifficultyControl(ergoSettings.chainSettings)
+
+  val eh = ErgoHistory.readOrGenerate(ergoSettings, ntp)
+
+
+  println("best: " + eh.bestHeaderOpt.map(_.height))
+
+  val heights = ldc.previousHeadersRequiredForRecalculation(842752 + 1 + 1024)
+
+  println("hs: " + heights)
+
+  val headerOpts = heights.map(eh.bestHeaderIdAtHeight).map(idOpt => idOpt.flatMap(id => eh.typedModifierById[Header](id)))
+
+  println(headerOpts.map(_.map(_.id)))
+
+  println("dir: " + ergoSettings.directory)
+
+  val headers =  headerOpts.map{_ match {
+    case None => headerOpts.head.get.copy(height = 842752 + 1024, nBits = 122447235L, timestamp = System.currentTimeMillis() + 1000*60*1440*4)
+    case Some(h) => h
+  }}
+
+
+
+  println(ldc.calculate(headers))
+
+}
+

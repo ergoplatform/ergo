@@ -57,7 +57,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
       invalidatedTxIds,
       outputs ++ tx.outputs.map(_.id -> wtx),
       inputs ++ tx.inputs.map(_.boxId -> wtx)
-    ).updateFamily(unconfirmedTx, wtx.weight)
+    ).updateFamily(unconfirmedTx, wtx.weight, System.currentTimeMillis(), 0)
     if (newPool.orderedTransactions.size > mempoolCapacity) {
       val victim = newPool.orderedTransactions.last._2
       newPool.remove(victim)
@@ -85,7 +85,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
           invalidatedTxIds,
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(unconfirmedTx, -wtx.weight)
+        ).updateFamily(unconfirmedTx, -wtx.weight, System.currentTimeMillis(), 0)
       case None => this
     }
   }
@@ -100,7 +100,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
           invalidatedTxIds.put(tx.id),
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(unconfirmedTx, -wtx.weight)
+        ).updateFamily(unconfirmedTx, -wtx.weight, System.currentTimeMillis(), 0)
       case None =>
         OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
     }
@@ -138,7 +138,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
 
   /**
     *
-    * Form families of transactions: take in account relations between transaction when perform ordering.
+    * Form families of transactions: take in account relations between transactions when performing ordering.
     * If transaction X is spending output of transaction Y, then X weight should be greater than of Y.
     * Y should be proceeded prior to X or swapped out of mempool after X.
     * To achieve this goal we recursively add weight of new transaction to all transactions which
@@ -148,27 +148,36 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     * @param weight
     * @return
     */
-  private def updateFamily(unconfirmedTx: UnconfirmedTransaction, weight: Long): OrderedTxPool = {
-    val tx = unconfirmedTx.transaction
-    tx.inputs.foldLeft(this)((pool, input) =>
-      pool.outputs.get(input.boxId).fold(pool)(wtx => {
-        pool.orderedTransactions.get(wtx) match {
-          case Some(ut) =>
-            val parent = ut.transaction
-            val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerFactor, wtx.created)
-            val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> ut),
-              pool.transactionsRegistry.updated(parent.id, newWtx),
-              invalidatedTxIds,
-              parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
-              parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
-            )
-            newPool.updateFamily(ut, weight)
-          case None =>
-            //shouldn't be the case, but better not to hide this possibility
-            log.error("Could not find transaction in pool.orderedTransactions, please report to devs")
-            pool
-        }
-      }))
+  private def updateFamily(unconfirmedTx: UnconfirmedTransaction,
+                           weight: Long,
+                           startTime: Long,
+                           depth: Int): OrderedTxPool = {
+    val now = System.currentTimeMillis()
+    val diff = now - startTime
+    if (depth > 500 || diff > 500) {
+      log.warn(s"updateFamily takes too long, depth: $depth, time diff: $diff, transaction: ${unconfirmedTx.id}")
+      this
+    } else {
+      val tx = unconfirmedTx.transaction
+
+      val parentTxs = tx.inputs.flatMap { input =>
+        this.outputs.get(input.boxId)
+      }.toSet.flatMap { wtx: WeightedTxId =>
+        this.orderedTransactions.get(wtx).map(ut => wtx -> ut)
+      }
+
+      parentTxs.foldLeft(this) { case (pool, (wtx, ut)) =>
+        val parent = ut.transaction
+        val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerFactor, wtx.created)
+        val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> ut),
+          pool.transactionsRegistry.updated(parent.id, newWtx),
+          invalidatedTxIds,
+          parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
+          parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
+        )
+        newPool.updateFamily(ut, weight, startTime, depth)
+      }
+    }
   }
 }
 

@@ -75,7 +75,7 @@ trait ErgoHistoryReader
 
   /**
     * @param id - modifier id
-    * @return raw bytes of semantically valid ErgoPersistentModifier with the given id it is in history
+    * @return type and raw bytes of semantically valid ErgoPersistentModifier with the given id it is in history
     */
    def modifierTypeAndBytesById(id: ModifierId): Option[(ModifierTypeId, Array[Byte])] =
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {

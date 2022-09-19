@@ -175,7 +175,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
           parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
           parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
         )
-        newPool.updateFamily(ut, weight, startTime, depth)
+        newPool.updateFamily(ut, weight, startTime, depth + 1)
       }
     }
   }

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.{ErgoAddress, ErgoBox}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
@@ -15,8 +15,6 @@ import sigmastate.Values.ErgoTree
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import spire.syntax.all.cfor
-
-import scala.language.postfixOps
 
 case class IndexedErgoAddress(treeHash: ModifierId,
                               txs: ListBuffer[Long],
@@ -121,7 +119,6 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress] {
 
   def hashErgoTree(tree: ErgoTree): Array[Byte] = Algos.hash(tree.bytes)
-  def hashAddress(address: ErgoAddress): Array[Byte] = hashErgoTree(address.script)
 
   def boxSegmentId(hash: ModifierId, segmentNum: Int): ModifierId = bytesToId(Algos.hash(hash + " box segment " + segmentNum))
   def txSegmentId(hash: ModifierId, segmentNum: Int): ModifierId = bytesToId(Algos.hash(hash + " tx segment " + segmentNum))

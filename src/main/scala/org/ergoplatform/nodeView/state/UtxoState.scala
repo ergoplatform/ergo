@@ -93,7 +93,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             persistentProver.performOneOperation(op) match {
               case Success(_) =>
               case Failure(t) =>
-                log.error(s"Operation $op failed during $headerId transactions validation in")
+                log.error(s"Operation $op failed during $headerId transactions validation")
                 opsResult = Failure(t)
             }
           }

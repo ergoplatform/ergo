@@ -12,14 +12,13 @@ import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTest
 import org.scalatest.flatspec.AnyFlatSpec
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FailedTransaction, SuccessfulTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
 
 import scala.concurrent.duration._
-import scala.util.Random
 import sigmastate.lang.Terms.ValueOps
 import sigmastate.serialization.ErgoTreeSerializer
 
@@ -110,17 +109,8 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, settingsToTest))
 
-    def sendState(): Unit = auditor ! ChangedState(us)
-    def sendPool(): Unit = auditor ! ChangedMempool(new FakeMempool(txs))
 
-    val coin = Random.nextBoolean() // flip random coin
-    if (coin) {
-      sendPool()
-      sendState()
-    } else {
-      sendState()
-      sendPool()
-    }
+    auditor ! RecheckMempool(us, new FakeMempool(txs))
 
     probe.fishForMessage(3.seconds) {
       case _: SendToNetwork => true

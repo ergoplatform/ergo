@@ -163,6 +163,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
   property("scorex.restApi.publicUrl should be valid") {
     val invalidUrls =
       List(
+        "http:invalid",
         "http://localhost",
         "http://127.0.0.1",
         "http://0.0.0.0",

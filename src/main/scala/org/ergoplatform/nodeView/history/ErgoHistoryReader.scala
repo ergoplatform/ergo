@@ -75,6 +75,17 @@ trait ErgoHistoryReader
 
   /**
     * @param id - modifier id
+    * @return type and raw bytes of semantically valid ErgoPersistentModifier with the given id it is in history
+    */
+   def modifierTypeAndBytesById(id: ModifierId): Option[(ModifierTypeId, Array[Byte])] =
+    if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
+      historyStorage.modifierTypeAndBytesById(id)
+    } else {
+      None
+    }
+
+  /**
+    * @param id - modifier id
     * @return semantically valid ErgoPersistentModifier with the given id it is in history
     */
   override def modifierById(id: ModifierId): Option[BlockSection] =
@@ -595,6 +606,20 @@ trait ErgoHistoryReader
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
     val proofParams = PoPowParams(m, k)
     nipopowAlgos.prove(histReader = this, headerIdOpt = headerIdOpt)(proofParams)
+  }
+
+  /**
+    * Get estimated height of headers-chain, if it is synced
+    * @return height of last header known, if headers-chain is synced, or None if not synced
+    */
+  def estimatedTip(): Option[Height] = {
+    Try { //error may happen if history not initialized
+      if(isHeadersChainSynced) {
+        Some(headersHeight)
+      } else {
+        None
+      }
+    }.getOrElse(None)
   }
 
 }

@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-import cats.Traverse
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
@@ -76,7 +75,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                                        headerId: ModifierId,
                                        expectedDigest: ADDigest,
                                        currentStateContext: ErgoStateContext): Try[Unit] = {
-    import cats.implicits._
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
     def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
@@ -87,13 +85,23 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
       log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
-      val resultTry =
-        ErgoState.stateChanges(transactions).map { stateChanges =>
-          val mods = stateChanges.operations
-          Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+      val blockOpsTry = ErgoState.stateChanges(transactions).flatMap { stateChanges =>
+        val operations = stateChanges.operations
+        var opsResult: Try[Unit] = Success(())
+        operations.foreach { op =>
+          if (opsResult.isSuccess) {
+            persistentProver.performOneOperation(op) match {
+              case Success(_) =>
+              case Failure(t) =>
+                log.error(s"Operation $op failed during $headerId transactions validation in")
+                opsResult = Failure(t)
+            }
+          }
         }
+        opsResult
+      }
       ModifierValidator(stateContext.validationSettings)
-        .validateNoFailure(fbOperationFailed, resultTry, Transaction.ModifierTypeId)
+        .validateNoFailure(fbOperationFailed, blockOpsTry, Transaction.ModifierTypeId)
         .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry

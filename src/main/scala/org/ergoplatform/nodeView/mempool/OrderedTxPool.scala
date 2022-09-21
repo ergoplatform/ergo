@@ -26,6 +26,17 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
 
   import OrderedTxPool.weighted
 
+  /**
+    * When a transaction has a parent in the mempool, we update its weight, weight of parent's parents etc.
+    * This parameter sets max update depth
+    */
+  private val MaxParentScanDepth = 500
+
+  /**
+    * See `MaxParentScanDepth`, but this parameter sets max update time
+    */
+  private val MaxParentScanTime = 500
+
   private implicit val ms: MonetarySettings = settings.chainSettings.monetary
 
   private val mempoolCapacity = settings.nodeSettings.mempoolCapacity
@@ -153,9 +164,9 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
                            startTime: Long,
                            depth: Int): OrderedTxPool = {
     val now = System.currentTimeMillis()
-    val diff = now - startTime
-    if (depth > 500 || diff > 500) {
-      log.warn(s"updateFamily takes too long, depth: $depth, time diff: $diff, transaction: ${unconfirmedTx.id}")
+    val timeDiff = now - startTime
+    if (depth > MaxParentScanDepth || timeDiff > MaxParentScanTime) {
+      log.warn(s"updateFamily takes too long, depth: $depth, time diff: $timeDiff, transaction: ${unconfirmedTx.id}")
       this
     } else {
       val tx = unconfirmedTx.transaction

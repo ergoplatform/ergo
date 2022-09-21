@@ -51,6 +51,10 @@ class NetworkController(ergoSettings: ErgoSettings,
 
   private val scorexSettings = ergoSettings.scorexSettings
   private val networkSettings = scorexSettings.network
+
+  // capabilities of our node
+  private val modePeerFeature = ModePeerFeature(ergoSettings.nodeSettings)
+
   private implicit val timeout: Timeout = Timeout(networkSettings.controllerTimeout.getOrElse(5.seconds))
 
   private var messageHandlers = Map.empty[MessageCode, ActorRef]
@@ -343,8 +347,7 @@ class NetworkController(ergoSettings: ErgoSettings,
       }
     }
 
-    val modePeerFeature = ModePeerFeature(ergoSettings.nodeSettings)
-    val mandatoryFeatures = Seq(modePeerFeature) ++ Seq(mySessionIdFeature)
+    val mandatoryFeatures = Array(modePeerFeature, mySessionIdFeature)
 
     val remoteAddress = connectionId.remoteAddress.getAddress
     val isLocal = (remoteAddress != null) && (remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress)

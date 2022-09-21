@@ -8,11 +8,12 @@ import akka.pattern.ask
 import akka.util.Timeout
 import scorex.core.app.{ScorexContext, Version}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{DisconnectedPeer, HandshakedPeer}
+import org.ergoplatform.network.ModePeerFeature
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message.{Message, MessageSpec}
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
 import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
-import scorex.core.settings.ScorexSettings
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.{NetworkUtils, TimeProvider}
 import scorex.util.ScorexLogging
@@ -25,7 +26,7 @@ import scala.util.{Random, Try}
   * Control all network interaction
   * must be singleton
   */
-class NetworkController(scorexSettings: ScorexSettings,
+class NetworkController(ergoSettings: ErgoSettings,
                         peerManagerRef: ActorRef,
                         scorexContext: ScorexContext,
                         tcpManager: ActorRef
@@ -48,6 +49,7 @@ class NetworkController(scorexSettings: ScorexSettings,
       Restart
   }
 
+  private val scorexSettings = ergoSettings.scorexSettings
   private val networkSettings = scorexSettings.network
   private implicit val timeout: Timeout = Timeout(networkSettings.controllerTimeout.getOrElse(5.seconds))
 
@@ -341,7 +343,8 @@ class NetworkController(scorexSettings: ScorexSettings,
       }
     }
 
-    val mandatoryFeatures = scorexContext.features ++ Seq(mySessionIdFeature)
+    val modePeerFeature = ModePeerFeature(ergoSettings.nodeSettings)
+    val mandatoryFeatures = Seq(modePeerFeature) ++ Seq(mySessionIdFeature)
 
     val remoteAddress = connectionId.remoteAddress.getAddress
     val isLocal = (remoteAddress != null) && (remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress)
@@ -555,7 +558,7 @@ object NetworkController {
 }
 
 object NetworkControllerRef {
-  def props(settings: ScorexSettings,
+  def props(settings: ErgoSettings,
             peerManagerRef: ActorRef,
             scorexContext: ScorexContext,
             tcpManager: ActorRef)(implicit ec: ExecutionContext): Props = {
@@ -563,7 +566,7 @@ object NetworkControllerRef {
   }
 
   def apply(name: String,
-            settings: ScorexSettings,
+            settings: ErgoSettings,
             peerManagerRef: ActorRef,
             scorexContext: ScorexContext)
            (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {

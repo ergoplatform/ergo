@@ -1,6 +1,6 @@
 package scorex.core.network
 
-import org.ergoplatform.settings.PeerFeatureConstants
+import org.ergoplatform.settings.PeerFeatureDescriptors
 
 import java.net.{InetAddress, InetSocketAddress, URL}
 import scorex.core.app.{ApplicationVersionSerializer, Version}
@@ -94,7 +94,7 @@ object PeerSpecSerializer extends ScorexSerializer[PeerSpec] with ScorexLogging 
       val featBytesCount = r.getUShort().toShortExact
       val featChunk = r.getChunk(featBytesCount)
       //we ignore a feature found in the PeersData if we do not know how to parse it or failed to do that
-      val serializer = PeerFeatureConstants.FeatureSerializers.get(featId)
+      val serializer = PeerFeatureDescriptors.FeatureSerializers.get(featId)
       if (serializer.isEmpty) {
         log.debug(s"No feature serializer found for feature #$featId")
       }

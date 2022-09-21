@@ -5,9 +5,9 @@ import scorex.core.network.PeerFeature
 import scorex.core.network.peer.{LocalAddressPeerFeatureSerializer, RestApiUrlPeerFeatureSerializer, SessionIdPeerFeatureSerializer}
 
 /**
-  * Repository of existing peer feature identifiers
+  * Repository of existing peer feature identifiers, stores their ids along with serializers
   */
-object PeerFeatureConstants {
+object PeerFeatureDescriptors {
   /**
     * See `LocalAddressPeerFeature`
     */
@@ -28,6 +28,9 @@ object PeerFeatureConstants {
     */
   val ModeFeatureId: Byte = 16: Byte
 
+  /**
+    * All the peer feature serializers should be here
+    */
   val FeatureSerializers: PeerFeature.Serializers = Map(
     LocalAddressPeerFeatureId -> LocalAddressPeerFeatureSerializer,
     SessionIdPeerFeatureId -> SessionIdPeerFeatureSerializer,

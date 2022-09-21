@@ -7,10 +7,8 @@ import akka.util.{ByteString, CompactByteString}
 import scorex.core.app.{ScorexContext, Version}
 import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
 import scorex.core.network.PeerConnectionHandler.ReceivableMessages
-import scorex.core.network.PeerFeature.Serializers
 import scorex.core.network.message.{HandshakeSerializer, MessageSerializer}
 import scorex.core.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.ScorexSettings
 import scorex.util.ScorexLogging
 
@@ -35,10 +33,6 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   private val ownSocketAddress = connectionDescription.ownSocketAddress
   private val localFeatures = connectionDescription.localFeatures
 
-  private val featureSerializers: Serializers =
-    localFeatures.map(f => f.featureId -> (f.serializer: ScorexSerializer[_ <: PeerFeature])).toMap
-
-  private val handshakeSerializer = new HandshakeSerializer(featureSerializers)
   private val messageSerializer = new MessageSerializer(scorexContext.messageSpecs, networkSettings.magicBytes)
 
   // there is no recovery for broken connections
@@ -69,7 +63,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   private def handshaking: Receive = {
     handshakeTimeoutCancellableOpt = Some(context.system.scheduler.scheduleOnce(networkSettings.handshakeTimeout)
     (self ! HandshakeTimeout))
-    val hb = handshakeSerializer.toBytes(createHandshakeMessage())
+    val hb = HandshakeSerializer.toBytes(createHandshakeMessage())
     connection ! Tcp.Write(ByteString(hb))
     log.info(s"Handshake sent to $connectionId")
 
@@ -93,7 +87,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 
   private def receiveAndHandleHandshake(handler: Handshake => Unit): Receive = {
     case Received(data) =>
-      handshakeSerializer.parseBytesTry(data.toArray) match {
+      HandshakeSerializer.parseBytesTry(data.toArray) match {
         case Success(handshake) =>
           handler(handshake)
 

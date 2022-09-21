@@ -194,7 +194,6 @@ object PeersSpec {
   * on the network.
   */
 class PeersSpec(peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
-  private val peerSpecSerializer = PeerSpecSerializer
 
   override val messageCode: Message.MessageCode = PeersSpec.messageCode
 
@@ -202,14 +201,14 @@ class PeersSpec(peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
 
   override def serialize(peers: Seq[PeerSpec], w: Writer): Unit = {
     w.putUInt(peers.size)
-    peers.foreach(p => peerSpecSerializer.serialize(p, w))
+    peers.foreach(p => PeerSpecSerializer.serialize(p, w))
   }
 
   override def parse(r: Reader): Seq[PeerSpec] = {
     val length = r.getUInt().toIntExact
     require(length <= peersLimit, s"Too many peers. $length exceeds limit $peersLimit")
     (0 until length).map { _ =>
-      peerSpecSerializer.parse(r)
+      PeerSpecSerializer.parse(r)
     }
   }
 }
@@ -225,8 +224,6 @@ object HandshakeSerializer extends MessageSpecV1[Handshake] {
 
   val maxHandshakeSize: Int = 8096
 
-  private val peersDataSerializer = PeerSpecSerializer
-
   /**
     * Serializing handshake into a byte writer.
     *
@@ -236,13 +233,13 @@ object HandshakeSerializer extends MessageSpecV1[Handshake] {
   override def serialize(hs: Handshake, w: Writer): Unit = {
     // first writes down handshake time, then peer specification of our node
     w.putULong(hs.time)
-    peersDataSerializer.serialize(hs.peerSpec, w)
+    PeerSpecSerializer.serialize(hs.peerSpec, w)
   }
 
   override def parse(r: Reader): Handshake = {
     require(r.remaining <= maxHandshakeSize, s"Too big handshake. Size ${r.remaining} exceeds $maxHandshakeSize limit")
     val time = r.getULong()
-    val data = peersDataSerializer.parse(r)
+    val data = PeerSpecSerializer.parse(r)
     Handshake(data, time)
   }
 

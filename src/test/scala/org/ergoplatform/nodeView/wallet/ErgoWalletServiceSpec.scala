@@ -44,7 +44,7 @@ class ErgoWalletServiceSpec
   private implicit val x: WalletFixture = new WalletFixture(settings, parameters, getCurrentView(_).vault)
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 4)
   private lazy val pks = getPublicKeys.toList
-  private val masterKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create("edge talent poet tortoise trumpet dose")), usePre1627KeyDerivation = true)
+  private val masterKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create("edge talent poet tortoise trumpet dose")), usePre1627KeyDerivation = false)
 
   override def afterAll(): Unit = try super.afterAll() finally x.stop()
 
@@ -76,7 +76,8 @@ class ErgoWalletServiceSpec
           settingsWithPruning,
           mnemonic = SecretString.create("x"),
           mnemonicPassOpt = None,
-          walletPass = SecretString.create("y")
+          walletPass = SecretString.create("y"),
+          usePre1627KeyDerivation = false
         ).failed.get.getMessage shouldBe "Unable to restore wallet when pruning is enabled"
       }
     }

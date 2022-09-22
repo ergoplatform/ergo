@@ -35,6 +35,31 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
     }
   }
 
+  def newCalculate(previousHeaders: Seq[Header]): Difficulty = {
+    def bitcoinCalculate(start: Header, end: Header) = {
+      end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
+    }
+    val predictiveDiff = calculate(previousHeaders)
+    val classicDiff = if(previousHeaders.size>=3){
+      val hs = previousHeaders.takeRight(2)
+      bitcoinCalculate(hs(0), hs(1))
+    } else {
+      predictiveDiff
+    }
+    val avg = (classicDiff + predictiveDiff) / 2
+    //val lastDiff = previousHeaders.last.requiredDifficulty
+
+    val uncompressedDiff = avg /*if(avg > lastDiff){
+      avg.min(lastDiff * 3 / 2)
+    } else {
+      avg.max(lastDiff * 2 / 3)
+    }*/
+    // perform serialization cycle in order to normalize resulted difficulty
+    RequiredDifficulty.decodeCompactBits(
+      RequiredDifficulty.encodeCompactBits(uncompressedDiff)
+    )
+  }
+
   @SuppressWarnings(Array("TraversableHead"))
   def calculate(previousHeaders: Seq[Header]): Difficulty = {
     require(previousHeaders.nonEmpty, "PreviousHeaders should always contain at least 1 element")
@@ -116,14 +141,92 @@ object v2testing extends App {
 
   println("dir: " + ergoSettings.directory)
 
-  val headers =  headerOpts.map{_ match {
-    case None => headerOpts.head.get.copy(height = 842752 + 1024, nBits = 122447235L, timestamp = System.currentTimeMillis() + 1000*60*1440*4)
-    case Some(h) => h
-  }}
+  val h1 = headerOpts.head.get.copy(height = 842752 + 1024, nBits = 122447235L, timestamp = System.currentTimeMillis() + 1000*60*1440*3)
+
+  val headers = headerOpts.flatten.toSeq ++ Seq(h1)
+
+  val diff1 = ldc.calculate(headers)
+  println("diff1: " + diff1)
+  val nbits1 = RequiredDifficulty.encodeCompactBits(diff1)
+
+  val h2 = headerOpts.head.get.copy(height = 842752 + 2048, nBits = nbits1, timestamp = System.currentTimeMillis() + 1000*60*1440*6)
+
+  val headers2 = headerOpts.flatten.toSeq.tail ++ Seq(h1, h2)
+  val diff2 = ldc.calculate(headers2)
+  println("diff2: " + diff2)
+  val nbits2 = RequiredDifficulty.encodeCompactBits(diff2)
+
+  val h3 = headerOpts.head.get.copy(height = 842752 + 3072, nBits = nbits2, timestamp = System.currentTimeMillis() + 1000*60*1440*8)
+  val headers3 = headers2.tail ++ Seq(h3)
+  val diff3 = ldc.calculate(headers3)
+  println("diff3: " + diff3)
+  val nbits3 = RequiredDifficulty.encodeCompactBits(diff3)
+
+  val h4 = headerOpts.head.get.copy(height = 842752 + 4096, nBits = nbits3, timestamp = System.currentTimeMillis() + (1000*60*1440*9.5).toInt)
+  val headers4 = headers3.tail ++ Seq(h4)
+  val diff4 = ldc.calculate(headers4)
+  println("diff4: " + diff4)
+  val nbits4 = RequiredDifficulty.encodeCompactBits(diff4)
 
 
+  val h5 = headerOpts.head.get.copy(height = 842752 + 4096 + 1024, nBits = nbits3, timestamp = System.currentTimeMillis() + (1000*60*1440*10.5).toInt)
+  val headers5 = headers4.tail ++ Seq(h5)
+  val diff5 = ldc.calculate(headers5)
+  println("diff5: " + diff5)
+  val nbits5 = RequiredDifficulty.encodeCompactBits(diff5)
 
-  println(ldc.calculate(headers))
+
+  val h6 = headerOpts.head.get.copy(height = 842752 + 4096 + 2048, nBits = nbits3, timestamp = System.currentTimeMillis() + (1000*60*1440*11.5).toInt)
+  val headers6 = headers5.tail ++ Seq(h6)
+  val diff6 = ldc.calculate(headers6)
+  println("diff6: " + diff6)
+  val nbits6 = RequiredDifficulty.encodeCompactBits(diff6)
 
 }
 
+
+
+object AltDiff extends App {
+
+  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+
+  private val currentSettings: ErgoSettings =
+    ErgoSettings.read(Args(Some("/home/kushti/ergo/mainnet/mainnet.conf"), Some(NetworkType.MainNet)))
+
+  private val altSettings: ErgoSettings =
+    ErgoSettings.read(Args(Some("/home/kushti/ergo/mainnet/alt.conf"), Some(NetworkType.MainNet)))
+
+  val ntp = new NetworkTimeProvider(altSettings.scorexSettings.ntp)
+
+
+  println(currentSettings.chainSettings.epochLength)
+  println(altSettings.chainSettings.epochLength)
+
+  val eh = ErgoHistory.readOrGenerate(altSettings, ntp)
+
+  println("best: " + eh.bestHeaderOpt.map(_.height))
+
+  val ldc = new LinearDifficultyControl(altSettings.chainSettings)
+/*
+  val heights = ldc.previousHeadersRequiredForRecalculation(843265)
+  val headerOpts = heights.map(eh.bestHeaderIdAtHeight).map(idOpt => idOpt.flatMap(id => eh.typedModifierById[Header](id)))
+  val h1 = headerOpts.head.get.copy(height = 843264, nBits = 122447235L, timestamp = System.currentTimeMillis() + 1000*60*120)
+
+  val headers = headerOpts.flatten.toSeq ++ Seq(h1)
+
+  val diff1 = ldc.calculate(headers)
+  println("diff1: " + diff1)
+  val nbits1 = RequiredDifficulty.encodeCompactBits(diff1)
+*/
+  (1 to 843207).foreach{h =>
+    if(h % 1024 == 1 && h > 1) {
+      val heights = ldc.previousHeadersRequiredForRecalculation(h)
+      val headers = heights.map(eh.bestHeaderIdAtHeight).map(idOpt => idOpt.flatMap(id => eh.typedModifierById[Header](id))).flatten
+      val calcDiff = ldc.newCalculate(headers)
+      val chainDiff = eh.bestHeaderAtHeight(h).get.requiredDifficulty
+
+      println(s"diff for $h: $calcDiff, chain diff: ${chainDiff*100/calcDiff-100}%")
+    }
+  }
+
+}

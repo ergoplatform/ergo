@@ -73,7 +73,7 @@ public class CreateTransactionDemo {
 
         // Create an address
         byte[] entropy = Random.randomBytes(32);
-        ExtendedSecretKey extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy);
+        ExtendedSecretKey extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy, false);
         ErgoAddress myAddress = P2PKAddress.apply(extendedSecretKey.privateInput().publicImage(), encoder);
 
         int feeAmt = 1000000; // minimal fee amount

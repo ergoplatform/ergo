@@ -66,7 +66,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   lazy val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.fold[SecretString](SecretString.empty())(SecretString.create(_)))
-  val defaultRootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(defaultSeed, usePre1627KeyDerivation = false)
+  val defaultRootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(defaultSeed, usePre1627KeyDerivation = true)
   val defaultChildSecrets: IndexedSeq[ExtendedSecretKey] = settings.walletSettings.testKeysQty
     .toIndexedSeq
     .flatMap(x => (0 until x).map(defaultRootSecret.child))

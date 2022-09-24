@@ -28,7 +28,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   blockchainSimulator(difficultyControl,
     baseHeader.copy(height = 0, timestamp = 0, nBits = 16842752),
-    randomHashRate)
+    linearGrowingHashRate)
 
   /**
     * Generate blockchain starting from initial header with specified difficulty control and measure mean time interval between blocks
@@ -140,21 +140,19 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
     val heights = difficultyControl.previousHeadersRequiredForRecalculation(parentHeight + 1)
       .ensuring(_.last == parentHeight)
     if (heights.lengthCompare(1) == 0) {
-      difficultyControl.calculate(Seq(parent))
+      difficultyControl.newCalculate(Seq(parent))
     } else {
       val headersToCalculate = heights.map(h => blockchain(h))
-      difficultyControl.calculate(headersToCalculate)
+      difficultyControl.newCalculate(headersToCalculate)
     }
   }
 
 
   def constantHashRate(height: Int): Int = {
-    assert(height > 0)
     1000
   }
   def linearGrowingHashRate(height: Int): Int = Math.max(2000 - height / 20, 100)
   def randomHashRate(height: Int): Int = {
-    assert(height > 0)
     Random.nextInt(1000)
   }
 

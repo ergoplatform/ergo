@@ -8,7 +8,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scala.concurrent.duration._
 import scala.util.Try
 
-class LinearDifficultyControlSpecification extends ErgoPropertyTest {
+class DifficultyAdjustmentSpecification extends ErgoPropertyTest {
 
   val precision = 0.0001
   val minDiff: BigInt = (BigDecimal(1) / precision).toBigInt()
@@ -22,7 +22,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
                     epochLength: Int = Epoch): ChainSettings =
     settings.chainSettings.copy(blockInterval = blockInterval, useLastEpochs = useLastEpochs, epochLength = epochLength)
 
-  val control = new LinearDifficultyControl(chainSettings())
+  val control = new DifficultyAdjustment(chainSettings())
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {
     val height = Epoch * (UseLastEpochs + 1) + 1
@@ -33,7 +33,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   property("previousHeadersRequiredForRecalculation() with Epoch = 1") {
     forAll(Gen.choose(2, 1000)) { _ =>
       val useLastEpochs = 3
-      val control = new LinearDifficultyControl(chainSettings(1.minute, useLastEpochs, 1))
+      val control = new DifficultyAdjustment(chainSettings(1.minute, useLastEpochs, 1))
       val height = useLastEpochs + 1
       control.previousHeadersRequiredForRecalculation(height, Epoch) shouldEqual (0 until height)
     }
@@ -111,7 +111,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   property("interpolate() for linear hashrate growth") {
     forAll(epochGen, diffGen, smallPositiveInt, smallPositiveInt) { (startEpoch, diff, epoch, useLastEpochs) =>
       whenever(useLastEpochs > 1) {
-        val control = new LinearDifficultyControl(chainSettings(1.minute, useLastEpochs, epoch))
+        val control = new DifficultyAdjustment(chainSettings(1.minute, useLastEpochs, epoch))
         val previousDifficulties = (startEpoch * epoch until (useLastEpochs + startEpoch) * epoch by epoch).map(i => (i, diff * i))
         val newDiff = control.interpolate(previousDifficulties, Epoch)
         val expected = previousDifficulties.map(_._2).max + diff
@@ -123,7 +123,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   property("calculate() for different epoch lengths and constant hashrate") {
     forAll(defaultHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
       whenever(useLastEpochs > 1 && header.requiredDifficulty >= 1) {
-        val control = new LinearDifficultyControl(chainSettings(interval.millis, useLastEpochs, epoch))
+        val control = new DifficultyAdjustment(chainSettings(interval.millis, useLastEpochs, epoch))
         val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1, Epoch)
           .map(i => header.copy(timestamp = header.timestamp + i * interval, height = i))
         previousHeaders.length shouldBe useLastEpochs + 1
@@ -136,7 +136,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
     val step = 1000
     forAll(defaultHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
       whenever(useLastEpochs > 1) {
-        val control = new LinearDifficultyControl(chainSettings(interval.millis, useLastEpochs, epoch))
+        val control = new DifficultyAdjustment(chainSettings(interval.millis, useLastEpochs, epoch))
         val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1, Epoch).map { i =>
           header.copy(timestamp = header.timestamp + i * interval,
             height = i,
@@ -146,7 +146,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
         previousHeaders.length shouldBe useLastEpochs + 1
         val expectedDifficulty = previousHeaders.last.requiredDifficulty + step
         val error = BigDecimal(control.calculate(previousHeaders, Epoch) - expectedDifficulty) / BigDecimal(expectedDifficulty)
-        error should be < BigDecimal(1) / LinearDifficultyControl.PrecisionConstant
+        error should be < BigDecimal(1) / DifficultyAdjustment.PrecisionConstant
       }
     }
   }

@@ -1,6 +1,6 @@
 package org.ergoplatform.tools
 
-import org.ergoplatform.mining.difficulty.{LinearDifficultyControl, RequiredDifficulty}
+import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, RequiredDifficulty}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.ErgoSettings
@@ -22,7 +22,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 //  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
   val epochLength = 256
   val chainSettings = settings.chainSettings.copy(blockInterval = 2.minute, useLastEpochs = 8, epochLength = epochLength)
-  val difficultyControl = new LinearDifficultyControl(chainSettings)
+  val difficultyControl = new DifficultyAdjustment(chainSettings)
   // Constant rate: Stable simulated average interval = 119713, error  = 0.23916666% | Init simulated average interval = 117794, error  = 1.8383334%
   // Increasing rate: Stable simulated average interval = 119841, error  = 0.1325% | Init simulated average interval = 119077, error  = 0.76916665%
   // Random rate: Stable simulated average interval = 120539, error  = 0.44916666% | Init simulated average interval = 115519, error  = 3.7341666%
@@ -37,7 +37,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
     * @param difficultyControl
     * @param initialHeader
     */
-  def blockchainSimulator(difficultyControl: LinearDifficultyControl,
+  def blockchainSimulator(difficultyControl: DifficultyAdjustment,
                           initialHeader: Header,
                           timeForOneHash: Int => Int): Unit = {
     // number of blocks in simulated chain
@@ -87,7 +87,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
   def printTestnetData(): Unit = {
     val baseHeader = defaultHeaderGen.sample.get
     val chainSettings = ErgoSettings.read().chainSettings.copy(epochLength = 1)
-    val difficultyControl = new LinearDifficultyControl(chainSettings)
+    val difficultyControl = new DifficultyAdjustment(chainSettings)
 
     val headers = Source.fromResource("difficulty.csv").getLines().toSeq.tail.map { line =>
       val l = line.split(",")
@@ -100,7 +100,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
     printEpochs(headers, difficultyControl)
   }
 
-  def printEpochs(headers: Seq[Header], difficultyControl: LinearDifficultyControl): Unit = {
+  def printEpochs(headers: Seq[Header], difficultyControl: DifficultyAdjustment): Unit = {
     case class Epoch(startHeight: Int, requiredDifficulty: BigInt, blockInterval: FiniteDuration, timestamp: Long) {
       val realDifficulty: BigInt = requiredDifficulty * difficultyControl.desiredInterval.toMillis / blockInterval.toMillis
 

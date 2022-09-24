@@ -7,9 +7,9 @@ import scorex.util.ScorexLogging
 import scala.concurrent.duration.FiniteDuration
 
 
-class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLogging {
+class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLogging {
 
-  import LinearDifficultyControl._
+  import DifficultyAdjustment._
 
   val desiredInterval: FiniteDuration = chainSettings.blockInterval
   val useLastEpochs: Int = chainSettings.useLastEpochs
@@ -119,6 +119,6 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
 
 }
 
-object LinearDifficultyControl {
+object DifficultyAdjustment {
   val PrecisionConstant: Int = 1000000000
 }

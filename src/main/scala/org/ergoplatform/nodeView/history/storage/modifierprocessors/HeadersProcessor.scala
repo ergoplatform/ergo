@@ -4,7 +4,7 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
+import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
@@ -42,7 +42,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   // Maximum time in future block header may have
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
-  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings)
+  lazy val difficultyCalculator = new DifficultyAdjustment(chainSettings)
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 

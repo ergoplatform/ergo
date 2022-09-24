@@ -269,19 +269,20 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       settings.chainSettings.initialDifficultyVersion2
     } else {
       val parentHeight = parent.height
+      val epochLength = settings.chainSettings.epochLength
 
-      if(parentHeight % settings.chainSettings.epochLength == 0) {
+      if (parentHeight % epochLength == 0) {
         //todo: it is slow to read thousands headers from database for each header
         //todo; consider caching here
         //todo: https://github.com/ergoplatform/ergo/issues/872
-        val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
+        val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
           .ensuring(_.last == parentHeight)
         if (heights.lengthCompare(1) == 0) {
-          difficultyCalculator.calculate(Array(parent))
+          difficultyCalculator.calculate(Array(parent), epochLength)
         } else {
           val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
           val headers = chain.headers.filter(p => heights.contains(p.height))
-          difficultyCalculator.calculate(headers)
+          difficultyCalculator.calculate(headers, epochLength)
         }
       } else {
         parent.requiredDifficulty

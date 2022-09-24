@@ -20,7 +20,8 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   val baseHeader = defaultHeaderGen.sample.get
 //  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
-  val chainSettings = settings.chainSettings.copy(blockInterval = 2.minute, useLastEpochs = 8, epochLength = 256)
+  val epochLength = 256
+  val chainSettings = settings.chainSettings.copy(blockInterval = 2.minute, useLastEpochs = 8, epochLength = epochLength)
   val difficultyControl = new LinearDifficultyControl(chainSettings)
   // Constant rate: Stable simulated average interval = 119713, error  = 0.23916666% | Init simulated average interval = 117794, error  = 1.8383334%
   // Increasing rate: Stable simulated average interval = 119841, error  = 0.1325% | Init simulated average interval = 119077, error  = 0.76916665%
@@ -28,7 +29,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   blockchainSimulator(difficultyControl,
     baseHeader.copy(height = 0, timestamp = 0, nBits = 16842752),
-    linearGrowingHashRate)
+    randomHashRate)
 
   /**
     * Generate blockchain starting from initial header with specified difficulty control and measure mean time interval between blocks
@@ -106,7 +107,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
       override def toString: String = s"$startHeight,$requiredDifficulty,$realDifficulty,${blockInterval.toMillis}"
     }
 
-    val epochs: Seq[Epoch] = headers.filter(h => h.height % difficultyControl.epochLength == 0).sliding(2).map { p =>
+    val epochs: Seq[Epoch] = headers.filter(h => h.height % epochLength == 0).sliding(2).map { p =>
       val start = p.head
       val end = p.last
       val meanInterval = ((end.timestamp - start.timestamp) / (end.height - start.height)).millis
@@ -123,7 +124,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
     val errorStable = Math.abs(simulatedStable - desired).toFloat * 100 / desired
 
     println(s"Control:")
-    println(s"Desired interval = $desired, epoch length = ${difficultyControl.epochLength}, use last epochs = " +
+    println(s"Desired interval = $desired, epoch length = $epochLength, use last epochs = " +
       difficultyControl.useLastEpochs)
     println(s"Init simulated average interval = $simulatedInit, error  = $errorInit%")
     println(s"Stable simulated average interval = $simulatedStable, error  = $errorStable%")
@@ -137,13 +138,13 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   private def requiredDifficultyAfter(parent: Header, blockchain: mutable.Map[Int, Header]): Difficulty = {
     val parentHeight = parent.height
-    val heights = difficultyControl.previousHeadersRequiredForRecalculation(parentHeight + 1)
+    val heights = difficultyControl.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
       .ensuring(_.last == parentHeight)
     if (heights.lengthCompare(1) == 0) {
-      difficultyControl.newCalculate(Seq(parent))
+      difficultyControl.calculate(Seq(parent), epochLength)
     } else {
       val headersToCalculate = heights.map(h => blockchain(h))
-      difficultyControl.newCalculate(headersToCalculate)
+      difficultyControl.calculate(headersToCalculate, epochLength)
     }
   }
 

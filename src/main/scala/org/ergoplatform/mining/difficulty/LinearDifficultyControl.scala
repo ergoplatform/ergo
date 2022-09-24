@@ -13,17 +13,16 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
 
   val desiredInterval: FiniteDuration = chainSettings.blockInterval
   val useLastEpochs: Int = chainSettings.useLastEpochs
-  val epochLength: Int = chainSettings.epochLength
   val initialDifficulty: BigInt = chainSettings.initialDifficulty
 
   require(useLastEpochs > 1, "useLastEpochs should always be > 1")
-  require(epochLength > 0, "epochLength should always be > 0")
-  require(epochLength < Int.MaxValue / useLastEpochs, s"epochLength $epochLength is too high for $useLastEpochs epochs")
+  require(chainSettings.epochLength > 0, "diff epoch length should always be > 0")
+  require(chainSettings.epochLength < Int.MaxValue / useLastEpochs, s"diff epoch length is too high for $useLastEpochs epochs")
 
   /**
     * @return heights of previous headers required for block recalculation
     */
-  def previousHeadersRequiredForRecalculation(height: Height): Seq[Int] = {
+  def previousHeadersRequiredForRecalculation(height: Height, epochLength: Int): Seq[Int] = {
     if ((height - 1) % epochLength == 0 && epochLength > 1) {
       (0 to useLastEpochs).map(i => (height - 1) - i * epochLength).filter(_ >= 0).reverse
     } else if ((height - 1) % epochLength == 0 && height > epochLength * useLastEpochs) {
@@ -33,9 +32,9 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
     }
   }
 
-  private def bitcoinCalculate(previousHeaders: Seq[Header]): Difficulty = {
+  private def bitcoinCalculate(previousHeaders: Seq[Header], epochLength: Int): Difficulty = {
     val hs = previousHeaders.takeRight(2)
-    bitcoinCalculate(hs(0), hs(1))
+    bitcoinCalculate(hs(0), hs(1), epochLength: Int)
   }
 
   /**
@@ -46,15 +45,15 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
     * @param start - last block of previous epoch
     * @param end - last block of current epoch
     */
-  private def bitcoinCalculate(start: Header, end: Header): BigInt = {
+  private def bitcoinCalculate(start: Header, end: Header, epochLength: Int): BigInt = {
     end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
   }
 
-  def newCalculate(previousHeaders: Seq[Header]): Difficulty = {
+  def newCalculate(previousHeaders: Seq[Header], epochLength: Int): Difficulty = {
     require(previousHeaders.size >= 2, "at least two headers needed for diff recalc")
 
-    val predictiveDiff = calculate(previousHeaders)
-    val classicDiff = bitcoinCalculate(previousHeaders)
+    val predictiveDiff = calculate(previousHeaders, epochLength)
+    val classicDiff = bitcoinCalculate(previousHeaders, epochLength)
 
     val avg = (classicDiff + predictiveDiff) / 2
     val lastDiff = previousHeaders.last.requiredDifficulty
@@ -71,7 +70,7 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
   }
 
   @SuppressWarnings(Array("TraversableHead"))
-  def calculate(previousHeaders: Seq[Header]): Difficulty = {
+  def calculate(previousHeaders: Seq[Header], epochLength: Int): Difficulty = {
     require(previousHeaders.nonEmpty, "PreviousHeaders should always contain at least 1 element")
 
     val uncompressedDiff = {
@@ -85,7 +84,7 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
           val diff = end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
           (end.height, diff)
         }
-        val diff = interpolate(data)
+        val diff = interpolate(data, epochLength)
         if (diff >= 1) diff else initialDifficulty
       }
     }
@@ -96,7 +95,7 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
   }
 
   //y = a + bx
-  private[difficulty] def interpolate(data: Seq[(Int, Difficulty)]): Difficulty = {
+  private[difficulty] def interpolate(data: Seq[(Int, Difficulty)], epochLength: Int): Difficulty = {
     val size = data.size
     if (size == 1) {
       data.head._2

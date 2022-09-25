@@ -257,6 +257,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
+  private var eip37VotedOn = false //todo: persistence
+
   /**
     * Calculate difficulty for the next block
     *
@@ -264,11 +266,36 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return - difficulty for the next block
     */
   def requiredDifficultyAfter(parent: Header): Difficulty = {
-    if (parent.height == settings.chainSettings.voting.version2ActivationHeight || parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
+    val parentHeight = parent.height
+
+    if (settings.chainSettings.isMainnet &&
+        !eip37VotedOn &&
+         parent.height % 128 == 0 &&
+          parent.height > 8436776 &&
+          parent.height > 8436776 + 2048) {
+      val chain = headerChainBack(128, parent, _ => false)
+      val eip37Activated = chain.headers.map(_.votes).map(_.contains(8: Byte)).count(_ == true) >= 100
+      if (eip37Activated) {
+        eip37VotedOn = true
+      }
+    }
+
+    if (eip37VotedOn) {
+      val epochLength = 128
+      if (parentHeight % epochLength == 0) {
+        val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
+        val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+        val headers = chain.headers.filter(p => heights.contains(p.height))
+        difficultyCalculator.newCalculate(headers, epochLength)
+      } else {
+        parent.requiredDifficulty
+      }
+    }
+
+    if (parentHeight == settings.chainSettings.voting.version2ActivationHeight || parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
       // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
       settings.chainSettings.initialDifficultyVersion2
     } else {
-      val parentHeight = parent.height
       val epochLength = settings.chainSettings.epochLength
 
       if (parentHeight % epochLength == 0) {

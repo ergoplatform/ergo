@@ -743,7 +743,7 @@ object ErgoNodeViewHolder {
     def chainSynced =
       history.bestFullBlockOpt.map(_.id) == history.bestHeaderOpt.map(_.id)
 
-    if (chainUpdateDelayed) {
+    if (chainUpdateDelayed && headersHeight > blockHeight) {
       val bestFullBlockOpt =
         history.bestFullBlockOpt
           .filter(_.id != lastMod.id)

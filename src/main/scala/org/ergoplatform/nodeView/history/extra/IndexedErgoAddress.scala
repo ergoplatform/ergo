@@ -13,7 +13,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable.ListBuffer
 import spire.syntax.all.cfor
 
 case class IndexedErgoAddress(treeHash: ModifierId,
@@ -27,9 +27,6 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   override val modifierTypeId: ModifierTypeId = IndexedErgoAddress.modifierTypeId
   override type M = IndexedErgoAddress
   override def serializer: ScorexSerializer[IndexedErgoAddress] = IndexedErgoAddressSerializer
-
-  private val newTxs: ArrayBuffer[(ModifierId, Long)] = ArrayBuffer.empty[(ModifierId, Long)]
-  private val newBoxes: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
 
   private[extra] var boxSegmentCount: Int = 0
   private[extra] var txSegmentCount: Int = 0
@@ -73,14 +70,13 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     slice(data, offset, limit).toArray
   }
 
-  private[extra] def addTx(txId: ModifierId, txNum: Long): IndexedErgoAddress = {
-    if((newTxs.nonEmpty && newTxs(newTxs.length - 1)._2 != txNum) || (txs.nonEmpty && txs.last != txNum)) // check for duplicates
-      newTxs += Tuple2(txId,txNum)
+  private[extra] def addTx(tx: Long): IndexedErgoAddress = {
+    if(txs.lastOption.getOrElse(-1) != tx) txs += tx // check for duplicates
     this
   }
 
   private[extra] def addBox(iEb: IndexedErgoBox): IndexedErgoAddress = {
-    newBoxes += iEb.globalIndex
+    boxes += iEb.globalIndex
     balanceInfo.get.add(iEb.box)
     this
   }
@@ -88,13 +84,6 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   private[extra] def spendBox(box: ErgoBox): IndexedErgoAddress = {
     balanceInfo.get.subtract(box)
     this
-  }
-
-  private[extra] def sortNewTxsAndBoxes(): Unit = {
-    txs ++= newTxs.sortBy(_._1).map(_._2)
-    boxes ++= newBoxes
-    newTxs.clear()
-    newBoxes.clear()
   }
 
   private[extra] def splitToSegments(): Array[IndexedErgoAddress] = {

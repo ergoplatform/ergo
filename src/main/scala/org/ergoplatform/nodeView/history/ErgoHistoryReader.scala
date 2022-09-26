@@ -75,6 +75,17 @@ trait ErgoHistoryReader
 
   /**
     * @param id - modifier id
+    * @return type and raw bytes of semantically valid ErgoPersistentModifier with the given id it is in history
+    */
+   def modifierTypeAndBytesById(id: ModifierId): Option[(ModifierTypeId, Array[Byte])] =
+    if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
+      historyStorage.modifierTypeAndBytesById(id)
+    } else {
+      None
+    }
+
+  /**
+    * @param id - modifier id
     * @return semantically valid ErgoPersistentModifier with the given id it is in history
     */
   override def modifierById(id: ModifierId): Option[BlockSection] =

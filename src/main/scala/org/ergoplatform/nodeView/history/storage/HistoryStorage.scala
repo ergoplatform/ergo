@@ -5,9 +5,11 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
+import scorex.core.ModifierTypeId
 import scorex.core.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import supertagged.PostfixSugar
 
 import scala.util.{Failure, Success, Try}
 
@@ -54,6 +56,10 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
 
   def modifierBytesById(id: ModifierId): Option[Array[Byte]] = {
     objectsStore.get(idToBytes(id)).map(_.tail) // removing modifier type byte with .tail
+  }
+
+  def modifierTypeAndBytesById(id: ModifierId): Option[(ModifierTypeId, Array[Byte])] = {
+    objectsStore.get(idToBytes(id)).map(bs => (bs.head @@ ModifierTypeId, bs.tail)) // first byte is type id, tail is modifier bytes
   }
 
   def modifierById(id: ModifierId): Option[BlockSection] =

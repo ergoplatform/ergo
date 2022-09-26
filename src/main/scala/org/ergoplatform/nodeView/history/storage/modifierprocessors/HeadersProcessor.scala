@@ -19,6 +19,7 @@ import scorex.core.consensus.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
+import scorex.crypto.hash.Blake2b256
 import scorex.db.ByteArrayWrapper
 import scorex.util._
 
@@ -257,7 +258,18 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  private var eip37VotedOn = false //todo: persistence
+
+  private val EIP37VotingParameter: Byte = 8 // should be 6, and 6 = 2100 in config
+
+  private val eip37Key = Blake2b256.hash("eip37 activation height")
+
+  private def storeEip37ActivationHeight(eip37ActivationHeight: Int) = {
+    historyStorage.insert(eip37Key, Ints.toByteArray(eip37ActivationHeight))
+  }
+
+  private def eip37VotedOn: Option[Int] = {
+    historyStorage.get(scorex.util.bytesToId(eip37Key)).map(Ints.fromByteArray)
+  }
 
   /**
     * Calculate difficulty for the next block
@@ -269,50 +281,52 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     val parentHeight = parent.height
 
     if (settings.chainSettings.isMainnet &&
-        !eip37VotedOn &&
-         parent.height % 128 == 0 &&
-          parent.height > 8436776 &&
-          parent.height > 8436776 + 2048) {
+        parentHeight > 843776 &&
+        parentHeight <= 843776 + 4096 &&
+        parentHeight % 128 == 0) {
       val chain = headerChainBack(128, parent, _ => false)
-      val eip37Activated = chain.headers.map(_.votes).map(_.contains(8: Byte)).count(_ == true) >= 100
+      val eip37Activated = chain.headers.map(_.votes).map(_.contains(EIP37VotingParameter)).count(_ == true) >= 100
       if (eip37Activated) {
-        eip37VotedOn = true
+        storeEip37ActivationHeight(parentHeight + 1)
       }
     }
 
-    if (eip37VotedOn) {
-      val epochLength = 128
+    if (parentHeight > 843776 && parentHeight + 1 >= eip37VotedOn.getOrElse(0)) {
+      // by eip37VotedOn definition could be on mainnet only
+      val epochLength = 128 // epoch length after EIP-37 activation
       if (parentHeight % epochLength == 0) {
         val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
+        // todo: if parent is on best chain, read headers directly, not via headerChainBack
         val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
         val headers = chain.headers.filter(p => heights.contains(p.height))
         difficultyCalculator.newCalculate(headers, epochLength)
       } else {
         parent.requiredDifficulty
       }
-    }
-
-    if (parentHeight == settings.chainSettings.voting.version2ActivationHeight || parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
-      // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
-      settings.chainSettings.initialDifficultyVersion2
     } else {
-      val epochLength = settings.chainSettings.epochLength
-
-      if (parentHeight % epochLength == 0) {
-        //todo: it is slow to read thousands headers from database for each header
-        //todo; consider caching here
-        //todo: https://github.com/ergoplatform/ergo/issues/872
-        val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
-          .ensuring(_.last == parentHeight)
-        if (heights.lengthCompare(1) == 0) {
-          difficultyCalculator.calculate(Array(parent), epochLength)
-        } else {
-          val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
-          val headers = chain.headers.filter(p => heights.contains(p.height))
-          difficultyCalculator.calculate(headers, epochLength)
-        }
+      if (parentHeight == settings.chainSettings.voting.version2ActivationHeight ||
+          parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
+        // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
+        settings.chainSettings.initialDifficultyVersion2
       } else {
-        parent.requiredDifficulty
+        val epochLength = settings.chainSettings.epochLength
+
+        if (parentHeight % epochLength == 0) {
+          //todo: it is slow to read thousands headers from database for each header
+          //todo; consider caching here
+          //todo: https://github.com/ergoplatform/ergo/issues/872
+          val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
+            .ensuring(_.last == parentHeight)
+          if (heights.lengthCompare(1) == 0) {
+            difficultyCalculator.calculate(Array(parent), epochLength)
+          } else {
+            val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+            val headers = chain.headers.filter(p => heights.contains(p.height))
+            difficultyCalculator.calculate(headers, epochLength)
+          }
+        } else {
+          parent.requiredDifficulty
+        }
       }
     }
   }

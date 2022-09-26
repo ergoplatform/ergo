@@ -280,6 +280,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   def requiredDifficultyAfter(parent: Header): Difficulty = {
     val parentHeight = parent.height
 
+    // todo: this EIP-37 activation checking code could be removed after activation
     if (settings.chainSettings.isMainnet &&
         parentHeight > 843776 &&
         parentHeight <= 843776 + 8192 &&
@@ -300,7 +301,10 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         // todo: if parent is on best chain, read headers directly, not via headerChainBack
         val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
         val headers = chain.headers.filter(p => heights.contains(p.height))
-        difficultyCalculator.eip37Calculate(headers, epochLength)
+        val newDiff = difficultyCalculator.eip37Calculate(headers, epochLength)
+        //todo: downgrade log level after testing
+        log.warn(s"Difficulty for ${parentHeight + 1}: $newDiff")
+        newDiff
       } else {
         parent.requiredDifficulty
       }

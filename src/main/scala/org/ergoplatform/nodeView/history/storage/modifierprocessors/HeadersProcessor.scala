@@ -259,7 +259,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   protected def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
 
-  private val EIP37VotingParameter: Byte = 8 // should be 6, and 6 = 2100 in config
+  private val EIP37VotingParameter: Byte = 8 // todo: should be 6 after testing , and 6 = 2100 in config
 
   private val eip37Key = Blake2b256.hash("eip37 activation height")
 
@@ -282,16 +282,17 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
     if (settings.chainSettings.isMainnet &&
         parentHeight > 843776 &&
-        parentHeight <= 843776 + 4096 &&
-        parentHeight % 128 == 0) {
-      val chain = headerChainBack(128, parent, _ => false)
-      val eip37Activated = chain.headers.map(_.votes).map(_.contains(EIP37VotingParameter)).count(_ == true) >= 100
+        parentHeight <= 843776 + 8192 &&
+        parentHeight % 128 == 0 &&
+        eip37VotedOn.isEmpty) {
+      val chain = headerChainBack(512, parent, _ => false)
+      val eip37Activated = chain.headers.map(_.votes).map(_.contains(EIP37VotingParameter)).count(_ == true) >= 460
       if (eip37Activated) {
         storeEip37ActivationHeight(parentHeight + 1)
       }
     }
 
-    if (parentHeight > 843776 && parentHeight + 1 >= eip37VotedOn.getOrElse(0)) {
+    if (parentHeight > 843776 && parentHeight + 1 >= eip37VotedOn.getOrElse(Int.MaxValue)) {
       // by eip37VotedOn definition could be on mainnet only
       val epochLength = 128 // epoch length after EIP-37 activation
       if (parentHeight % epochLength == 0) {

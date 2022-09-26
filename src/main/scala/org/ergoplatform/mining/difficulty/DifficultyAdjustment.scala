@@ -49,15 +49,23 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
   }
 
-  def newCalculate(previousHeaders: Seq[Header], epochLength: Int): Difficulty = {
+  /**
+    * Calculate difficulty for first block of a new epoch according to EIP-37
+    * @param previousHeaders - last headers of few epochs (8 in case of Ergo mainnet)
+    * @param epochLength - epoch length
+    */
+  def eip37Calculate(previousHeaders: Seq[Header], epochLength: Int): Difficulty = {
     require(previousHeaders.size >= 2, "at least two headers needed for diff recalc")
-
-    val predictiveDiff = calculate(previousHeaders, epochLength)
-    val classicDiff = bitcoinCalculate(previousHeaders, epochLength)
-
-    val avg = (classicDiff + predictiveDiff) / 2
     val lastDiff = previousHeaders.last.requiredDifficulty
 
+    val predictiveDiff = calculate(previousHeaders, epochLength)
+    val limitedPredictiveDiff = if (predictiveDiff > lastDiff) {
+      predictiveDiff.min(lastDiff * 3 / 2)
+    } else {
+      predictiveDiff.max(lastDiff * 2 / 3)
+    }
+    val classicDiff = bitcoinCalculate(previousHeaders, epochLength)
+    val avg = (classicDiff + limitedPredictiveDiff) / 2
     val uncompressedDiff = if (avg > lastDiff) {
       avg.min(lastDiff * 3 / 2)
     } else {

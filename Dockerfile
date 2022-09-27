@@ -13,6 +13,7 @@ RUN sbt assembly
 RUN mv `find target/scala-*/stripped/ -name ergo-*.jar` ergo.jar
 
 FROM openjdk:11-jre-slim
+RUN apt-get update && apt-get install -y curl jq && rm -rf /var/lib/apt/lists/*
 RUN adduser --disabled-password --home /home/ergo --uid 9052 --gecos "ErgoPlatform" ergo && \
     install -m 0750 -o ergo -g ergo -d /home/ergo/.ergo
 USER ergo

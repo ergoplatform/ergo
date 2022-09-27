@@ -32,6 +32,7 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     }
   }
 
+  /** @param previousHeaders  should be last headers of the previous epochs */
   private def bitcoinCalculate(previousHeaders: Seq[Header], epochLength: Int): Difficulty = {
     val hs = previousHeaders.takeRight(2)
     bitcoinCalculate(hs(0), hs(1), epochLength: Int)

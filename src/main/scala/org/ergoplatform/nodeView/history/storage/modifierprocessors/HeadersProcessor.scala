@@ -280,7 +280,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     val parentHeight = parent.height
 
     val minActivationHeight = 843776
-    val maxActivationHeight = 843776 + 8192
+    val maxActivationHeight = 843776 + 98304
     val checkActivationPeriod = 128
     val activationVotesChecked = 256
     val activationThreshold = 232

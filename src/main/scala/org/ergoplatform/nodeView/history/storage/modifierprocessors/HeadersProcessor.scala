@@ -267,7 +267,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     historyStorage.insert(eip37Key, Ints.toByteArray(eip37ActivationHeight))
   }
 
-  private def eip37VotedOn: Option[Int] = {
+  private def eip37ActivationHeight: Option[Int] = {
     historyStorage.get(scorex.util.bytesToId(eip37Key)).map(Ints.fromByteArray)
   }
 
@@ -291,7 +291,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         parentHeight > minActivationHeight &&
         parentHeight <= maxActivationHeight &&
         parentHeight % checkActivationPeriod == 0 &&
-        eip37VotedOn.isEmpty) {
+        eip37ActivationHeight.isEmpty) {
       val chain = headerChainBack(activationVotesChecked, parent, _ => false)
       val eip37Activated = chain.headers.map(_.votes).map(_.contains(EIP37VotingParameter)).count(_ == true) >= activationThreshold
       if (eip37Activated) {
@@ -299,7 +299,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       }
     }
 
-    if (parentHeight > 843776 && parentHeight + 1 >= eip37VotedOn.getOrElse(Int.MaxValue)) {
+    if (parentHeight > minActivationHeight && parentHeight + 1 >= eip37ActivationHeight.getOrElse(Int.MaxValue)) {
       // by eip37VotedOn definition could be on mainnet only
       val epochLength = 128 // epoch length after EIP-37 activation
       if (parentHeight % epochLength == 0) {

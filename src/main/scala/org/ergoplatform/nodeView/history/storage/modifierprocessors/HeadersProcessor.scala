@@ -292,8 +292,10 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         parentHeight % checkActivationPeriod == 0 &&
         eip37ActivationHeight.isEmpty) {
       val chain = headerChainBack(activationVotesChecked, parent, _ => false)
-      val eip37Activated = chain.headers.map(_.votes).map(_.contains(EIP37VotingParameter)).count(_ == true) >= activationThreshold
+      val votesFor = chain.headers.map(_.votes).map(_.contains(EIP37VotingParameter)).count(_ == true)
+      val eip37Activated = votesFor >= activationThreshold
       if (eip37Activated) {
+        log.info(s"EIP-37 activated on ${parentHeight + 1}, votes for: $votesFor")
         storeEip37ActivationHeight(parentHeight + 1)
       }
     }

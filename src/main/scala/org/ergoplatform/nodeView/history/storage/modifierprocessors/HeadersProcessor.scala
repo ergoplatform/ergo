@@ -280,14 +280,20 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   def requiredDifficultyAfter(parent: Header): Difficulty = {
     val parentHeight = parent.height
 
+    val minActivationHeight = 843776
+    val maxActivationHeight = 843776 + 8192
+    val checkActivationPeriod = 128
+    val activationVotesChecked = 256
+    val activationThreshold = 232
+
     // todo: this EIP-37 activation checking code could be removed after activation
     if (settings.chainSettings.isMainnet &&
-        parentHeight > 843776 &&
-        parentHeight <= 843776 + 8192 &&
-        parentHeight % 128 == 0 &&
+        parentHeight > minActivationHeight &&
+        parentHeight <= maxActivationHeight &&
+        parentHeight % checkActivationPeriod == 0 &&
         eip37VotedOn.isEmpty) {
-      val chain = headerChainBack(512, parent, _ => false)
-      val eip37Activated = chain.headers.map(_.votes).map(_.contains(EIP37VotingParameter)).count(_ == true) >= 460
+      val chain = headerChainBack(activationVotesChecked, parent, _ => false)
+      val eip37Activated = chain.headers.map(_.votes).map(_.contains(EIP37VotingParameter)).count(_ == true) >= activationThreshold
       if (eip37Activated) {
         storeEip37ActivationHeight(parentHeight + 1)
       }

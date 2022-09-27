@@ -62,14 +62,14 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     val limitedPredictiveDiff = if (predictiveDiff > lastDiff) {
       predictiveDiff.min(lastDiff * 3 / 2)
     } else {
-      predictiveDiff.max(lastDiff * 2 / 3)
+      predictiveDiff.max(lastDiff * 2)
     }
     val classicDiff = bitcoinCalculate(previousHeaders, epochLength)
     val avg = (classicDiff + limitedPredictiveDiff) / 2
     val uncompressedDiff = if (avg > lastDiff) {
       avg.min(lastDiff * 3 / 2)
     } else {
-      avg.max(lastDiff * 2 / 3)
+      avg.max(lastDiff * 2)
     }
     //todo: downgrade log level after testing
     log.warn(s"Difficulty for ${previousHeaders.last.height + 1}: predictive $predictiveDiff, classic: $classicDiff, " +

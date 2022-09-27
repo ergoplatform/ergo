@@ -19,7 +19,7 @@ import scala.util.Random
 object DifficultyControlSimulator extends App with ErgoGenerators {
 
   val baseHeader = defaultHeaderGen.sample.get
-//  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
+  //  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
   val epochLength = 256
   val chainSettings = settings.chainSettings.copy(blockInterval = 2.minute, useLastEpochs = 8, epochLength = epochLength)
   val difficultyControl = new DifficultyAdjustment(chainSettings)
@@ -129,7 +129,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
     println(s"Init simulated average interval = $simulatedInit, error  = $errorInit%")
     println(s"Stable simulated average interval = $simulatedStable, error  = $errorStable%")
 
-/*
+    /*
     println(s"height,requiredDifficulty,realDifficulty,timeDiff")
     epochs.foreach(d => println(d))
 */
@@ -152,7 +152,9 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
   def constantHashRate(height: Int): Int = {
     1000
   }
+
   def linearGrowingHashRate(height: Int): Int = Math.max(2000 - height / 20, 100)
+
   def randomHashRate(height: Int): Int = {
     Random.nextInt(1000)
   }

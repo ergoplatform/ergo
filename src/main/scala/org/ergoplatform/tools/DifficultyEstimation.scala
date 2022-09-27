@@ -24,6 +24,10 @@ object v2testing extends App {
 
   val epochLength = ergoSettings.chainSettings.epochLength
 
+  println("Chain settings: " + ergoSettings.chainSettings)
+  println("Epoch length: " + epochLength)
+  println("Block time: " + ergoSettings.chainSettings.blockInterval)
+
   println("best: " + eh.bestHeaderOpt.map(_.height))
 
   val heights = ldc.previousHeadersRequiredForRecalculation(843776 + 1 + 1024, epochLength)
@@ -120,18 +124,44 @@ object AltDiff extends App {
 
 
 object AdaptiveSimulator extends App {
+  import io.circe.parser._
+
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
   private val altSettings: ErgoSettings =
     ErgoSettings.read(Args(Some("/home/kushti/ergo/mainnet/alt.conf"), Some(NetworkType.MainNet)))
   val ntp = new NetworkTimeProvider(altSettings.scorexSettings.ntp)
 
-  val eh = ErgoHistory.readOrGenerate(altSettings, ntp)
-
   val ldc = new DifficultyAdjustment(altSettings.chainSettings)
 
+  val h1Json =
+    """
+      |{
+      |  "extensionId" : "af4c9de8106960b47964d21e6eb2acdad7e3e168791e595f0806ebfb036ee7de",
+      |  "difficulty" : "1199990374400",
+      |  "votes" : "000000",
+      |  "timestamp" : 1561978977137,
+      |  "size" : 279,
+      |  "stateRoot" : "18b7a08878f2a7ee4389c5a1cece1e2724abe8b8adc8916240dd1bcac069177303",
+      |  "height" : 1,
+      |  "nBits" : 100734821,
+      |  "version" : 1,
+      |  "id" : "b0244dfc267baca974a4caee06120321562784303a8a688976ae56170e4d175b",
+      |  "adProofsRoot" : "766ab7a313cd2fb66d135b0be6662aa02dfa8e5b17342c05a04396268df0bfbb",
+      |  "transactionsRoot" : "93fb06aa44413ff57ac878fda9377207d5db0e78833556b331b4d9727b3153ba",
+      |  "extensionHash" : "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
+      |  "powSolutions" : {
+      |    "pk" : "03be7ad70c74f691345cbedba19f4844e7fc514e1188a7929f5ae261d5bb00bb66",
+      |    "w" : "02da9385ac99014ddcffe88d2ac5f28ce817cd615f270a0a5eae58acfb9fd9f6a0",
+      |    "n" : "000000030151dc63",
+      |    "d" : 46909460813884299753486408728361968139945651324239558400157099627
+      |  },
+      |  "adProofsId" : "cfc4af9743534b30ef38deec118a85ce6f0a3741b79b7d294f3e089c118188dc",
+      |  "transactionsId" : "fc13e7fd2d1ddbd10e373e232814b3c9ee1b6fbdc4e6257c288ecd9e6da92633",
+      |  "parentId" : "0000000000000000000000000000000000000000000000000000000000000000"
+      |}""".stripMargin
 
-  val h1 = eh.bestHeaderAtHeight(1).get
+  val h1 = Header.jsonDecoder.decodeJson(parse(h1Json).toOption.get).toOption.get
 
   var totalError = 0
   var maxDelay = 0
@@ -139,10 +169,10 @@ object AdaptiveSimulator extends App {
   (1 to 100).foreach { _ =>
     var blockDelay = altSettings.chainSettings.blockInterval
     val epochLength = altSettings.chainSettings.epochLength
-    var price = 1000000
+    var price = 100000
 
-    val medianChange = 1 // price going up 1% epoch on average
-    val variance = 30 // with +-20%
+    val medianChange = 3 // price going up 1% epoch on average
+    val variance = 10 // with +-20%
 
     val blocks = mutable.Map[Int, Header]()
     blocks.put(0, h1.copy(height = 0)) // put genesis block
@@ -184,7 +214,7 @@ object AdaptiveSimulator extends App {
       val heights = ldc.previousHeadersRequiredForRecalculation(h, epochLength)
       val hs = heights.map(blocks.apply)
 
-      val newDiff = ldc.bitcoinCalculate(hs, epochLength)
+      val newDiff = ldc.eip37Calculate(hs, epochLength)
       println("newDiff: " + newDiff)
       val block = h1.copy(height = h, timestamp = blockBefore.timestamp + newBlockDelay, nBits = RequiredDifficulty.encodeCompactBits(newDiff))
       blocks.put(h, block)
@@ -199,6 +229,7 @@ object AdaptiveSimulator extends App {
     }
   }
 
+  println("Planned block time: " + altSettings.chainSettings.blockInterval)
   println("Total error: " + totalError / 1000)
   println("Max delay: " + maxDelay)
 

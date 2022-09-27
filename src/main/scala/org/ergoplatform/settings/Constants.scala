@@ -54,7 +54,7 @@ object Constants {
   val SoftForkEpochs = 32 //about 45.5 days
 
   def TrueLeaf: ErgoTree = Values.TrueLeaf.toSigmaProp
-  val FalseLeaf: ErgoTree = Values.FalseLeaf.toSigmaProp
+  def FalseLeaf: ErgoTree = Values.FalseLeaf.toSigmaProp
 
   val StringEncoding = "UTF-8"
 

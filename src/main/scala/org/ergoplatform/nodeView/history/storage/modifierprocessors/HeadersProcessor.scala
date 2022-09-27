@@ -258,8 +258,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-
-  private val EIP37VotingParameter: Byte = 8 // todo: should be 6 after testing , and 6 = 2100 in config
+  private val EIP37VotingParameter: Byte = 6 // input cost, set 6 = 2100 for voting on EIP-37
 
   private val eip37Key = Blake2b256.hash("eip37 activation height")
 

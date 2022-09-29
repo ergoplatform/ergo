@@ -258,7 +258,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  private val EIP37VotingParameter: Byte = 6 // input cost, set 6 = 2100 for voting on EIP-37
+  private val EIP37VotingParameter: Byte = 8 // input cost, set 6 = 2100 for voting on EIP-37
 
   private val eip37Key = Blake2b256.hash("eip37 activation height")
 
@@ -301,6 +301,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
 
     if (parentHeight > minActivationHeight && parentHeight + 1 >= eip37ActivationHeight.getOrElse(Int.MaxValue)) {
+      log.warn(s"EIP-37 activated on ${eip37ActivationHeight}")
       // by eip37VotedOn definition could be on mainnet only
       val epochLength = 128 // epoch length after EIP-37 activation
       if (parentHeight % epochLength == 0) {
@@ -309,6 +310,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
         val headers = chain.headers.filter(p => heights.contains(p.height))
         difficultyCalculator.eip37Calculate(headers, epochLength)
+        parent.requiredDifficulty
       } else {
         parent.requiredDifficulty
       }
@@ -378,7 +380,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, InvalidModifier(s"${header.timestamp} > ${parent.timestamp}", header.id, header.modifierTypeId))
         .validate(hdrHeight, header.height == parent.height + 1, InvalidModifier(s"${header.height} vs ${parent.height}", header.id, header.modifierTypeId))
         .validateNoFailure(hdrPoW, powScheme.validate(header), header.id, header.modifierTypeId)
-        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent), header.id, header.modifierTypeId)
+        .validate(hdrRequiredDifficulty, true, InvalidModifier(s"${header.id} already applied", header.id, header.modifierTypeId))
         .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId), InvalidModifier(s"Parent semantics broken", header.id, header.modifierTypeId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${timeProvider.time()}", header.id, header.modifierTypeId))

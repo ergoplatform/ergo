@@ -228,7 +228,8 @@ object ErgoStatsCollector {
         "lastSeenMessageTime" -> ni.lastIncomingMessageTime.asJson,
         "genesisBlockId" -> ni.genesisBlockIdOpt.asJson,
         "parameters" -> ni.parameters.asJson,
-        "eip27Supported" -> ni.eip27Supported.asJson
+        "eip27Supported" -> ni.eip27Supported.asJson,
+        "eip37Supported" -> true.asJson
       ) ++ optionalFields).asJson
     }
   }

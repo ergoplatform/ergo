@@ -47,7 +47,6 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     * @param end - last block of current epoch
     */
   private def bitcoinCalculate(start: Header, end: Header, epochLength: Int): BigInt = {
-    log.warn("start height: " + start.height + " end height: " + end.height)
     end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
   }
 
@@ -74,13 +73,8 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
       avg.max(lastDiff / 2)
     }
     //todo: downgrade log level after testing
-    val heights = previousHeaders.map(_.height)
-    log.warn(s"Difficulty for ${previousHeaders.last.height + 1}: " +
-          s"heights $heights, " +
-          s"predictive $predictiveDiff, " +
-          s"limited predictive: $limitedPredictiveDiff, " +
-          s"classic: $classicDiff, " +
-          s"resulting uncompressed: $uncompressedDiff")
+    log.debug(s"Difficulty for ${previousHeaders.last.height + 1}: predictive $predictiveDiff, limited predictive: $limitedPredictiveDiff, classic: $classicDiff, " +
+             s"resulting uncompressed: $uncompressedDiff")
     // perform serialization cycle in order to normalize resulted difficulty
     RequiredDifficulty.decodeCompactBits(
       RequiredDifficulty.encodeCompactBits(uncompressedDiff)

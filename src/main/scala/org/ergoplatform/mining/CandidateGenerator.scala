@@ -465,7 +465,7 @@ object CandidateGenerator extends ScorexLogging {
 
       // Calculate required difficulty for the new block
       val nBits: Long = bestHeaderOpt
-        .map(parent => 1)
+        .map(parent => history.requiredDifficultyAfter(parent))
         .map(d => RequiredDifficulty.encodeCompactBits(d))
         .getOrElse(ergoSettings.chainSettings.initialNBits)
 
@@ -479,7 +479,8 @@ object CandidateGenerator extends ScorexLogging {
           val currentParams = stateContext.currentParameters
           val voteForSoftFork = forkOrdered(ergoSettings, currentParams, header)
 
-          if (newHeight > 0) {
+          if (newHeight % votingSettings.votingLength == 0 && newHeight > 0) {
+            // new voting epoch
             val (newParams, activatedUpdate) = currentParams.update(
               newHeight,
               voteForSoftFork,
@@ -494,13 +495,26 @@ object CandidateGenerator extends ScorexLogging {
               newParams.blockVersion
             )
           } else {
+            val preVotes = currentParams.vote(
+              ergoSettings.votingTargets.targets,
+              stateContext.votingData.epochVotes,
+              voteForSoftFork
+            )
+            val votes = if(newHeight > 843776 &&
+                            newHeight < 844800 + 2048 &&
+                            ergoSettings.votingTargets.targets.get(Parameters.InputCostIncrease).contains(2400)) {
+              val idx = preVotes.indexWhere(_ == Parameters.NoParameter)
+              if(idx != -1) {
+                preVotes.update(idx, Parameters.InputCostIncrease)
+              } else {
+                preVotes
+              }
+            } else {
+              preVotes
+            }
             (
               interlinksExtension,
-              currentParams.vote(
-                ergoSettings.votingTargets.targets,
-                stateContext.votingData.epochVotes,
-                voteForSoftFork
-              ),
+              votes,
               currentParams.blockVersion
             )
           }
@@ -570,7 +584,6 @@ object CandidateGenerator extends ScorexLogging {
             votes
           )
           val ext = deriveWorkMessage(candidate)
-          log.warn("Candidate votes: " + candidate.votes.mkString(", "))
           log.info(
             s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
             s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"

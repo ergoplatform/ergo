@@ -286,21 +286,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[BlockSection]@unchecked) =>
       @tailrec
-      def applyFromCacheLoop(cache: ErgoModifiersCache, limit: Int): Unit = {
-        if(limit <= 0 ){
-          ()
-        } else {
-          val at0 = System.currentTimeMillis()
-          cache.popCandidate(history()) match {
-            case Some(mod) =>
-              pmodModify(mod, local = false)
-              val at = System.currentTimeMillis()
-              log.debug(s"Modifier application time for ${mod.id}: ${at - at0}")
-              val diff = (at - at0).toInt
-              applyFromCacheLoop(cache, limit - diff)
-            case None =>
-              ()
-          }
+      def applyFromCacheLoop(cache: ErgoModifiersCache): Unit = {
+        val at0 = System.currentTimeMillis()
+        cache.popCandidate(history()) match {
+          case Some(mod) =>
+            pmodModify(mod, local = false)
+            val at = System.currentTimeMillis()
+            log.debug(s"Modifier application time for ${mod.id}: ${at - at0}")
+            applyFromCacheLoop(cache)
+          case None =>
+            ()
         }
       }
 
@@ -328,7 +323,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             sorted.foreach(h => headersCache.put(h.id, h))
           }
 
-          applyFromCacheLoop(headersCache, 10000)
+          applyFromCacheLoop(headersCache)
 
           val cleared = headersCache.cleanOverfull()
           val upd = BlockSectionsProcessingCacheUpdate(
@@ -345,7 +340,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           log.debug(s"Cache size before: ${modifiersCache.size}")
 
           val at0 = System.currentTimeMillis()
-          applyFromCacheLoop(modifiersCache, 750)
+          applyFromCacheLoop(modifiersCache)
           val at = System.currentTimeMillis()
           log.debug(s"Application time: ${at-at0}")
 

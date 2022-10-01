@@ -34,6 +34,7 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import ErgoNodeViewSynchronizer.{IncomingTxInfo, TransactionProcessingCacheRecord}
+import scorex.core.app.Version
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -598,7 +599,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     Constants.modifierSerializers.get(typeId) match {
       case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
         // parse all modifiers and put them to modifiers cache
-        val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, serializer, remote)
+        val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)
 
         // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
         val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
@@ -679,6 +680,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return collection of parsed modifiers
     */
   def parseModifiers[M <: NodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
+                                            modifierTypeId: ModifierTypeId,
                                             serializer: ScorexSerializer[M],
                                             remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
@@ -686,7 +688,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Success(mod) if id == mod.id =>
           Some(mod)
         case _ =>
-          // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
+          // Penalize peer and do nothing
+          // Forget about block section, so it will be redownloaded if announced again only
+          deliveryTracker.setUnknown(id, modifierTypeId)
           penalizeMisbehavingPeer(remote)
           log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
           None
@@ -771,8 +775,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         }
       case _ =>
-        log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
-        invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
+        if (peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial) == Version.v4043 &&
+          modifierTypeId == Header.modifierTypeId) {
+          log.debug("Header ids from 4.0.43")
+          Seq.empty
+        } else {
+          log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
+          invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
+        }
     }
 
     if (newModifierIds.nonEmpty) {
@@ -802,8 +812,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           mp.getAll(invData.ids).map { unconfirmedTx =>
             unconfirmedTx.transaction.id -> unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes)
           }
-        case _: ModifierTypeId =>
-          invData.ids.flatMap(id => hr.modifierBytesById(id).map(bytes => (id, bytes)))
+        case expectedTypeId: ModifierTypeId =>
+          invData.ids.flatMap { id =>
+            hr.modifierTypeAndBytesById(id).flatMap { case (mTypeId, bytes) =>
+              if (mTypeId == expectedTypeId) {
+                Some(id -> bytes)
+              } else {
+                log.debug(s"Improper type for asked modifier id: $id")
+                None
+              }
+            }
+          }
       }
 
       log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
@@ -867,7 +886,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         } else {
           // A block section is not delivered on time.
           log.info(s"Peer ${peer.toString} has not delivered modifier " +
-                   s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time, status tracker: $syncTracker")
+                   s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time")
 
           // Number of block section delivery checks increased or initialized,
           // except the case where we can have issues with connectivity,
@@ -980,9 +999,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
     case FullBlockApplied(header) =>
-      if (header.isNew(timeProvider, 1.hour)) {
+      if (header.isNew(timeProvider, 2.hours)) {
         broadcastModifierInv(Header.modifierTypeId, header.id)
-        header.sectionIds.foreach { case (_, id) => broadcastModifierInv(Header.modifierTypeId, id) }
+        header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id) }
       }
       clearDeclined()
       clearInterblockCost()
@@ -1261,7 +1280,7 @@ object ErgoNodeViewSynchronizer {
       * @param state - up-to-date state to check transaction against
       * @param mempool - mempool to check
       */
-    case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader) extends NodeViewChange
+    case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
   }
 
 }

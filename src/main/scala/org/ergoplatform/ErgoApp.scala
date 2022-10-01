@@ -11,7 +11,7 @@ import org.ergoplatform.http.api._
 import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
-import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModePeerFeature}
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.slf4j.{Logger, LoggerFactory}
@@ -48,9 +48,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
   implicit private val actorSystem: ActorSystem = ActorSystem(scorexSettings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
 
-  private val features: Seq[PeerFeature] = Seq(ModePeerFeature(ergoSettings.nodeSettings))
-  private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
-
   private val timeProvider = new NetworkTimeProvider(scorexSettings.ntp)
 
   private val upnpGateway: Option[UPnPGateway] =
@@ -66,7 +63,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val basicSpecs = {
     Seq(
       GetPeersSpec,
-      new PeersSpec(featureSerializers, scorexSettings.network.maxPeerSpecObjects),
+      new PeersSpec(scorexSettings.network.maxPeerSpecObjects),
       InvSpec,
       RequestModifierSpec,
       ModifiersSpec
@@ -77,7 +74,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val scorexContext = ScorexContext(
     messageSpecs = basicSpecs ++ additionalMessageSpecs,
-    features = features,
     upnpGateway = upnpGateway,
     timeProvider = timeProvider,
     externalNodeAddress = externalSocketAddress
@@ -86,7 +82,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
   private val networkControllerRef: ActorRef = NetworkControllerRef(
-    "networkController", scorexSettings, peerManagerRef, scorexContext)
+    "networkController", ergoSettings, peerManagerRef, scorexContext)
 
   private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
@@ -118,7 +114,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   if (ergoSettings.scorexSettings.network.peerDiscovery) {
     // Launching PeerSynchronizer actor which is then registering itself at network controller
-    PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network, featureSerializers)
+    PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network)
   }
 
   private val apiRoutes: Seq[ApiRoute] = Seq(

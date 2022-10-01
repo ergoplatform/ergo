@@ -1,7 +1,7 @@
 package org.ergoplatform.utils
 
 import akka.util.Timeout
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
+import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
@@ -94,7 +94,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
   val EmptyDigest32: Digest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
-  val defaultDifficultyControl = new LinearDifficultyControl(settings.chainSettings)
+  val defaultDifficultyControl = new DifficultyAdjustment(settings.chainSettings)
   val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(Array(0: Byte, 8: Byte) -> EmptyDigest32))
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq())
   val emptyDataInputs: IndexedSeq[DataInput] = IndexedSeq()

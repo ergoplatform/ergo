@@ -260,7 +260,7 @@ object ErgoHistory extends ScorexLogging {
 
   // check if there is possible database corruption when there is header after
   // recognized blockchain tip marked as invalid
-  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
+  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Unit = history.historyStorage.synchronized {
     val RepairDepth = 128
 
     val bestHeaderHeight = history.headersHeight
@@ -272,16 +272,21 @@ object ErgoHistory extends ScorexLogging {
         val notInvalidHeaders = headerIds.filter { headerId =>
           if (history.isSemanticallyValid(headerId) == Invalid) {
             log.warn(s"Clearing invalid header: $headerId at height $h")
-            history.forgetHeader()
+            history.forgetHeader(headerId)
             false
           } else {
             true
           }
         }
-        val updatedHeightIdsValue = notInvalidHeaders.foldLeft(Array[Byte].empty) { case (acc, id) =>
+        val updatedHeightIdsValue: Array[Byte] = notInvalidHeaders.foldLeft(Array.empty[Byte]) { case (acc, id) =>
           acc ++ idToBytes(id)
         }
-        history.historyStorage.insert(Array(history.heightIdsKey(h), updatedHeightIdsValue), Nil)
+        if(updatedHeightIdsValue.isEmpty) {
+          //could be the case after bestHeaderHeight
+          history.historyStorage.remove(Array(history.heightIdsKey(h)), Nil)
+        } else {
+          history.historyStorage.insert(Array(history.heightIdsKey(h) -> updatedHeightIdsValue), Nil)
+        }
         checkHeightsFrom(h + 1)
       }
     }

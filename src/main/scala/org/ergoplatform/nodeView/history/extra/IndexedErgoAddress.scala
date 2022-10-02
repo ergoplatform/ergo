@@ -151,8 +151,8 @@ object IndexedErgoAddress {
   def slice[T](arr: Iterable[T], offset: Int, limit: Int): Iterable[T] =
     arr.slice(arr.size - offset - limit, arr.size - offset)
 
-  def getTxs(arr: Iterable[Long])(history: ErgoHistoryReader): Array[IndexedErgoTransaction] =
-    arr.map(n => NumericTxIndex.getTxByNumber(history, n).get.retrieveBody(history)).toArray
+  def getTxs(arr: Iterable[Long])(history: ErgoHistoryReader): Array[IndexedErgoTransaction] = // sorted to match explorer
+    arr.map(n => NumericTxIndex.getTxByNumber(history, n).get.retrieveBody(history)).toArray.sortBy(tx => (-tx.height, tx.id))
 
   def getBoxes(arr: Iterable[Long])(history: ErgoHistoryReader): Array[IndexedErgoBox] =
     arr.map(n => NumericBoxIndex.getBoxByNumber(history, n).get).toArray

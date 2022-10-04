@@ -495,28 +495,11 @@ object CandidateGenerator extends ScorexLogging {
               newParams.blockVersion
             )
           } else {
-            val preVotes = currentParams.vote(
+            val votes = currentParams.vote(
               ergoSettings.votingTargets.targets,
               stateContext.votingData.epochVotes,
               voteForSoftFork
             )
-            // we allow to put vote for parameter #6 (input cost) used for EIP-37 activation,
-            // even if epoch wasn't started with such a vote
-            val voteForEip37 = 2400 // 6 == 2400 in the config
-            val votes = if(newHeight > 843776 &&
-                            newHeight < 844800 + 2048 &&
-                            ergoSettings.votingTargets.targets.get(Parameters.InputCostIncrease).contains(voteForEip37) &&
-                            !preVotes.contains(Parameters.InputCostIncrease)) {
-              val idx = preVotes.indexWhere(_ == Parameters.NoParameter)
-              if(idx != -1) {
-                preVotes.update(idx, Parameters.InputCostIncrease)
-                preVotes
-              } else {
-                preVotes
-              }
-            } else {
-              preVotes
-            }
             (
               interlinksExtension,
               votes,

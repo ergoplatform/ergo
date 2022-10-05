@@ -19,7 +19,6 @@ import scorex.core.consensus.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
-import scorex.crypto.hash.Blake2b256
 import scorex.db.ByteArrayWrapper
 import scorex.util._
 
@@ -258,18 +257,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  private val EIP37VotingParameter: Byte = 6 // input cost, set 6 = 2100 for voting on EIP-37
-
-  private val eip37Key = Blake2b256.hash("eip37 activation height")
-
-  private def storeEip37ActivationHeight(eip37ActivationHeight: Int) = {
-    historyStorage.insert(eip37Key, Ints.toByteArray(eip37ActivationHeight))
-  }
-
-  private def eip37ActivationHeight: Option[Int] = {
-    historyStorage.get(scorex.util.bytesToId(eip37Key)).map(Ints.fromByteArray)
-  }
-
   /**
     * Calculate difficulty for the next block
     *
@@ -279,29 +266,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   def requiredDifficultyAfter(parent: Header): Difficulty = {
     val parentHeight = parent.height
 
-    val minActivationHeight = 843776
-    val maxActivationHeight = 843776 + 98304
-    val checkActivationPeriod = 128
-    val activationVotesChecked = 256
-    val activationThreshold = 232
+    val eip37ActivationHeight = 844673
 
-    // todo: this EIP-37 activation checking code could be removed after activation
-    if (settings.chainSettings.isMainnet &&
-        parentHeight > minActivationHeight &&
-        parentHeight <= maxActivationHeight &&
-        parentHeight % checkActivationPeriod == 0 &&
-        eip37ActivationHeight.isEmpty) {
-      val chain = headerChainBack(activationVotesChecked, parent, _ => false)
-      val votesFor = chain.headers.map(_.votes).map(_.contains(EIP37VotingParameter)).count(_ == true)
-      val eip37Activated = votesFor >= activationThreshold
-      if (eip37Activated) {
-        log.info(s"EIP-37 activated on ${parentHeight + 1}, votes for: $votesFor")
-        storeEip37ActivationHeight(parentHeight + 1)
-      }
-    }
-
-    if (parentHeight > minActivationHeight && parentHeight + 1 >= eip37ActivationHeight.getOrElse(Int.MaxValue)) {
-      // by eip37VotedOn definition could be on mainnet only
+    if (settings.networkType.isMainNet && parentHeight + 1 >= eip37ActivationHeight) {
       val epochLength = 128 // epoch length after EIP-37 activation
       if (parentHeight % epochLength == 0) {
         val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)

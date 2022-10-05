@@ -40,7 +40,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 
-  override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
+  override implicit lazy val scorexSettings: ScorexSettings = ergoSettings.scorexSettings
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
@@ -49,7 +49,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
-  private val syncTracker = ErgoSyncTracker(settings.network, timeProvider)
+  private val syncTracker = ErgoSyncTracker(scorexSettings.network, timeProvider)
 
   val statsCollectorRef: ActorRef =
     ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, syncTracker, ergoSettings, timeProvider)
@@ -57,7 +57,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     ErgoUtilsApiRoute(ergoSettings),
-    InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
+    InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings))
 

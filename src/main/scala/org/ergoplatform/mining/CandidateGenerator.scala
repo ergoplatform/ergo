@@ -480,6 +480,7 @@ object CandidateGenerator extends ScorexLogging {
           val voteForSoftFork = forkOrdered(ergoSettings, currentParams, header)
 
           if (newHeight % votingSettings.votingLength == 0 && newHeight > 0) {
+            // new voting epoch
             val (newParams, activatedUpdate) = currentParams.update(
               newHeight,
               voteForSoftFork,
@@ -494,13 +495,14 @@ object CandidateGenerator extends ScorexLogging {
               newParams.blockVersion
             )
           } else {
+            val votes = currentParams.vote(
+              ergoSettings.votingTargets.targets,
+              stateContext.votingData.epochVotes,
+              voteForSoftFork
+            )
             (
               interlinksExtension,
-              currentParams.vote(
-                ergoSettings.votingTargets.targets,
-                stateContext.votingData.epochVotes,
-                voteForSoftFork
-              ),
+              votes,
               currentParams.blockVersion
             )
           }

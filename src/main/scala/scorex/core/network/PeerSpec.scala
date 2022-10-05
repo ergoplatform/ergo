@@ -1,10 +1,13 @@
 package scorex.core.network
 
+import org.ergoplatform.settings.PeerFeatureDescriptors
+
 import java.net.{InetAddress, InetSocketAddress, URL}
 import scorex.core.app.{ApplicationVersionSerializer, Version}
 import scorex.core.network.peer.{LocalAddressPeerFeature, RestApiUrlPeerFeature}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.Extensions._
+import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -38,9 +41,9 @@ case class PeerSpec(agentName: String,
 
 }
 
-class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends ScorexSerializer[PeerSpec] {
-  override def serialize(obj: PeerSpec, w: Writer): Unit = {
+object PeerSpecSerializer extends ScorexSerializer[PeerSpec] with ScorexLogging {
 
+  override def serialize(obj: PeerSpec, w: Writer): Unit = {
     w.putShortString(obj.agentName)
     ApplicationVersionSerializer.serialize(obj.protocolVersion, w)
     w.putShortString(obj.nodeName)
@@ -91,7 +94,11 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
       val featBytesCount = r.getUShort().toShortExact
       val featChunk = r.getChunk(featBytesCount)
       //we ignore a feature found in the PeersData if we do not know how to parse it or failed to do that
-      featureSerializers.get(featId).flatMap { featureSerializer =>
+      val serializer = PeerFeatureDescriptors.FeatureSerializers.get(featId)
+      if (serializer.isEmpty) {
+        log.debug(s"No feature serializer found for feature #$featId")
+      }
+      serializer.flatMap { featureSerializer =>
         featureSerializer.parseTry(r.newReader(featChunk)).toOption
       }
     }

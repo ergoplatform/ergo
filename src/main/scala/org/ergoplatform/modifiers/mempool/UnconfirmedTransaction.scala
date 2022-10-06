@@ -30,6 +30,12 @@ case class UnconfirmedTransaction(transaction: ErgoTransaction,
     copy(lastCost = Some(cost), lastCheckedTime = System.currentTimeMillis())
   }
 
+  override def equals(obj: Any): Boolean = obj match {
+    case that: UnconfirmedTransaction => that.id == id
+    case _ => false
+  }
+
+  override def hashCode(): Int = id.hashCode()
 }
 
 object UnconfirmedTransaction {

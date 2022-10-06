@@ -158,7 +158,9 @@ class CandidateGenerator(
               _ ! StatusReply.error(s"Candidate generation failed : ${ex.getMessage}")
             )
           case Some(Success((candidate, eliminatedTxs))) =>
-            if (eliminatedTxs.ids.nonEmpty) viewHolderRef ! eliminatedTxs
+            if (eliminatedTxs.ids.nonEmpty) {
+              viewHolderRef ! eliminatedTxs
+            }
             val generationTook = System.currentTimeMillis() - start
             log.info(s"Generated new candidate in $generationTook ms")
             context.become(

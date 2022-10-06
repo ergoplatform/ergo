@@ -188,7 +188,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     val validationStartTime = System.currentTimeMillis()
 
     val blacklistedTransactions = nodeSettings.blacklistedTransactions
-    if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
+    if (blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
       val exc = new Exception("blacklisted tx")
       this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(exc, validationStartTime)
     } else {

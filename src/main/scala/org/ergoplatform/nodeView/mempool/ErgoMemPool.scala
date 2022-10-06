@@ -109,6 +109,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   }
 
   def remove(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
+    log.debug(s"Removing transaction ${unconfirmedTransaction.id} from the mempool")
     val tx = unconfirmedTransaction.transaction
     val wtx = pool.transactionsRegistry.get(tx.id)
     val updStats = wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))

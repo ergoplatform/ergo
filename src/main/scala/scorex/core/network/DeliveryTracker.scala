@@ -4,7 +4,7 @@ import akka.actor.Cancellable
 import io.circe.{Encoder, Json}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.CheckDelivery
-import org.ergoplatform.nodeView.mempool.ExpiringApproximateCache
+import org.ergoplatform.nodeView.mempool.ExpiringCache
 import org.ergoplatform.settings.{ErgoSettings, NetworkCacheSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.consensus.ContainsModifiers
@@ -56,14 +56,12 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
   private var invalidModifierCache = emptyExpiringApproximateCache
 
   private def emptyExpiringApproximateCache = {
-    val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
-    val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
     val frontCacheSize = cacheSettings.invalidModifiersCacheSize
     val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
-    ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration)
+    ExpiringCache.empty(frontCacheSize, frontCacheExpiration)
   }
 
-  def fullInfo: FullInfo = DeliveryTracker.FullInfo(invalidModifierCache.approximateElementCount, requested.toSeq, received.toSeq)
+  def fullInfo: FullInfo = DeliveryTracker.FullInfo(invalidModifierCache.size, requested.toSeq, received.toSeq)
 
   def reset(): Unit = {
     log.info(s"Resetting state of DeliveryTracker...")
@@ -100,7 +98,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
   def status(modifierId: ModifierId, modifierTypeId: ModifierTypeId, modifierKeepers: Seq[ContainsModifiers[_]]): ModifiersStatus =
     if (received.get(modifierTypeId).exists(_.contains(modifierId))) Received
     else if (requested.get(modifierTypeId).exists(_.contains(modifierId))) Requested
-    else if (invalidModifierCache.mightContain(modifierId)) Invalid
+    else if (invalidModifierCache.contains(modifierId)) Invalid
     else if (modifierKeepers.exists(_.contains(modifierId))) Held
     else Unknown
 
@@ -288,7 +286,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     }
 
   override def toString: String = {
-    val invalidModCount = s"invalid modifiers count : ${invalidModifierCache.approximateElementCount}"
+    val invalidModCount = s"invalid modifiers count : ${invalidModifierCache.size}"
     val requestedStr =
       requested.map { case (mType, infoByMid) =>
         val peersCheckTimes =

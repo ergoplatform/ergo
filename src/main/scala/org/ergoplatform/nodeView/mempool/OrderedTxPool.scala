@@ -19,7 +19,7 @@ import scala.collection.immutable.TreeMap
   */
 case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTransaction],
                          transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
-                         invalidatedTxIds: ApproximateCacheLike[String],
+                         invalidatedTxIds: ExpiringCache,
                          outputs: TreeMap[BoxId, WeightedTxId],
                          inputs: TreeMap[BoxId, WeightedTxId])
                         (implicit settings: ErgoSettings) extends ScorexLogging {
@@ -145,7 +145,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     transactionsRegistry.contains(id)
   }
 
-  def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)
+  def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.contains(id)
 
   /**
     *
@@ -214,14 +214,12 @@ object OrderedTxPool {
 
   def empty(settings: ErgoSettings): OrderedTxPool = {
     val cacheSettings = settings.cacheSettings.mempool
-    val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
-    val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
     val frontCacheSize = cacheSettings.invalidModifiersCacheSize
     val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
     OrderedTxPool(
       TreeMap.empty[WeightedTxId, UnconfirmedTransaction],
       TreeMap.empty[ModifierId, WeightedTxId],
-      ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration),
+      ExpiringCache.empty(frontCacheSize, frontCacheExpiration),
       TreeMap.empty[BoxId, WeightedTxId],
       TreeMap.empty[BoxId, WeightedTxId])(settings)
   }

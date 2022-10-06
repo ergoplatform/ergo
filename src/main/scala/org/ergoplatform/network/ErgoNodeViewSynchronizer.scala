@@ -97,7 +97,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * The node stops to accept transactions if declined table reaches this max size. It prevents spam attacks trying
     * to bloat the table (or exhaust node's CPU)
     */
-  private val MaxDeclined = 400
+  private val MaxDeclined = 1000
 
   /**
     * No more than this number of unparsed transactions can be cached
@@ -968,7 +968,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // helper method to clear declined transactions after some off, so the node may accept them again
   private def clearDeclined(): Unit = {
-    val clearTimeout = FiniteDuration(10, MINUTES)
+    val clearTimeout = FiniteDuration(20, MINUTES)
     val now = System.currentTimeMillis()
 
     val toRemove = declined.filter { case (_, time) =>

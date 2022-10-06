@@ -762,6 +762,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         if (txAcceptanceFilter) {
           val unknownMods =
+            //todo: filter out transactions invalidated in the mempool?
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history
           val notApplied = unknownMods.filterNot(blockAppliedTxsCache.mightContain)
@@ -1033,22 +1034,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
 
-    case FailedOnRecheckTransaction(_, _) =>
-      // do nothing for now
+    case FailedOnRecheckTransaction(id, _) =>
+      declined.put(id, System.currentTimeMillis())
 
     case SyntacticallySuccessfulModifier(modTypeId, modId) =>
       deliveryTracker.setHeld(modId, modTypeId)
 
     case RecoverableFailedModification(modTypeId, modId, e) =>
-      logger.debug(s"Setting recoverable failed modifier ${modId} as Unknown", e)
+      logger.debug(s"Setting recoverable failed modifier $modId as Unknown", e)
       deliveryTracker.setUnknown(modId, modTypeId)
 
     case SyntacticallyFailedModification(modTypeId, modId, e) =>
-      logger.debug(s"Invalidating syntactically failed modifier ${modId}", e)
+      logger.debug(s"Invalidating syntactically failed modifier $modId", e)
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case SemanticallyFailedModification(modTypeId, modId, e) =>
-      logger.debug(s"Invalidating semantically failed modifier ${modId}", e)
+      logger.debug(s"Invalidating semantically failed modifier $modId", e)
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>

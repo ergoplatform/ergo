@@ -142,7 +142,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     * @return - true, if transaction is in the pool or invalidated earlier, false otherwise
     */
   def contains(id: ModifierId): Boolean = {
-    transactionsRegistry.contains(id) || isInvalidated(id)
+    transactionsRegistry.contains(id)
   }
 
   def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)

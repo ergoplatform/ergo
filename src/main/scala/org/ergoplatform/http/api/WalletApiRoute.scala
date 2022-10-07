@@ -87,7 +87,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
           .map(mnemoPassOpt => (pass, mnemo, mnemoPassOpt))
         )
       )
-      .fold(_ => reject, s => provide(s))
+      .fold(e => reject, s => provide(s))
   }
 
   private val checkRequest: Directive1[(String, Option[String])] = entity(as[Json]).flatMap { p =>

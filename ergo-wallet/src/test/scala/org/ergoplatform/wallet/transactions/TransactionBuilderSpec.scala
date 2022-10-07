@@ -29,7 +29,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   val seedStr                       = "edge talent poet tortoise trumpet dose"
   val seed: Array[Byte]             = Mnemonic.toSeed(SecretString.create(seedStr))
-  val rootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(seed)
+  val rootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = false)
 
   val currentHeight    = 0
   val minBoxValue      = BoxSelector.MinBoxValue

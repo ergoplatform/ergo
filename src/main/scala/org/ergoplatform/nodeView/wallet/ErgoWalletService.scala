@@ -292,7 +292,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     log.info("Initializing wallet")
 
     def initStorage(mnemonic: SecretString): Try[JsonSecretStorage] =
-      Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass)(walletSettings.secretStorage))
+      Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass, usePre1627KeyDerivation = true)(walletSettings.secretStorage))
 
     val result =
       new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
@@ -320,7 +320,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     if (settings.nodeSettings.isFullBlocksPruned)
       Failure(new IllegalArgumentException("Unable to restore wallet when pruning is enabled"))
     else
-      Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage))
+      Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage, usePre1627KeyDerivation = true))
         .flatMap { secretStorage =>
           // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
           recreateRegistry(state, settings).flatMap { stateV1 =>

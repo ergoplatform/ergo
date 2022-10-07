@@ -109,6 +109,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   }
 
   def remove(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
+    log.debug(s"Removing transaction ${unconfirmedTransaction.id} from the mempool")
     val tx = unconfirmedTransaction.transaction
     val wtx = pool.transactionsRegistry.get(tx.id)
     val updStats = wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
@@ -184,11 +185,17 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
   def process(unconfirmedTx: UnconfirmedTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTx.transaction
+
+    val invalidatedCnt = this.pool.invalidatedTxIds.approximateElementCount
+    val poolSize = this.size
+
     log.info(s"Processing mempool transaction: $tx")
+    log.debug(s"Mempool: invalidated transactions: $invalidatedCnt, pool size: $poolSize")
+
     val validationStartTime = System.currentTimeMillis()
 
     val blacklistedTransactions = nodeSettings.blacklistedTransactions
-    if(blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
+    if (blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
       val exc = new Exception("blacklisted tx")
       this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(exc, validationStartTime)
     } else {
@@ -229,7 +236,15 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime)
           }
         } else {
-          val exc = new Exception(s"Pool can not accept transaction ${tx.id}, it is invalidated earlier or the pool is full")
+          val contains = this.contains(tx.id)
+          val msg = if(contains) {
+            s"Pool can not accept transaction ${tx.id}, it is already in the mempool"
+          } else if(pool.size == settings.nodeSettings.mempoolCapacity) {
+            s"Pool can not accept transaction ${tx.id}, the mempool is full"
+          } else {
+            s"Pool can not accept transaction ${tx.id}"
+          }
+          val exc = new Exception(msg)
           this -> new ProcessingOutcome.Declined(exc, validationStartTime)
         }
       } else {

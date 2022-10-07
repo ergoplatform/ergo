@@ -140,7 +140,6 @@ class WalletApiRouteSpec extends AnyFlatSpec
       route ~> check(status shouldBe StatusCodes.OK)
   }
 
-
   it should "unlock wallet" in {
     Post(prefix + "/unlock", Json.obj("pass" -> "1234".asJson)) ~> route ~> check {
       status shouldBe StatusCodes.OK

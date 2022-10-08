@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransactionSerializer, Unconfirme
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
+import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord, txInfo}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
@@ -33,7 +33,6 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
-import ErgoNodeViewSynchronizer.{IncomingTxInfo, TransactionProcessingCacheRecord}
 import scorex.core.app.Version
 
 import scala.annotation.tailrec
@@ -151,13 +150,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var modifiersCacheSize: Int = 0
 
   /**
-    * To be called when the node is synced and new block arrives, to reset transactions cost counter
-    */
-  private def clearInterblockCost(): Unit = {
-    interblockCost = IncomingTxInfo.empty()
-  }
-
-  /**
     * To be called when the node is synced and new block arrives, to resume transaction bytes cache processing
     */
   private def processFirstTxProcessingCacheRecord(): Unit = {
@@ -179,17 +171,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // should not be here, and so ReserveCostValue should not be used
       log.warn("Cost is empty in processMempoolResult")
     }
+
+    val peer = processingResult.transaction.source.get
+
+    val processedTx = txInfo(peer)
+
+
     val cost = costOpt.getOrElse(FallbackCostValue)
     val ng = processingResult match {
-      case _: FailedTransaction => interblockCost.copy(invalidatedCost = interblockCost.invalidatedCost + cost)
-      case _: SuccessfulTransaction => interblockCost.copy(acceptedCost = interblockCost.acceptedCost + cost)
-      case _: DeclinedTransaction => interblockCost.copy(declinedCost = interblockCost.declinedCost + cost)
+      case _: FailedTransaction => processedTx.copy(invalidatedCost = processedTx.invalidatedCost + cost)
+      case _: SuccessfulTransaction => processedTx.copy(acceptedCost = processedTx.acceptedCost + cost)
+      case _: DeclinedTransaction => processedTx.copy(declinedCost = processedTx.declinedCost + cost)
     }
 
     log.debug(s"Old global cost info: $interblockCost, new $ng, tx processing cache size: ${txProcessingCache.size}")
-    interblockCost = ng
+    txInfo.put(peer, ng)
 
-    if (interblockCost.totalCost < MempoolCostPerBlock) {
+    if (txInfo(peer).totalCost < MempoolCostPerBlock) {
       processFirstTxProcessingCacheRecord()
     }
   }
@@ -577,7 +575,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                      remote: ConnectedPeer): Unit = {
     // filter out transactions already in the mempool
     val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
-    val (toProcess, toPutIntoCache) = if (interblockCost.totalCost < MempoolCostPerBlock) {
+
+    val totalCost = txInfo.get(remote).map(_.totalCost).getOrElse(interblockCost.totalCost)
+
+    val (toProcess, toPutIntoCache) = if (totalCost < MempoolCostPerBlock) {
       // if we are within per-block limits, parse and process first transaction
       (notInThePool.headOption, notInThePool.tail)
     } else {
@@ -745,13 +746,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                            peer: ConnectedPeer,
                            blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
 
+    val totalCost = txInfo.get(peer).map(_.totalCost).getOrElse(interblockCost.totalCost)
+
     // We download transactions only if following conditions met:
     def txAcceptanceFilter: Boolean = {
       settings.nodeSettings.stateType.holdsUtxoSet && // node holds UTXO set
         hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
         hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
-        interblockCost.totalCost <= MempoolCostPerBlock * 3 / 2 && // we can download some extra to fill cache
-        txProcessingCache.size <= MaxProcessingTransactionsCacheSize && // txs processing cache is not overfull
+        totalCost <= MempoolCostPerBlock * 3 / 2 && // we can download some extra to fill cache
+      txProcessingCache.size <= MaxProcessingTransactionsCacheSize && // txs processing cache is not overfull
         declined.size < MaxDeclined // the node is not stormed by transactions is has to decline
     }
 
@@ -769,7 +772,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val notDeclined = notApplied.filter(id => !declined.contains(id))
           log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
             s"${unknownMods.size} of them are unknown, requesting $notDeclined")
-          val txsToAsk = (MempoolCostPerBlock - interblockCost.totalCost) / OptimisticMaxTransactionCost
+          val txsToAsk = (MempoolCostPerBlock - totalCost) / OptimisticMaxTransactionCost
           notDeclined.take(txsToAsk)
         } else {
           Seq.empty
@@ -1004,7 +1007,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id) }
       }
       clearDeclined()
-      clearInterblockCost()
+      txInfo.clear()
       processFirstTxProcessingCacheRecord() // resume cache processing
 
     case st@SuccessfulTransaction(utx) =>
@@ -1176,6 +1179,8 @@ object ErgoNodeViewSynchronizer {
   object IncomingTxInfo {
     def empty(): IncomingTxInfo = IncomingTxInfo(0, 0, 0)
   }
+
+  private val txInfo = mutable.Map[ConnectedPeer, IncomingTxInfo]()
 
   /**
     * Transaction bytes and source peer to be recorded in a cache and processed later

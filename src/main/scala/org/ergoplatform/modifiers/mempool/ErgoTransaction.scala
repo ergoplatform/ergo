@@ -376,6 +376,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     val blockVersion = stateContext.blockVersion
 
+    // Before 5.0 soft-fork (v3 block version), we are checking only that
+    // creation height in outputs is not non-negative
+    // After, we are checking that it is not less that max creation height in inputs
     val maxCreationHeightInInputs = if (blockVersion <= Header.HardeningVersion) {
       0
     } else {

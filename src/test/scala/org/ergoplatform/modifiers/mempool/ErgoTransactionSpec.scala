@@ -490,6 +490,9 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
                   box.transactionId, box.index, creationHeight)
     }
 
+    // retuns random transaction along with inputs,
+    // and a boolean flag, if the latter is true, monotonic creation height rule holds,
+    // otherwise, it does not hold
     val txGen = boxesGenTemplate(minAssets = 0, maxAssets = 5, minInputs = 5, maxInputs = 10, propositionGen = trueLeafGen).map { case (boxes, _) =>
       boxes.map(updateInputHeight)
     }.map{ boxes =>

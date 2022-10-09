@@ -112,6 +112,13 @@ object Header extends ApiCodecs {
   type Timestamp = Long
   type Version = Byte
 
+  val InitialVersion: Byte = 1
+
+  val HardeningVersion: Byte = 2
+
+  val Interpreter50Version: Byte = 3
+
+
   def toSigma(header: Header): special.sigma.Header =
     CHeader(
       id = header.id.toBytes.toColl,
@@ -130,8 +137,6 @@ object Header extends ApiCodecs {
       powDistance = CBigInt(header.powSolution.d.bigInteger),
       votes = header.votes.toColl
     )
-
-  val InitialVersion: Byte = 1
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 

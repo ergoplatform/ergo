@@ -8,11 +8,11 @@ trait SendingStrategy {
 
 object SendToRandom extends SendingStrategy {
 
-  private val dayInMs: Long = 24 * 60 * 60 * 1000
+  private val limit: Long = 3 * 60 * 60 * 1000 // 3h
 
   override def choose(peers: Seq[ConnectedPeer]): Seq[ConnectedPeer] = {
-    val activeRecently: Seq[ConnectedPeer] = // choose peers which were active in the last 24 hours
-      peers.filter(p => p.peerInfo.isDefined && System.currentTimeMillis - p.peerInfo.get.lastHandshake  < dayInMs)
+    val activeRecently: Seq[ConnectedPeer] = // choose peers which were active in the last limit hours
+      peers.filter(System.currentTimeMillis - _.lastMessage  < limit)
     if (activeRecently.nonEmpty) {
       Seq(activeRecently(Random.nextInt(activeRecently.length)))
     } else {

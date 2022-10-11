@@ -158,7 +158,9 @@ class CandidateGenerator(
               _ ! StatusReply.error(s"Candidate generation failed : ${ex.getMessage}")
             )
           case Some(Success((candidate, eliminatedTxs))) =>
-            if (eliminatedTxs.ids.nonEmpty) viewHolderRef ! eliminatedTxs
+            if (eliminatedTxs.ids.nonEmpty) {
+              viewHolderRef ! eliminatedTxs
+            }
             val generationTook = System.currentTimeMillis() - start
             log.info(s"Generated new candidate in $generationTook ms")
             context.become(
@@ -480,6 +482,7 @@ object CandidateGenerator extends ScorexLogging {
           val voteForSoftFork = forkOrdered(ergoSettings, currentParams, header)
 
           if (newHeight % votingSettings.votingLength == 0 && newHeight > 0) {
+            // new voting epoch
             val (newParams, activatedUpdate) = currentParams.update(
               newHeight,
               voteForSoftFork,
@@ -494,13 +497,14 @@ object CandidateGenerator extends ScorexLogging {
               newParams.blockVersion
             )
           } else {
+            val votes = currentParams.vote(
+              ergoSettings.votingTargets.targets,
+              stateContext.votingData.epochVotes,
+              voteForSoftFork
+            )
             (
               interlinksExtension,
-              currentParams.vote(
-                ergoSettings.votingTargets.targets,
-                stateContext.votingData.epochVotes,
-                voteForSoftFork
-              ),
+              votes,
               currentParams.blockVersion
             )
           }

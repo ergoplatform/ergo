@@ -1,7 +1,7 @@
 package org.ergoplatform.utils.generators
 
 import org.ergoplatform.Input
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
+import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.Header
@@ -47,7 +47,7 @@ trait ChainGenerator extends ErgoTestConstants {
     */
   final def genHeaderChain(height: Int,
                            prefixOpt: Option[Header] = None,
-                           control: LinearDifficultyControl = defaultDifficultyControl,
+                           control: DifficultyAdjustment = defaultDifficultyControl,
                            extensionHash: Digest32 = EmptyDigest32,
                            diffBitsOpt: Option[Long],
                            useRealTs: Boolean): HeaderChain =
@@ -57,7 +57,7 @@ trait ChainGenerator extends ErgoTestConstants {
     */
   final def genHeaderChain(until: Seq[Header] => Boolean,
                            prefix: Option[Header],
-                           control: LinearDifficultyControl,
+                           control: DifficultyAdjustment,
                            diffBitsOpt: Option[Long],
                            useRealTs: Boolean): HeaderChain = {
     val headers = headerStream(prefix, control, diffBitsOpt = diffBitsOpt, useRealTs = useRealTs)
@@ -84,7 +84,7 @@ trait ChainGenerator extends ErgoTestConstants {
   }
 
   private def headerStream(prefix: Option[Header],
-                           control: LinearDifficultyControl,
+                           control: DifficultyAdjustment,
                            extensionHash: Digest32 = EmptyDigest32,
                            diffBitsOpt: Option[Long],
                            useRealTs: Boolean): Stream[Header] = {
@@ -95,7 +95,7 @@ trait ChainGenerator extends ErgoTestConstants {
   }
 
   def nextHeader(prev: Option[Header],
-                 control: LinearDifficultyControl,
+                 control: DifficultyAdjustment,
                  extensionHash: Digest32 = EmptyDigest32,
                  tsOpt: Option[Long] = None,
                  diffBitsOpt: Option[Long] = None,

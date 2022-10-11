@@ -7,11 +7,16 @@ trait SendingStrategy {
 }
 
 object SendToRandom extends SendingStrategy {
+
+  private val dayInMs: Long = 24 * 60 * 60 * 1000
+
   override def choose(peers: Seq[ConnectedPeer]): Seq[ConnectedPeer] = {
-    if (peers.nonEmpty) {
-      Seq(peers(Random.nextInt(peers.length)))
+    val activeRecently: Seq[ConnectedPeer] = // choose peers which were active in the last 24 hours
+      peers.filter(p => p.peerInfo.isDefined && System.currentTimeMillis - p.peerInfo.get.lastHandshake  < dayInMs)
+    if (activeRecently.nonEmpty) {
+      Seq(activeRecently(Random.nextInt(activeRecently.length)))
     } else {
-      Seq.empty
+      Nil
     }
   }
 }

@@ -98,7 +98,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getTxsByAddressR: Route = (get & pathPrefix("transaction" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
+  private def getTxsByAddressR: Route = (post & pathPrefix("transaction" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems transactions can be requested")
     }else {
@@ -156,7 +156,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByAddressR: Route = (get & pathPrefix("box" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
+  private def getBoxesByAddressR: Route = (post & pathPrefix("box" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     }else {
@@ -172,7 +172,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByAddressUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
+  private def getBoxesByAddressUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     }else {
@@ -209,7 +209,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByErgoTreeR: Route = (get & pathPrefix("box" / "byErgoTree") & ergoTree & paging) { (tree, offset, limit) =>
+  private def getBoxesByErgoTreeR: Route = (post & pathPrefix("box" / "byErgoTree") & ergoTree & paging) { (tree, offset, limit) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     }else {
@@ -225,7 +225,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByErgoTreeUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging) { (tree, offset, limit) =>
+  private def getBoxesByErgoTreeUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging) { (tree, offset, limit) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     }else {
@@ -264,7 +264,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getAddressBalanceTotalR: Route =  (get & pathPrefix("balance") & ergoAddress) { address =>
+  private def getAddressBalanceTotalR: Route = (post & pathPrefix("balance") & ergoAddress) { address =>
     ApiResponse(getAddressBalanceTotal(address))
   }
 

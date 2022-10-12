@@ -5324,19 +5324,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/transaction/byAddress/{address}:
-    get:
+  /blockchain/transaction/byAddress:
+    post:
       summary: Retrieve transactions by their associated address
       operationId: getTxsByAddress
       tags:
         - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: adderess associated with transactions
+            schema:
+              $ref: '#/components/schemas/ErgoAddress'
       parameters:
-        - in: path
-          name: address
-          required: true
-          description: adderess associated with transactions
-          schema:
-            $ref: '#/components/schemas/ErgoAddress'
         - in: query
           name: offset
           required: false
@@ -5488,19 +5489,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/box/byAddress/{address}:
-    get:
+  /blockchain/box/byAddress:
+    post:
       summary: Retrieve boxes by their associated address
       operationId: getBoxesByAddress
       tags:
         - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: adderess associated with boxes
+            schema:
+              $ref: '#/components/schemas/ErgoAddress'
       parameters:
-        - in: path
-          name: address
-          required: true
-          description: adderess associated with boxes
-          schema:
-            $ref: '#/components/schemas/ErgoAddress'
         - in: query
           name: offset
           required: false
@@ -5546,19 +5548,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/box/unspent/byAddress/{address}:
-    get:
+  /blockchain/box/unspent/byAddress:
+    post:
       summary: Retrieve unspent boxes by their associated address
       operationId: getBoxesByAddressUnspent
       tags:
         - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: adderess associated with unspent boxes
+            schema:
+              $ref: '#/components/schemas/ErgoAddress'
       parameters:
-        - in: path
-          name: address
-          required: true
-          description: adderess associated with unspent boxes
-          schema:
-            $ref: '#/components/schemas/ErgoAddress'
         - in: query
           name: offset
           required: false
@@ -5638,20 +5641,21 @@ paths:
                 schema:
                   $ref: '#/components/schemas/ApiError'
 
-  /blockchain/box/byErgoTree/{ergoTreeHex}:
-    get:
+  /blockchain/box/byErgoTree:
+    post:
       summary: Retrieve boxes by their associated ergotree
       operationId: getBoxesByErgoTree
       tags:
         - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: hex encoded ergotree
+            schema:
+              type: string
+              example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       parameters:
-        - in: path
-          name: ergoTreeHex
-          required: true
-          description: hex encoded ergotree
-          schema:
-            type: string
-            example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
         - in: query
           name: offset
           required: false
@@ -5691,20 +5695,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/box/unspent/byErgoTree/{ergoTreeHex}:
-    get:
+  /blockchain/box/unspent/byErgoTree:
+    post:
       summary: Retrieve unspent boxes by their associated ergotree
       operationId: getBoxesByErgoTreeUnspent
       tags:
         - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: hex encoded ergotree
+            schema:
+              type: string
+              example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       parameters:
-        - in: path
-          name: ergoTreeHex
-          required: true
-          description: hex encoded ergotree
-          schema:
-            type: string
-            example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
         - in: query
           name: offset
           required: false
@@ -5774,19 +5779,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/balance/{address}:
-    get:
+  /blockchain/balance:
+    post:
       summary: Retrieve confirmed and unconfirmed balance of an address
       operationId: getAddressBalanceTotal
       tags:
         - blockchain
-      parameters:
-        - in: path
-          name: address
-          required: true
-          description: adderess with balance
-          schema:
-            $ref: '#/components/schemas/ErgoAddress'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: adderess with balance
+            schema:
+              $ref: '#/components/schemas/ErgoAddress'
       responses:
         '200':
           description: balance information

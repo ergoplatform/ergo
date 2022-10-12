@@ -40,7 +40,7 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
     }
   }
 
-  val ergoAddress: Directive1[ErgoAddress] = pathPrefix(Segment).flatMap(handleErgoAddress)
+  val ergoAddress: Directive1[ErgoAddress] = entity(as[String]).flatMap(handleErgoAddress)
 
   private def handleErgoAddress(value: String): Directive1[ErgoAddress] = {
     ae.fromString(value) match {
@@ -49,7 +49,7 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
     }
   }
 
-  val ergoTree: Directive1[ErgoTree] = pathPrefix(Segment).flatMap(handleErgoTree)
+  val ergoTree: Directive1[ErgoTree] = entity(as[String]).flatMap(handleErgoTree)
 
   private def handleErgoTree(value: String): Directive1[ErgoTree] = {
     Base16.decode(value) match {

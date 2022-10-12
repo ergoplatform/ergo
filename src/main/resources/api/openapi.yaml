@@ -2927,7 +2927,7 @@ paths:
 
   /transactions/unconfirmed/byErgoTree:
     post:
-      summary: Finds unconfirmed transactions by ErgoTree of one of its output or input boxes (if present in UtxoState)
+      summary: Finds unconfirmed transactions by ErgoTree hex of one of its output or input boxes (if present in UtxoState)
       operationId: getUnconfirmedTransactionsByErgoTree
       tags:
         - transactions

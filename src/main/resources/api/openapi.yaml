@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.104"
+  version: "4.0.105"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1560,6 +1560,7 @@ components:
       required:
         - pass
         - mnemonic
+        - usePre1627KeyDerivation
       properties:
         pass:
           type: string
@@ -1570,6 +1571,9 @@ components:
         mnemonicPass:
           type: string
           description: Optional pass to password-protect mnemonic seed
+        usePre1627KeyDerivation:
+          type: boolean
+          description: use incorrect(previous) BIP32 key derivation (see https://github.com/ergoplatform/ergo/issues/1627 for details). It's recommended to set to 'true' if the original wallet was created by ergo node before v4.0.24.
 
     CheckWallet:
       type: object

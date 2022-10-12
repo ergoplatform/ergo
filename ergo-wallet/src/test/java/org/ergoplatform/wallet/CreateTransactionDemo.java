@@ -33,7 +33,7 @@ public class CreateTransactionDemo {
 
         // Create an address
         byte[] entropy = Random.randomBytes(32);
-        ExtendedSecretKey extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy);
+        ExtendedSecretKey extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy, false);
         ErgoAddress myAddress = P2PKAddress.apply(extendedSecretKey.privateInput().publicImage(), encoder);
 
         int transferAmt = 25000000; // amount to transfer
@@ -73,7 +73,7 @@ public class CreateTransactionDemo {
 
         // Create an address
         byte[] entropy = Random.randomBytes(32);
-        ExtendedSecretKey extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy);
+        ExtendedSecretKey extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy, false);
         ErgoAddress myAddress = P2PKAddress.apply(extendedSecretKey.privateInput().publicImage(), encoder);
 
         int feeAmt = 1000000; // minimal fee amount
@@ -118,11 +118,11 @@ public class CreateTransactionDemo {
 
         // Create second address
         byte[] entropy1 = Random.randomBytes(32);
-        ExtendedSecretKey extendedSecretKey1 = ExtendedSecretKey.deriveMasterKey(entropy1);
+        ExtendedSecretKey extendedSecretKey1 = ExtendedSecretKey.deriveMasterKey(entropy1, false);
         ErgoAddress changeAddress = P2PKAddress.apply(extendedSecretKey1.privateInput().publicImage(), encoder);
 
         byte[] entropy2 = Random.randomBytes(32);
-        ExtendedSecretKey extendedSecretKey2 = ExtendedSecretKey.deriveMasterKey(entropy2);
+        ExtendedSecretKey extendedSecretKey2 = ExtendedSecretKey.deriveMasterKey(entropy2, false);
 
 
         int transferAmt = 25000000; // amount to transfer

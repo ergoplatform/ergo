@@ -96,7 +96,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
           invalidatedTxIds,
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(unconfirmedTx, -wtx.weight, System.currentTimeMillis(), 0)
+        ).updateFamily(unconfirmedTx, -wtx.weight, System.currentTimeMillis(), depth = 0)
       case None => this
     }
   }
@@ -111,7 +111,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
           invalidatedTxIds.put(tx.id),
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(unconfirmedTx, -wtx.weight, System.currentTimeMillis(), 0)
+        ).updateFamily(unconfirmedTx, -wtx.weight, System.currentTimeMillis(), depth = 0)
       case None =>
         OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
     }
@@ -142,7 +142,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     * @return - true, if transaction is in the pool or invalidated earlier, false otherwise
     */
   def contains(id: ModifierId): Boolean = {
-    transactionsRegistry.contains(id) || isInvalidated(id)
+    transactionsRegistry.contains(id)
   }
 
   def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)

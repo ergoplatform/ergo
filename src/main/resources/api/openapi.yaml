@@ -3221,7 +3221,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AddressValidity'
+                description: Encoded Ergo Address
+                type: string
+                example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
         default:
           description: Error
           content:

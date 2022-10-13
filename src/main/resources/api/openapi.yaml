@@ -3214,16 +3214,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErgoAddress'
+              description: Encoded Ergo Address
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
       responses:
         '200':
           description: Address validity with validation error
           content:
             application/json:
               schema:
-                description: Encoded Ergo Address
-                type: string
-                example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
+                $ref: '#/components/schemas/AddressValidity'
         default:
           description: Error
           content:

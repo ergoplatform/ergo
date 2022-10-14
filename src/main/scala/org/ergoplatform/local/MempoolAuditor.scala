@@ -4,19 +4,15 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
-import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.network.Broadcast
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, SemanticallySuccessfulModifier}
-import org.ergoplatform.nodeView.state.UtxoStateReader
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.RecheckMempool
+import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import scorex.core.network.message.{InvData, InvSpec, Message}
 import scorex.core.transaction.Transaction
-import scorex.core.transaction.state.TransactionValidation
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
@@ -53,33 +49,23 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       Restart
   }
 
-  private var stateReaderOpt: Option[TransactionValidation] = None
   private var poolReaderOpt: Option[ErgoMemPoolReader] = None
+  private var stateReaderOpt: Option[ErgoStateReader] = None
 
   private val worker: ActorRef =
     context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, settings.nodeSettings)))
 
   override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
+    context.system.eventStream.subscribe(self, classOf[RecheckMempool])
   }
 
   override def receive: Receive = awaiting
 
   private def awaiting: Receive = {
-    case SemanticallySuccessfulModifier(_: ErgoFullBlock) | SemanticallySuccessfulModifier(_: Header) =>
-      stateReaderOpt = None
-      poolReaderOpt = None
-      nodeViewHolderRef ! GetNodeViewChanges(history = false, state = true, mempool = true, vault = false)
-
-    case ChangedMempool(mp: ErgoMemPoolReader) =>
-      poolReaderOpt = Some(mp)
-      stateReaderOpt.foreach(st => initiateCleanup(st, mp))
-
-    case ChangedState(st: TransactionValidation) =>
+    case RecheckMempool(st: UtxoStateReader, mp: ErgoMemPoolReader) =>
       stateReaderOpt = Some(st)
-      poolReaderOpt.foreach(mp => initiateCleanup(st, mp))
-
-    case ChangedState(_) | ChangedMempool(_) => // do nothing
+      poolReaderOpt = Some(mp)
+      initiateCleanup(st, mp)
   }
 
   private def working: Receive = {
@@ -87,23 +73,21 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       log.info("Cleanup done. Switching to awaiting mode")
       //rebroadcast transactions
       rebroadcastTransactions()
-      stateReaderOpt = None
-      poolReaderOpt = None
       context become awaiting
 
     case _ => // ignore other triggers until work is done
   }
 
-  private def initiateCleanup(validator: TransactionValidation, mempool: ErgoMemPoolReader): Unit = {
-    log.info("Initiating cleanup. Switching to working mode")
+  private def initiateCleanup(validator: UtxoStateReader, mempool: ErgoMemPoolReader): Unit = {
+    log.info("Initiating mempool cleanup")
     worker ! RunCleanup(validator, mempool)
     context become working // ignore other triggers until work is done
   }
 
-  private def broadcastTx(tx: ErgoTransaction): Unit = {
+  private def broadcastTx(unconfirmedTx: UnconfirmedTransaction): Unit = {
     val msg = Message(
       InvSpec,
-      Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
+      Right(InvData(Transaction.ModifierTypeId, Seq(unconfirmedTx.id))),
       None
     )
     networkControllerRef ! SendToNetwork(msg, Broadcast)
@@ -115,19 +99,19 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       val toBroadcast = pr.random(settings.nodeSettings.rebroadcastCount).toSeq
       stateReaderOpt match {
         case Some(utxoState: UtxoStateReader) =>
-          val stateToCheck = utxoState.withTransactions(toBroadcast)
-          toBroadcast.foreach { tx =>
-            if (tx.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
-              log.info(s"Rebroadcasting $tx")
-              broadcastTx(tx)
+          val stateToCheck = utxoState.withUnconfirmedTransactions(toBroadcast)
+          toBroadcast.foreach { unconfirmedTx =>
+            if (unconfirmedTx.transaction.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
+              log.info(s"Rebroadcasting $unconfirmedTx")
+              broadcastTx(unconfirmedTx)
             } else {
-              log.info(s"Not rebroadcasting $tx as not all the inputs are in place")
+              log.info(s"Not rebroadcasting $unconfirmedTx as not all the inputs are in place")
             }
           }
         case _ =>
-          toBroadcast.foreach { tx =>
-            log.warn(s"Rebroadcasting $tx while state is not ready or not UTXO set")
-            broadcastTx(tx)
+          toBroadcast.foreach { unconfirmedTx =>
+            log.warn(s"Rebroadcasting $unconfirmedTx while state is not ready or not UTXO set")
+            broadcastTx(unconfirmedTx)
           }
       }
     }

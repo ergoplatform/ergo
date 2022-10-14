@@ -5,14 +5,14 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.{ModifierTypeId, NodeViewComponent}
-import scorex.core.consensus.{ContainsModifiers, Equal, Fork, PeerChainStatus, ModifierSemanticValidity, Older, Unknown, Younger}
+import scorex.core.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
@@ -69,6 +69,17 @@ trait ErgoHistoryReader
   def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
       historyStorage.modifierBytesById(id)
+    } else {
+      None
+    }
+
+  /**
+    * @param id - modifier id
+    * @return type and raw bytes of semantically valid ErgoPersistentModifier with the given id it is in history
+    */
+   def modifierTypeAndBytesById(id: ModifierId): Option[(ModifierTypeId, Array[Byte])] =
+    if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
+      historyStorage.modifierTypeAndBytesById(id)
     } else {
       None
     }
@@ -419,7 +430,7 @@ trait ErgoHistoryReader
       case chunk: UTXOSnapshotChunk =>
         validate(chunk)
       case m: Any =>
-        Failure(new MalformedModifierError(s"Modifier $m has incorrect type"))
+        Failure(new MalformedModifierError(s"Modifier $m has incorrect type", modifier.id, modifier.modifierTypeId))
     }
   }
 
@@ -595,6 +606,20 @@ trait ErgoHistoryReader
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
     val proofParams = PoPowParams(m, k)
     nipopowAlgos.prove(histReader = this, headerIdOpt = headerIdOpt)(proofParams)
+  }
+
+  /**
+    * Get estimated height of headers-chain, if it is synced
+    * @return height of last header known, if headers-chain is synced, or None if not synced
+    */
+  def estimatedTip(): Option[Height] = {
+    Try { //error may happen if history not initialized
+      if(isHeadersChainSynced) {
+        Some(headersHeight)
+      } else {
+        None
+      }
+    }.getOrElse(None)
   }
 
 }

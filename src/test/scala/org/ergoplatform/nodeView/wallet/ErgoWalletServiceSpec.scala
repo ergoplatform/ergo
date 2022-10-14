@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R1}
 import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
@@ -47,7 +47,7 @@ class ErgoWalletServiceSpec
   private implicit val x: WalletFixture = new WalletFixture(settings, parameters, getCurrentView(_).vault)
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 4)
   private lazy val pks = getPublicKeys.toList
-  private val masterKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create("edge talent poet tortoise trumpet dose")))
+  private val masterKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create("edge talent poet tortoise trumpet dose")), usePre1627KeyDerivation = true)
 
   override def afterAll(): Unit = try super.afterAll() finally x.stop()
 
@@ -172,7 +172,7 @@ class ErgoWalletServiceSpec
           val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
 
           val walletService = new ErgoWalletServiceImpl(ergoSettings)
-          val unconfirmedTx =
+          val unconfirmedTx = UnconfirmedTransaction(
             walletService.generateTransaction(
               initialState(store, versionedStore),
               boxSelector,
@@ -180,7 +180,7 @@ class ErgoWalletServiceSpec
               inputsRaw = encodedBoxes,
               dataInputsRaw = Seq.empty,
               sign = true
-            ).get.asInstanceOf[ErgoTransaction]
+            ).get.asInstanceOf[ErgoTransaction], None)
 
           // let's create wallet state with an unconfirmed transaction in mempool
           val wState = initialState(store, versionedStore, Some(new FakeMempool(Seq(unconfirmedTx))))
@@ -207,7 +207,7 @@ class ErgoWalletServiceSpec
           val txs3 = walletService.getScanTransactions(wState, scanId, 100, includeUnconfirmed = true)
           txs3.size shouldBe 1
 
-          txs3.head.wtx.tx.id shouldBe unconfirmedTx.id
+          txs3.head.wtx.tx.id shouldBe unconfirmedTx.transaction.id
         }
       }
     }

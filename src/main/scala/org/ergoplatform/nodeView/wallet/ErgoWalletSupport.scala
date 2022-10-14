@@ -37,7 +37,7 @@ trait ErgoWalletSupport extends ScorexLogging {
 
   def buildProverFromMnemonic(mnemonic: SecretString, keysQty: Option[Int], parameters: Parameters): ErgoProvingInterpreter = {
     val seed = Mnemonic.toSeed(mnemonic)
-    val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
+    val rootSk = ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = true)
     val childSks = keysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
     ErgoProvingInterpreter(rootSk +: childSks, parameters)
   }

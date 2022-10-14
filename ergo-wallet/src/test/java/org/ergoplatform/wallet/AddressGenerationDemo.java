@@ -19,7 +19,7 @@ public class AddressGenerationDemo {
     }
 
     public static ExtendedSecretKey masterSecretFromSeed(byte[] seed) {
-        ExtendedSecretKey rootSk = ExtendedSecretKey.deriveMasterKey(seed);
+        ExtendedSecretKey rootSk = ExtendedSecretKey.deriveMasterKey(seed, false);
         return rootSk;
     }
 

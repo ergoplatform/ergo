@@ -42,7 +42,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedHistory])
     context.system.eventStream.subscribe(self, classOf[ChangedState])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool])
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
+    context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
   }
@@ -143,10 +143,10 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   }
 
   def onSemanticallySuccessfulModification: Receive = {
-    case SemanticallySuccessfulModifier(fb: ErgoFullBlock) =>
+    case FullBlockApplied(header) =>
       nodeInfo = nodeInfo.copy(
-        stateRoot = Some(Algos.encode(fb.header.stateRoot)),
-        stateVersion = Some(fb.encodedId))
+        stateRoot = Some(Algos.encode(header.stateRoot)),
+        stateVersion = Some(header.encodedId))
   }
 
 }
@@ -228,7 +228,8 @@ object ErgoStatsCollector {
         "lastSeenMessageTime" -> ni.lastIncomingMessageTime.asJson,
         "genesisBlockId" -> ni.genesisBlockIdOpt.asJson,
         "parameters" -> ni.parameters.asJson,
-        "eip27Supported" -> ni.eip27Supported.asJson
+        "eip27Supported" -> ni.eip27Supported.asJson,
+        "eip37Supported" -> true.asJson
       ) ++ optionalFields).asJson
     }
   }

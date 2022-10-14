@@ -8,8 +8,10 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
-import scorex.core.validation.ModifierValidator
+import scorex.core.ModifierTypeId
+import scorex.core.validation.{InvalidModifier, ModifierValidator}
 import scorex.core.validation.ValidationResult.Invalid
+import scorex.util.ModifierId
 
 object ValidationRules {
 
@@ -19,208 +21,208 @@ object ValidationRules {
     */
   lazy val rulesSpec: Map[Short, RuleStatus] = Map(
 
-    alreadyApplied -> RuleStatus(s => fatal(s"Double application of a modifier is prohibited. $s"),
+    alreadyApplied -> RuleStatus(im => fatal(s"Double application of a modifier is prohibited. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header], classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
 
 
     // transaction validation
-    txNoInputs -> RuleStatus(s => fatal(s"A transaction should have at least one input. $s"),
+    txNoInputs -> RuleStatus(im => fatal(s"A transaction should have at least one input. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txNoOutputs -> RuleStatus(s => fatal(s"A transaction should have at least one output. $s"),
+    txNoOutputs -> RuleStatus(im => fatal(s"A transaction should have at least one output. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txManyInputs -> RuleStatus(s => fatal(s"A number of transaction inputs should not exceed ${Short.MaxValue}. $s"),
+    txManyInputs -> RuleStatus(im => fatal(s"A number of transaction inputs should not exceed ${Short.MaxValue}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txManyDataInputs -> RuleStatus(s => fatal(s"A number transaction data inputs should not exceed ${Short.MaxValue}. $s"),
+    txManyDataInputs -> RuleStatus(im => fatal(s"A number transaction data inputs should not exceed ${Short.MaxValue}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txManyOutputs -> RuleStatus(s => fatal(s"A number of transaction outputs should not exceed ${Short.MaxValue}. $s"),
+    txManyOutputs -> RuleStatus(im => fatal(s"A number of transaction outputs should not exceed ${Short.MaxValue}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txNegativeOutput -> RuleStatus(s => fatal(s"Erg amount for a transaction output should not be negative. $s"),
+    txNegativeOutput -> RuleStatus(im => fatal(s"Erg amount for a transaction output should not be negative. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txOutputSum -> RuleStatus(s => fatal(s"Sum of transaction output values should not exceed ${Long.MaxValue}. $s"),
+    txOutputSum -> RuleStatus(im => fatal(s"Sum of transaction output values should not exceed ${Long.MaxValue}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txInputsUnique -> RuleStatus(s => fatal(s"There should be no duplicate inputs. $s"),
+    txInputsUnique -> RuleStatus(im => fatal(s"There should be no duplicate inputs. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txAssetsInOneBox -> RuleStatus(s => fatal(s"A number of tokens within a box should not exceed ${ErgoBoxAssetExtractor.MaxAssetsPerBox}" +
-      s" and sum of assets of one type should not exceed ${Long.MaxValue}. $s"),
+    txAssetsInOneBox -> RuleStatus(im => fatal(s"A number of tokens within a box should not exceed ${ErgoBoxAssetExtractor.MaxAssetsPerBox}" +
+      s" and sum of assets of one type should not exceed ${Long.MaxValue}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txPositiveAssets -> RuleStatus(s => fatal(s"All token amounts of transaction outputs should be positive. $s"),
+    txPositiveAssets -> RuleStatus(im => fatal(s"All token amounts of transaction outputs should be positive. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txDust -> RuleStatus(s => fatal(s"Every output of the transaction should contain at least <minValuePerByte * outputSize> nanoErgs. $s"),
+    txDust -> RuleStatus(im => fatal(s"Every output of the transaction should contain at least <minValuePerByte * outputSize> nanoErgs. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
-    txFuture -> RuleStatus(s => fatal(s"Transaction outputs should have creationHeight not exceeding block height. $s"),
+    txFuture -> RuleStatus(im => fatal(s"Transaction outputs should have creationHeight not exceeding block height. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txBoxesToSpend -> RuleStatus(s => fatal(s"Every input of the transaction should be in UTXO. $s"),
+    txBoxesToSpend -> RuleStatus(im => fatal(s"Every input of the transaction should be in UTXO. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txDataBoxes -> RuleStatus(s => fatal(s"Every data input of the transaction should be in UTXO. $s"),
+    txDataBoxes -> RuleStatus(im => fatal(s"Every data input of the transaction should be in UTXO. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txInputsSum -> RuleStatus(s => fatal(s"Sum of transaction inputs should not exceed ${Long.MaxValue}. $s"),
+    txInputsSum -> RuleStatus(im => fatal(s"Sum of transaction inputs should not exceed ${Long.MaxValue}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txErgPreservation -> RuleStatus(s => fatal(s"Amount of Ergs in inputs should be equal to amount of Erg in outputs. $s"),
+    txErgPreservation -> RuleStatus(im => fatal(s"Amount of Ergs in inputs should be equal to amount of Erg in outputs. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txAssetsPreservation -> RuleStatus(s => fatal(s"For every token, its amount in outputs should not exceed its amount in inputs. $s"),
+    txAssetsPreservation -> RuleStatus(im => fatal(s"For every token, its amount in outputs should not exceed its amount in inputs. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txBoxToSpend -> RuleStatus(s => fatal(s"Box id doesn't match the input. $s"),
+    txBoxToSpend -> RuleStatus(im => fatal(s"Box id doesn't match the input. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
-    txScriptValidation -> RuleStatus(s => fatal(s"Scripts of all transaction inputs should pass verification. $s"),
+    txScriptValidation -> RuleStatus(im => fatal(s"Scripts of all transaction inputs should pass verification. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txBoxSize -> RuleStatus(s => fatal(s"Box size should not exceed ${MaxBoxSize.value}. $s"),
+    txBoxSize -> RuleStatus(im => fatal(s"Box size should not exceed ${MaxBoxSize.value}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
-    txBoxPropositionSize -> RuleStatus(s => fatal(s"Box proposition size should not exceed ${MaxPropositionBytes.value}. $s"),
+    txBoxPropositionSize -> RuleStatus(im => fatal(s"Box proposition size should not exceed ${MaxPropositionBytes.value}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
-    txNegHeight -> RuleStatus(s => fatal(s"Transaction outputs should have non-negative creationHeight. $s"),
+    txNegHeight -> RuleStatus(im => fatal(s"Transaction outputs should have non-negative creationHeight. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txReemission -> RuleStatus(s => fatal(s"Transaction should conform EIP-27 rules $s"),
+    txReemission -> RuleStatus(im => fatal(s"Transaction should conform EIP-27 rules ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
 
     // header validation
-    hdrGenesisParent -> RuleStatus(s => fatal(s"Genesis header should have genesis parent id. $s"),
+    hdrGenesisParent -> RuleStatus(im => fatal(s"Genesis header should have genesis parent id. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrGenesisFromConfig -> RuleStatus(s => fatal(s"Genesis header id should be equal to id from the config. $s"),
+    hdrGenesisFromConfig -> RuleStatus(im => fatal(s"Genesis header id should be equal to id from the config. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrGenesisHeight -> RuleStatus(s => fatal(s"Genesis height should be ${ErgoHistory.GenesisHeight}. $s"),
+    hdrGenesisHeight -> RuleStatus(im => fatal(s"Genesis height should be ${ErgoHistory.GenesisHeight}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrParent -> RuleStatus(s => recoverable(s"Parent header with id $s is not defined"),
+    hdrParent -> RuleStatus(im => recoverable(s"Parent header with id ${im.error} is not defined", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrNonIncreasingTimestamp -> RuleStatus(s => fatal(s"Header timestamp should be greater than the parent's. $s"),
+    hdrNonIncreasingTimestamp -> RuleStatus(im => fatal(s"Header timestamp should be greater than the parent's. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrHeight -> RuleStatus(s => fatal(s"A header height should be greater by one than the parent's. $s"),
+    hdrHeight -> RuleStatus(im => fatal(s"A header height should be greater by one than the parent's. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrPoW -> RuleStatus(s => fatal(s"A header should contain correct PoW solution. $s"),
+    hdrPoW -> RuleStatus(im => fatal(s"A header should contain correct PoW solution. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrRequiredDifficulty -> RuleStatus(s => fatal(s"A header should contain correct required difficulty. $s"),
+    hdrRequiredDifficulty -> RuleStatus(im => fatal(s"A header should contain correct required difficulty. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrTooOld -> RuleStatus(s => fatal(s"A header height should not be older than current height minus <config.keepVersions>. $s"),
+    hdrTooOld -> RuleStatus(im => fatal(s"A header height should not be older than current height minus <config.keepVersions>. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrParentSemantics -> RuleStatus(s => fatal(s"Parent header should not be marked as invalid. $s"),
+    hdrParentSemantics -> RuleStatus(im => fatal(s"Parent header should not be marked as invalid. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrFutureTimestamp -> RuleStatus(s => recoverable(s"Header timestamp should not be more than 20 minutes in the future. $s"),
+    hdrFutureTimestamp -> RuleStatus(im => recoverable(s"Header timestamp should not be more than 20 minutes in the future. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
 
-    hdrVotesNumber -> RuleStatus(s => fatal(s"Number of non-zero votes should be <= ${Parameters.ParamVotesCount}. $s"),
+    hdrVotesNumber -> RuleStatus(im => fatal(s"Number of non-zero votes should be <= ${Parameters.ParamVotesCount}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = true),
-    hdrVotesDuplicates -> RuleStatus(s => fatal(s"A header votes should contain no duplicates. $s"),
+    hdrVotesDuplicates -> RuleStatus(im => fatal(s"A header votes should contain no duplicates. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrVotesContradictory -> RuleStatus(s => fatal(s"A header votes should contain no contradictory votes. $s"),
+    hdrVotesContradictory -> RuleStatus(im => fatal(s"A header votes should contain no contradictory votes. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrVotesUnknown -> RuleStatus(s => fatal(s"First header of an epoch should not contain a vote for unknown parameter. $s"),
+    hdrVotesUnknown -> RuleStatus(im => fatal(s"First header of an epoch should not contain a vote for unknown parameter. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = true),
-    hdrCheckpoint -> RuleStatus(s => fatal(s"Chain is failing checkpoint validation"),
+    hdrCheckpoint -> RuleStatus(im => fatal(s"Chain is failing checkpoint validation. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
 
     // block sections validation
-    bsNoHeader -> RuleStatus(s => recoverable(s"A header for a modifier $s is not defined"),
+    bsNoHeader -> RuleStatus(im => recoverable(s"A header for a modifier ${im.error} is not defined", im.modifierId, im.modifierTypeId),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
-    bsCorrespondsToHeader -> RuleStatus(s => fatal(s"Block sections should correspond to the declared header. $s"),
+    bsCorrespondsToHeader -> RuleStatus(im => fatal(s"Block sections should correspond to the declared header. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
-    bsHeaderValid -> RuleStatus(s => fatal(s"A header for the block section should not be marked as invalid. $s"),
+    bsHeaderValid -> RuleStatus(im => fatal(s"A header for the block section should not be marked as invalid. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
-    bsHeadersChainSynced -> RuleStatus(_ => recoverable(s"Headers-chain is not synchronized yet"),
+    bsHeadersChainSynced -> RuleStatus(im => recoverable(s"Headers-chain is not synchronized yet. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
-    bsTooOld -> RuleStatus(s => fatal(s"Block section should correspond to a block header that is not pruned yet. $s"),
+    bsTooOld -> RuleStatus(im => fatal(s"Block section should correspond to a block header that is not pruned yet. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
-    bsBlockTransactionsSize -> RuleStatus(s => fatal(s"Size of block transactions section should not exceed <maxBlockSize>. $s"),
+    bsBlockTransactionsSize -> RuleStatus(im => fatal(s"Size of block transactions section should not exceed <maxBlockSize>. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[BlockTransactions]),
       mayBeDisabled = true),
-    bsBlockTransactionsCost -> RuleStatus(s => fatal(s"Accumulated cost of block transactions should not exceed <maxBlockCost>. $s"),
+    bsBlockTransactionsCost -> RuleStatus(im => fatal(s"Accumulated cost of block transactions should not exceed <maxBlockCost>. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction], classOf[BlockTransactions]),
       mayBeDisabled = false),
 
     // full block processing validation
-    fbOperationFailed -> RuleStatus(s => fatal(s"Operations against the state AVL+ tree should be successful. $s"),
+    fbOperationFailed -> RuleStatus(im => fatal(s"Operations against the state AVL+ tree should be successful. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoFullBlock]),
       mayBeDisabled = false),
-    fbDigestIncorrect -> RuleStatus(s => fatal(s"Calculated AVL+ digest should be equal to one written in the block header. $s"),
+    fbDigestIncorrect -> RuleStatus(im => fatal(s"Calculated AVL+ digest should be equal to one written in the block header. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoFullBlock]),
       mayBeDisabled = false),
 
     // extension validation
     // interlinks validation
-    exIlUnableToValidate -> RuleStatus(s => recoverable(s"Unable to validate interlinks. $s"),
+    exIlUnableToValidate -> RuleStatus(im => recoverable(s"Unable to validate interlinks. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exIlEncoding -> RuleStatus(s => fatal(s"Interlinks should be packed properly. $s"),
+    exIlEncoding -> RuleStatus(im => fatal(s"Interlinks should be packed properly. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exIlStructure -> RuleStatus(s => fatal(s"Interlinks should have the correct structure. $s"),
+    exIlStructure -> RuleStatus(im => fatal(s"Interlinks should have the correct structure. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exKeyLength -> RuleStatus(s => fatal(s"Extension fields key length should be ${Extension.FieldKeySize}. $s"),
+    exKeyLength -> RuleStatus(im => fatal(s"Extension fields key length should be ${Extension.FieldKeySize}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = false),
-    exValueLength -> RuleStatus(s => fatal(s"Extension field value length should be <= ${Extension.FieldValueMaxSize}. $s"),
+    exValueLength -> RuleStatus(im => fatal(s"Extension field value length should be <= ${Extension.FieldValueMaxSize}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exDuplicateKeys -> RuleStatus(s => fatal(s"An extension should not contain duplicate keys. $s"),
+    exDuplicateKeys -> RuleStatus(im => fatal(s"An extension should not contain duplicate keys. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exCheckForkVote -> RuleStatus(s => fatal(s"Voting for fork could be started only after activation period of a previous soft-fork. $s"),
+    exCheckForkVote -> RuleStatus(im => fatal(s"Voting for fork could be started only after activation period of a previous soft-fork. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exParseParameters -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain correctly packed parameters. $s"),
+    exParseParameters -> RuleStatus(im => fatal(s"At the beginning of the epoch, the extension should contain correctly packed parameters. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exMatchParameters -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain all the system parameters. $s"),
+    exMatchParameters -> RuleStatus(im => fatal(s"At the beginning of the epoch, the extension should contain all the system parameters. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exBlockVersion -> RuleStatus(s => fatal(s"Versions in header and parameters section should be equal. $s"),
+    exBlockVersion -> RuleStatus(im => fatal(s"Versions in header and parameters section should be equal. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exParseValidationSettings -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain correctly packed validation settings. $s"),
+    exParseValidationSettings -> RuleStatus(im => fatal(s"At the beginning of the epoch, the extension should contain correctly packed validation settings. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exMatchValidationSettings -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain all the validation settings. $s"),
+    exMatchValidationSettings -> RuleStatus(im => fatal(s"At the beginning of the epoch, the extension should contain all the validation settings. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exSize -> RuleStatus(s => fatal(s"Size of extension section should not exceed ${Constants.MaxExtensionSize}. $s"),
+    exSize -> RuleStatus(im => fatal(s"Size of extension section should not exceed ${Constants.MaxExtensionSize}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
 
-    exEmpty -> RuleStatus(s => fatal(s"Extension of non-genesis block should not be empty. $s"),
+    exEmpty -> RuleStatus(im => fatal(s"Extension of non-genesis block should not be empty. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true)
   )
@@ -300,36 +302,38 @@ object ValidationRules {
   val fbDigestIncorrect: Short = 501
 
 
-  def errorMessage(id: Short, details: String): String = {
+  def errorMessage(id: Short, details: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId): String = {
     ValidationRules.rulesSpec(id)
-      .error(details)
+      .invalidMod(InvalidModifier(details, modifierId, modifierTypeId))
       .errors
       .last
       .message
   }
 
-  private def recoverable(errorMessage: String): Invalid = ModifierValidator.error(errorMessage)
+  private def recoverable(errorMessage: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId): Invalid =
+    ModifierValidator.error(errorMessage, modifierId, modifierTypeId)
 
-  private def fatal(errorMessage: String): Invalid = ModifierValidator.fatal(errorMessage)
+  private def fatal(error: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId): Invalid =
+    ModifierValidator.fatal(error, modifierId, modifierTypeId)
 }
 
 /**
   * Status of validation rule.
   * The only mutable parameter is `isActive`
   *
-  * @param error           - function that construct validation error from details string
+  * @param invalidMod      - function that construct validation error from details
   * @param affectedClasses - modifiers, that are validated via this rule
   * @param mayBeDisabled   - whether rule may be disabled via soft-fork
   * @param isActive        - whether rule is active right now
   */
-case class RuleStatus(error: String => Invalid,
+case class RuleStatus(invalidMod: InvalidModifier => Invalid,
                       affectedClasses: Seq[Class[_]],
                       mayBeDisabled: Boolean,
                       isActive: Boolean)
 
 object RuleStatus {
-  def apply(error: String => Invalid, affectedClasses: Seq[Class[_]], mayBeDisabled: Boolean): RuleStatus = {
-    RuleStatus(error, affectedClasses, mayBeDisabled, isActive = true)
+  def apply(invalidMod: InvalidModifier => Invalid, affectedClasses: Seq[Class[_]], mayBeDisabled: Boolean): RuleStatus = {
+    RuleStatus(invalidMod, affectedClasses, mayBeDisabled, isActive = true)
   }
 
 }

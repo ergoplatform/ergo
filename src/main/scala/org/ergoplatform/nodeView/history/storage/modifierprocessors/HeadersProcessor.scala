@@ -4,7 +4,7 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
+import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
@@ -18,7 +18,7 @@ import org.ergoplatform.settings._
 import scorex.core.consensus.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
+import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayWrapper
 import scorex.util._
 
@@ -42,7 +42,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   // Maximum time in future block header may have
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
-  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings)
+  lazy val difficultyCalculator = new DifficultyAdjustment(chainSettings)
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
@@ -264,27 +264,45 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return - difficulty for the next block
     */
   def requiredDifficultyAfter(parent: Header): Difficulty = {
-    if (parent.height == settings.chainSettings.voting.version2ActivationHeight || parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
-      // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
-      settings.chainSettings.initialDifficultyVersion2
-    } else {
-      val parentHeight = parent.height
+    val parentHeight = parent.height
 
-      if(parentHeight % settings.chainSettings.epochLength == 0) {
-        //todo: it is slow to read thousands headers from database for each header
-        //todo; consider caching here
-        //todo: https://github.com/ergoplatform/ergo/issues/872
-        val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
-          .ensuring(_.last == parentHeight)
-        if (heights.lengthCompare(1) == 0) {
-          difficultyCalculator.calculate(Array(parent))
-        } else {
-          val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
-          val headers = chain.headers.filter(p => heights.contains(p.height))
-          difficultyCalculator.calculate(headers)
-        }
+    val eip37ActivationHeight = 844673
+
+    if (settings.networkType.isMainNet && parentHeight + 1 >= eip37ActivationHeight) {
+      val epochLength = 128 // epoch length after EIP-37 activation
+      if (parentHeight % epochLength == 0) {
+        val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
+        // todo: if parent is on best chain, read headers directly, not via headerChainBack
+        val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+        val headers = chain.headers.filter(p => heights.contains(p.height))
+        difficultyCalculator.eip37Calculate(headers, epochLength)
       } else {
         parent.requiredDifficulty
+      }
+    } else {
+      if (parentHeight == settings.chainSettings.voting.version2ActivationHeight ||
+          parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
+        // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
+        settings.chainSettings.initialDifficultyVersion2
+      } else {
+        val epochLength = settings.chainSettings.epochLength
+
+        if (parentHeight % epochLength == 0) {
+          //todo: it is slow to read thousands headers from database for each header
+          //todo; consider caching here
+          //todo: https://github.com/ergoplatform/ergo/issues/872
+          val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
+            .ensuring(_.last == parentHeight)
+          if (heights.lengthCompare(1) == 0) {
+            difficultyCalculator.calculate(Array(parent), epochLength)
+          } else {
+            val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+            val headers = chain.headers.filter(p => heights.contains(p.height))
+            difficultyCalculator.calculate(headers, epochLength)
+          }
+        } else {
+          parent.requiredDifficulty
+        }
       }
     }
   }
@@ -301,21 +319,21 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         parentOpt map { parent =>
           validateChildBlockHeader(header, parent)
         } getOrElse {
-          validationState.validate(hdrParent, condition = false, Algos.encode(header.parentId))
+          validationState.validate(hdrParent, condition = false, InvalidModifier(Algos.encode(header.parentId), header.id, header.modifierTypeId))
         }
       }
     }
 
     private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
       validationState
-        .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
-        .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id))
-        .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
-        .validateNoFailure(hdrPoW, powScheme.validate(header))
-        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty)
-        .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validate(hdrTooOld, fullBlockHeight < nodeSettings.keepVersions, heightOf(header.parentId).toString)
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
+        .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId, header.modifierTypeId)
+        .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id), header.id, header.modifierTypeId)
+        .validate(hdrGenesisHeight, header.height == GenesisHeight, InvalidModifier(header.toString, header.id, header.modifierTypeId))
+        .validateNoFailure(hdrPoW, powScheme.validate(header), header.id, header.modifierTypeId)
+        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty, header.id, header.modifierTypeId)
+        .validateNot(alreadyApplied, historyStorage.contains(header.id), InvalidModifier(header.toString, header.id, header.modifierTypeId))
+        .validate(hdrTooOld, fullBlockHeight < nodeSettings.keepVersions, InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
+        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${timeProvider.time()}", header.id, header.modifierTypeId))
         .result
     }
 
@@ -324,15 +342,15 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       */
     private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
       validationState
-        .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
-        .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
-        .validateNoFailure(hdrPoW, powScheme.validate(header))
-        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent))
-        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
-        .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
-        .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validate(hdrCheckpoint, checkpointCondition(header), "Wrong checkpoint")
+        .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, InvalidModifier(s"${header.timestamp} > ${parent.timestamp}", header.id, header.modifierTypeId))
+        .validate(hdrHeight, header.height == parent.height + 1, InvalidModifier(s"${header.height} vs ${parent.height}", header.id, header.modifierTypeId))
+        .validateNoFailure(hdrPoW, powScheme.validate(header), header.id, header.modifierTypeId)
+        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent), header.id, header.modifierTypeId)
+        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
+        .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId), InvalidModifier(s"Parent semantics broken", header.id, header.modifierTypeId))
+        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${timeProvider.time()}", header.id, header.modifierTypeId))
+        .validateNot(alreadyApplied, historyStorage.contains(header.id), InvalidModifier(s"${header.id} already applied", header.id, header.modifierTypeId))
+        .validate(hdrCheckpoint, checkpointCondition(header), InvalidModifier(s"${header.id} wrong checkpoint", header.id, header.modifierTypeId))
         .result
     }
 

@@ -78,14 +78,14 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
 
   def expectModificationOutcome(section: BlockSection)(implicit ctx: Ctx): Try[Unit] = {
     expectMsgType[ModificationOutcome] match {
-      case SyntacticallySuccessfulModifier(mod) if mod.id == section.id =>
+      case SyntacticallySuccessfulModifier(_, modId) if modId == section.id =>
         Success(())
       case outcome =>
         val msg = section match {
           case header: Header => s"Error applying header ${header.id}: $outcome"
           case other => s"Error applying section $other: $outcome"
         }
-        val e = new MalformedModifierError(msg)
+        val e = new MalformedModifierError(msg, section.id, section.modifierTypeId)
         log.error(msg, e)
         Failure(e)
     }

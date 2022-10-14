@@ -94,6 +94,8 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * Read unspent boxes which belong to a scan with given id
     *
     * @param scanId - scan identifier
+    * @param heightFrom - min inclusion height of unspent boxes
+    * @param heightTo - max inclusion height of unspent boxes
     * @return sequences of scan-related unspent boxes found in the database
     */
   def unspentBoxes(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] = {

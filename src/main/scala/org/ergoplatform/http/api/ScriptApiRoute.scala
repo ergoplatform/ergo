@@ -19,7 +19,7 @@ import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
-import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
+import sigmastate.lang.SigmaCompiler
 import sigmastate.interpreter.Interpreter
 import sigmastate.serialization.ValueSerializer
 

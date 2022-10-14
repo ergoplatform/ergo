@@ -97,7 +97,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       ergoWalletService.initWallet(state, settings, pass, mnemonicPassOpt) match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
-          context.become(loadedWallet(newState.copy(walletState = WalletPhase.Created)))
+          context.become(loadedWallet(newState.copy(walletPhase = WalletPhase.Created)))
           self ! UnlockWallet(pass)
           sender() ! Success(mnemonic)
         case Failure(t) =>
@@ -111,7 +111,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass) match {
         case Success(newState) =>
           log.info("Wallet is restored")
-          context.become(loadedWallet(newState.copy(walletState = WalletPhase.Restored)))
+          context.become(loadedWallet(newState.copy(walletPhase = WalletPhase.Restored)))
           self ! UnlockWallet(walletPass)
           sender() ! Success(())
         case Failure(t) =>
@@ -266,7 +266,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       if (state.secretIsSet(settings.walletSettings.testMnemonic)) { // scan blocks only if wallet is initialized
         val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)
         // we want to scan a block either when it is its turn or when wallet is freshly created (no need to load the past)
-        if (nextBlockHeight == newBlock.height || (state.walletState == WalletPhase.Created && state.getWalletHeight == 0)) {
+        if (nextBlockHeight == newBlock.height || (state.walletPhase == WalletPhase.Created && state.getWalletHeight == 0)) {
           log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
           val newState =
             ergoWalletService.scanBlockUpdate(state, newBlock, settings.walletSettings.dustLimit) match {

@@ -205,7 +205,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param blockId     - block identifier
     * @param blockHeight - block height
     */
-  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = {
+  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int, walletCreated: Boolean = false): Try[Unit] = {
 
     // first, put newly created outputs and related transactions into key-value bag
     val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
@@ -217,7 +217,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
 
     // and update wallet digest
     updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
-      if (height + 1 != blockHeight) {
+      if (height + 1 != blockHeight && !walletCreated) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
       val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.scans.contains(PaymentsScanId))

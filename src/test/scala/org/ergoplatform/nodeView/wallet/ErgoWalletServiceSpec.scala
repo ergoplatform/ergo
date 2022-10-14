@@ -64,7 +64,7 @@ class ErgoWalletServiceSpec
       utxoStateReaderOpt = Option.empty,
       parameters,
       maxInputsToUse = 1000,
-      walletState = WalletPhase.UnInitialized,
+      walletPhase = WalletPhase.UnInitialized,
       rescanInProgress = false
     )
   }

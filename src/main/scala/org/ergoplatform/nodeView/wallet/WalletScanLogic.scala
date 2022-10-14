@@ -44,11 +44,12 @@ object WalletScanLogic extends ScorexLogging {
                             walletVars: WalletVars,
                             block: ErgoFullBlock,
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
-                            dustLimit: Option[Long]
+                            dustLimit: Option[Long],
+                            walletCreated: Boolean
                            ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
     scanBlockTransactions(
       registry, offChainRegistry, walletVars,
-      block.height, block.id, block.transactions, cachedOutputsFilter, dustLimit)
+      block.height, block.id, block.transactions, cachedOutputsFilter, dustLimit, walletCreated)
   }
 
   /**
@@ -70,7 +71,8 @@ object WalletScanLogic extends ScorexLogging {
                             blockId: ModifierId,
                             transactions: Seq[ErgoTransaction],
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
-                            dustLimit: Option[Long]
+                            dustLimit: Option[Long],
+                            walletCreated: Boolean = false
                            ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
 
     // Take unspent wallet outputs Bloom Filter from cache
@@ -165,7 +167,7 @@ object WalletScanLogic extends ScorexLogging {
     }
 
     // function effects: updating registry and offchainRegistry datasets
-    registry.updateOnBlock(scanRes, blockId, height)
+    registry.updateOnBlock(scanRes, blockId, height, walletCreated)
       .map { _ =>
         //data needed to update the offchain-registry
         val walletUnspent = registry.walletUnspentBoxes()

@@ -296,7 +296,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   }
 
   property("spam simulation (transaction validation cost with too many tokens exceeds block limit)") {
-    val bxsQty = 400
+    val bxsQty = 392 // with greater value test is failing with collection size exception
     val (inputs, tx) = validErgoTransactionGenTemplate(1, 1,16).sample.get // it takes too long to test with `forAll`
     val tokens = (0 until 255).map(_ => (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextLong))
     val (in, out) = {

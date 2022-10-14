@@ -9,7 +9,7 @@ import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state._
@@ -22,7 +22,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
 import sigmastate.SigmaAnd
 import sigmastate.Values.{ErgoTree, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol
@@ -38,7 +38,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
   implicit private val timeout: Timeout = defaultTimeout
 
-  private val newBlockSignal: Class[SemanticallySuccessfulModifier] = classOf[SemanticallySuccessfulModifier]
+  private val newBlockSignal: Class[FullBlockApplied] = classOf[FullBlockApplied]
   private val newBlockDelay: FiniteDuration = 30 seconds
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
@@ -95,7 +95,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val outputs = (0 until 10).map(_ => output)
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
     val tx = defaultProver.sign(unsignedTx, IndexedSeq(boxToSpend), IndexedSeq(), r.s.stateContext).get
-    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(tx), None))
     expectNoMessage(1 seconds)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
@@ -122,7 +122,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     txCost shouldBe 431780
 
     // send costly transaction to the mempool
-    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(costlyTx))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(costlyTx), None))
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
@@ -188,7 +188,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
         )
       }
 
-      txs.foreach(nodeViewHolderRef ! LocallyGeneratedTransaction(_))
+      txs.map(tx => UnconfirmedTransaction(tx, None)).foreach(nodeViewHolderRef ! LocallyGeneratedTransaction(_))
 
       if (toSend > toSpend.size) {
         // wait for the next block
@@ -257,7 +257,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
     // As double-spending transactions are filtered out in the mempool, the only way to push them is to order to
     // include double-spending transaction directly via mandatoryTransactions argument of PrepareCandidate command
-    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx1))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(tx1), None))
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     testProbe.expectNoMessage(200.millis)
@@ -274,10 +274,10 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
         testProbe.fishForMessage(blockValidationDelay) {
           case StatusReply.Success(()) =>
             testProbe.expectMsgPF(candidateGenDelay) {
-              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+              case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
-          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+          case FullBlockApplied(header) if header.id != block.header.parentId =>
             testProbe.expectMsg(StatusReply.Success(()))
             true
         }
@@ -429,7 +429,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
       val v2Block = testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-      val h2 = v2Block.modifier.asInstanceOf[ErgoFullBlock].header
+      val h2 = v2Block.header
       h2.version shouldBe 2
       h2.minerPk shouldBe defaultMinerPk.value
     }

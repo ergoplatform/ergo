@@ -1,7 +1,7 @@
 package org.ergoplatform.utils
 
 import akka.util.Timeout
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
+import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
@@ -66,7 +66,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   lazy val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.fold[SecretString](SecretString.empty())(SecretString.create(_)))
-  val defaultRootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(defaultSeed)
+  val defaultRootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(defaultSeed, usePre1627KeyDerivation = true)
   val defaultChildSecrets: IndexedSeq[ExtendedSecretKey] = settings.walletSettings.testKeysQty
     .toIndexedSeq
     .flatMap(x => (0 until x).map(defaultRootSecret.child))
@@ -94,7 +94,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
   val EmptyDigest32: Digest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
-  val defaultDifficultyControl = new LinearDifficultyControl(settings.chainSettings)
+  val defaultDifficultyControl = new DifficultyAdjustment(settings.chainSettings)
   val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(Array(0: Byte, 8: Byte) -> EmptyDigest32))
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq())
   val emptyDataInputs: IndexedSeq[DataInput] = IndexedSeq()

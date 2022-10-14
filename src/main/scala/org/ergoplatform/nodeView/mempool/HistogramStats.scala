@@ -10,7 +10,7 @@ object HistogramStats {
     for (wtx <- wtxs) {
       val waitTime = currTime - wtx.created
       val bin = if (waitTime < maxWaitTimeMsec) (waitTime/interval).toInt else nBins
-      histogram.update(bin, FeeHistogramBin(histogram(bin).nTxns + 1, histogram(bin).totalFee + wtx.feePerKb))
+      histogram.update(bin, FeeHistogramBin(histogram(bin).nTxns + 1, histogram(bin).totalFee + wtx.feePerFactor))
     }
     histogram
   }

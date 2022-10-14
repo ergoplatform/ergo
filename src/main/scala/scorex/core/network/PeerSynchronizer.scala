@@ -20,8 +20,7 @@ import scala.concurrent.duration._
   */
 class PeerSynchronizer(val networkControllerRef: ActorRef,
                        peerManager: ActorRef,
-                       settings: NetworkSettings,
-                       featureSerializers: PeerFeature.Serializers)
+                       settings: NetworkSettings)
                       (implicit ec: ExecutionContext) extends Actor with Synchronizer with ScorexLogging {
 
 
@@ -38,7 +37,7 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
       Restart
   }
 
-  private val peersSpec = new PeersSpec(featureSerializers, settings.maxPeerSpecObjects)
+  private val peersSpec = new PeersSpec(settings.maxPeerSpecObjects)
 
   private val msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: PeersSpec, peers: Seq[PeerSpec]@unchecked, _) if peers.cast[Seq[PeerSpec]].isDefined =>
@@ -98,11 +97,11 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
 }
 
 object PeerSynchronizerRef {
-  def props(networkControllerRef: ActorRef, peerManager: ActorRef, settings: NetworkSettings,
-            featureSerializers: PeerFeature.Serializers)(implicit ec: ExecutionContext): Props =
-    Props(new PeerSynchronizer(networkControllerRef, peerManager, settings, featureSerializers))
+  def props(networkControllerRef: ActorRef, peerManager: ActorRef, settings: NetworkSettings)
+           (implicit ec: ExecutionContext): Props =
+    Props(new PeerSynchronizer(networkControllerRef, peerManager, settings))
 
-  def apply(name: String, networkControllerRef: ActorRef, peerManager: ActorRef, settings: NetworkSettings,
-            featureSerializers: PeerFeature.Serializers)(implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props(networkControllerRef, peerManager, settings, featureSerializers), name)
+  def apply(name: String, networkControllerRef: ActorRef, peerManager: ActorRef, settings: NetworkSettings)
+           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
+    system.actorOf(props(networkControllerRef, peerManager, settings), name)
 }

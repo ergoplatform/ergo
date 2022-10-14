@@ -193,8 +193,7 @@ object PeersSpec {
   * The `Peers` message is a reply to a `GetPeer` message and relays connection information about peers
   * on the network.
   */
-class PeersSpec(featureSerializers: PeerFeature.Serializers, peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
-  private val peerSpecSerializer = new PeerSpecSerializer(featureSerializers)
+class PeersSpec(peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
 
   override val messageCode: Message.MessageCode = PeersSpec.messageCode
 
@@ -202,23 +201,16 @@ class PeersSpec(featureSerializers: PeerFeature.Serializers, peersLimit: Int) ex
 
   override def serialize(peers: Seq[PeerSpec], w: Writer): Unit = {
     w.putUInt(peers.size)
-    peers.foreach(p => peerSpecSerializer.serialize(p, w))
+    peers.foreach(p => PeerSpecSerializer.serialize(p, w))
   }
 
   override def parse(r: Reader): Seq[PeerSpec] = {
     val length = r.getUInt().toIntExact
     require(length <= peersLimit, s"Too many peers. $length exceeds limit $peersLimit")
     (0 until length).map { _ =>
-      peerSpecSerializer.parse(r)
+      PeerSpecSerializer.parse(r)
     }
   }
-}
-
-object HandshakeSerializer {
-
-  val messageCode: MessageCode = 75: Byte
-  val messageName: String = "Handshake"
-  val maxHandshakeSize: Int = 8096
 }
 
 /**
@@ -226,13 +218,11 @@ object HandshakeSerializer {
   * to the receiving node at the beginning of a connection. Until both peers
   * have exchanged `Handshake` messages, no other messages will be accepted.
   */
-class HandshakeSerializer(featureSerializers: PeerFeature.Serializers) extends MessageSpecV1[Handshake] {
-  import HandshakeSerializer.maxHandshakeSize
+object HandshakeSerializer extends MessageSpecV1[Handshake] {
+  override val messageCode: MessageCode = 75: Byte
+  override val messageName: String = "Handshake"
 
-  private val peersDataSerializer = new PeerSpecSerializer(featureSerializers)
-
-  override val messageCode: MessageCode = HandshakeSerializer.messageCode
-  override val messageName: String = HandshakeSerializer.messageName
+  val maxHandshakeSize: Int = 8096
 
   /**
     * Serializing handshake into a byte writer.
@@ -243,13 +233,13 @@ class HandshakeSerializer(featureSerializers: PeerFeature.Serializers) extends M
   override def serialize(hs: Handshake, w: Writer): Unit = {
     // first writes down handshake time, then peer specification of our node
     w.putULong(hs.time)
-    peersDataSerializer.serialize(hs.peerSpec, w)
+    PeerSpecSerializer.serialize(hs.peerSpec, w)
   }
 
   override def parse(r: Reader): Handshake = {
     require(r.remaining <= maxHandshakeSize, s"Too big handshake. Size ${r.remaining} exceeds $maxHandshakeSize limit")
     val time = r.getULong()
-    val data = peersDataSerializer.parse(r)
+    val data = PeerSpecSerializer.parse(r)
     Handshake(data, time)
   }
 

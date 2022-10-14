@@ -33,7 +33,7 @@ class DerivationPathSpec
 
     val seed = Mnemonic.toSeed(SecretString.create(mnemonic), None)
 
-    val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
+    val masterKey = ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = false)
     val dp = DerivationPath.nextPath(IndexedSeq(masterKey), usePreEip3Derivation = false).get
     val sk = masterKey.derive(dp)
     val pk = sk.publicKey.key
@@ -69,7 +69,7 @@ class DerivationPathSpec
 
     val seed = Mnemonic.toSeed(SecretString.create(mnemonic), None)
 
-    val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
+    val masterKey = ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = false)
     val dp = DerivationPath.nextPath(IndexedSeq(masterKey), usePreEip3Derivation = true).get
     val sk = masterKey.derive(dp)
     val pk = sk.publicKey.key
@@ -106,7 +106,7 @@ class DerivationPathSpec
 
     val seed = Mnemonic.toSeed(SecretString.create(mnemonic), None)
 
-    val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
+    val masterKey = ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = false)
     P2PKAddress(masterKey.publicKey.key).toString() shouldBe address
 
     masterKey.path shouldBe masterKeyDerivation

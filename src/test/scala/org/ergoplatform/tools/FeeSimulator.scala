@@ -95,7 +95,7 @@ object FeeSimulator extends App {
 
   val meanMinTxFeeE = outputsSize * storageFeeFactor * LErgo / StoragePeriod.toDouble
 
-  println(s"Reward per block: ${BlockSize * storageFeeFactor * LErgo / StoragePeriod.toDouble  / CoinsInOneErgo.toDouble} Erg")
+  println(s"Reward per block: ${BlockSize * storageFeeFactor * LErgo / StoragePeriod.toDouble / CoinsInOneErgo.toDouble} Erg")
 
   println(s"Tx fee: ${meanMinTxFeeE / CoinsInOneErgo.toDouble}")
 

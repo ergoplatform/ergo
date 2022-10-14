@@ -4,8 +4,8 @@ import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -42,6 +42,8 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends HistoryTests
 
   //Generators
   override lazy val transactionGenerator: Gen[ErgoTransaction] = invalidErgoTransactionGen
+  override lazy val unconfirmedTxGenerator: Gen[UnconfirmedTransaction] =
+    invalidErgoTransactionGen.map(tx => UnconfirmedTransaction(tx, None))
   override lazy val memPoolGenerator: Gen[MPool] = emptyMemPoolGen
 
   override def syntacticallyValidModifier(history: HT): Header = {
@@ -102,7 +104,7 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends HistoryTests
     syncTracker,
     deliveryTracker)(ec) {
 
-    override protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
+    protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
       mod match {
         case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) =>
           fb.toSeq.foreach(s => broadcastModifierInv(s))

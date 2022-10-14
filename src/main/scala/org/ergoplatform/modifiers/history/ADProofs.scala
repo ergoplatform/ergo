@@ -102,10 +102,12 @@ object ADProofsSerializer extends ScorexSerializer[ADProofs] {
   }
 
   override def parse(r: Reader): ADProofs = {
+    val startPos = r.position
     val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val size = r.getUInt().toIntExact
     val proofBytes = SerializedAdProof @@ r.getBytes(size)
-    ADProofs(headerId, proofBytes, Some(size + Constants.ModifierIdSize))
+    val endPos = r.position
+    ADProofs(headerId, proofBytes, Some(endPos - startPos))
   }
 
 }

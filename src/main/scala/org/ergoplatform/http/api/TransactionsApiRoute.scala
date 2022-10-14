@@ -5,11 +5,10 @@ import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -38,10 +37,11 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
 
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getMemPool.map { p =>
-    p.getAll.slice(offset, offset + limit).map(_.asJson).asJson
+    p.getAll.slice(offset, offset + limit).map(_.transaction.asJson).asJson
   }
 
-  private def validateTransactionAndProcess(tx: ErgoTransaction)(processFn: ErgoTransaction => Any): Route = {
+  private def validateTransactionAndProcess(tx: ErgoTransaction)
+                                           (processFn: UnconfirmedTransaction => Route): Route = {
     if (tx.size > ergoSettings.nodeSettings.maxTransactionSize) {
       BadRequest(s"Transaction $tx has too large size ${tx.size}")
     } else {
@@ -50,10 +50,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
       } {
         _.fold(
           e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
-          _ => {
-            processFn(tx)
-            ApiResponse(tx.id)
-          }
+          utx => processFn(utx)
         )
       }
     }
@@ -61,13 +58,11 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
-    validateTransactionAndProcess(tx) { tx =>
-      nodeViewActorRef ! LocallyGeneratedTransaction(tx)
-    }
+    validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
   }
 
   def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) { tx =>
-    validateTransactionAndProcess(tx) { tx => tx }
+    validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
   }
 
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & txPaging) { (offset, limit) =>

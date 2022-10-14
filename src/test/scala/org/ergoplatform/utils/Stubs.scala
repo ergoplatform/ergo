@@ -8,10 +8,12 @@ import org.ergoplatform.mining.CandidateGenerator.Candidate
 import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
@@ -68,7 +70,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val wallet = new WalletStub
 
   val txs: Seq[ErgoTransaction] = validTransactionsFromBoxHolder(boxesHolderGen.sample.get)._1
-  val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
+  val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs.map(tx => UnconfirmedTransaction(tx, None))).get
 
   val digestReaders = Readers(history, digestState, memPool, wallet)
 
@@ -117,12 +119,23 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class NodeViewStub extends Actor {
     def receive: Receive = {
+      case LocallyGeneratedTransaction(utx) =>
+        sender() ! new ProcessingOutcome.Accepted(utx, System.currentTimeMillis())
+      case _ =>
+    }
+  }
+
+  class FailingNodeViewStub extends Actor {
+    def receive: Receive = {
+      case LocallyGeneratedTransaction(_) =>
+        sender() ! new ProcessingOutcome.Invalidated(new Error("Transaction invalid"), System.currentTimeMillis())
       case _ =>
     }
   }
 
   object NodeViewStub {
     def props(): Props = Props(new NodeViewStub)
+    def failingProps(): Props = Props(new FailingNodeViewStub)
   }
 
   class NetworkControllerStub extends Actor {
@@ -250,7 +263,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   object WalletActorStub {
     val mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
     val path = DerivationPath(List(0, 1, 2), publicBranch = false)
-    val secretKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create(mnemonic))).derive(path)
+    val secretKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create(mnemonic)), usePre1627KeyDerivation = true).derive(path)
     val address = P2PKAddress(proveDlogGen.sample.get)
 
     val walletBoxN_N: WalletBox = WalletBox(
@@ -355,7 +368,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
-      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
+      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
+      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024
+)
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
     val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)

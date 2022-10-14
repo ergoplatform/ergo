@@ -196,6 +196,7 @@ trait ApiCodecs extends JsonCodecs {
   }
 
 
+
   implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
     sigma =>
       val op = sigma.opCode.toByte.asJson

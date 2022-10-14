@@ -63,7 +63,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
       getUnconfirmedOutputByErgoTreeR ~
       getUnconfirmedOutputByBoxIdR ~
       getUnconfirmedInputByBoxIdR ~
-      getUnconfirmedTxByErgoTreeR ~
+      getUnconfirmedTxsByErgoTreeR ~
       getUnconfirmedTxByIdR ~
       getUnconfirmedTransactionsR ~
       unconfirmedContainsR ~
@@ -143,15 +143,15 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     }
 
   /** Collect all transactions which inputs or outputs contain given ErgoTree hex */
-  def getUnconfirmedTxByErgoTreeR: Route =
-    (pathPrefix("unconfirmed" / "byErgoTree") & post & entity(as[Json])) { body =>
+  def getUnconfirmedTxsByErgoTreeR: Route =
+    (pathPrefix("unconfirmed" / "byErgoTree") & post & entity(as[Json]) & txPaging) { case (body, offset, limit) =>
       body.as[String] match {
         case Left(ex) =>
           ApiError(StatusCodes.BadRequest, ex.getMessage())
         case Right(ergoTree) =>
           ApiResponse(
             getMemPool.flatMap { pool =>
-              val allTxs = pool.getAll
+              val allTxs = pool.getAll.slice(offset, offset + limit)
               val txsWithOutputMatch =
                 allTxs
                   .collect { case tx if tx.transaction.outputs.exists(_.ergoTree.bytesHex == ergoTree) =>
@@ -202,13 +202,14 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   /** Collect all tx outputs which contain given ErgoTree hex */
   def getUnconfirmedOutputByErgoTreeR: Route =
-    (pathPrefix("unconfirmed" / "outputs" / "byErgoTree") & post & entity(as[Json])) { body =>
+    (pathPrefix("unconfirmed" / "outputs" / "byErgoTree") & post & entity(as[Json]) & txPaging) { (body, offset, limit) =>
       body.as[String] match {
         case Left(ex) =>
           ApiError(StatusCodes.BadRequest, ex.getMessage())
         case Right(ergoTree) =>
           ApiResponse(
-            getMemPool.map(_.getAll.flatMap(_.transaction.outputs.filter(_.ergoTree.bytesHex == ergoTree)))
+            getMemPool
+              .map(_.getAll.slice(offset, offset + limit).flatMap(_.transaction.outputs.filter(_.ergoTree.bytesHex == ergoTree)))
           )
       }
     }
@@ -223,7 +224,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   /** Collect all tx outputs which contain all given Registers */
   def getUnconfirmedOutputByRegistersR: Route =
-    (pathPrefix("unconfirmed" / "outputs" / "byRegisters") & post & entity(as[Json])) { body =>
+    (pathPrefix("unconfirmed" / "outputs" / "byRegisters") & post & entity(as[Json]) & txPaging) { (body, offset, limit) =>
       body.as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] match {
         case Left(ex) =>
           ApiError(StatusCodes.BadRequest, ex.getMessage())
@@ -233,7 +234,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
           ApiResponse(
             getMemPool.map { pool =>
               pool
-                .getAll
+                .getAll.slice(offset, offset + limit)
                 .flatMap(_.transaction.outputs.filter(o => registers.toSet.diff(o.additionalRegisters.toSet).isEmpty))
             }
           )

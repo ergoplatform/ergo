@@ -62,7 +62,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   private def compileSource(source: String, env: Map[String, Any]): Try[ErgoTree] = {
     import sigmastate.Values._
-    val compiler = SigmaCompiler(CompilerSettings(ergoSettings.chainSettings.addressPrefix, TransformingSigmaBuilder, lowerMethodCalls = true))
+    val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
     Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
       case script: Value[SSigmaProp.type@unchecked] if script.tpe == SSigmaProp =>
         Success(script)

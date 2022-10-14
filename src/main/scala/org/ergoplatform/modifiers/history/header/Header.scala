@@ -112,6 +112,24 @@ object Header extends ApiCodecs {
   type Timestamp = Long
   type Version = Byte
 
+  /**
+    * Block version during mainnet launch
+    */
+  val InitialVersion: Byte = 1
+
+  /**
+    * Block version after the Hardening hard-fork
+    * Autolykos v2 PoW, witnesses in transactions Merkle tree
+    */
+  val HardeningVersion: Byte = 2
+
+  /**
+    * Block version after the 5.0 soft-fork
+    * 5.0 interpreter with JITC, monotonic height rule
+    */
+  val Interpreter50Version: Byte = 3
+
+
   def toSigma(header: Header): special.sigma.Header =
     CHeader(
       id = header.id.toBytes.toColl,
@@ -130,8 +148,6 @@ object Header extends ApiCodecs {
       powDistance = CBigInt(header.powSolution.d.bigInteger),
       votes = header.votes.toColl
     )
-
-  val InitialVersion: Byte = 1
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 

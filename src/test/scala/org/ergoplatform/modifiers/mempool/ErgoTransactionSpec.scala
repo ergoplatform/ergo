@@ -36,6 +36,52 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
   private val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
+
+  private def updateAnAsset(tx: ErgoTransaction, from: IndexedSeq[ErgoBox], deltaFn: Long => Long) = {
+    val updCandidates = tx.outputCandidates.foldLeft(IndexedSeq[ErgoBoxCandidate]() -> false) { case ((seq, modified), ebc) =>
+      if (modified) {
+        (seq :+ ebc) -> true
+      } else {
+        if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(t => !java.util.Arrays.equals(t._1, from.head.id))) {
+          (seq :+ modifyAsset(ebc, deltaFn, Digest32 @@ from.head.id)) -> true
+        } else {
+          (seq :+ ebc) -> false
+        }
+      }
+    }._1
+    tx.copy(outputCandidates = updCandidates)
+  }
+
+  private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
+    new ErgoBoxCandidate(
+      boxCandidate.value + delta,
+      boxCandidate.ergoTree,
+      boxCandidate.creationHeight,
+      boxCandidate.additionalTokens,
+      boxCandidate.additionalRegisters)
+  }
+
+  private def modifyAsset(boxCandidate: ErgoBoxCandidate,
+                          deltaFn: Long => Long,
+                          idToskip: TokenId): ErgoBoxCandidate = {
+    val assetId = boxCandidate.additionalTokens.find(t => !java.util.Arrays.equals(t._1, idToskip)).get._1
+
+    val tokens = boxCandidate.additionalTokens.map { case (id, amount) =>
+      if (java.util.Arrays.equals(id, assetId)) assetId -> deltaFn(amount) else assetId -> amount
+    }
+
+    new ErgoBoxCandidate(
+      boxCandidate.value,
+      boxCandidate.ergoTree,
+      boxCandidate.creationHeight,
+      tokens,
+      boxCandidate.additionalRegisters)
+  }
+
+  private def checkTx(from: IndexedSeq[ErgoBox], wrongTx: ErgoTransaction): Try[Int] = {
+    wrongTx.statelessValidity().flatMap(_ => wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext))
+  }
+
   property("serialization vector") {
     // test vectors, that specifies transaction json and bytes representation.
     // ensures that bytes transaction representation was not changed
@@ -138,21 +184,6 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
       wrongTx.statelessValidity().isSuccess shouldBe false
       wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
     }
-  }
-
-  private def updateAnAsset(tx: ErgoTransaction, from: IndexedSeq[ErgoBox], deltaFn: Long => Long) = {
-    val updCandidates = tx.outputCandidates.foldLeft(IndexedSeq[ErgoBoxCandidate]() -> false) { case ((seq, modified), ebc) =>
-      if (modified) {
-        (seq :+ ebc) -> true
-      } else {
-        if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(t => !java.util.Arrays.equals(t._1, from.head.id))) {
-          (seq :+ modifyAsset(ebc, deltaFn, Digest32 @@ from.head.id)) -> true
-        } else {
-          (seq :+ ebc) -> false
-        }
-      }
-    }._1
-    tx.copy(outputCandidates = updCandidates)
   }
 
   property("assets preservation law holds") {
@@ -435,34 +466,76 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     }
   }
 
-  private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
-    new ErgoBoxCandidate(
-      boxCandidate.value + delta,
-      boxCandidate.ergoTree,
-      boxCandidate.creationHeight,
-      boxCandidate.additionalTokens,
-      boxCandidate.additionalRegisters)
-  }
-
-  private def modifyAsset(boxCandidate: ErgoBoxCandidate,
-                          deltaFn: Long => Long,
-                          idToskip: TokenId): ErgoBoxCandidate = {
-    val assetId = boxCandidate.additionalTokens.find(t => !java.util.Arrays.equals(t._1, idToskip)).get._1
-
-    val tokens = boxCandidate.additionalTokens.map { case (id, amount) =>
-      if (java.util.Arrays.equals(id, assetId)) assetId -> deltaFn(amount) else assetId -> amount
+  property("monotonic creation height") {
+    def stateContext(height: Int, blockVersion: Byte): ErgoStateContext = {
+      val header = defaultHeaderGen.sample.get.copy(version = blockVersion, height = height)
+      val params = Parameters(LaunchParameters.height,
+                              LaunchParameters.parametersTable.updated(Parameters.BlockVersion, blockVersion),
+                              LaunchParameters.proposedUpdate)
+      new ErgoStateContext(Seq(header), None, genesisStateDigest, params, ErgoValidationSettings.initial,
+        VotingData.empty)(settings)
     }
 
-    new ErgoBoxCandidate(
-      boxCandidate.value,
-      boxCandidate.ergoTree,
-      boxCandidate.creationHeight,
-      tokens,
-      boxCandidate.additionalRegisters)
-  }
+    def stateContextForTx(tx: ErgoTransaction, blockVersion: Byte): ErgoStateContext = {
+      stateContext(tx.outputs.map(_.creationHeight).max, blockVersion)
+    }
 
-  private def checkTx(from: IndexedSeq[ErgoBox], wrongTx: ErgoTransaction): Try[Int] = {
-    wrongTx.statelessValidity().flatMap(_ => wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext))
+    def updateOutputHeight(box: ErgoBoxCandidate, value: Int): ErgoBoxCandidate = {
+      new ErgoBoxCandidate(box.value, box.ergoTree, value, box.additionalTokens, box.additionalRegisters)
+    }
+
+    def updateInputHeight(box: ErgoBox): ErgoBox = {
+      val creationHeight = scala.util.Random.nextInt(1000) + 1
+      new ErgoBox(box.value, box.ergoTree, box.additionalTokens, box.additionalRegisters,
+                  box.transactionId, box.index, creationHeight)
+    }
+
+    // retuns random transaction along with inputs,
+    // and a boolean flag, if the latter is true, monotonic creation height rule holds,
+    // otherwise, it does not hold
+    val txGen = boxesGenTemplate(minAssets = 0, maxAssets = 5, minInputs = 5, maxInputs = 10, propositionGen = trueLeafGen).map { case (boxes, _) =>
+      boxes.map(updateInputHeight)
+    }.map{ boxes =>
+      val fixed = Random.nextBoolean()
+      val maxHeight = boxes.map(_.creationHeight).max
+      val preUnsignedTx = validUnsignedTransactionFromBoxes(boxes)
+      val unsignedTx = if(fixed) {
+        preUnsignedTx.copy(outputCandidates = preUnsignedTx.outputCandidates.map{out =>
+          val creationHeight = maxHeight + Random.nextInt(3)
+          updateOutputHeight(out, creationHeight)
+        })
+      } else {
+        preUnsignedTx.copy(outputCandidates = preUnsignedTx.outputCandidates.map{out =>
+          val creationHeight = maxHeight - (Random.nextInt(maxHeight) + 1)
+          updateOutputHeight(out, creationHeight)
+        })
+      }
+      val tx = defaultProver.sign(unsignedTx, boxes, IndexedSeq.empty, emptyStateContext)
+        .map(ErgoTransaction.apply)
+        .get
+      (boxes, tx, fixed)
+    }
+
+    forAll(txGen){ case (boxes, tx, fixed) =>
+      // with initial block version == 1, monotonic rule does not work
+      tx.statefulValidity(boxes, IndexedSeq.empty, stateContextForTx(tx, blockVersion = 1)).isSuccess shouldBe true
+
+      // with pre-5.0 block version == 2, monotonic rule does not work as well
+      tx.statefulValidity(boxes, IndexedSeq.empty, stateContextForTx(tx, blockVersion = 2)).isSuccess shouldBe true
+
+      // starting from block version == 3, monotonic rule works,
+      // so validation fails if transaction is not following the rule (fixed == false)
+      val ctx3 = stateContextForTx(tx, blockVersion = 3)
+      if (fixed) {
+        tx.statefulValidity(boxes, IndexedSeq.empty, ctx3).isSuccess shouldBe true
+      } else {
+        val txFailure = tx.statefulValidity(boxes, IndexedSeq.empty, ctx3)
+        txFailure.isSuccess shouldBe false
+        val cause = txFailure.toEither.left.get.getMessage
+        val expectedMessage = ValidationRules.errorMessage(ValidationRules.txMonotonicHeight, "", emptyModifierId, Transaction.ModifierTypeId)
+        cause should startWith(expectedMessage)
+      }
+    }
   }
 
 }

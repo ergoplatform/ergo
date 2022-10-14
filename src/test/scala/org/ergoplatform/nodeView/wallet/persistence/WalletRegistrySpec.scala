@@ -243,6 +243,41 @@ class WalletRegistrySpec
     }
   }
 
+  it should "get unspent boxes by height from/to inclusive" in {
+    val appId1: ScanId = ScanId @@ 21.toShort
+    val appId2: ScanId = ScanId @@ 22.toShort
+    forAll(trackedBoxGen) { tb0 =>
+      withVersionedStore(10) { store =>
+        val tb1 = tb0.copy(scans = Set(appId1), inclusionHeightOpt = Some(5))
+        val reg = new WalletRegistry(store)(ws)
+        WalletRegistry.putBox(emptyBag, tb1).transact(store).get
+        reg.getBox(tb1.box.id).get.scans shouldBe Set(appId1)
+        reg.unspentBoxes(appId1, 1, 4).length shouldBe 0
+        reg.unspentBoxes(appId1, 6, 10).length shouldBe 0
+        reg.unspentBoxes(appId1, 4, 6).length shouldBe 1
+        reg.unspentBoxes(appId1, 5, 6).length shouldBe 1
+        reg.unspentBoxes(appId1, 5, 5).length shouldBe 1
+        reg.unspentBoxes(appId1, 4, 5).length shouldBe 1
+        // put another box under the same scan id should result in 2 matches
+        val tb2 = trackedBoxGen.sample.get.copy(scans = Set(appId1), inclusionHeightOpt = Some(6))
+        WalletRegistry.putBox(emptyBag, tb2).transact(store).get
+        reg.unspentBoxes(appId1, 4, 7).length shouldBe 2
+        // search should differentiate between scan ids
+        val tb3 = trackedBoxGen.sample.get.copy(scans = Set(appId2), inclusionHeightOpt = Some(6))
+        WalletRegistry.putBox(emptyBag, tb3).transact(store).get
+        reg.unspentBoxes(appId1, 4, 7).length shouldBe 2
+        reg.unspentBoxes(appId2, 4, 7).length shouldBe 1
+        // putting 2 different boxes under same height should result in 2 matches
+        val tb4 = trackedBoxGen.sample.get.copy(scans = Set(appId2), inclusionHeightOpt = Some(6))
+        WalletRegistry.putBox(emptyBag, tb4).transact(store).get
+        reg.unspentBoxes(appId2, 4, 7).length shouldBe 2
+        // putting 2 identical boxes should be idempotent operation
+        WalletRegistry.putBox(emptyBag, tb4).transact(store).get
+        reg.unspentBoxes(appId2, 4, 7).length shouldBe 2
+      }
+    }
+  }
+
   it should "remove application from a box correctly" in {
     val appId: ScanId = ScanId @@ 20.toShort
 

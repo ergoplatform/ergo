@@ -91,6 +91,18 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   }
 
   /**
+    * Read unspent boxes which belong to a scan with given id
+    *
+    * @param scanId - scan identifier
+    * @return sequences of scan-related unspent boxes found in the database
+    */
+  def unspentBoxes(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] = {
+    store
+      .getRange(fromScanBoxSpaceKey(scanId, heightFrom), toScanBoxSpaceKey(scanId, heightTo))
+      .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
+  }
+
+  /**
     * Read spent boxes which belong to a scan with given id
     *
     * @param scanId - scan identifier
@@ -416,6 +428,9 @@ object WalletRegistry {
   // tx index prefixes
   private val InclusionHeightScanTxPrefix: Byte = 0x08
 
+  private val FirstUnspentBoxByHeightKey = Array.fill(32)(0: Byte)
+  private val LastUnspentBoxByHeightKey = Array.fill(32)(-1: Byte)
+
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
 
@@ -458,7 +473,7 @@ object WalletRegistry {
 
   /** Same as [[composeKey()]] with additional height parameter. */
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int): Array[Byte] = {
-    val res = new Array[Byte](39) // 1 byte for prefix + 2 for scanId + 4 for height + 32 for suffix
+    val res = new Array[Byte](39) // 1 byte for prefix + 2 for scanId + 4 for height
     res(0) = prefix
     putShort(res, pos = 1, scanId)
     putInt(res, pos = 3, height)
@@ -476,6 +491,12 @@ object WalletRegistry {
     putBytes(res, 7, suffixId)
     res
   }
+
+  private def fromScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKeyWithHeightAndId(InclusionHeightScanBoxPrefix, scanId, height, FirstUnspentBoxByHeightKey)
+
+  private def toScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKeyWithHeightAndId(InclusionHeightScanBoxPrefix, scanId, height, LastUnspentBoxByHeightKey)
 
   private def firstScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, 0)

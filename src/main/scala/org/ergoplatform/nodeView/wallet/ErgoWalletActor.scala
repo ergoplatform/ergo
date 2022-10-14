@@ -179,8 +179,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       val boxes = ergoWalletService.getWalletBoxes(state, unspent, considerUnconfirmed)
       sender() ! boxes
 
-    case GetScanUnspentBoxes(scanId, considerUnconfirmed) =>
-      val boxes = ergoWalletService.getScanUnspentBoxes(state, scanId, considerUnconfirmed)
+    case GetScanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight) =>
+      val boxes = ergoWalletService.getScanUnspentBoxes(state, scanId, considerUnconfirmed, minHeight, maxHeight)
       sender() ! boxes
 
     case GetScanSpentBoxes(scanId) =>
@@ -695,8 +695,10 @@ object ErgoWalletActor extends ScorexLogging {
     *
     * @param scanId              - scan identifier
     * @param considerUnconfirmed - consider boxes from mempool
+    * @param minHeight - min inclusion height of unspent boxes
+    * @param maxHeight - max inclusion height of unspent boxes
     */
-  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean)
+  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int)
 
   /**
     * Get spent boxes related to a scan

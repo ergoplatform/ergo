@@ -65,7 +65,7 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight) =>
       val scanId = ScanId @@ scanIdInt.toShort
       val considerUnconfirmed = minConfNum == -1
-      withWallet(_.scanUnspentBoxes(scanId, considerUnconfirmed).map {
+      withWallet(_.scanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight).map {
         _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
       })
   }

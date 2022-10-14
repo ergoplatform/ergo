@@ -2930,6 +2930,25 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /transactions/unconfirmed/byErgoTree:
+    parameters:
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
     post:
       summary: Finds unconfirmed transactions by ErgoTree hex of one of its output or input boxes (if present in UtxoState)
       operationId: getUnconfirmedTransactionsByErgoTree
@@ -3011,6 +3030,25 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /transactions/unconfirmed/outputs/byErgoTree:
+    parameters:
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
     post:
       summary: Finds all output boxes by ErgoTree hex among unconfirmed transactions
       operationId: getUnconfirmedTransactionOutputBoxesByErgoTree
@@ -3071,6 +3109,25 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /transactions/unconfirmed/outputs/byRegisters:
+    parameters:
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
     post:
       summary: Finds all output boxes among unconfirmed transactions that contain given registers
       operationId: getUnconfirmedTransactionOutputBoxesByRegisters

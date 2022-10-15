@@ -221,7 +221,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
         memPool.getAll
           .flatMap(_.transaction.outputs)
           .filter(_.ergoTree.bytesHex == searchedTree)
-          .map(b => Base16.encode(b.id)).toList
+          .map(b => Base16.encode(b.id)).take(50).toList
       status shouldBe StatusCodes.OK
       val actualOutputIds = responseAs[List[Json]].map(_.hcursor.downField("boxId").as[String].right.get)
       actualOutputIds shouldEqual expectedOutputIds

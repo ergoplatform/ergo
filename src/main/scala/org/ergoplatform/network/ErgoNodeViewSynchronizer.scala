@@ -97,7 +97,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * The node stops to accept transactions if declined table reaches this max size. It prevents spam attacks trying
     * to bloat the table (or exhaust node's CPU)
     */
-  private val MaxDeclined = 400
+  private val MaxDeclined = 1000
 
   /**
     * No more than this number of unparsed transactions can be cached
@@ -762,6 +762,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         if (txAcceptanceFilter) {
           val unknownMods =
+            // todo: filter out transactions invalidated in the mempool,
+            // todo: see https://github.com/ergoplatform/ergo/issues/1863
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
           // filter out transactions that were already applied to history
           val notApplied = unknownMods.filterNot(blockAppliedTxsCache.mightContain)
@@ -966,7 +968,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // helper method to clear declined transactions after some off, so the node may accept them again
   private def clearDeclined(): Unit = {
-    val clearTimeout = FiniteDuration(10, MINUTES)
+    val clearTimeout = FiniteDuration(20, MINUTES)
     val now = System.currentTimeMillis()
 
     val toRemove = declined.filter { case (_, time) =>
@@ -1033,22 +1035,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
 
-    case FailedOnRecheckTransaction(_, _) =>
-      // do nothing for now
+    case FailedOnRecheckTransaction(id, _) =>
+      declined.put(id, System.currentTimeMillis())
 
     case SyntacticallySuccessfulModifier(modTypeId, modId) =>
       deliveryTracker.setHeld(modId, modTypeId)
 
     case RecoverableFailedModification(modTypeId, modId, e) =>
-      logger.debug(s"Setting recoverable failed modifier ${modId} as Unknown", e)
+      logger.debug(s"Setting recoverable failed modifier $modId as Unknown", e)
       deliveryTracker.setUnknown(modId, modTypeId)
 
     case SyntacticallyFailedModification(modTypeId, modId, e) =>
-      logger.debug(s"Invalidating syntactically failed modifier ${modId}", e)
+      logger.debug(s"Invalidating syntactically failed modifier $modId", e)
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case SemanticallyFailedModification(modTypeId, modId, e) =>
-      logger.debug(s"Invalidating semantically failed modifier ${modId}", e)
+      logger.debug(s"Invalidating semantically failed modifier $modId", e)
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>

@@ -20,6 +20,7 @@ import org.scalatest.matchers.should.Matchers
 
 import scala.util.{Random, Try}
 import scala.concurrent.duration._
+import akka.http.scaladsl.server.MissingQueryParamRejection
 
 class WalletApiRouteSpec extends AnyFlatSpec
   with Matchers
@@ -136,10 +137,15 @@ class WalletApiRouteSpec extends AnyFlatSpec
   }
 
   it should "restore wallet" in {
-    Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
+    Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson, 
+      "usePre1627KeyDerivation" -> false.asJson)) ~>
       route ~> check(status shouldBe StatusCodes.OK)
   }
 
+  it should "not restore wallet without key derivation method specified" in {
+    Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
+      route ~> check(rejection shouldBe a[MissingQueryParamRejection])
+  }
 
   it should "unlock wallet" in {
     Post(prefix + "/unlock", Json.obj("pass" -> "1234".asJson)) ~> route ~> check {

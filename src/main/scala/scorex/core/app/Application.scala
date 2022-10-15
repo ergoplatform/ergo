@@ -3,6 +3,7 @@ package scorex.core.app
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler, Route}
+import org.ergoplatform.ErgoApp
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.{ApiErrorHandler, ApiRejectionHandler, ApiRoute, CompositeHttpService}
 import scorex.core.network._
@@ -16,9 +17,6 @@ import java.net.InetSocketAddress
 import scala.concurrent.ExecutionContext
 
 trait Application extends ScorexLogging {
-
-  import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
-
 
   //settings
   val ergoSettings: ErgoSettings
@@ -100,20 +98,8 @@ trait Application extends ScorexLogging {
     Runtime.getRuntime.addShutdownHook(new Thread() {
       override def run() {
         log.error("Unexpected shutdown")
-        stopAll()
+        ErgoApp.shutdownSystem()
       }
     })
-  }
-
-  def stopAll(): Unit = synchronized {
-    log.info("Stopping network services")
-    upnpGateway.foreach(_.deletePort(scorexSettings.network.bindAddress.getPort))
-    networkControllerRef ! ShutdownNetwork
-
-    log.info("Stopping actors (incl. block generator)")
-    actorSystem.terminate().onComplete { _ =>
-      log.info("Exiting from the app...")
-      System.exit(0)
-    }
   }
 }

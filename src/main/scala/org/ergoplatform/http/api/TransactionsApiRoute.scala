@@ -151,7 +151,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
         case Right(ergoTree) =>
           ApiResponse(
             getMemPool.flatMap { pool =>
-              val allTxs = pool.getAll.slice(offset, offset + limit)
+              val allTxs = pool.getAll
               val txsWithOutputMatch =
                 allTxs
                   .collect { case tx if tx.transaction.outputs.exists(_.ergoTree.bytesHex == ergoTree) =>
@@ -169,7 +169,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
                   txsWithOutputMatch ++ txWithInputMatch
                 case _ =>
                   txsWithOutputMatch
-              }
+              }.map(_.slice(offset, offset + limit))
             }
           )
       }
@@ -209,7 +209,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
         case Right(ergoTree) =>
           ApiResponse(
             getMemPool
-              .map(_.getAll.slice(offset, offset + limit).flatMap(_.transaction.outputs.filter(_.ergoTree.bytesHex == ergoTree)))
+              .map(_.getAll.flatMap(_.transaction.outputs.filter(_.ergoTree.bytesHex == ergoTree)).slice(offset, offset + limit))
           )
       }
     }
@@ -234,8 +234,9 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
           ApiResponse(
             getMemPool.map { pool =>
               pool
-                .getAll.slice(offset, offset + limit)
+                .getAll
                 .flatMap(_.transaction.outputs.filter(o => registers.toSet.diff(o.additionalRegisters.toSet).isEmpty))
+                .slice(offset, offset + limit)
             }
           )
       }

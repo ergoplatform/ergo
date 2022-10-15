@@ -97,6 +97,9 @@ object ValidationRules {
     txReemission -> RuleStatus(im => fatal(s"Transaction should conform EIP-27 rules ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
+    txMonotonicHeight -> RuleStatus(im => fatal(s"Creation height of any output should be not less than  ${im.error}", im.modifierId, im.modifierTypeId),
+      Seq(classOf[ErgoTransaction]),
+      mayBeDisabled = true),
 
     // header validation
     hdrGenesisParent -> RuleStatus(im => fatal(s"Genesis header should have genesis parent id. ${im.error}", im.modifierId, im.modifierTypeId),
@@ -250,8 +253,9 @@ object ValidationRules {
   val txScriptValidation: Short = 119
   val txBoxSize: Short = 120
   val txBoxPropositionSize: Short = 121
-  val txNegHeight: Short = 122
-  val txReemission: Short = 123
+  val txNegHeight: Short = 122 // introduced in v2 blocks
+  val txReemission: Short = 123 // introduced in EIP-27 (soft-fork)
+  val txMonotonicHeight: Short = 124 // introduced in v3 blocks
 
   // header validation
   val hdrGenesisParent: Short = 200

@@ -15,7 +15,7 @@ import scala.util.Try
 final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
                              trackedPubKeys: Seq[ExtendedPublicKey],
                              trackedBytes: Seq[Array[Byte]],
-                             filter: BloomFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
+                             pkFilter: BloomFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
 
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
@@ -37,9 +37,9 @@ final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
     val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
 
     // update filter
-    filter.put(newPkBytes)
+    pkFilter.put(newPkBytes)
 
-    WalletCache(updAddresses, updTrackedPubKeys, updTrackedBytes, filter)
+    WalletCache(updAddresses, updTrackedPubKeys, updTrackedBytes, pkFilter)
   }
 
 }

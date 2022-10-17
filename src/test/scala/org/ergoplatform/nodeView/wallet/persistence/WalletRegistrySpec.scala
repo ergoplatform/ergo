@@ -262,6 +262,7 @@ class WalletRegistrySpec
         val tb2 = trackedBoxGen.sample.get.copy(scans = Set(appId1), inclusionHeightOpt = Some(6))
         WalletRegistry.putBox(emptyBag, tb2).transact(store).get
         reg.unspentBoxes(appId1, 4, 7).length shouldBe 2
+        reg.unspentBoxes(appId1, 4, 5).length shouldBe 1
         // search should differentiate between scan ids
         val tb3 = trackedBoxGen.sample.get.copy(scans = Set(appId2), inclusionHeightOpt = Some(6))
         WalletRegistry.putBox(emptyBag, tb3).transact(store).get
@@ -273,6 +274,10 @@ class WalletRegistrySpec
         reg.unspentBoxes(appId2, 4, 7).length shouldBe 2
         // putting 2 identical boxes should be idempotent operation
         WalletRegistry.putBox(emptyBag, tb4).transact(store).get
+        reg.unspentBoxes(appId2, 4, 7).length shouldBe 2
+
+        val tb5 = trackedBoxGen.sample.get.copy(scans = Set(appId2), inclusionHeightOpt = Some(5), spendingHeightOpt = Some(6))
+        WalletRegistry.putBox(emptyBag, tb5).transact(store).get
         reg.unspentBoxes(appId2, 4, 7).length shouldBe 2
       }
     }

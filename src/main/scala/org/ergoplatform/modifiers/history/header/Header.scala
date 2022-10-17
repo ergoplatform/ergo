@@ -125,7 +125,7 @@ object Header extends ApiCodecs {
 
   /**
     * Block version after the 5.0 soft-fork
-    * 5.0 interpreter with JITC, monotonic height rule
+    * 5.0 interpreter with JITC, monotonic height rule (EIP-39)
     */
   val Interpreter50Version: Byte = 3
 

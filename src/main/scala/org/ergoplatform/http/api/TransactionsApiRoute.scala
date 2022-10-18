@@ -41,7 +41,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
       case Success(boxId) =>
         provide(boxId)
       case _ =>
-        reject(ValidationRejection("Wrong boxId format, it should be hex string"))
+        reject(ValidationRejection(s"boxId $value is invalid, it should be hex string"))
     }
   }
 
@@ -52,7 +52,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
       case Success(tokenId) =>
         provide(tokenId)
       case _ =>
-        reject(ValidationRejection("Wrong tokenId format, it should be hex string"))
+        reject(ValidationRejection(s"tokenId $value is invalid, it should be 64 chars long hex string"))
     }
   }
 

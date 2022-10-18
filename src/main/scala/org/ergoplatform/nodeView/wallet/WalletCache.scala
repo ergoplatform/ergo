@@ -15,7 +15,7 @@ import scala.util.Try
 final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
                              trackedPubKeys: Seq[ExtendedPublicKey],
                              trackedBytes: Seq[Array[Byte]],
-                             pkFilter: BloomFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
+                             scriptsFilter: BloomFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
 
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
@@ -37,9 +37,9 @@ final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
     val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
 
     // update filter
-    pkFilter.put(newPkBytes)
+    scriptsFilter.put(newPkBytes)
 
-    WalletCache(updAddresses, updTrackedPubKeys, updTrackedBytes, pkFilter)
+    WalletCache(updAddresses, updTrackedPubKeys, updTrackedBytes, scriptsFilter)
   }
 
 }
@@ -94,10 +94,10 @@ object WalletCache {
   def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): WalletCache = {
     val tbs = trackedBytes(trackedPubKeys)
     val msBytes = miningScripts(trackedPubKeys, settings).map(_.bytes)
-    val pkFilter = createScriptsFilter(tbs, msBytes, settings.walletSettings.walletProfile)
+    val scriptsFilter = createScriptsFilter(tbs, msBytes, settings.walletSettings.walletProfile)
     val pka = publicKeyAddresses(trackedPubKeys, settings.addressEncoder)
 
-    WalletCache(pka, trackedPubKeys, tbs, pkFilter)(settings)
+    WalletCache(pka, trackedPubKeys, tbs, scriptsFilter)(settings)
   }
 
 }

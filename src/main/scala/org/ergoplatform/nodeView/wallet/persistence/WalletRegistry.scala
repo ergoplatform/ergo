@@ -102,6 +102,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     store
       .getRange(fromScanBoxSpaceKey(scanId, heightFrom), toScanBoxSpaceKey(scanId, heightTo))
       .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
+      .filter(_.spendingHeightOpt.isEmpty)
   }
 
   /**

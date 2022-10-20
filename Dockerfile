@@ -11,11 +11,10 @@ RUN sbt update
 COPY . ./
 RUN sbt assembly
 RUN mv `find target/scala-*/stripped/ -name ergo-*.jar` ergo.jar
-FROM openjdk:11-oraclelinux8
-RUN microdnf --nodocs -y upgrade
-RUN microdnf --nodocs -y install --setopt=install_weak_deps=0 jq curl
-RUN microdnf clean all
-RUN adduser --home-dir /home/ergo --uid 9052 ergo && \
+
+FROM eclipse-temurin:11-jre-jammy
+RUN apt-get update && apt-get install -y curl jq && rm -rf /var/lib/apt/lists/*
+RUN adduser --disabled-password --home /home/ergo --uid 9052 --gecos "ErgoPlatform" ergo && \
     install -m 0750 -o ergo -g ergo -d /home/ergo/.ergo
 USER ergo
 EXPOSE 9020 9021 9052 9030 9053

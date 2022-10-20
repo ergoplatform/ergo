@@ -39,8 +39,8 @@ trait ErgoWalletReader extends NodeViewComponent {
     (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[SecretString]]
 
   def restoreWallet(encryptionPass: SecretString, mnemonic: SecretString,
-                    mnemonicPassOpt: Option[SecretString] = None): Future[Try[Unit]] =
-    (walletActor ? RestoreWallet(mnemonic, mnemonicPassOpt, encryptionPass)).mapTo[Try[Unit]]
+                    mnemonicPassOpt: Option[SecretString] = None, usePre1627KeyDerivation: Boolean): Future[Try[Unit]] =
+    (walletActor ? RestoreWallet(mnemonic, mnemonicPassOpt, encryptionPass, usePre1627KeyDerivation)).mapTo[Try[Unit]]
 
   def unlockWallet(pass: SecretString): Future[Try[Unit]] =
     (walletActor ? UnlockWallet(pass)).mapTo[Try[Unit]]

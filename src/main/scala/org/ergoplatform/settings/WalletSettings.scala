@@ -1,5 +1,6 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.nodeView.wallet.WalletProfile
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 
 case class WalletSettings(secretStorage: SecretStorageSettings,
@@ -15,4 +16,9 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           testKeysQty: Option[Int] = None,
                           // Some(Seq(x)) burns all except x, Some(Seq.empty) burns all, None ignores that feature
                           tokensWhitelist: Option[Seq[String]] = None,
-                          checkEIP27: Boolean = false)
+                          checkEIP27: Boolean = false,
+                          profile: String = WalletProfile.User.label) {
+
+  val walletProfile: WalletProfile = WalletProfile.fromLabel(profile)
+
+}

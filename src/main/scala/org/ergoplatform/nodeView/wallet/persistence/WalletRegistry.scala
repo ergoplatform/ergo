@@ -449,9 +449,6 @@ object WalletRegistry {
 
   // box index prefix that tracks all (spent & unspent) boxes by inclusion height
   private val InclusionHeightScanBoxPrefix: Byte = 0x07
-  // box-sized dummy suffix that represents minimum and maximum for range iteration
-  private val BoxSizedStartSuffix = Array.fill(32)(0: Byte)
-  private val BoxSizedEndSuffix = Array.fill(32)(-1: Byte)
 
   // tx index prefix that tracks transactions by inclusion height
   private val InclusionHeightScanTxPrefix: Byte = 0x08
@@ -517,12 +514,6 @@ object WalletRegistry {
     res
   }
 
-  private def fromScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
-    composeKeyWithHeightAndId(InclusionHeightScanBoxPrefix, scanId, height, BoxSizedStartSuffix)
-
-  private def toScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
-    composeKeyWithHeightAndId(InclusionHeightScanBoxPrefix, scanId, height, BoxSizedEndSuffix)
-
   private def firstScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, 0)
 
@@ -535,13 +526,11 @@ object WalletRegistry {
   private def lastSpentScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(SpentIndexPrefix, scanId, -1)
 
-/*
-  private def firstIncludedScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
-    composeKey(UnspentIndexPrefix, scanId, height, 0)
+  private def fromScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKey(InclusionHeightScanBoxPrefix, scanId, height)
 
-  private def lastIncludedScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
-    composeKey(UnspentIndexPrefix, scanId, Int.MaxValue, -1)
-*/
+  private def toScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKey(InclusionHeightScanBoxPrefix, scanId, height, -1)
 
   private def firstIncludedScanTransactionSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
     composeKey(InclusionHeightScanTxPrefix, scanId, height)

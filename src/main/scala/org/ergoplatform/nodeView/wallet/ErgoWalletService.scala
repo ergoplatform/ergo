@@ -561,8 +561,16 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     }
 
   override def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =
-      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter, dustLimit)
-        .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
+      WalletScanLogic.scanBlockTransactions(
+        state.registry,
+        state.offChainRegistry,
+        state.walletVars,
+        block,
+        state.outputsFilter,
+        dustLimit,
+        ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
+        state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
+      }
 
   override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

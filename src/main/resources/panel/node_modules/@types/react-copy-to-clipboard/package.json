@@ -1,0 +1,36 @@
+{
+    "name": "@types/react-copy-to-clipboard",
+    "version": "4.3.0",
+    "description": "TypeScript definitions for react-copy-to-clipboard",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Meno Abels",
+            "url": "https://github.com/mabels",
+            "githubUsername": "mabels"
+        },
+        {
+            "name": "Bernabe",
+            "url": "https://github.com/BernabeFelix",
+            "githubUsername": "BernabeFelix"
+        },
+        {
+            "name": "Ward Delabastita",
+            "url": "https://github.com/wdlb",
+            "githubUsername": "wdlb"
+        }
+    ],
+    "main": "",
+    "types": "index",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/react-copy-to-clipboard"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/react": "*"
+    },
+    "typesPublisherContentHash": "19790b1a6e6ace9df9b1e88090a78da164478ce0f0caca0783d47a759338dbf2",
+    "typeScriptVersion": "2.8"
+}

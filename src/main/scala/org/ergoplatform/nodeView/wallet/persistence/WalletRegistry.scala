@@ -91,19 +91,39 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   }
 
   /**
-    * Read unspent boxes which belong to a scan with given id
+    * Read boxes within height range which belong to a scan with given id
     *
     * @param scanId - scan identifier
     * @param heightFrom - min inclusion height of unspent boxes
     * @param heightTo - max inclusion height of unspent boxes
-    * @return sequences of scan-related unspent boxes found in the database
+    * @return sequences of scan-related boxes found in the database
     */
-  def unspentBoxes(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] = {
+  def boxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
     store
       .getRange(fromScanBoxSpaceKey(scanId, heightFrom), toScanBoxSpaceKey(scanId, heightTo))
       .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
-      .filter(_.spendingHeightOpt.isEmpty)
-  }
+
+  /**
+    * Read unspent boxes within height range which belong to a scan with given id
+    *
+    * @param scanId     - scan identifier
+    * @param heightFrom - min inclusion height of unspent boxes
+    * @param heightTo   - max inclusion height of unspent boxes
+    * @return sequences of scan-related unspent boxes found in the database
+    */
+  def unspentBoxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+    boxesByInclusionHeight(scanId, heightFrom, heightTo).filter(_.spendingHeightOpt.isEmpty)
+
+  /**
+    * Read spent boxes within height range which belong to a scan with given id
+    *
+    * @param scanId     - scan identifier
+    * @param heightFrom - min inclusion height of unspent boxes
+    * @param heightTo   - max inclusion height of unspent boxes
+    * @return sequences of scan-related spent boxes found in the database
+    */
+  def spentBoxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+    boxesByInclusionHeight(scanId, heightFrom, heightTo).filter(_.spendingHeightOpt.isDefined)
 
   /**
     * Read spent boxes which belong to a scan with given id
@@ -426,13 +446,15 @@ object WalletRegistry {
   // box indexes prefixes
   private val UnspentIndexPrefix: Byte = 0x03
   private val SpentIndexPrefix: Byte = 0x04
+
+  // box index prefix that tracks all (spent & unspent) boxes by inclusion height
   private val InclusionHeightScanBoxPrefix: Byte = 0x07
+  // box-sized dummy suffix that represents minimum and maximum for range iteration
+  private val BoxSizedStartSuffix = Array.fill(32)(0: Byte)
+  private val BoxSizedEndSuffix = Array.fill(32)(-1: Byte)
 
-  // tx index prefixes
+  // tx index prefix that tracks transactions by inclusion height
   private val InclusionHeightScanTxPrefix: Byte = 0x08
-
-  private val FirstUnspentBoxByHeightKey = Array.fill(32)(0: Byte)
-  private val LastUnspentBoxByHeightKey = Array.fill(32)(-1: Byte)
 
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
@@ -496,10 +518,10 @@ object WalletRegistry {
   }
 
   private def fromScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
-    composeKeyWithHeightAndId(InclusionHeightScanBoxPrefix, scanId, height, FirstUnspentBoxByHeightKey)
+    composeKeyWithHeightAndId(InclusionHeightScanBoxPrefix, scanId, height, BoxSizedStartSuffix)
 
   private def toScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
-    composeKeyWithHeightAndId(InclusionHeightScanBoxPrefix, scanId, height, LastUnspentBoxByHeightKey)
+    composeKeyWithHeightAndId(InclusionHeightScanBoxPrefix, scanId, height, BoxSizedEndSuffix)
 
   private def firstScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, 0)

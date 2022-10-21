@@ -1,4 +1,4 @@
-FROM mozilla/sbt:11.0.13_1.6.2 as builder
+FROM sbtscala/scala-sbt:eclipse-temurin-11.0.15_1.6.2_2.12.16 as builder
 WORKDIR /mnt
 COPY build.sbt findbugs-exclude.xml ./
 COPY project/ project/

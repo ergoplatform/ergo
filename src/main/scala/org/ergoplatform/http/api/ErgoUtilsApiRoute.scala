@@ -1,6 +1,7 @@
 package org.ergoplatform.http.api
 
 import akka.actor.ActorRefFactory
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import io.circe.Json
 import io.circe.syntax._
@@ -13,13 +14,10 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.ProveDlog
+
 import java.security.SecureRandom
 import scala.util.Failure
-import sigmastate.serialization.{
-  ErgoTreeSerializer,
-  GroupElementSerializer,
-  SigmaSerializer
-}
+import sigmastate.serialization.{ErgoTreeSerializer, GroupElementSerializer, SigmaSerializer}
 
 class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
   implicit val context: ActorRefFactory
@@ -38,10 +36,12 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
     seedRoute ~
     length ~
     hashBlake2b ~
-    addressR ~
     rawToAddressR ~
     addressToRawR ~
-    ergoTreeToAddressR
+    validateAddressPostR ~
+    validateAddressGetR ~
+    ergoTreeToAddressPostR ~
+    ergoTreeToAddressGetR
   }
 
   private def seed(length: Int): String = {
@@ -60,9 +60,9 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
 
   def hashBlake2b: Route = {
     (post & path("hash" / "blake2b") & entity(as[Json])) { json =>
-      json.asString match {
-        case Some(message) => ApiResponse(encoder.encode(Blake2b256(message)))
-        case None          => ApiError.BadRequest
+      json.as[String] match {
+        case Right(message) => ApiResponse(encoder.encode(Blake2b256(message)))
+        case Left(ex)       => ApiError(StatusCodes.BadRequest, ex.getMessage())
       }
     }
   }
@@ -91,34 +91,48 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
       )
   }
 
-  def ergoTreeToAddressR: Route = (get & path("ergoTreeToAddress" / Segment)) {
-    ergoTreeHex =>
-      Base16
-        .decode(ergoTreeHex)
-        .flatMap { etBytes =>
-          ergoAddressEncoder.fromProposition(treeSerializer.deserializeErgoTree(etBytes))
-        }
-        .fold(
-          e => BadRequest(e.getMessage),
-          address => ApiResponse(Map("address" -> address.toString.asJson).asJson)
-        )
+  private def ergoTreeToAddressResponse(ergoTreeHex: String) = {
+    Base16
+      .decode(ergoTreeHex)
+      .flatMap { etBytes =>
+        ergoAddressEncoder.fromProposition(treeSerializer.deserializeErgoTree(etBytes))
+      }
+      .fold(
+        e => BadRequest(e.getMessage),
+        address => ApiResponse(Map("address" -> address.toString.asJson).asJson)
+      )
   }
 
-  def addressR: Route = (get & path("address" / Segment)) { addressStr =>
+  def ergoTreeToAddressGetR: Route = (get & path("ergoTreeToAddress" / Segment))(ergoTreeToAddressResponse)
+  def ergoTreeToAddressPostR: Route = (post & path("ergoTreeToAddress") & entity(as[Json])) { json =>
+    json.as[String] match {
+      case Right(ergoTreeHex) => ergoTreeToAddressResponse(ergoTreeHex)
+      case Left(ex)           => ApiError(StatusCodes.BadRequest, ex.getMessage())
+    }
+  }
+
+  private def validateAddressResponse(addressStr: String) = {
     val address = ergoAddressEncoder.fromString(addressStr)
     val error = address match {
       case Failure(exception) => Map("error" -> exception.getMessage.asJson)
-      case _                  => Map()
+      case _ => Map()
     }
 
     val resp: Map[String, Json] = error ++ Map(
-        "address" -> addressStr.asJson,
-        "isValid" -> address.isSuccess.asJson
-      )
-
+      "address" -> addressStr.asJson,
+      "isValid" -> address.isSuccess.asJson
+    )
     ApiResponse(resp.asJson)
   }
 
+  def validateAddressGetR: Route = (get & path("address" / Segment))(validateAddressResponse)
+
+  def validateAddressPostR: Route = (post & path("address") & entity(as[Json])) { json =>
+    json.as[String] match {
+      case Right(addressStr) => validateAddressResponse(addressStr)
+      case Left(ex)          => ApiError(StatusCodes.BadRequest, ex.getMessage())
+    }
+  }
 }
 
 object ErgoUtilsApiRoute {

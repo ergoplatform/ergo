@@ -92,7 +92,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
           handler(handshake)
 
         case Failure(t) =>
-          log.info(s"Error during parsing a handshake", t.getMessage)
+          log.info(s"Error during parsing a handshake: ${t.getMessage}")
           //ban the peer for the wrong handshake message
           //peer will be added to the blacklist and the network controller will send CloseConnection
           selfPeer.foreach(c => networkControllerRef ! PenalizePeer(c.connectionId.remoteAddress, PenaltyType.PermanentPenalty))

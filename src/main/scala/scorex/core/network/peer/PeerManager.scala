@@ -136,13 +136,16 @@ object PeerManager {
       */
     case class SeenPeers(howMany: Int) extends GetPeers[Seq[PeerInfo]] {
 
+      val limit: Long = 3 * 60 * 60 * 1000 // 3h
+
       override def choose(knownPeers: Map[InetSocketAddress, PeerInfo],
                           blacklistedPeers: Seq[InetAddress],
                           sc: ScorexContext): Seq[PeerInfo] = {
         val recentlySeenNonBlacklisted = knownPeers.values.toSeq
           .filter { p =>
             (p.connectionType.isDefined || p.lastHandshake > 0) &&
-              !blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip))
+            !blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip)) &&
+            (System.currentTimeMillis - p.lastHandshake < limit)
           }
         Random.shuffle(recentlySeenNonBlacklisted).take(howMany)
       }

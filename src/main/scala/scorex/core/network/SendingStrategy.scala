@@ -11,7 +11,7 @@ object SendToRandom extends SendingStrategy {
     if (peers.nonEmpty) {
       Seq(peers(Random.nextInt(peers.length)))
     } else {
-      Seq.empty
+      Nil
     }
   }
 }

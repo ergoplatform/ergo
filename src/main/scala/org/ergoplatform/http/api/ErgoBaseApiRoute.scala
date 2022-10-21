@@ -11,7 +11,6 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiError, ApiRoute}
 import scorex.util.{ModifierId, bytesToId}
 import akka.pattern.ask
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome._
@@ -26,8 +25,6 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
 
   implicit val ec: ExecutionContextExecutor = context.dispatcher
 
-  implicit val ae: ErgoAddressEncoder = null
-
   val modifierId: Directive1[ModifierId] = pathPrefix(Segment).flatMap(handleModifierId)
 
   val modifierIdGet: Directive1[ModifierId] = parameters("id".as[String])
@@ -37,15 +34,6 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
     Algos.decode(value) match {
       case Success(bytes) => provide(bytesToId(bytes))
       case _ => reject(ValidationRejection("Wrong modifierId format"))
-    }
-  }
-
-  val ergoAddress: Directive1[ErgoAddress] = entity(as[String]).flatMap(handleErgoAddress)
-
-  private def handleErgoAddress(value: String): Directive1[ErgoAddress] = {
-    ae.fromString(value) match {
-      case Success(addr) => provide(addr)
-      case _ => reject(ValidationRejection("Wrong address format"))
     }
   }
 

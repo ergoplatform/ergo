@@ -1,7 +1,7 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive, Route}
+import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
 import akka.pattern.ask
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
@@ -19,6 +19,7 @@ import spire.implicits.cfor
 
 import java.nio.ByteBuffer
 import scala.concurrent.Future
+import scala.util.Success
 
 case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -29,8 +30,16 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private val MaxItems = 16384
 
-  override val ae: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
+  implicit val ae: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
 
+  val ergoAddress: Directive1[ErgoAddress] = entity(as[String]).flatMap(handleErgoAddress)
+
+  private def handleErgoAddress(value: String): Directive1[ErgoAddress] = {
+    ae.fromString(value) match {
+      case Success(addr) => provide(addr)
+      case _ => reject(ValidationRejection("Wrong address format"))
+    }
+  }
 
   override val route: Route = pathPrefix("blockchain") {
     getTxByIdR ~

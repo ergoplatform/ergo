@@ -19,10 +19,9 @@ trait WalletApiOperations extends ErgoBaseApiRoute {
 
 
   /**
-    * Filter function for wallet boxes used in box-related API calls.
-    * Allows to filter out boxes by height or number of confirmations.
+    * Filter function that filters boxes by height or number of confirmations.
     */
-  val boxFilterPredicate: (WalletBox, Int, Int, Int, Int) => Boolean = {
+  val boxConfirmationHeightFilter: (WalletBox, Int, Int, Int, Int) => Boolean = {
     (bx: WalletBox, minConfNum: Int, maxConfNum: Int, minHeight: Int, maxHeight: Int) =>
       val minConstraints =
         bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
@@ -31,7 +30,16 @@ trait WalletApiOperations extends ErgoBaseApiRoute {
         (maxConfNum == -1 || bx.confirmationsNumOpt.getOrElse(0) <= maxConfNum) &&
           (maxHeight == -1 || bx.trackedBox.inclusionHeightOpt.getOrElse(Int.MaxValue) <= maxHeight)
       minConstraints && maxConstraints
+  }
 
+  /**
+    * Filter function that filters boxes by number of confirmations.
+    */
+  val boxConfirmationFilter: (WalletBox, Int, Int) => Boolean = {
+    (bx: WalletBox, minConfNum: Int, maxConfNum: Int) =>
+      val minConstraints = bx.confirmationsNumOpt.getOrElse(0) >= minConfNum
+      val maxConstraints = maxConfNum == -1 || bx.confirmationsNumOpt.getOrElse(0) <= maxConfNum
+      minConstraints && maxConstraints
   }
 
 

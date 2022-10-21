@@ -19,7 +19,7 @@ import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
-import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
+import sigmastate.lang.SigmaCompiler
 import sigmastate.interpreter.Interpreter
 import sigmastate.serialization.ValueSerializer
 
@@ -62,7 +62,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   private def compileSource(source: String, env: Map[String, Any]): Try[ErgoTree] = {
     import sigmastate.Values._
-    val compiler = SigmaCompiler(CompilerSettings(ergoSettings.chainSettings.addressPrefix, TransformingSigmaBuilder, lowerMethodCalls = true))
+    val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
     Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
       case script: Value[SSigmaProp.type@unchecked] if script.tpe == SSigmaProp =>
         Success(script)

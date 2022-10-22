@@ -4,7 +4,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress
+import org.ergoplatform.nodeView.history.extra.{ExtraIndexSerializer, ExtraIndex, IndexedErgoAddress}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.ScorexEncoding
@@ -21,6 +21,7 @@ import spire.syntax.all.cfor
   * @param indexStore   - Additional key-value storage for indexes, required by History for efficient work.
   *                     contains links to bestHeader, bestFullBlock, heights and scores for different blocks, etc.
   * @param objectsStore - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
+  * @param extraStore   - key-value store, where key is id of Index and value is it's bytes
   * @param config       - cache configs
   */
 class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStore: LDBKVStore, config: CacheSettings)
@@ -41,7 +42,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
   private val extraCache =
     Caffeine.newBuilder()
       .maximumSize(config.history.extraCacheSize)
-      .build[String, BlockSection]()
+      .build[String, ExtraIndex]()
 
   private val indexCache =
     Caffeine.newBuilder()
@@ -50,12 +51,12 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
 
   private def cacheModifier(mod: BlockSection): Unit = mod.modifierTypeId match {
     case Header.modifierTypeId => headersCache.put(mod.id, mod)
-    case IndexedErgoAddress.modifierTypeId => extraCache.put(mod.id, mod) // only cache "big" modifiers
+    case IndexedErgoAddress.modifierTypeId => extraCache.put(mod.id, mod.asInstanceOf[ExtraIndex]) // only cache "big" modifiers
     case _ => blockSectionsCache.put(mod.id, mod)
   }
 
   private def lookupModifier(id: ModifierId): Option[BlockSection] =
-    Option(extraCache.getIfPresent(id)) orElse Option(headersCache.getIfPresent(id)) orElse Option(blockSectionsCache.getIfPresent(id))
+    Option(headersCache.getIfPresent(id)) orElse Option(blockSectionsCache.getIfPresent(id))
 
   private def removeModifier(id: ModifierId): Unit = {
     headersCache.invalidate(id)
@@ -72,18 +73,31 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
   }
 
   def modifierById(id: ModifierId): Option[BlockSection] =
-    lookupModifier(id) orElse
-      (extraStore.get(idToBytes(id)) orElse objectsStore.get(idToBytes(id))).flatMap { bytes =>
-        HistoryModifierSerializer.parseBytesTry(bytes) match {
-          case Success(pm) =>
-            log.trace(s"Cache miss for existing modifier $id")
-            cacheModifier(pm)
-            Some(pm)
-          case Failure(_) =>
-            log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
-            None
-        }
+    lookupModifier(id) orElse objectsStore.get(idToBytes(id)).flatMap { bytes =>
+      HistoryModifierSerializer.parseBytesTry(bytes) match {
+        case Success(pm) =>
+          log.trace(s"Cache miss for existing modifier $id")
+          cacheModifier(pm)
+          Some(pm)
+        case Failure(_) =>
+          log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
+          None
       }
+    }
+
+  def getExtraIndex(id: ModifierId): Option[ExtraIndex] = {
+    Option(extraCache.getIfPresent(id)) orElse extraStore.get(idToBytes(id)).flatMap { bytes =>
+      ExtraIndexSerializer.parseBytesTry(bytes) match {
+        case Success(pm) =>
+          log.trace(s"Cache miss for existing index $id")
+          cacheModifier(pm)
+          Some(pm)
+        case Failure(_) =>
+          log.warn(s"Failed to parse index ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
+          None
+      }
+    }
+  }
 
   def getIndex(id: ByteArrayWrapper): Option[Array[Byte]] =
     Option(indexCache.getIfPresent(id)).orElse {
@@ -113,8 +127,8 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
   }
 
   def insertExtra(indexesToInsert: Array[(Array[Byte], Array[Byte])],
-                  objectsToInsert: Array[BlockSection]): Unit = {
-    extraStore.insert(objectsToInsert.map(mod => (mod.serializedId, HistoryModifierSerializer.toBytes(mod))))
+                  objectsToInsert: Array[ExtraIndex]): Unit = {
+    extraStore.insert(objectsToInsert.map(mod => (mod.serializedId, ExtraIndexSerializer.toBytes(mod))))
     cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i))}
     cfor(0)(_ < indexesToInsert.length, _ + 1) { i => extraStore.insert(indexesToInsert(i)._1, indexesToInsert(i)._2)}
   }

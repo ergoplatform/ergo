@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
-import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.settings.Algos
@@ -13,12 +12,21 @@ import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.{CollectionConstant, EvaluatedValue}
 import sigmastate.{SByte, SType}
 
+/**
+  * Index of a token containing creation information.
+  * @param tokenId     - id of this token
+  * @param boxId       - id of the creation box
+  * @param amount      - emission amount
+  * @param name        - name of this token (UTF-8)
+  * @param description - description of this token (UTF-8)
+  * @param decimals    - number of decimal places
+  */
 case class IndexedToken(tokenId: ModifierId,
                         boxId: ModifierId,
                         amount: Long,
                         name: String,
                         description: String,
-                        decimals: Int) extends BlockSection {
+                        decimals: Int) extends ExtraIndex {
   override def parentId: ModifierId = null
   override val modifierTypeId: ModifierTypeId = IndexedToken.modifierTypeId
   override type M = IndexedToken
@@ -28,10 +36,19 @@ case class IndexedToken(tokenId: ModifierId,
 }
 
 object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
-
-  // necessary, because token ids are sometimes identical to box ids, which causes overwrites
+  /**
+    * Calculate a unique identifier for this a token.
+    * Necessary, because token ids are sometimes identical to box ids, which causes overwrites.
+    * @param tokenId - id of the token
+    * @return unique id for token
+    */
   def uniqueId(tokenId: ModifierId): ModifierId = bytesToId(Algos.hash(tokenId + "token"))
 
+  /**
+    * Check if a box is creation a token.
+    * @param box - box to check
+    * @return true if the box is creation a token, false otherwise
+    */
   def tokenRegistersSet(box: ErgoBox): Boolean = {
 
     // registers exist
@@ -53,6 +70,12 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
     true
   }
 
+  /**
+    * Get the number of decimals places from a register.
+    * Try-catch, because some old tokens used Int to store the decimals, rather than Byte Coll
+    * @param reg - register to extract decimals from
+    * @return number of decimals places
+    */
   def getDecimals(reg: EvaluatedValue[_ <: SType]): Int = {
     try {
       new String(reg.asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8").toInt
@@ -61,6 +84,11 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
     }
   }
 
+  /**
+    * Construct a token index from a box. Used after checking box with "tokenRegistersSet".
+    * @param box - box to use
+    * @return token index
+    */
   def fromBox(box: ErgoBox): IndexedToken =
     IndexedToken(bytesToId(box.additionalTokens(0)._1),
                  bytesToId(box.id),

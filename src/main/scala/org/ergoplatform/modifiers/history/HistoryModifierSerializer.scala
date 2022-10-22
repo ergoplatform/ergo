@@ -3,7 +3,6 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.nodeView.history.extra.{IndexedErgoAddress, IndexedErgoAddressSerializer, IndexedErgoBox, IndexedErgoBoxSerializer, IndexedErgoTransaction, IndexedErgoTransactionSerializer, IndexedToken, IndexedTokenSerializer, NumericBoxIndex, NumericBoxIndexSerializer, NumericTxIndex, NumericTxIndexSerializer}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 
@@ -23,24 +22,6 @@ object HistoryModifierSerializer extends ScorexSerializer[BlockSection] {
       case m: Extension =>
         w.put(Extension.modifierTypeId)
         ExtensionSerializer.serialize(m, w)
-      case m: IndexedErgoAddress =>
-        w.put(IndexedErgoAddress.modifierTypeId)
-        IndexedErgoAddressSerializer.serialize(m, w)
-      case m: IndexedErgoTransaction =>
-        w.put(IndexedErgoTransaction.modifierTypeId)
-        IndexedErgoTransactionSerializer.serialize(m, w)
-      case m: IndexedErgoBox =>
-        w.put(IndexedErgoBox.modifierTypeId)
-        IndexedErgoBoxSerializer.serialize(m, w)
-      case m: NumericTxIndex =>
-        w.put(NumericTxIndex.modifierTypeId)
-        NumericTxIndexSerializer.serialize(m, w)
-      case m: NumericBoxIndex =>
-        w.put(NumericBoxIndex.modifierTypeId)
-        NumericBoxIndexSerializer.serialize(m, w)
-      case m: IndexedToken =>
-        w.put(IndexedToken.modifierTypeId)
-        IndexedTokenSerializer.serialize(m, w)
       case m =>
         throw new Error(s"Serialization for unknown modifier: $m")
     }
@@ -56,18 +37,6 @@ object HistoryModifierSerializer extends ScorexSerializer[BlockSection] {
         BlockTransactionsSerializer.parse(r)
       case Extension.`modifierTypeId` =>
         ExtensionSerializer.parse(r)
-      case IndexedErgoAddress.`modifierTypeId` =>
-        IndexedErgoAddressSerializer.parse(r)
-      case IndexedErgoTransaction.`modifierTypeId` =>
-        IndexedErgoTransactionSerializer.parse(r)
-      case IndexedErgoBox.`modifierTypeId` =>
-        IndexedErgoBoxSerializer.parse(r)
-      case NumericTxIndex.`modifierTypeId` =>
-        NumericTxIndexSerializer.parse(r)
-      case NumericBoxIndex.`modifierTypeId` =>
-        NumericBoxIndexSerializer.parse(r)
-      case IndexedToken.`modifierTypeId` =>
-        IndexedTokenSerializer.parse(r)
       case m =>
         throw new Error(s"Deserialization for unknown type byte: $m")
     }

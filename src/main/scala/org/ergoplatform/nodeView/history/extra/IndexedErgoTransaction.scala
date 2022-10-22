@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.DataInput
 import org.ergoplatform.modifiers.history.BlockTransactions
@@ -11,9 +10,15 @@ import scorex.core.ModifierTypeId
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
 
+/**
+  * Index of a transaction.
+  * @param txid        - id of this transaction
+  * @param height      - height of the block which includes this transaction
+  * @param globalIndex - numeric index of this transaction
+  */
 case class IndexedErgoTransaction(txid: ModifierId,
                                   height: Int,
-                                  globalIndex: Long) extends BlockSection {
+                                  globalIndex: Long) extends ExtraIndex {
 
   override val modifierTypeId: ModifierTypeId = IndexedErgoTransaction.modifierTypeId
   override def serializedId: Array[Byte] = fastIdToBytes(txid)
@@ -42,6 +47,11 @@ case class IndexedErgoTransaction(txid: ModifierId,
   def outputs: IndexedSeq[IndexedErgoBox] = _outputs
   def txSize: Int = _txSize
 
+  /**
+    * Get all information related to this transaction from database.
+    * @param history - database handle
+    * @return this transaction augmented with additional information
+    */
   def retrieveBody(history: ErgoHistoryReader): IndexedErgoTransaction = {
 
     val header: Header = history.typedModifierById[Header](history.bestHeaderIdAtHeight(height).get).get
@@ -52,9 +62,9 @@ case class IndexedErgoTransaction(txid: ModifierId,
     _timestamp = header.timestamp
     _index = blockTxs.txs.indices.find(blockTxs.txs(_).id == txid).get
     _numConfirmations = history.bestFullBlockOpt.get.height - height
-    _inputs = blockTxs.txs(_index).inputs.map(input => history.typedModifierById[IndexedErgoBox](bytesToId(input.boxId)).get)
+    _inputs = blockTxs.txs(_index).inputs.map(input => history.typedExtraIndexById[IndexedErgoBox](bytesToId(input.boxId)).get)
     _dataInputs = blockTxs.txs(_index).dataInputs
-    _outputs = blockTxs.txs(_index).outputs.map(output => history.typedModifierById[IndexedErgoBox](bytesToId(output.id)).get)
+    _outputs = blockTxs.txs(_index).outputs.map(output => history.typedExtraIndexById[IndexedErgoBox](bytesToId(output.id)).get)
     _txSize = blockTxs.txs(_index).size
 
     this

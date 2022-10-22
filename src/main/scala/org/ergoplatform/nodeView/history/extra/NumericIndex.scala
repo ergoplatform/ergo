@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
 import org.ergoplatform.settings.Algos
@@ -9,7 +8,12 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 
-case class NumericTxIndex(n: Long, m: ModifierId) extends BlockSection {
+/**
+  * Numeric index pointing to a transaction id.
+  * @param n - index number of a transaction
+  * @param m - id of a transaction
+  */
+case class NumericTxIndex(n: Long, m: ModifierId) extends ExtraIndex {
   override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = NumericTxIndex.indexToBytes(n)
   override def parentId: ModifierId = null
@@ -34,13 +38,29 @@ object NumericTxIndexSerializer extends ScorexSerializer[NumericTxIndex] {
 object NumericTxIndex {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ 25.toByte
 
+  /**
+    * Convert the index number of a transaction to an id for database retreival.
+    * @param n - index number to hash
+    * @return id corresponding to index number
+    */
   def indexToBytes(n: Long): Array[Byte] = Algos.hash("txns height " + n)
 
+  /**
+    * Get a body-less transaction from database by its index number.
+    * @param history - database handle
+    * @param n       - index number of a transaction
+    * @return transaction with given index, if found
+    */
   def getTxByNumber(history: ErgoHistoryReader, n: Long): Option[IndexedErgoTransaction] =
-    history.typedModifierById[IndexedErgoTransaction](history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n))).get.m)
+    history.typedExtraIndexById[IndexedErgoTransaction](history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n))).get.m)
 }
 
-case class NumericBoxIndex(n: Long, m: ModifierId) extends BlockSection {
+/**
+  * Numeric index pointing to a box id.
+  * @param n - index number of a box
+  * @param m - id of a box
+  */
+case class NumericBoxIndex(n: Long, m: ModifierId) extends ExtraIndex {
   override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = NumericBoxIndex.indexToBytes(n)
   override def parentId: ModifierId = null
@@ -65,8 +85,19 @@ object NumericBoxIndexSerializer extends ScorexSerializer[NumericBoxIndex] {
 object NumericBoxIndex {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ 30.toByte
 
+  /**
+    * Convert the index number of a box to an id for database retreival.
+    * @param n - index number to hash
+    * @return id corresponding to index number
+    */
   def indexToBytes(n: Long): Array[Byte] = Algos.hash("boxes height " + n)
 
+  /**
+    * Get a box from database by its index number.
+    * @param history - database handle
+    * @param n       - index number of a box
+    * @return box with given index, if found
+    */
   def getBoxByNumber(history: ErgoHistoryReader, n: Long): Option[IndexedErgoBox] =
-    history.typedModifierById[IndexedErgoBox](history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n))).get.m)
+    history.typedExtraIndexById[IndexedErgoBox](history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n))).get.m)
 }

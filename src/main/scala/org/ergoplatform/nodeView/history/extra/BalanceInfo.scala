@@ -18,7 +18,7 @@ class BalanceInfo(var nanoErgs: Long = 0L,
 
   def retreiveAdditionalTokenInfo(history: ErgoHistoryReader): BalanceInfo = {
     additionalTokenInfo ++= tokens.map(token => {
-      val iT: IndexedToken = history.typedModifierById[IndexedToken](IndexedTokenSerializer.uniqueId(token._1)).get
+      val iT: IndexedToken = history.typedExtraIndexById[IndexedToken](IndexedTokenSerializer.uniqueId(token._1)).get
       (token._1,(iT.name,iT.decimals))
     })
     this

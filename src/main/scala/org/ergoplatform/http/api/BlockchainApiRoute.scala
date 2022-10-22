@@ -64,13 +64,13 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     (readersHolder ? GetReaders).mapTo[Readers].map(r => (r.h, r.m))
 
   private def getAddress(tree: ErgoTree)(history: ErgoHistoryReader): Option[IndexedErgoAddress] = {
-    history.typedModifierById[IndexedErgoAddress](bytesToId(IndexedErgoAddressSerializer.hashErgoTree(tree)))
+    history.typedExtraIndexById[IndexedErgoAddress](bytesToId(IndexedErgoAddressSerializer.hashErgoTree(tree)))
   }
 
   private def getAddress(addr: ErgoAddress)(history: ErgoHistoryReader): Option[IndexedErgoAddress] = getAddress(addr.script)(history)
 
   private def getTxById(id: ModifierId)(history: ErgoHistoryReader): Option[IndexedErgoTransaction] =
-    history.typedModifierById[IndexedErgoTransaction](id) match {
+    history.typedExtraIndexById[IndexedErgoTransaction](id) match {
       case Some(tx) => Some(tx.retrieveBody(history))
       case None     => None
     }
@@ -85,7 +85,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getTxByIndex(index: Long)(history: ErgoHistoryReader): Option[IndexedErgoTransaction] =
-    getTxById(history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(index))).get.m)(history)
+    getTxById(history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(index))).get.m)(history)
 
   private def getLastTx(history: ErgoHistoryReader): IndexedErgoTransaction =
     getTxByIndex(ByteBuffer.wrap(history.modifierBytesById(bytesToId(GlobalTxIndexKey)).getOrElse(Array.fill[Byte](8){0})).getLong - 1)(history).get
@@ -120,7 +120,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       val base: Int = getLastTx(history).globalIndex.toInt - offset
       val txIds: Array[ModifierId] = new Array[ModifierId](limit)
       cfor(0)(_ < limit, _ + 1) { i =>
-        txIds(i) = history.typedModifierById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(base - limit + i))).get.m
+        txIds(i) = history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(base - limit + i))).get.m
       }
       txIds.reverse
     }
@@ -134,7 +134,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getBoxById(id: ModifierId)(history: ErgoHistoryReader): Option[IndexedErgoBox] =
-    history.typedModifierById[IndexedErgoBox](id)
+    history.typedExtraIndexById[IndexedErgoBox](id)
 
   private def getBoxByIdF(id: ModifierId): Future[Option[IndexedErgoBox]] =
     getHistory.map { history =>
@@ -146,7 +146,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getBoxByIndex(index: Long)(history: ErgoHistoryReader): Option[IndexedErgoBox] =
-    getBoxById(history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(index))).get.m)(history)
+    getBoxById(history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(index))).get.m)(history)
 
   private def getBoxByIndexF(index: Long): Future[Option[IndexedErgoBox]] =
     getHistory.map { history =>
@@ -197,7 +197,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       val base: Int = getLastBox(history).globalIndex.toInt - offset
       val boxIds: Array[ModifierId] = new Array[ModifierId](limit)
       cfor(0)(_ < limit, _ + 1) { i =>
-        boxIds(i) = history.typedModifierById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(base - limit + i))).get.m
+        boxIds(i) = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(base - limit + i))).get.m
       }
       boxIds.reverse
     }
@@ -244,7 +244,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getTokenInfoById(id: ModifierId): Future[Option[IndexedToken]] = {
     getHistory.map { history =>
-      history.typedModifierById[IndexedToken](IndexedTokenSerializer.uniqueId(id))
+      history.typedExtraIndexById[IndexedToken](IndexedTokenSerializer.uniqueId(id))
     }
   }
 

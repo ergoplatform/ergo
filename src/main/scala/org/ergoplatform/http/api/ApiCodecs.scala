@@ -473,7 +473,7 @@ trait ApiCodecs extends JsonCodecs {
   implicit val indexedBoxEncoder: Encoder[IndexedErgoBox] = { iEb =>
     iEb.box.asJson.deepMerge(Json.obj(
       "globalIndex" -> iEb.globalIndex.asJson,
-      "inclusionHeight" -> iEb.inclusionHeightOpt.asJson,
+      "inclusionHeight" -> iEb.inclusionHeight.asJson,
       "address" -> ExtraIndexerRef.getAddressEncoder.toString(iEb.getAddress).asJson,
       "spentTransactionId" -> iEb.spendingTxIdOpt.asJson
     ))

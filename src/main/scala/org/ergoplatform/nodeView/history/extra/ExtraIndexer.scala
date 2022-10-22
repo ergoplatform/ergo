@@ -20,7 +20,11 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import spire.syntax.all.cfor
 
-class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
+/**
+  * Actor that constructs an index of database elements.
+  * @param cacheSettings - cacheSettings to use for saveLimit size
+  */
+class ExtraIndexer(cacheSettings: CacheSettings)
   extends Actor with ScorexLogging {
 
   private var indexedHeight: Int = 0
@@ -45,13 +49,18 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
   private def historyStorage: HistoryStorage = _history.historyStorage
 
   // fast access
-  private val general: ArrayBuffer[BlockSection] = ArrayBuffer.empty[BlockSection]
+  private val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
   private val boxes: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
   private val trees: ArrayBuffer[IndexedErgoAddress] = ArrayBuffer.empty[IndexedErgoAddress]
 
   // input tokens in a tx
   private val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
 
+  /**
+    * Find a box in the boxes buffer.
+    * @param id - id of the wanted box
+    * @return an Option containing the index of the wanted box in the boxes buffer or None if box was not found
+    */
   private def findBox(id: BoxId): Option[Int] = {
     cfor(boxes.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
       if (java.util.Arrays.equals(boxes(i).serializedId, id))
@@ -60,14 +69,20 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     None
   }
 
-  // returns index of box in boxes
+  /**
+    * Spend an IndexedErgoBox from buffer or database. Also record tokens for later use in balance tracking logic.
+    * @param id     - id of the wanted box
+    * @param txId   - id of the spending transaction
+    * @param height - height of the block the spending transaction is included in
+    * @return index of spent box in boxes buffer or -1 if an unknown box was spent
+    */
   private def findAndSpendBox(id: BoxId, txId: ModifierId, height: Int): Int = {
     findBox(id) match {
       case Some(i) =>
         tokens ++= boxes(i).asSpent(txId, height).box.additionalTokens.toArray
         i
       case None =>
-        history.typedModifierById[IndexedErgoBox](bytesToId(id)) match { // box not found in last saveLimit modifiers
+        history.typedExtraIndexById[IndexedErgoBox](bytesToId(id)) match { // box not found in last saveLimit modifiers
           case Some(x) => // box found in DB, update
             boxes += x.asSpent(txId, height)
             tokens ++= x.box.additionalTokens.toArray
@@ -79,6 +94,11 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     }
   }
 
+  /**
+    * Add or subtract a box from an address in the buffer or in database.
+    * @param id             - hash of the (ergotree) address
+    * @param spendOrReceive - ErgoBox to spend or IndexedErgoBox to receive
+    */
   private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[ErgoBox,IndexedErgoBox]): Unit = {
     cfor(trees.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
       if(trees(i).treeHash == id) { // address found in last saveLimit modifiers
@@ -89,7 +109,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
         return
       }
     }
-    history.typedModifierById[IndexedErgoAddress](id) match { // address not found in last saveLimit modifiers
+    history.typedExtraIndexById[IndexedErgoAddress](id) match { // address not found in last saveLimit modifiers
       case Some(x) =>
         spendOrReceive match {
           case Left(box) => trees += x.addTx(globalTxIndex).spendBox(box) // spend box
@@ -103,8 +123,14 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     }
   }
 
+  /**
+    * @return number of indexes in all buffers
+    */
   private def modCount: Int = general.length + boxes.length + trees.length
 
+  /**
+    * Write buffered indexes to database and clear buffers.
+    */
   private def saveProgress(): Unit = {
 
     val start: Long = System.nanoTime()
@@ -116,7 +142,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     }
 
     // merge all modifiers to an Array, avoids reallocations durin concatenation (++)
-    val all: Array[BlockSection] = new Array[BlockSection](modCount)
+    val all: Array[ExtraIndex] = new Array[ExtraIndex](modCount)
     val offset: Array[Int] = Array(0, general.length, general.length + boxes.length)
     cfor(0)(_ < general.length, _ + 1) { i => all(i + offset(0)) = general(i) }
     cfor(0)(_ < boxes.length  , _ + 1) { i => all(i + offset(1)) = boxes(i) }
@@ -142,6 +168,11 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
     lastWroteToDB = indexedHeight
   }
 
+  /**
+    * Process a batch of BlockTransactions into memory and occasionally write them to database.
+    * @param bt     - BlockTransaction to process
+    * @param height - height of the block containing the transactions
+    */
   private def index(bt: BlockTransactions, height: Int): Unit = {
 
     if(caughtUp && height <= indexedHeight) return // do not process older blocks again after caught up (due to actor message queue)
@@ -170,7 +201,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
       //process transaction outputs
       cfor(0)(_ < tx.outputs.size, _ + 1) { i =>
         val box: ErgoBox = tx.outputs(i)
-        boxes += new IndexedErgoBox(Some(height), None, None, box, globalBoxIndex) // box by id
+        boxes += new IndexedErgoBox(height, None, None, box, globalBoxIndex) // box by id
         general += NumericBoxIndex(globalBoxIndex, bytesToId(box.id)) // box id by global box number
 
         // box by address
@@ -200,7 +231,7 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
       indexedHeight = height // update height here after caught up with chain
 
       if(modCount >= saveLimit || // modifier limit reached to write to db
-         history.fullBlockHeight == history.headersHeight) // write to db every block after caught up
+         history.fullBlockHeight == history.headersHeight) // write to db every block after chain synced
         saveProgress()
 
     }else
@@ -209,6 +240,9 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 
   }
 
+  /**
+    * Main indexer loop that tries to catch up with the already present blocks in database.
+    */
   private def run(): Unit = {
 
     indexedHeight  = ByteBuffer.wrap(history.modifierBytesById(bytesToId(IndexedHeightKey)) .getOrElse(Array.fill[Byte](4){0})).getInt
@@ -245,6 +279,10 @@ class ExtraIndex(chainSettings: ChainSettings, cacheSettings: CacheSettings)
 object ExtraIndexerRef {
 
   object ReceivableMessages {
+    /**
+      * Initialize ExtraIndexer and start indexing.
+      * @param history - handle to database
+      */
     case class Start(history: ErgoHistory)
   }
 
@@ -265,7 +303,11 @@ object ExtraIndexerRef {
     index
   }
 
-  // faster id to bytes - no safety checks
+  /**
+    * Faster id to bytes - no safety checks
+    * @param id - ModifierId to convert to byte representation
+    * @return an array of bytes
+    */
   private[extra] def fastIdToBytes(id: ModifierId): Array[Byte] = {
     val x: Array[Byte] = new Array[Byte](id.length / 2)
     cfor(0)(_ < id.length, _ + 2) {i => x(i / 2) = ((hexIndex(id(i)) << 4) | hexIndex(id(i + 1))).toByte}
@@ -277,7 +319,7 @@ object ExtraIndexerRef {
   val GlobalBoxIndexKey: Array[Byte] = Algos.hash("boxes height")
 
   def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {
-    val actor = system.actorOf(Props.create(classOf[ExtraIndex], chainSettings, cacheSettings))
+    val actor = system.actorOf(Props.create(classOf[ExtraIndexer], cacheSettings))
     _ae = chainSettings.addressEncoder
     ExtraIndexerRefHolder.init(actor)
     actor
@@ -289,10 +331,22 @@ object ExtraIndexerRefHolder {
   private var _actor: Option[ActorRef] = None
   private var running: Boolean = false
 
+  /**
+    * Start stored ExtraIndexer actor with history handle.
+    * @param history - initialized history handle
+    */
   private[history] def start(history: ErgoHistory): Unit = if(_actor.isDefined && !running) {
     _actor.get ! Start(history)
     running = true
   }
 
+  /**
+    * Store a Ref to an ExtraIndexer actor.
+    * @param actor - Ref to ExtraIndexer
+    */
   private[extra] def init(actor: ActorRef): Unit = _actor = Some(actor)
 }
+/**
+  * Base trait for all additional indexes made by ExtraIndexer
+  */
+trait ExtraIndex extends BlockSection

@@ -6,7 +6,12 @@ import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler, Route}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.{ApiErrorHandler, ApiRejectionHandler, ApiRoute, CompositeHttpService}
+import scorex.core.api.http.{
+  ApiErrorHandler,
+  ApiRejectionHandler,
+  ApiRoute,
+  CompositeHttpService
+}
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message._
@@ -87,16 +92,30 @@ trait Application extends ScorexLogging {
 
   val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
-  val messageHandlers: Map[MessageCode, ActorRef] = Map(
-    InvSpec.messageCode                 -> nodeViewSynchronizer,
-    RequestModifierSpec.messageCode     -> nodeViewSynchronizer,
-    ModifiersSpec.messageCode           -> nodeViewSynchronizer,
-    ErgoSyncInfoMessageSpec.messageCode -> nodeViewSynchronizer,
-    PeersSpec.messageCode               -> peerSynchronizer
-  )
+  private val messageHandlers: ActorRef => Map[MessageCode, ActorRef] =
+    networkControllerRef => {
+      Map(
+        InvSpec.messageCode                 -> nodeViewSynchronizer,
+        RequestModifierSpec.messageCode     -> nodeViewSynchronizer,
+        ModifiersSpec.messageCode           -> nodeViewSynchronizer,
+        ErgoSyncInfoMessageSpec.messageCode -> nodeViewSynchronizer,
+        PeersSpec.messageCode -> PeerSynchronizerRef(
+          "PeerSynchronizer",
+          networkControllerRef,
+          peerManagerRef,
+          scorexSettings.network
+        )
+      )
+    }
 
   val networkControllerRef: ActorRef =
-    NetworkControllerRef("networkController", ergoSettings, peerManagerRef, scorexContext, messageHandlers)
+    NetworkControllerRef(
+      "networkController",
+      ergoSettings,
+      peerManagerRef,
+      scorexContext,
+      messageHandlers
+    )
 
   val peerSynchronizer: ActorRef =
     PeerSynchronizerRef(

@@ -1153,15 +1153,14 @@ object ErgoNodeViewSynchronizer {
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
       timeProvider, syncTracker, deliveryTracker))
 
-  def apply(networkControllerRef: ActorRef,
-            viewHolderRef: ActorRef,
+  def make(viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             settings: ErgoSettings,
             timeProvider: NetworkTimeProvider,
             syncTracker: ErgoSyncTracker,
             deliveryTracker: DeliveryTracker)
-           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker, deliveryTracker))
+           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef => ActorRef =
+    networkControllerRef => context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker, deliveryTracker))
 
   /**
     * Container for aggregated costs of accepted, declined or invalidated transactions. Can be used to track global

@@ -1,7 +1,7 @@
 package scorex.core.network
 
 import java.net._
-import akka.actor._
+import akka.actor.{ActorRef, _}
 import akka.io.Tcp._
 import akka.io.{IO, Tcp}
 import akka.pattern.ask
@@ -11,7 +11,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{Dis
 import org.ergoplatform.network.ModePeerFeature
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.network.message.Message.MessageCode
-import scorex.core.network.message.{Message}
+import scorex.core.network.message.Message
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
 import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
 import scorex.core.utils.TimeProvider.Time
@@ -30,7 +30,7 @@ class NetworkController(ergoSettings: ErgoSettings,
                         peerManagerRef: ActorRef,
                         scorexContext: ScorexContext,
                         tcpManager: ActorRef,
-                        messageHandlers: Map[MessageCode, ActorRef]
+                        messageHandlersPartial: ActorRef => Map[MessageCode, ActorRef]
                        )(implicit ec: ExecutionContext) extends Actor with ScorexLogging {
 
   import NetworkController.ReceivableMessages._
@@ -55,11 +55,9 @@ class NetworkController(ergoSettings: ErgoSettings,
 
   // capabilities of our node
   private val modePeerFeature = ModePeerFeature(ergoSettings.nodeSettings)
+  private val messageHandlers = messageHandlersPartial(self)
 
   private implicit val timeout: Timeout = Timeout(networkSettings.controllerTimeout.getOrElse(5.seconds))
-
-
-
   private lazy val bindAddress = networkSettings.bindAddress
 
   private var connections = Map.empty[InetSocketAddress, ConnectedPeer]
@@ -558,24 +556,24 @@ object NetworkController {
 }
 
 object NetworkControllerRef {
+
   def props(settings: ErgoSettings,
             peerManagerRef: ActorRef,
             scorexContext: ScorexContext,
             tcpManager: ActorRef,
-            messageHandlers: Map[MessageCode, ActorRef])(implicit ec: ExecutionContext): Props = {
-    Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager, messageHandlers))
+            messageHandlers: ActorRef => Map[MessageCode, ActorRef]
+           )(implicit ec: ExecutionContext): Props = {
+    Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager, messageHandlers)
+    )
   }
 
   def apply(name: String,
             settings: ErgoSettings,
             peerManagerRef: ActorRef,
             scorexContext: ScorexContext,
-            messageHandlers: Map[MessageCode, ActorRef])
+            messageHandlers: ActorRef => Map[MessageCode, ActorRef])
            (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
 
-    system.actorOf(
-      props(settings, peerManagerRef, scorexContext, IO(Tcp), messageHandlers),
-      name)
+    system.actorOf(props(settings, peerManagerRef, scorexContext, IO(Tcp), messageHandlers), name)
   }
-
 }

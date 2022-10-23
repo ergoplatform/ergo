@@ -79,36 +79,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
     )
   }
 
-  // touch it to run preStart method of the actor which is in turn running schedulers
-  val ergoNodeViewSynchronizerRef = ErgoNodeViewSynchronizer(
-    networkControllerRef,
-    nodeViewHolderRef,
-    ErgoSyncInfoMessageSpec,
-    ergoSettings,
-    timeProvider,
-    syncTracker,
-    deliveryTracker
-  )
-
-  val messageHandlers: Map[MessageCode, ActorRef] = {
-    var map: Map[MessageCode, ActorRef] = Map(
-      InvSpec.messageCode                 -> ergoNodeViewSynchronizerRef,
-      RequestModifierSpec.messageCode     -> ergoNodeViewSynchronizerRef,
-      ModifiersSpec.messageCode           -> ergoNodeViewSynchronizerRef,
-      ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef
-    )
-    if (ergoSettings.scorexSettings.network.peerDiscovery) {
-      // Launching PeerSynchronizer actor which is then registering itself at network controller
-      map += PeersSpec.messageCode -> PeerSynchronizerRef(
-        "PeerSynchronizer",
-        networkControllerRef,
-        peerManagerRef,
-        scorexSettings.network
-      )
-    }
-    map
-  }
-
   private val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
 
   private val scorexContext = ScorexContext(
@@ -119,9 +89,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
   )
 
   private val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
-
-  private val networkControllerRef: ActorRef =
-    NetworkControllerRef("networkController", ergoSettings, peerManagerRef, scorexContext, messageHandlers)
 
   private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
@@ -137,6 +104,50 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val syncTracker = ErgoSyncTracker(scorexSettings.network, timeProvider)
 
+  private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
+
+  // touch it to run preStart method of the actor which is in turn running schedulers
+  private val ergoNodeViewSynchronizerRefPartial = ErgoNodeViewSynchronizer.make(
+    nodeViewHolderRef,
+    ErgoSyncInfoMessageSpec,
+    ergoSettings,
+    timeProvider,
+    syncTracker,
+    deliveryTracker
+  )
+
+  private val messageHandlers: ActorRef => Map[MessageCode, ActorRef] =
+    networkControllerRef => {
+      val ergoNodeViewSynchronizerRef = ergoNodeViewSynchronizerRefPartial(
+        networkControllerRef
+      )
+      var map: Map[MessageCode, ActorRef] = Map(
+        InvSpec.messageCode                 -> ergoNodeViewSynchronizerRef,
+        RequestModifierSpec.messageCode     -> ergoNodeViewSynchronizerRef,
+        ModifiersSpec.messageCode           -> ergoNodeViewSynchronizerRef,
+        ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef
+      )
+      if (ergoSettings.scorexSettings.network.peerDiscovery) {
+        // Launching PeerSynchronizer actor which is then registering itself at network controller
+        map += PeersSpec.messageCode -> PeerSynchronizerRef(
+          "PeerSynchronizer",
+          networkControllerRef,
+          peerManagerRef,
+          scorexSettings.network
+        )
+      }
+      map
+    }
+
+  private val networkControllerRef: ActorRef =
+    NetworkControllerRef(
+      "networkController",
+      ergoSettings,
+      peerManagerRef,
+      scorexContext,
+      messageHandlers
+    )
+
   private val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(
     readersHolderRef,
     networkControllerRef,
@@ -144,7 +155,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
     ergoSettings,
     timeProvider
   )
-  private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
       EmissionApiRoute(ergoSettings),

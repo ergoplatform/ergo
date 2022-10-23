@@ -11,7 +11,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{Dis
 import org.ergoplatform.network.ModePeerFeature
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.network.message.Message.MessageCode
-import scorex.core.network.message.{Message, MessageSpec}
+import scorex.core.network.message.{Message}
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
 import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
 import scorex.core.utils.TimeProvider.Time
@@ -29,7 +29,8 @@ import scala.util.{Random, Try}
 class NetworkController(ergoSettings: ErgoSettings,
                         peerManagerRef: ActorRef,
                         scorexContext: ScorexContext,
-                        tcpManager: ActorRef
+                        tcpManager: ActorRef,
+                        messageHandlers: Map[MessageCode, ActorRef]
                        )(implicit ec: ExecutionContext) extends Actor with ScorexLogging {
 
   import NetworkController.ReceivableMessages._
@@ -57,7 +58,7 @@ class NetworkController(ergoSettings: ErgoSettings,
 
   private implicit val timeout: Timeout = Timeout(networkSettings.controllerTimeout.getOrElse(5.seconds))
 
-  private var messageHandlers = Map.empty[MessageCode, ActorRef]
+
 
   private lazy val bindAddress = networkSettings.bindAddress
 
@@ -136,10 +137,6 @@ class NetworkController(ergoSettings: ErgoSettings,
       filterConnections(sendingStrategy, message.spec.protocolVersion).foreach { connectedPeer =>
         connectedPeer.handlerRef ! message
       }
-
-    case RegisterMessageSpecs(specs, handler) =>
-      log.info(s"Registering handlers for ${specs.map(s => s.messageCode -> s.messageName)}")
-      messageHandlers ++= specs.map(_.messageCode -> handler)
   }
 
   private def peerCommands: Receive = {
@@ -537,7 +534,7 @@ object NetworkController {
 
     case class Handshaked(peer: PeerInfo)
 
-    case class RegisterMessageSpecs(specs: Seq[MessageSpec[_]], handler: ActorRef)
+    //case class RegisterMessageSpecs(specs: Seq[MessageSpec[_]], handler: ActorRef)
 
     case class SendToNetwork(message: Message[_], sendingStrategy: SendingStrategy)
 
@@ -564,18 +561,20 @@ object NetworkControllerRef {
   def props(settings: ErgoSettings,
             peerManagerRef: ActorRef,
             scorexContext: ScorexContext,
-            tcpManager: ActorRef)(implicit ec: ExecutionContext): Props = {
-    Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager))
+            tcpManager: ActorRef,
+            messageHandlers: Map[MessageCode, ActorRef])(implicit ec: ExecutionContext): Props = {
+    Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager, messageHandlers))
   }
 
   def apply(name: String,
             settings: ErgoSettings,
             peerManagerRef: ActorRef,
-            scorexContext: ScorexContext)
+            scorexContext: ScorexContext,
+            messageHandlers: Map[MessageCode, ActorRef])
            (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
 
     system.actorOf(
-      props(settings, peerManagerRef, scorexContext, IO(Tcp)),
+      props(settings, peerManagerRef, scorexContext, IO(Tcp), messageHandlers),
       name)
   }
 

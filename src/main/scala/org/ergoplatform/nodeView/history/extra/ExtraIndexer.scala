@@ -100,7 +100,7 @@ class ExtraIndexer(cacheSettings: CacheSettings)
     */
   private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[ErgoBox,IndexedErgoBox]): Unit = {
     cfor(trees.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
-      if(trees(i).treeHash == id) { // address found in last saveLimit modifiers
+      if(trees(i).id == id) { // address found in last saveLimit modifiers
         spendOrReceive match {
           case Left(box) => trees(i).addTx(globalTxIndex).spendBox(box) // spend box
           case Right(iEb) => trees(i).addTx(globalTxIndex).addBox(iEb) // receive box

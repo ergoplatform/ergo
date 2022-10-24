@@ -20,6 +20,7 @@ case class IndexedErgoTransaction(txid: ModifierId,
                                   height: Int,
                                   globalIndex: Long) extends ExtraIndex {
 
+  override def id: ModifierId = txid
   override def serializedId: Array[Byte] = fastIdToBytes(txid)
 
   private var _blockId: ModifierId = ModifierId @@ ""

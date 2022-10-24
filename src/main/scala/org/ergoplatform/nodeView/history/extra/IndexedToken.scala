@@ -28,6 +28,7 @@ case class IndexedToken(tokenId: ModifierId,
                         description: String,
                         decimals: Int) extends ExtraIndex {
 
+  override def id: ModifierId = uniqueId(tokenId)
   override def serializedId: Array[Byte] = fastIdToBytes(uniqueId(tokenId))
 
 }
@@ -42,7 +43,7 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
   def uniqueId(tokenId: ModifierId): ModifierId = bytesToId(Algos.hash(tokenId + "token"))
 
   /**
-    * Check if a box is creation a token.
+    * Check if a box is creating a token.
     * @param box - box to check
     * @return true if the box is creation a token, false otherwise
     */

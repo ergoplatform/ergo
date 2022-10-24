@@ -27,12 +27,9 @@ case class IndexedToken(tokenId: ModifierId,
                         name: String,
                         description: String,
                         decimals: Int) extends ExtraIndex {
-  override def parentId: ModifierId = null
-  override val modifierTypeId: ModifierTypeId = IndexedToken.modifierTypeId
-  override type M = IndexedToken
-  override def serializer: ScorexSerializer[IndexedToken] = IndexedTokenSerializer
-  override val sizeOpt: Option[Int] = None
+
   override def serializedId: Array[Byte] = fastIdToBytes(uniqueId(tokenId))
+
 }
 
 object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {

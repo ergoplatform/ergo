@@ -27,12 +27,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
                               boxes: ListBuffer[Long],
                               balanceInfo: Option[BalanceInfo]) extends ExtraIndex with ScorexLogging {
 
-  override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = fastIdToBytes(treeHash)
-  override def parentId: ModifierId = null
-  override val modifierTypeId: ModifierTypeId = IndexedErgoAddress.modifierTypeId
-  override type M = IndexedErgoAddress
-  override def serializer: ScorexSerializer[IndexedErgoAddress] = IndexedErgoAddressSerializer
 
   private[extra] var boxSegmentCount: Int = 0
   private[extra] var txSegmentCount: Int = 0

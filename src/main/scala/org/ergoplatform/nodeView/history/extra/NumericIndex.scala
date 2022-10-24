@@ -14,13 +14,9 @@ import scorex.util.serialization.{Reader, Writer}
   * @param m - id of a transaction
   */
 case class NumericTxIndex(n: Long, m: ModifierId) extends ExtraIndex {
-  override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = NumericTxIndex.indexToBytes(n)
-  override def parentId: ModifierId = null
-  override val modifierTypeId: ModifierTypeId = NumericTxIndex.modifierTypeId
-  override type M = NumericTxIndex
-  override def serializer: ScorexSerializer[NumericTxIndex] = NumericTxIndexSerializer
 }
+
 object NumericTxIndexSerializer extends ScorexSerializer[NumericTxIndex] {
 
   override def serialize(ni: NumericTxIndex, w: Writer): Unit = {
@@ -61,13 +57,9 @@ object NumericTxIndex {
   * @param m - id of a box
   */
 case class NumericBoxIndex(n: Long, m: ModifierId) extends ExtraIndex {
-  override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = NumericBoxIndex.indexToBytes(n)
-  override def parentId: ModifierId = null
-  override val modifierTypeId: ModifierTypeId = NumericBoxIndex.modifierTypeId
-  override type M = NumericBoxIndex
-  override def serializer: ScorexSerializer[NumericBoxIndex] = NumericBoxIndexSerializer
 }
+
 object NumericBoxIndexSerializer extends ScorexSerializer[NumericBoxIndex] {
 
   override def serialize(ni: NumericBoxIndex, w: Writer): Unit = {

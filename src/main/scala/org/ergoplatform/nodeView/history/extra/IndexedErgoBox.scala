@@ -33,12 +33,7 @@ class IndexedErgoBox(val inclusionHeight: Int,
                                Set.empty[ScanId]),
                                None) with ExtraIndex {
 
-  override def parentId: ModifierId = null
-  override val modifierTypeId: ModifierTypeId = IndexedErgoBox.modifierTypeId
-  override val sizeOpt: Option[Int] = None
   override def serializedId: Array[Byte] = box.id
-  override type M = IndexedErgoBox
-  override def serializer: ScorexSerializer[IndexedErgoBox] = IndexedErgoBoxSerializer
 
   /**
     * @return address constructed from the ErgoTree of this box

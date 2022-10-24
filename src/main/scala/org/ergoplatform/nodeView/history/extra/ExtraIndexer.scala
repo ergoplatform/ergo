@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoBox.{BoxId, TokenId}
-import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
@@ -349,4 +348,7 @@ object ExtraIndexerRefHolder {
 /**
   * Base trait for all additional indexes made by ExtraIndexer
   */
-trait ExtraIndex extends BlockSection
+trait ExtraIndex {
+  def id: ModifierId = bytesToId(serializedId)
+  def serializedId: Array[Byte]
+}

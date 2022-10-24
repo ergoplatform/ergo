@@ -20,12 +20,7 @@ case class IndexedErgoTransaction(txid: ModifierId,
                                   height: Int,
                                   globalIndex: Long) extends ExtraIndex {
 
-  override val modifierTypeId: ModifierTypeId = IndexedErgoTransaction.modifierTypeId
   override def serializedId: Array[Byte] = fastIdToBytes(txid)
-  override val sizeOpt: Option[Int] = None
-  override def parentId: ModifierId = null
-  override type M = IndexedErgoTransaction
-  override def serializer: ScorexSerializer[IndexedErgoTransaction] = IndexedErgoTransactionSerializer
 
   private var _blockId: ModifierId = ModifierId @@ ""
   private var _inclusionHeight: Int = 0

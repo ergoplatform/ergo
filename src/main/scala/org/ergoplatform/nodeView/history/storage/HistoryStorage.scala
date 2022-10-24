@@ -51,7 +51,6 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
 
   private def cacheModifier(mod: BlockSection): Unit = mod.modifierTypeId match {
     case Header.modifierTypeId => headersCache.put(mod.id, mod)
-    case IndexedErgoAddress.modifierTypeId => extraCache.put(mod.id, mod.asInstanceOf[ExtraIndex]) // only cache "big" modifiers
     case _ => blockSectionsCache.put(mod.id, mod)
   }
 
@@ -90,7 +89,9 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
       ExtraIndexSerializer.parseBytesTry(bytes) match {
         case Success(pm) =>
           log.trace(s"Cache miss for existing index $id")
-          cacheModifier(pm)
+          if(pm.isInstanceOf[IndexedErgoAddress]){
+            extraCache.put(pm.id, pm) // only cache addresses
+          }
           Some(pm)
         case Failure(_) =>
           log.warn(s"Failed to parse index ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
@@ -129,7 +130,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
   def insertExtra(indexesToInsert: Array[(Array[Byte], Array[Byte])],
                   objectsToInsert: Array[ExtraIndex]): Unit = {
     extraStore.insert(objectsToInsert.map(mod => (mod.serializedId, ExtraIndexSerializer.toBytes(mod))))
-    cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i))}
+    cfor(0)(_ < objectsToInsert.length, _ + 1) { i => val ei = objectsToInsert(i); extraCache.put(ei.id, ei)}
     cfor(0)(_ < indexesToInsert.length, _ + 1) { i => extraStore.insert(indexesToInsert(i)._1, indexesToInsert(i)._2)}
   }
 

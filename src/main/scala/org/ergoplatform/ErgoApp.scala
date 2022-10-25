@@ -127,13 +127,17 @@ class ErgoApp(args: Args) extends ScorexLogging {
         ModifiersSpec.messageCode           -> ergoNodeViewSynchronizerRef,
         ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef
       )
+      // Launching PeerSynchronizer actor which is then registering itself at network controller
       if (ergoSettings.scorexSettings.network.peerDiscovery) {
-        // Launching PeerSynchronizer actor which is then registering itself at network controller
-        map += PeersSpec.messageCode -> PeerSynchronizerRef(
+        val psr = PeerSynchronizerRef(
           "PeerSynchronizer",
           networkControllerRef,
           peerManagerRef,
           scorexSettings.network
+        )
+        map ++= Map(
+          PeersSpec.messageCode    -> psr,
+          GetPeersSpec.messageCode -> psr
         )
       }
       map

@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y curl jq && rm -rf /var/lib/apt/lists/*
 RUN adduser --disabled-password --home /home/ergo --uid 9052 --gecos "ErgoPlatform" ergo && \
     install -m 0750 -o ergo -g ergo -d /home/ergo/.ergo
 USER ergo
-EXPOSE 9020 9021 9052 9030 9053
+EXPOSE 9020 9021 9022 9052 9030 9053
 WORKDIR /home/ergo
 VOLUME ["/home/ergo/.ergo"]
 ENV MAX_HEAP 3G

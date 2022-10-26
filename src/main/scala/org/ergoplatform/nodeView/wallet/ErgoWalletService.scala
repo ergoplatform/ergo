@@ -409,12 +409,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
 
   override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox] = {
     val unconfirmed = if (considerUnconfirmed) {
-      state.offChainRegistry.offChainBoxes
-        .filter { box =>
-          box.scans.contains(scanId) &&
-          box.inclusionHeightOpt.getOrElse(0) >= minHeight  &&
-          (maxHeight == -1 || box.inclusionHeightOpt.getOrElse(Int.MaxValue) <= maxHeight)
-        }
+      state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
     } else {
       Seq.empty
     }

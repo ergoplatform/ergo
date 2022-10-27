@@ -7,8 +7,11 @@ import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 import scorex.util.ModifierId
 import org.ergoplatform.wallet.transactions.TransactionBuilder._
 
+import scala.:+
 import scala.annotation.tailrec
+import scala.collection.immutable.VectorBuilder
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 /**
   * A box selector which is parameterized by maximum number of inputs a transaction can have, and optimal number of inputs.
@@ -135,8 +138,8 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
     val boxesToThrowAway = bsr.boxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
     val sorted = boxesToThrowAway.sortBy(b => BoxSelector.valueOf(b, reemissionDataOpt))
 
-    type BoxesToAdd = Seq[T]
-    type BoxesToDrop = Seq[T]
+    type BoxesToAdd = ListBuffer[T]
+    type BoxesToDrop = Set[T]
     type Operations = (BoxesToAdd, BoxesToDrop)
 
     @tailrec
@@ -149,15 +152,16 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
           currentOps
         case Seq(cand, cs@_*) =>
           var collected = 0L
-          val (dropped, remain) = toDrop.partition { b =>
+          val candValue = BoxSelector.valueOf(cand, reemissionDataOpt)
+          val (dropped, remain) = toDrop.span { b =>
             collected = collected + BoxSelector.valueOf(b, reemissionDataOpt)
-            collected <= BoxSelector.valueOf(cand, reemissionDataOpt)
+            collected <= candValue
           }
           replaceStep(cs, remain, (currentOps._1 :+ cand, currentOps._2 ++ dropped))
       }
     }
 
-    val (toAdd, toDrop) = replaceStep(bigBoxes, sorted, (Seq(), Seq()))
+    val (toAdd, toDrop) = replaceStep(bigBoxes, sorted, (ListBuffer.empty[T], Set.empty[T]))
     if (toAdd.nonEmpty) {
       val compactedBoxes = bsr.boxes.filter(b => !toDrop.contains(b)) ++ toAdd
       calcChange(compactedBoxes, targetBalance, targetAssets)

@@ -97,12 +97,12 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
   }
 
   property("dust collection under select()") {
-    val optimalInputs = 5
-    val selector = new ReplaceCompactCollectBoxSelector(20, optimalInputs, None)
-    val inputValues = (1 to 10).map(v => trackedBox(v))
+    val optimalInputs = 3000
+    val selector = new ReplaceCompactCollectBoxSelector(3000, optimalInputs, None)
+    val inputValues = (1 to 30000).map(v => trackedBox(v))
 
     {
-      val targetBalance = 6
+      val targetBalance = 10000000
       val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
       res.boxes.length shouldBe optimalInputs
     }

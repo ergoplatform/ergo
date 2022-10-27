@@ -7,9 +7,7 @@ import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 import scorex.util.ModifierId
 import org.ergoplatform.wallet.transactions.TransactionBuilder._
 
-import scala.:+
 import scala.annotation.tailrec
-import scala.collection.immutable.VectorBuilder
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 

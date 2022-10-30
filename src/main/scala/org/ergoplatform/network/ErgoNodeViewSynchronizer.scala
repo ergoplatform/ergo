@@ -175,16 +175,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     //TODO peer should always be set?  Throw exception?
     val peer = processingResult.transaction.source.get
-    val processedTx = txInfo(peer)
+    val peerTxInfo = txInfo(peer)
 
     val cost = costOpt.getOrElse(FallbackCostValue)
     val ng = processingResult match {
-      case _: FailedTransaction => processedTx.copy(invalidatedCost = processedTx.invalidatedCost + cost)
-      case _: SuccessfulTransaction => processedTx.copy(acceptedCost = processedTx.acceptedCost + cost)
-      case _: DeclinedTransaction => processedTx.copy(declinedCost = processedTx.declinedCost + cost)
+      case _: FailedTransaction => peerTxInfo.copy(invalidatedCost = peerTxInfo.invalidatedCost + cost)
+      case _: SuccessfulTransaction => peerTxInfo.copy(acceptedCost = peerTxInfo.acceptedCost + cost)
+      case _: DeclinedTransaction => peerTxInfo.copy(declinedCost = peerTxInfo.declinedCost + cost)
     }
 
-    log.debug(s"Old global cost info: ${txInfo.get(peer).map(_.totalCost).getOrElse(0)}, " +
+    log.debug(s"Old peer cost info: ${txInfo.get(peer).map(_.totalCost).getOrElse(0)}, " +
       s"new $ng, tx processing cache size: ${txProcessingCache.size}")
     txInfo.put(peer, ng)
 

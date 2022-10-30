@@ -192,8 +192,8 @@ class NetworkController(ergoSettings: ErgoSettings,
     case f@CommandFailed(c: Connect) =>
       unconfirmedConnections -= c.remoteAddress
       f.cause match {
-        case Some(t) => log.info("Failed to connect to : " + c.remoteAddress, t)
-        case None => log.info("Failed to connect to : " + c.remoteAddress)
+        case Some(t) => log.info(s"Failed to connect to ${c.remoteAddress} - ${t.getMessage}")
+        case None => log.info(s"Failed to connect to ${c.remoteAddress}")
       }
 
       // If a message received from p2p within connection timeout,

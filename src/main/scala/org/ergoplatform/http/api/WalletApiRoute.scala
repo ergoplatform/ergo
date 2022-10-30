@@ -24,6 +24,7 @@ import scorex.util.encode.Base16
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+import akka.http.scaladsl.server.MissingQueryParamRejection
 
 case class WalletApiRoute(readersHolder: ActorRef,
                           nodeViewActorRef: ActorRef,
@@ -80,14 +81,16 @@ case class WalletApiRoute(readersHolder: ActorRef,
       .fold(_ => reject, s => provide(s))
   }
 
-  private val restoreRequest: Directive1[(String, String, Option[String])] = entity(as[Json]).flatMap { p =>
+  private val restoreRequest: Directive1[(Boolean, String, String, Option[String])] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("pass").as[String]
-      .flatMap(pass => p.hcursor.downField("mnemonic").as[String]
-        .flatMap(mnemo => p.hcursor.downField("mnemonicPass").as[Option[String]]
-          .map(mnemoPassOpt => (pass, mnemo, mnemoPassOpt))
+      .flatMap(usePre1627KeyDerivation => p.hcursor.downField("usePre1627KeyDerivation").as[Boolean]
+        .flatMap(pass => p.hcursor.downField("mnemonic").as[String]
+          .flatMap(mnemo => p.hcursor.downField("mnemonicPass").as[Option[String]]
+            .map(mnemoPassOpt => (pass, usePre1627KeyDerivation, mnemo, mnemoPassOpt))
+          )
         )
       )
-      .fold(_ => reject, s => provide(s))
+      .fold(e => reject(MissingQueryParamRejection(e.toString())), s => provide(s))
   }
 
   private val checkRequest: Directive1[(String, Option[String])] = entity(as[Json]).flatMap { p =>
@@ -397,8 +400,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def restoreWalletR: Route = (path("restore") & post & restoreRequest) {
-    case (pass, mnemo, mnemoPassOpt) =>
-      withWalletOp(_.restoreWallet(SecretString.create(pass), SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)))) {
+    case (usePre1627KeyDerivation, pass, mnemo, mnemoPassOpt) =>
+      withWalletOp(_.restoreWallet(SecretString.create(pass), SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)), usePre1627KeyDerivation)) {
         _.fold(
           e => BadRequest(e.getMessage),
           _ => ApiResponse.toRoute(ApiResponse.OK)

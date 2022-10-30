@@ -66,13 +66,15 @@ trait ErgoWalletService {
     * @param mnemonic that was used to initialize wallet with
     * @param mnemonicPassOpt that was used to initialize wallet with
     * @param walletPass that was used to initialize wallet with
+    * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation, expected to be false for new wallets, and true for old pre-1627 wallets (see https://github.com/ergoplatform/ergo/issues/1627 for details)
     * @return new wallet state
     */
   def restoreWallet(state: ErgoWalletState,
                     settings: ErgoSettings,
                     mnemonic: SecretString,
                     mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString): Try[ErgoWalletState]
+                    walletPass: SecretString, 
+                    usePre1627KeyDerivation: Boolean): Try[ErgoWalletState]
 
   /**
     * Decrypt underlying encrypted storage using `walletPass` and update public keys
@@ -292,7 +294,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     log.info("Initializing wallet")
 
     def initStorage(mnemonic: SecretString): Try[JsonSecretStorage] =
-      Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass)(walletSettings.secretStorage))
+      Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass, usePre1627KeyDerivation = false)(walletSettings.secretStorage))
 
     val result =
       new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
@@ -316,11 +318,12 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
                     settings: ErgoSettings,
                     mnemonic: SecretString,
                     mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString): Try[ErgoWalletState] =
+                    walletPass: SecretString,
+                    usePre1627KeyDerivation: Boolean): Try[ErgoWalletState] =
     if (settings.nodeSettings.isFullBlocksPruned)
       Failure(new IllegalArgumentException("Unable to restore wallet when pruning is enabled"))
     else
-      Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage))
+      Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage, usePre1627KeyDerivation))
         .flatMap { secretStorage =>
           // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
           recreateRegistry(state, settings).flatMap { stateV1 =>
@@ -551,8 +554,16 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     }
 
   override def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =
-      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter, dustLimit)
-        .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
+      WalletScanLogic.scanBlockTransactions(
+        state.registry,
+        state.offChainRegistry,
+        state.walletVars,
+        block,
+        state.outputsFilter,
+        dustLimit,
+        ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
+        state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
+      }
 
   override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

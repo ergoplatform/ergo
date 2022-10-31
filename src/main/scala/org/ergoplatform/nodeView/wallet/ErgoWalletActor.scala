@@ -107,8 +107,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     // Restore wallet with mnemonic if secret is not set yet
-    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass) match {
+    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
+      ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) match {
         case Success(newState) =>
           log.info("Wallet is restored")
           context.become(loadedWallet(newState.copy(walletPhase = WalletPhase.Restored)))
@@ -647,7 +647,7 @@ object ErgoWalletActor extends ScorexLogging {
     * @param mnemonicPassOpt
     * @param walletPass
     */
-  final case class RestoreWallet(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString], walletPass: SecretString)
+  final case class RestoreWallet(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString], walletPass: SecretString, usePre1627KeyDerivation: Boolean)
 
   /**
     * Unlock wallet with wallet password

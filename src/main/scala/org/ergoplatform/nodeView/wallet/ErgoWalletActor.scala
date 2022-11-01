@@ -266,7 +266,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       if (state.secretIsSet(settings.walletSettings.testMnemonic)) { // scan blocks only if wallet is initialized
         val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)
         // we want to scan a block either when it is its turn or when wallet is freshly created (no need to load the past)
-        if (nextBlockHeight == newBlock.height || (state.walletPhase == WalletPhase.Created && state.getWalletHeight == 0)) {
+        val walletFreshlyCreated = state.walletPhase == WalletPhase.Created && state.getWalletHeight == 0
+        if (nextBlockHeight == newBlock.height || walletFreshlyCreated) {
           log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
           val newState =
             ergoWalletService.scanBlockUpdate(state, newBlock, settings.walletSettings.dustLimit) match {
@@ -275,14 +276,17 @@ class ErgoWalletActor(settings: ErgoSettings,
                 log.error(errorMsg, ex)
                 state.copy(error = Some(errorMsg))
               case Success(updatedState) =>
+                if (walletFreshlyCreated) {
+                  logger.info(s"Freshly created wallet initialized at height $nextBlockHeight without scanning the past.")
+                }
                 updatedState
             }
           context.become(loadedWallet(newState))
         } else if (nextBlockHeight < newBlock.height) {
-          log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
+          log.warn(s"Wallet at height ${state.getWalletHeight}: skipped blocks found starting from $nextBlockHeight, going back to scan them")
           self ! ScanInThePast(nextBlockHeight, rescan = false)
         } else {
-          log.warn(s"Wallet: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
+          log.warn(s"Wallet at height ${state.getWalletHeight}: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
         }
       }
 

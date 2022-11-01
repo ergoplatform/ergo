@@ -31,6 +31,6 @@ object ApiRejectionHandler {
     }
     .handle { case ValidationRejection(msg, _) => ApiError.BadRequest(msg) }
     .handle { case x => ApiError.InternalError(s"Unhandled rejection: $x") }
-    .handleNotFound { ApiError.NotExists("The requested resource could not be found.") }
+    .handleNotFound { ApiError.BadRequest("The requested resource/endpoint could not be found.") }
     .result()
 }

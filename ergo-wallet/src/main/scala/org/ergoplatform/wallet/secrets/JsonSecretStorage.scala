@@ -107,7 +107,6 @@ object JsonSecretStorage {
 
     outWriter.write(jsonRaw)
     outWriter.close()
-    pass.erase()
 
     util.Arrays.fill(seed, 0: Byte)
 

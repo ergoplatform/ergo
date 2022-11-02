@@ -232,7 +232,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case GetScanUnspentBoxes(_, considerUnconfirmed,  minHeight, maxHeight) =>
         val unfiltered = if(considerUnconfirmed) {
-          Seq(walletBoxN_N, walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+          Seq(walletBoxN_N)
         } else {
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         }

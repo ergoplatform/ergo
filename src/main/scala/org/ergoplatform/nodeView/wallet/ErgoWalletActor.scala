@@ -314,15 +314,16 @@ class ErgoWalletActor(settings: ErgoSettings,
           sender() ! Failure(new Exception("Wallet not initialized"))
       }
 
-    case UnlockWallet(encPass) =>
+    case UnlockWallet(walletPass) =>
       log.info("Unlocking wallet")
-      ergoWalletService.unlockWallet(state, encPass, settings.walletSettings.usePreEip3Derivation) match {
+      ergoWalletService.unlockWallet(state, walletPass, settings.walletSettings.usePreEip3Derivation) match {
         case Success(newState) =>
           log.info("Wallet successfully unlocked")
+          walletPass.erase()
           context.become(loadedWallet(newState))
           sender() ! Success(())
         case f@Failure(t) =>
-          encPass.erase()
+          walletPass.erase()
           log.warn("Wallet unlock failed with: ", t)
           sender() ! f
       }

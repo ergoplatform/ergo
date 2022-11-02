@@ -1,22 +1,31 @@
 package org.ergoplatform.http.api
 
-import org.ergoplatform.nodeView.wallet.{ErgoWalletReader, WalletBox}
 import akka.actor.ActorRef
-import akka.http.scaladsl.server.{Directive, Route}
+import akka.http.scaladsl.server.{Directive, Route, ValidationRejection}
+import akka.pattern.ask
 import io.circe.Encoder
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.wallet.{ErgoWalletReader, WalletBox}
 import scorex.core.api.http.ApiResponse
 
 import scala.concurrent.Future
-import akka.pattern.ask
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 
 trait WalletApiOperations extends ErgoBaseApiRoute {
 
   val readersHolder: ActorRef
 
+  private val isLegalBoxParamCombination: ((Int, Int, Int, Int)) => Boolean = {
+    case (minConfNum, _, _, maxHeight) =>
+      // maxInclusionHeight cannot be specified when we consider unconfirmed
+      !(minConfNum == -1 && maxHeight != -1)
+  }
+
   val boxParams: Directive[(Int, Int, Int, Int)] =
     parameters("minConfirmations".as[Int] ? 0, "maxConfirmations".as[Int] ? -1, "minInclusionHeight".as[Int] ? 0, "maxInclusionHeight".as[Int] ? -1)
-
+      .tfilter(
+        isLegalBoxParamCombination,
+        ValidationRejection("maxInclusionHeight cannot be specified when we consider unconfirmed")
+      )
 
   /**
     * Filter function that filters boxes by height or number of confirmations.

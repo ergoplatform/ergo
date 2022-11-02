@@ -136,7 +136,7 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
                       targetBoxAssets: TokensMap,
                       reemissionAmt: Long): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     AssetUtils.subtractAssetsMut(foundBoxAssets, targetBoxAssets)
-    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxAssetsPerBox).toSeq
+    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxAssetsPerBox).toIndexedSeq
     val changeBalance = foundBalance - targetBalance
     //at least a minimum amount of ERG should be assigned per a created box
     if (changeBoxesAssets.size * MinBoxValue > changeBalance) {

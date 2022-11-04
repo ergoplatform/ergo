@@ -112,12 +112,14 @@ trait ErgoWalletService {
   def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
 
   /**
-    * @param state current wallet state
-    * @param scanId to get boxes for
+    * @param state               current wallet state
+    * @param scanId              to get boxes for
     * @param considerUnconfirmed whether to look for boxes in off-chain registry
+    * @param minHeight           min inclusion height of unspent boxes
+    * @param maxHeight           max inclusion height of unspent boxes
     * @return Unspent wallet boxes corresponding to `scanId`
     */
-  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox]
+  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox]
 
   /**
     * @param state current wallet state
@@ -406,7 +408,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
-  override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox] = {
+  override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox] = {
     val unconfirmed = if (considerUnconfirmed) {
       state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
     } else {
@@ -414,8 +416,8 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     }
 
     val currentHeight = state.fullHeight
-    val boxes = state.registry.unspentBoxes(scanId)  ++ unconfirmed
-    boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+    val unspentBoxes = state.registry.unspentBoxesByInclusionHeight(scanId, minHeight, maxHeight)
+    (unspentBoxes ++ unconfirmed).map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
   override def getScanSpentBoxes(state: ErgoWalletState, scanId: ScanId): Seq[WalletBox] = {

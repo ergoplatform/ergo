@@ -43,7 +43,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       p2sAddressR ~
         addressToTreeR ~
         addressToBytesR ~
-        executeWithContextR
+        executeWithContextR ~
+        currentContextR
     }
   }
 
@@ -94,6 +95,15 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         address => ApiResponse(addressResponse(address))
       )
     }
+  }
+
+  def currentContextR: Route = (path("currentContext") & get) {
+    ApiResponse(
+      getState(readersHolder).map { stateReader =>
+        val stateContext = stateReader.stateContext
+        stateContext.asInstanceOf[ErgoLikeContext].asJson
+      }
+    )
   }
 
   def executeWithContextR: Route =

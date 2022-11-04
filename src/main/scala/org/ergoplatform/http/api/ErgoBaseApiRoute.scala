@@ -34,6 +34,12 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
     }
   }
 
+  protected def getState(readersHolder: ActorRef): Future[ErgoStateReader] = {
+    (readersHolder ? GetReaders).mapTo[Readers].map { rs =>
+      rs.s
+    }
+  }
+
   private def getStateAndPool(readersHolder: ActorRef): Future[(ErgoStateReader, ErgoMemPoolReader)] = {
     (readersHolder ? GetReaders).mapTo[Readers].map { rs =>
       (rs.s, rs.m)

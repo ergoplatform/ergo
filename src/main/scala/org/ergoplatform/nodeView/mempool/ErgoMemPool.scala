@@ -123,14 +123,6 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
   def filter(txs: Seq[UnconfirmedTransaction]): ErgoMemPool = filter(t => !txs.exists(_.transaction.id == t.transaction.id))
 
-  /**
-    * Invalidate transaction and delete it from pool
-    *
-    * @param unconfirmedTransaction - Transaction to invalidate
-    */
-  def invalidate(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
-    new ErgoMemPool(pool.invalidate(unconfirmedTransaction), stats, sortingOption)
-  }
 
   /**
     * @return inputs spent by the mempool transactions
@@ -197,7 +189,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     val blacklistedTransactions = nodeSettings.blacklistedTransactions
     if (blacklistedTransactions.nonEmpty && blacklistedTransactions.contains(tx.id)) {
       val exc = new Exception("blacklisted tx")
-      this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(exc, validationStartTime)
+      this.remove(unconfirmedTx) -> new ProcessingOutcome.Invalidated(exc, validationStartTime)
     } else {
       val fee = extractFee(tx)
       val minFee = settings.nodeSettings.minimalFeeAmount
@@ -215,7 +207,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                   case Success(cost) =>
                     acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
                   case Failure(ex) =>
-                    this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
+                    this.remove(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
                 }
               } else {
                 val exc = new Exception("not all utxos in place yet")
@@ -228,7 +220,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                 case Success(cost) =>
                   acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
                 case Failure(ex) =>
-                  this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
+                  this.remove(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
               }
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other

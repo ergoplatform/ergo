@@ -19,7 +19,6 @@ import scala.collection.immutable.TreeMap
   */
 case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTransaction],
                          transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
-                         invalidatedTxIds: ApproximateCacheLike[String],
                          outputs: TreeMap[BoxId, WeightedTxId],
                          inputs: TreeMap[BoxId, WeightedTxId])
                         (implicit settings: ErgoSettings) extends ScorexLogging {
@@ -65,7 +64,6 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     val newPool = OrderedTxPool(
       orderedTransactions.updated(wtx, unconfirmedTx),
       transactionsRegistry.updated(wtx.id, wtx),
-      invalidatedTxIds,
       outputs ++ tx.outputs.map(_.id -> wtx),
       inputs ++ tx.inputs.map(_.boxId -> wtx)
     ).updateFamily(unconfirmedTx, wtx.weight, System.currentTimeMillis(), 0)
@@ -93,27 +91,10 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
         OrderedTxPool(
           orderedTransactions - wtx,
           transactionsRegistry - tx.id,
-          invalidatedTxIds,
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
         ).updateFamily(unconfirmedTx, -wtx.weight, System.currentTimeMillis(), depth = 0)
       case None => this
-    }
-  }
-
-  def invalidate(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
-    val tx = unconfirmedTx.transaction
-    transactionsRegistry.get(tx.id) match {
-      case Some(wtx) =>
-        OrderedTxPool(
-          orderedTransactions - wtx,
-          transactionsRegistry - tx.id,
-          invalidatedTxIds.put(tx.id),
-          outputs -- tx.outputs.map(_.id),
-          inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(unconfirmedTx, -wtx.weight, System.currentTimeMillis(), depth = 0)
-      case None =>
-        OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
     }
   }
 
@@ -144,8 +125,6 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
   def contains(id: ModifierId): Boolean = {
     transactionsRegistry.contains(id)
   }
-
-  def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)
 
   /**
     *
@@ -179,7 +158,6 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
         val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerFactor, wtx.created)
         val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> ut),
           pool.transactionsRegistry.updated(parent.id, newWtx),
-          invalidatedTxIds,
           parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
           parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
         )
@@ -213,15 +191,9 @@ object OrderedTxPool {
   private implicit val ordBoxId: Ordering[BoxId] = Ordering[String].on(b => Algos.encode(b))
 
   def empty(settings: ErgoSettings): OrderedTxPool = {
-    val cacheSettings = settings.cacheSettings.mempool
-    val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
-    val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
-    val frontCacheSize = cacheSettings.invalidModifiersCacheSize
-    val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
     OrderedTxPool(
       TreeMap.empty[WeightedTxId, UnconfirmedTransaction],
       TreeMap.empty[ModifierId, WeightedTxId],
-      ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration),
       TreeMap.empty[BoxId, WeightedTxId],
       TreeMap.empty[BoxId, WeightedTxId])(settings)
   }

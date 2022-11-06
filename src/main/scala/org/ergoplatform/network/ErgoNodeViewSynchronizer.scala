@@ -93,12 +93,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var lastModifierGotTime: Long = 0
 
   /**
-    * The node stops to accept transactions if declined table reaches this max size. It prevents spam attacks trying
-    * to bloat the table (or exhaust node's CPU)
-    */
-  private val MaxDeclined = 1000
-
-  /**
     * No more than this number of unparsed transactions can be cached
     */
   private val MaxProcessingTransactionsCacheSize = 50
@@ -633,8 +627,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def modifiersFromRemote(hr: ErgoHistory,
                                     mp: ErgoMemPool,
                                     data: ModifiersData,
-                                    remote: ConnectedPeer,
-                                    blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
+                                    remote: ConnectedPeer): Unit = {
     val typeId = data.typeId
     val modifiers = data.modifiers
     log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
@@ -643,7 +636,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     lastModifierGotTime = System.currentTimeMillis()
 
     // filter out non-requested modifiers
-    val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
+    val requestedModifiers = processSpam(remote, typeId, modifiers)
 
     if (typeId == Transaction.ModifierTypeId) {
       transactionsFromRemote(requestedModifiers, mp, remote)
@@ -708,8 +701,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   def processSpam(remote: ConnectedPeer,
                   typeId: ModifierTypeId,
-                  modifiers: Map[ModifierId, Array[Byte]],
-                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Map[ModifierId, Array[Byte]] = {
+                  modifiers: Map[ModifierId, Array[Byte]]): Map[ModifierId, Array[Byte]] = {
     val modifiersByStatus =
       modifiers
         .groupBy { case (id, _) => deliveryTracker.status(id, typeId, Seq.empty) }
@@ -720,11 +712,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
         // penalize a peer for sending TXs that have been already applied to a block
-        val spammyTxs = modifiers.filterKeys(blockAppliedTxsCache.mightContain)
-        if (spammyTxs.nonEmpty) {
-          log.info(s"Got spammy transactions: $spammyTxs")
-          penalizeSpammingPeer(remote)
-        }
+        log.info(s"Got spammy transactions: $spam")
+        penalizeSpammingPeer(remote)
       } else {
         spam.foreach { case (status, mods) =>
           log.info(s"Spam attempt: non-requested modifiers of type $typeId and status $status " +
@@ -741,11 +730,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Filter out modifier ids that are already in process (requested, received or applied),
     * request unknown ids from peer and set this ids to requested state.
     */
-  protected def processInv(hr: ErgoHistory,
-                           mp: ErgoMemPool,
-                           invData: InvData,
-                           peer: ConnectedPeer,
-                           blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
+  protected def processInv(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, peer: ConnectedPeer): Unit = {
 
     val totalCostForPeer = txInfo.get(peer).map(_.totalCost).getOrElse(0)
 
@@ -755,8 +740,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
         hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
         totalCostForPeer <= MempoolCostPerBlock * 3 / 2 && // we can download some extra to fill cache
-      txProcessingCache.size <= MaxProcessingTransactionsCacheSize && // txs processing cache is not overfull
-        declined.size < MaxDeclined // the node is not stormed by transactions is has to decline
+        txProcessingCache.size <= MaxProcessingTransactionsCacheSize // txs processing cache is not overfull
     }
 
     val modifierTypeId = invData.typeId
@@ -769,14 +753,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             // todo: filter out transactions invalidated in the mempool,
             // todo: see https://github.com/ergoplatform/ergo/issues/1863
             invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
-          // filter out transactions that were already applied to history
-          val notApplied = unknownMods.filterNot(blockAppliedTxsCache.mightContain)
-          // filter out transactions previously declined
-          val notDeclined = notApplied.filter(id => !declined.contains(id))
-          log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
-            s"${unknownMods.size} of them are unknown, requesting $notDeclined")
-          val txsToAsk = (MempoolCostPerBlock - totalCostForPeer) / OptimisticMaxTransactionCost
-          notDeclined.take(txsToAsk)
+          log.info(s"Processing ${invData.ids.length} tx invs from $peer, ${unknownMods.size} of them are unknown")
+          val txsToAsk = (MempoolCostPerBlock - totalCostForPeer) / OptimisticMaxTransactionCost + 1
+          unknownMods.take(txsToAsk)
         } else {
           Seq.empty
         }
@@ -970,23 +949,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
   }
 
-  // helper method to clear declined transactions after some off, so the node may accept them again
-  private def clearDeclined(): Unit = {
-    val clearTimeout = FiniteDuration(20, MINUTES)
-    val now = System.currentTimeMillis()
-
-    val toRemove = declined.filter { case (_, time) =>
-      (now - time) > clearTimeout.toMillis
-    }
-    log.debug(s"Declined transactions to be cleared: ${toRemove.size}")
-    toRemove.foreach { case (id, _) =>
-      declined.remove(id)
-    }
-  }
-
-  protected def viewHolderEvents(historyReader: ErgoHistory,
-                                 mempoolReader: ErgoMemPool,
-                                 blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
+  protected def viewHolderEvents(historyReader: ErgoHistory, mempoolReader: ErgoMemPool): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
     case CheckModifiersToDownload =>
@@ -1020,11 +983,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastModifierInv(tx)
 
     case dt@DeclinedTransaction(utx: UnconfirmedTransaction) =>
-      declined.put(utx.id, System.currentTimeMillis())
+      deliveryTracker.setInvalid(utx.id, Transaction.ModifierTypeId)
       processMempoolResult(dt)
 
     case ft@FailedTransaction(utx, error) =>
       val id = utx.id
+      declined.put(id, System.currentTimeMillis())
       processMempoolResult(ft)
 
       utx.source.foreach { peer =>
@@ -1040,7 +1004,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
     case FailedOnRecheckTransaction(id, _) =>
-      declined.put(id, System.currentTimeMillis())
+      deliveryTracker.setInvalid(id, Transaction.ModifierTypeId)
 
     case SyntacticallySuccessfulModifier(modTypeId, modId) =>
       deliveryTracker.setHeld(modId, modTypeId)
@@ -1058,10 +1022,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
-      context.become(initialized(newHistoryReader, mempoolReader, blockAppliedTxsCache))
+      context.become(initialized(newHistoryReader, mempoolReader))
 
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
-      context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
+      context.become(initialized(historyReader, newMempoolReader))
 
     case BlockSectionsProcessingCacheUpdate(headersCacheSize, blockSectionsCacheSize, cleared) =>
       val HeadersCacheSizeToDownloadMore = 3184
@@ -1086,7 +1050,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
       // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
       logger.debug("Caching applied transactions")
-      context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache.putAll(transactionIds)))
+      transactionIds.foreach { tId =>
+        deliveryTracker.setInvalid(tId, Transaction.ModifierTypeId)
+      }
 
     case ChainIsHealthy =>
       // good news
@@ -1099,24 +1065,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /** get handlers of messages coming from peers */
   private def msgHandlers(hr: ErgoHistory,
-                          mp: ErgoMemPool,
-                          blockAppliedTxsCache: FixedSizeApproximateCacheQueue
-                         ): PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
+                          mp: ErgoMemPool): PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: ErgoSyncInfoMessageSpec.type @unchecked, data: ErgoSyncInfo @unchecked, remote) =>
       processSync(hr, data, remote)
     case (_: InvSpec.type, data: InvData, remote) =>
-      processInv(hr, mp, data, remote, blockAppliedTxsCache)
+      processInv(hr, mp, data, remote)
     case (_: RequestModifierSpec.type, data: InvData, remote) =>
       modifiersReq(hr, mp, data, remote)
     case (_: ModifiersSpec.type, data: ModifiersData, remote) =>
-      modifiersFromRemote(hr, mp, data, remote, blockAppliedTxsCache)
+      modifiersFromRemote(hr, mp, data, remote)
   }
 
-  def initialized(hr: ErgoHistory, mp: ErgoMemPool, blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
-    processDataFromPeer(msgHandlers(hr, mp, blockAppliedTxsCache)) orElse
+  def initialized(hr: ErgoHistory, mp: ErgoMemPool): PartialFunction[Any, Unit] = {
+    processDataFromPeer(msgHandlers(hr, mp)) orElse
       onDownloadRequest(hr) orElse
       sendLocalSyncInfo(hr) orElse
-      viewHolderEvents(hr, mp, blockAppliedTxsCache) orElse
+      viewHolderEvents(hr, mp) orElse
       peerManagerEvents orElse
       checkDelivery orElse {
       case a: Any => log.error("Strange input: " + a)
@@ -1124,27 +1088,27 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /** Wait until both historyReader and mempoolReader instances are received so actor can be operational */
-  def initializing(hr: Option[ErgoHistory], mp: Option[ErgoMemPool], blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
+  def initializing(hr: Option[ErgoHistory], mp: Option[ErgoMemPool]): PartialFunction[Any, Unit] = {
     case ChangedHistory(historyReader: ErgoHistory) =>
       mp match {
         case Some(mempoolReader) =>
-          context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache))
+          context.become(initialized(historyReader, mempoolReader))
         case _ =>
-          context.become(initializing(Option(historyReader), mp, blockAppliedTxsCache))
+          context.become(initializing(Option(historyReader), mp))
       }
     case ChangedMempool(mempoolReader: ErgoMemPool) =>
       hr match {
         case Some(historyReader) =>
-          context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache))
+          context.become(initialized(historyReader, mempoolReader))
         case _ =>
-          context.become(initializing(hr, Option(mempoolReader), blockAppliedTxsCache))
+          context.become(initializing(hr, Option(mempoolReader)))
       }
     case msg =>
       // Actor not initialized yet, scheduling message until it is
       context.system.scheduler.scheduleOnce(1.second, self, msg)
   }
 
-  override def receive: Receive = initializing(None, None, FixedSizeApproximateCacheQueue.empty(cacheQueueSize = 5))
+  override def receive: Receive = initializing(None, None)
 
 }
 

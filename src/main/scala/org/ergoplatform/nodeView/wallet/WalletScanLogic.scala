@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletPhase
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanWalletInteraction}
@@ -45,11 +46,11 @@ object WalletScanLogic extends ScorexLogging {
                             block: ErgoFullBlock,
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
                             dustLimit: Option[Long],
-                            walletCreated: Boolean,
+                            walletPhase: WalletPhase,
                             walletProfile: WalletProfile): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
     scanBlockTransactions(
       registry, offChainRegistry, walletVars,
-      block.height, block.id, block.transactions, cachedOutputsFilter, dustLimit, walletProfile, walletCreated)
+      block.height, block.id, block.transactions, cachedOutputsFilter, dustLimit, walletProfile, walletPhase)
   }
 
   /**
@@ -63,7 +64,7 @@ object WalletScanLogic extends ScorexLogging {
     * @param transactions        - block transactions
     * @param cachedOutputsFilter - Bloom filter for previously created outputs
     * @param walletProfile       - indicates intended use case for the node wallet
-    * @param walletCreated       - whether wallet was created and not restored
+    * @param walletPhase         - whether wallet was created or restored
     * @return updated wallet database, offchain snapshot and the Bloom filter for wallet outputs
     */
   def scanBlockTransactions(registry: WalletRegistry,
@@ -75,7 +76,7 @@ object WalletScanLogic extends ScorexLogging {
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
                             dustLimit: Option[Long],
                             walletProfile: WalletProfile,
-                            walletCreated: Boolean = false): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
+                            walletPhase: WalletPhase): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
 
     // Take unspent wallet outputs Bloom Filter from cache
     // or recreate it from unspent outputs stored in the database
@@ -167,7 +168,7 @@ object WalletScanLogic extends ScorexLogging {
     }
 
     // function effects: updating registry and offchainRegistry datasets
-    registry.updateOnBlock(scanRes, blockId, height, walletCreated)
+    registry.updateOnBlock(scanRes, blockId, height, walletPhase)
       .map { _ =>
         //data needed to update the offchain-registry
         val walletUnspent = registry.walletUnspentBoxes()

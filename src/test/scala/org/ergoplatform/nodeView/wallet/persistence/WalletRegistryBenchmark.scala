@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input}
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, TokenId}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletPhase
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletVars}
 import org.ergoplatform.utils.ErgoTestConstants
@@ -54,7 +55,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   }
 
   val scanResults0 = ScanResults(boxes, Seq.empty, Seq.empty)
-  registry.updateOnBlock(scanResults0, ModifierId @@ Base16.encode(Array.fill(32)(0: Byte)), 1).get
+  registry.updateOnBlock(scanResults0, ModifierId @@ Base16.encode(Array.fill(32)(0: Byte)), 1, WalletPhase.Created).get
   println("keys: " + walletVars.proverOpt.get.secretKeys.size)
 
   val bts0 = System.currentTimeMillis()
@@ -73,7 +74,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   }
 
   val scanResults1 = ScanResults(Seq.empty, Seq.empty, txs)
-  registry.updateOnBlock(scanResults1, ModifierId @@ Base16.encode(Array.fill(32)(1: Byte)), 2).get
+  registry.updateOnBlock(scanResults1, ModifierId @@ Base16.encode(Array.fill(32)(1: Byte)), 2, WalletPhase.Created).get
 
   val tts0 = System.currentTimeMillis()
   val txsRead = registry.allWalletTxs()

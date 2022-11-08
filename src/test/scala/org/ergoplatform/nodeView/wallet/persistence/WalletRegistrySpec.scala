@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletPhase
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{ScanResults, SpentInputData}
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
@@ -108,7 +109,7 @@ class WalletRegistrySpec
         val registry = new WalletRegistry(store)(settings.walletSettings)
         val blockId = modifierIdGen.sample.get
         val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus))
-        registry.updateOnBlock(ScanResults(unspentBoxes, Seq.empty, Seq.empty), blockId, 100).get
+        registry.updateOnBlock(ScanResults(unspentBoxes, Seq.empty, Seq.empty), blockId, 100, WalletPhase.Created).get
         registry.walletUnspentBoxes().toList should contain theSameElementsAs unspentBoxes
       }
     }
@@ -123,7 +124,7 @@ class WalletRegistrySpec
         bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
       }
       val inputs = outs.map(tb => SpentInputData(fakeTxId, tb))
-      registry.updateOnBlock(ScanResults(outs, inputs, Seq.empty), blockId, 100).get
+      registry.updateOnBlock(ScanResults(outs, inputs, Seq.empty), blockId, 100, WalletPhase.Created).get
       registry.walletUnspentBoxes() shouldBe Seq.empty
     }
   }

@@ -7,7 +7,7 @@ import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
@@ -23,7 +23,7 @@ import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
 
 import scala.concurrent.Future
-import scala.util.Success
+import scala.util.{Failure, Success}
 
 case class TransactionsApiRoute(readersHolder: ActorRef,
                                 nodeViewActorRef: ActorRef,
@@ -58,6 +58,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   override val route: Route = pathPrefix("transactions") {
     checkTransactionR ~
+      checkTransactionBytesR ~
       getUnconfirmedOutputByRegistersR ~
       getUnconfirmedOutputByTokenIdR ~
       getUnconfirmedOutputByErgoTreeR ~
@@ -68,6 +69,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
       getUnconfirmedTransactionsR ~
       unconfirmedContainsR ~
       sendTransactionR ~
+      sendTransactionBytesR ~
       getFeeHistogramR ~
       getRecommendedFeeR ~
       getExpectedWaitTimeR
@@ -102,8 +104,26 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
   }
 
+  def sendTransactionBytesR: Route = (path("bytes") & pathEnd & post & entity(as[String])) { txBytesStr =>
+    Base16.decode(txBytesStr).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
+      case Success(tx) =>
+        validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
+      case Failure(e) =>
+        BadRequest(s"Can not parse transaction bytes: ${e.getMessage}")
+    }
+  }
+
   def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) { tx =>
     validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
+  }
+
+  def checkTransactionBytesR: Route = (path("checkBytes") & post & entity(as[String])) { txBytesStr =>
+    Base16.decode(txBytesStr).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
+      case Success(tx) =>
+        validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
+      case Failure(e) =>
+        BadRequest(s"Can not parse transaction bytes: ${e.getMessage}")
+    }
   }
 
   val feeHistogramParameters: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))

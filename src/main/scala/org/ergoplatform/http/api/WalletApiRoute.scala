@@ -310,7 +310,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
       withWallet {
         _.walletBoxes(unspentOnly = true, considerUnconfirmed)
           .map {
-            _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
+            _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
           }
       }
   }
@@ -321,7 +321,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
       withWallet {
         _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
           .map {
-            _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
+            _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
           }
       }
   }

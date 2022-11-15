@@ -230,11 +230,15 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! RemoveScanResponse(res)
 
-      case GetScanUnspentBoxes(_, considerUnconfirmed) =>
-        val res = if(considerUnconfirmed) {
-          Seq(walletBoxN_N, walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+      case GetScanUnspentBoxes(_, considerUnconfirmed,  minHeight, maxHeight) =>
+        val unfiltered = if(considerUnconfirmed) {
+          Seq(walletBoxN_N)
         } else {
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+        }
+        val res = unfiltered.filter { box =>
+          box.trackedBox.inclusionHeightOpt.getOrElse(0) >= minHeight &&
+            (maxHeight == -1 || box.trackedBox.inclusionHeightOpt.getOrElse(Int.MaxValue) <= maxHeight)
         }
         sender() ! res
 

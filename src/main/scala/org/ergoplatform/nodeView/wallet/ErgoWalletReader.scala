@@ -75,8 +75,8 @@ trait ErgoWalletReader extends NodeViewComponent {
   def walletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 
-  def scanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean = false): Future[Seq[WalletBox]] =
-    (walletActor ? GetScanUnspentBoxes(scanId, considerUnconfirmed)).mapTo[Seq[WalletBox]]
+  def scanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Future[Seq[WalletBox]] =
+    (walletActor ? GetScanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight)).mapTo[Seq[WalletBox]]
 
   def scanSpentBoxes(scanId: ScanId): Future[Seq[WalletBox]] =
     (walletActor ? GetScanSpentBoxes(scanId)).mapTo[Seq[WalletBox]]

@@ -256,7 +256,7 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
     val inputBoxes = selectionResult.boxes.toIndexedSeq
     new UnsignedErgoTransaction(
-      inputBoxes.map(_.box.id).map(id => new UnsignedInput(id)),
+      inputBoxes.map(tx => new UnsignedInput(tx.box.id)),
       dataInputs,
       (payTo ++ changeBoxCandidates).toIndexedSeq
     )

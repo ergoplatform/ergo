@@ -25,9 +25,9 @@ import scorex.testkit.generators.CoreGenerators
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
-import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{CryptoConstants, ProverResult}
-
+import sigmastate.basics.CryptoConstants.EcPointType
+import sigmastate.basics.CryptoConstants
+import sigmastate.interpreter.ProverResult
 import scala.util.Random
 
 trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators with Matchers with ErgoTestConstants {

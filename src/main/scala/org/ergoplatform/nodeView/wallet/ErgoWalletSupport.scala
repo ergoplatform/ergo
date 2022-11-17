@@ -212,7 +212,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                   def minimalErgoAmount: Long =
                     BoxUtils.minimalErgoAmountSimulated(
                       lockWithAddress.script,
-                      Colls.fromItems((Digest32 @@ assetId) -> amount),
+                      Colls.fromItems((Digest32 @@@ assetId) -> amount),
                       nonMandatoryRegisters,
                       parameters
                     )
@@ -221,7 +221,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                     valueOpt.getOrElse(minimalErgoAmount),
                     lockWithAddress.script,
                     fullHeight,
-                    Colls.fromItems((Digest32 @@ assetId) -> amount),
+                    Colls.fromItems((Digest32 @@@ assetId) -> amount),
                     nonMandatoryRegisters
                   )
                 }

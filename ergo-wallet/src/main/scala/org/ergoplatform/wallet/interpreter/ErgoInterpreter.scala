@@ -22,7 +22,7 @@ import scala.util.Try
   * @param params - current values of adjustable blockchain settings
   */
 class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
-  extends ErgoLikeInterpreter {
+  extends ErgoLikeInterpreter with ScorexLogging {
 
   override type CTX = ErgoLikeContext
 

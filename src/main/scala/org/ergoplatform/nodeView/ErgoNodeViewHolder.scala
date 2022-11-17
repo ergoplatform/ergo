@@ -25,7 +25,7 @@ import scorex.core.settings.ScorexSettings
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging}
-import spire.syntax.all.cfor
+import debox.cfor
 import java.io.File
 
 import scala.annotation.tailrec

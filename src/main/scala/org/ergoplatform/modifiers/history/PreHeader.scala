@@ -8,7 +8,7 @@ import org.ergoplatform.settings.Constants
 import scorex.util._
 import sigmastate.eval.CGroupElement
 import sigmastate.eval.Extensions._
-import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.basics.CryptoConstants.EcPointType
 
 /**
   * Only header fields that can be predicted by a miner

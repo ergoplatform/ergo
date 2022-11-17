@@ -224,10 +224,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
       lazy val reemissionRules = reemissionSettings.reemissionRules
 
-      lazy val reemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
+      lazy val reemissionTokenId = ModifierId @@@ reemissionSettings.reemissionTokenId
       lazy val reemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
 
-      lazy val emissionNftId = ModifierId @@ reemissionSettings.emissionNftId
+      lazy val emissionNftId = ModifierId @@@ reemissionSettings.emissionNftId
       lazy val emissionNftIdBytes = reemissionSettings.emissionNftIdBytes
 
       lazy val chainSettings = stateContext.ergoSettings.chainSettings

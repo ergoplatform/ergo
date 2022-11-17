@@ -222,7 +222,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val tokenData = genTokens(3).last
     tokenData._2 shouldBe 2
 
-    val tokenId = ModifierId @@ bytesToId(tokenData._1)
+    val tokenId = ModifierId @@@ bytesToId(tokenData._1)
 
     val ergValue = 10 * MinBoxValue
 

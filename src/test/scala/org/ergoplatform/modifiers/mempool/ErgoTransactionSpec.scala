@@ -24,8 +24,10 @@ import sigmastate.AND
 import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant, TrueLeaf}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
+import sigmastate.basics.CryptoConstants
+import sigmastate.crypto.Platform.BcDlogGroupOps
 import sigmastate.helpers.TestingHelpers._
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.{Random, Try}
 
@@ -42,7 +44,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
         (seq :+ ebc) -> true
       } else {
         if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(t => !java.util.Arrays.equals(t._1, from.head.id))) {
-          (seq :+ modifyAsset(ebc, deltaFn, Digest32 @@ from.head.id)) -> true
+          (seq :+ modifyAsset(ebc, deltaFn, Digest32 @@@ from.head.id)) -> true
         } else {
           (seq :+ ebc) -> false
         }

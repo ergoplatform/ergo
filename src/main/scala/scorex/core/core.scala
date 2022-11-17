@@ -37,8 +37,8 @@ package object core {
 
   def versionToBytes(id: VersionTag): Array[Byte] = Base16.decode(id).get
 
-  def versionToId(version: VersionTag): util.ModifierId = util.ModifierId @@ version
+  def versionToId(version: VersionTag): util.ModifierId = util.ModifierId @@@ version
 
-  def idToVersion(id: util.ModifierId): VersionTag = VersionTag @@ id
+  def idToVersion(id: util.ModifierId): VersionTag = VersionTag @@@ id
 
 }

@@ -22,7 +22,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, 
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.hash.Digest32
@@ -514,7 +514,7 @@ object CandidateGenerator extends ScorexLogging {
         )
 
       val upcomingContext = state.stateContext.upcoming(
-        minerPk.h,
+        minerPk.value,
         timestamp,
         nBits,
         votes,
@@ -677,7 +677,7 @@ object CandidateGenerator extends ScorexLogging {
 
     val nextHeight = currentHeight + 1
     val minerProp =
-      ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
+      ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop           = emissionBox.ergoTree

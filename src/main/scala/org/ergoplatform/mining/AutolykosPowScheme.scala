@@ -16,6 +16,7 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.Platform.BcDlogGroupOps
 
 import scala.annotation.tailrec
 import scala.math.BigInt

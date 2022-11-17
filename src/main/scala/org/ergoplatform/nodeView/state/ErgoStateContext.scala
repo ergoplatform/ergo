@@ -18,7 +18,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.eval.SigmaDsl
-import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.basics.CryptoConstants.EcPointType
 import special.collection.{Coll}
 
 import scala.util.{Try, Success, Failure}

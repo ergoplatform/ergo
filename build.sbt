@@ -36,7 +36,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "4.0.6-634-9a38009f-20220614-2339-SNAPSHOT"
+val sigmaStateVersion = "4.0.5-812-5e6358b7-20221117-1100-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -78,7 +78,7 @@ libraryDependencies ++= Seq(
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "com.iheart" %% "ficus" % "1.4.7",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "com.google.guava" % "guava" % "21.0",
+  "com.google.guava" % "guava" % "23.0",
   "com.github.ben-manes.caffeine" % "caffeine" % "2.9.3", // use 3.x only for java 11+
   "com.github.scopt" %% "scopt" % "4.0.1",
 

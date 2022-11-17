@@ -15,7 +15,7 @@ import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
-import org.ergoplatform.{DataInput, ErgoBox, ErgoScriptPredef}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoTreePredef}
 import scorex.core.app.Version
 import scorex.core.network.PeerSpec
 import scorex.core.utils.NetworkTimeProvider
@@ -24,7 +24,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
@@ -62,7 +62,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val coinsTotal: Long = emission.coinsTotal
   val stateConstants: StateConstants = StateConstants(settings)
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
-  val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
+  val feeProp: ErgoTree = ErgoTreePredef.feeProposition(emission.settings.minerRewardDelay)
 
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   lazy val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.fold[SecretString](SecretString.empty())(SecretString.create(_)))
@@ -77,7 +77,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultMinerSecret: DLogProverInput = defaultProver.hdKeys.head.privateInput
   val defaultMinerSecretNumber: BigInt = defaultProver.hdKeys.head.privateInput.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
-  val defaultMinerPkPoint: EcPointType = defaultMinerPk.h
+  val defaultMinerPkPoint: EcPointType = defaultMinerPk.value
 
   val defaultTimestamp: Long = 1552217190000L
   val defaultNBits: Long = settings.chainSettings.initialNBits

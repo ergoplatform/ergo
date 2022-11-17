@@ -8,8 +8,8 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.modifiers.history.header.Header.Version
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.interpreter.CryptoConstants
-import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.basics.CryptoConstants
+import sigmastate.basics.CryptoConstants.EcPointType
 
 /**
   * Solution for an Autolykos PoW puzzle.

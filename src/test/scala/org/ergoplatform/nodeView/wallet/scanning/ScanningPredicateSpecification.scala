@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
-import org.ergoplatform.{ErgoScriptPredef, P2PKAddress}
+import org.ergoplatform.{ErgoTreePredef, P2PKAddress}
 import org.ergoplatform.ErgoBox.R1
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
@@ -45,7 +45,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
 
   property("equals - miner prop") {
     forAll(proveDlogGen) { pk =>
-      val minerProp = ErgoScriptPredef.rewardOutputScript(testDelay, pk)
+      val minerProp = ErgoTreePredef.rewardOutputScript(testDelay, pk)
       val mpBytes = minerProp.bytes
 
       //look for exact miner script bytes
@@ -77,7 +77,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
   property("contains - miner prop") {
     forAll(ergoAddressGen) { p2pkAddress =>
       //look for exact p2pk script bytes
-      val minerProp = ErgoScriptPredef.rewardOutputScript(testDelay, p2pkAddress.asInstanceOf[P2PKAddress].pubkey)
+      val minerProp = ErgoTreePredef.rewardOutputScript(testDelay, p2pkAddress.asInstanceOf[P2PKAddress].pubkey)
       val box = testBox(value = 1, minerProp, creationHeight = 0)
       val pkBytes = p2pkAddress.asInstanceOf[P2PKAddress].pubkeyBytes
 

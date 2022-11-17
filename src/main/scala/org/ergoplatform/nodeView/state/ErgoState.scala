@@ -26,7 +26,7 @@ import sigmastate.AtLeast
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
-import spire.syntax.all.cfor
+import debox.cfor
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -126,7 +126,7 @@ object ErgoState extends ScorexLogging {
     if (currentStateContext.currentHeight <= checkpointHeight) {
       Valid(0L)
     } else {
-      import spire.syntax.all.cfor
+      import debox.cfor
       var costResult: ValidationResult[Long] = Valid[Long](0L)
       cfor(0)(_ < transactions.length && costResult.isValid, _ + 1) { i =>
         val validCostResult = costResult.asInstanceOf[Valid[Long]]
@@ -222,7 +222,7 @@ object ErgoState extends ScorexLogging {
     val protection = AtLeast(IntConstant(2), pks)
     val protectionBytes = ValueSerializer.serialize(protection)
     val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
-    val prop = ErgoScriptPredef.foundationScript(settings.monetary)
+    val prop = ErgoTreePredef.foundationScript(settings.monetary)
     createGenesisBox(value, prop, Seq.empty, Map(R4 -> ByteArrayConstant(protectionBytes)))
   }
 

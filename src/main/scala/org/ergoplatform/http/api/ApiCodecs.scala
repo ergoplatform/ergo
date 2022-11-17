@@ -26,7 +26,7 @@ import sigmastate.basics.DLogProtocol.{DLogProverInput, FirstDLogProverMessage, 
 import sigmastate.basics.VerifierMessage.Challenge
 import sigmastate.basics._
 import sigmastate.interpreter._
-import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.basics.CryptoConstants.EcPointType
 import io.circe.syntax._
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
 import org.ergoplatform.wallet.interface4j.SecretString
@@ -201,7 +201,7 @@ trait ApiCodecs extends JsonCodecs {
     sigma =>
       val op = sigma.opCode.toByte.asJson
       sigma match {
-        case dlog: ProveDlog => Map("op" -> op, "h" -> dlog.h.asJson).asJson
+        case dlog: ProveDlog => Map("op" -> op, "h" -> dlog.value.asJson).asJson
         case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
         case tp: TrivialProp => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
         case and: CAND =>

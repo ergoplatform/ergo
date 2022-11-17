@@ -1,12 +1,6 @@
 package org.ergoplatform.wallet.transactions
 
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.DataInput
-import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.ErgoAddress
-import org.ergoplatform.ErgoScriptPredef
-import org.ergoplatform.UnsignedErgoLikeTransaction
-import org.ergoplatform.UnsignedInput
+import org.ergoplatform._
 import sigmastate.eval.Extensions._
 
 import scala.util.Try
@@ -52,7 +46,7 @@ object TransactionBuilder {
                               currentHeight: Int): UnsignedErgoLikeTransaction = {
     val feeBox = new ErgoBoxCandidate(
       feeAmt,
-      ErgoScriptPredef.feeProposition(),
+      ErgoTreePredef.feeProposition(),
       currentHeight,
       Seq.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
@@ -123,7 +117,7 @@ object TransactionBuilder {
     )
     val fee = new ErgoBoxCandidate(
       feeAmt,
-      ErgoScriptPredef.feeProposition(),
+      ErgoTreePredef.feeProposition(),
       currentHeight,
       Seq.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
@@ -258,7 +252,7 @@ object TransactionBuilder {
       val actualFee = if (changeGoesToFee) fee + changeAmt else fee
       new ErgoBoxCandidate(
         actualFee,
-        ErgoScriptPredef.feeProposition(minerRewardDelay),
+        ErgoTreePredef.feeProposition(minerRewardDelay),
         currentHeight
       )
     }

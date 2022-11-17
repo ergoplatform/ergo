@@ -20,7 +20,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util._
 import sigmastate.eval.Extensions._
 import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
-import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.basics.CryptoConstants.EcPointType
 
 import scala.concurrent.duration.FiniteDuration
 

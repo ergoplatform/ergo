@@ -4,7 +4,7 @@ import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeSta
 import scorex.crypto.authds.ADDigest
 import scorex.util.encode.Base16
 import sigmastate.eval.{CGroupElement, CPreHeader, Colls}
-import sigmastate.interpreter.CryptoConstants
+import sigmastate.basics.CryptoConstants
 import special.collection.Coll
 import special.sigma.{Header, PreHeader}
 

@@ -10,7 +10,8 @@ import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.interpreter.CryptoConstants
+import sigmastate.basics.CryptoConstants
+import sigmastate.crypto.CryptoFacade
 
 /**
   * Secret, its chain code and path in key tree.
@@ -31,7 +32,7 @@ final class ExtendedSecretKey(private[secrets] val keyBytes: Array[Byte],
   def child(idx: Int): ExtendedSecretKey = ExtendedSecretKey.deriveChildSecretKey(this, idx)
 
   def publicKey: ExtendedPublicKey =
-    new ExtendedPublicKey(privateInput.publicImage.value.getEncoded(true), chainCode, path.toPublicBranch)
+    new ExtendedPublicKey(CryptoFacade.getEncodedPoint(privateInput.publicImage.value, true), chainCode, path.toPublicBranch)
 
   def isErased: Boolean = keyBytes.forall(_ == 0x00)
 
@@ -60,7 +61,7 @@ object ExtendedSecretKey {
   def deriveChildSecretKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedSecretKey = {
     val keyCoded: Array[Byte] =
       if (Index.isHardened(idx)) (0x00: Byte) +: parentKey.keyBytes
-      else parentKey.privateInput.publicImage.value.getEncoded(true)
+      else CryptoFacade.getEncodedPoint(parentKey.privateInput.publicImage.value, true)
     val (childKeyProto, childChainCode) = HmacSHA512
       .hash(parentKey.chainCode, keyCoded ++ Index.serializeIndex(idx))
       .splitAt(Constants.SecretKeyLength)
@@ -85,7 +86,7 @@ object ExtendedSecretKey {
 
   def deriveChildPublicKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedPublicKey = {
     val derivedSecret = deriveChildSecretKey(parentKey, idx)
-    val derivedPk = derivedSecret.privateInput.publicImage.value.getEncoded(true)
+    val derivedPk = CryptoFacade.getEncodedPoint(derivedSecret.privateInput.publicImage.value, true)
     val derivedPath = derivedSecret.path.copy(publicBranch = true)
     new ExtendedPublicKey(derivedPk, derivedSecret.chainCode, derivedPath)
   }

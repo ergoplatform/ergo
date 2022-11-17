@@ -154,7 +154,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
           case Success(_) =>
             result
           case Failure(unexpectedEx) =>
-            settings.getError(id, unexpectedEx, ModifierId @@ bytesToId(Array.fill(32)(0.toByte)), modifierTypeId)
+            settings.getError(id, unexpectedEx, ModifierId @@@ bytesToId(Array.fill(32)(0.toByte)), modifierTypeId)
         }
       }
     }

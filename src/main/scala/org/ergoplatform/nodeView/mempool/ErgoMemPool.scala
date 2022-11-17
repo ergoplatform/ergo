@@ -10,7 +10,7 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
-import spire.syntax.all.cfor
+import debox.cfor
 
 import scala.annotation.tailrec
 import scala.collection.mutable

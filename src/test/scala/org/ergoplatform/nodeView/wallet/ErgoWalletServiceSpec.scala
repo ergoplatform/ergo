@@ -258,7 +258,7 @@ class ErgoWalletServiceSpec
         val walletService = new ErgoWalletServiceImpl(settings)
         val signedTx = walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, sign = true).get.asInstanceOf[ErgoTransaction]
 
-        ErgoSignature.verify(signedTx.messageToSign, signedTx.inputs.head.spendingProof.proof, pks.head.pubkey.h) shouldBe true
+        ErgoSignature.verify(signedTx.messageToSign, signedTx.inputs.head.spendingProof.proof, pks.head.pubkey.value) shouldBe true
         signedTx.inputs.size shouldBe 1
         signedTx.outputs.size shouldBe 2
 

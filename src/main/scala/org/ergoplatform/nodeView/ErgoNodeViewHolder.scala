@@ -743,10 +743,9 @@ object ErgoNodeViewHolder {
         history.bestFullBlockOpt
           .filter(_.id != lastMod.id)
           .fold("")(fb => s"\n best full block: $fb")
-      val repairNeeded = ErgoHistory.repairIfNeeded(history)
+      ErgoHistory.repairIfNeeded(history) // todo: do we need to do it?
       ChainIsStuck(s"Chain not modified for $chainUpdateDelay ms, headers-height: $headersHeight, " +
-        s"block-height $blockHeight, chain synced: $chainSynced, repair needed: $repairNeeded, " +
-        s"last modifier applied: $lastMod, " +
+        s"block-height $blockHeight, chain synced: $chainSynced, last modifier applied: $lastMod, " +
         s"possible best full block $bestFullBlockOpt")
     } else {
       ChainIsHealthy

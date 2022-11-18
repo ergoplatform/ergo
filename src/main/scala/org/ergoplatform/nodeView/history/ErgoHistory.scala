@@ -7,17 +7,19 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
+import scorex.core.consensus.ModifierSemanticValidity.Invalid
 import scorex.core.consensus.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
+import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -219,7 +221,7 @@ trait ErgoHistory
     log.info(s"Result of removing header $headerId: " + hRes)
 
     hOpt.foreach { h =>
-      requiredModifiersForHeader(h).foreach { case (_, mId) =>
+      h.sectionIds.foreach { case (_, mId) =>
         val mRes = historyStorage.remove(
           indicesToRemove = Array(validityKey(mId)),
           idsToRemove = Array(mId)
@@ -258,21 +260,40 @@ object ErgoHistory extends ScorexLogging {
 
   // check if there is possible database corruption when there is header after
   // recognized blockchain tip marked as invalid
-  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
-    val bestHeaderHeight = history.headersHeight
-    val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
-    val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
+  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Unit = history.historyStorage.synchronized {
+    val RepairDepth = 128
 
-    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
-      log.warn("Found suspicious continuation, clearing it...")
-      afterHeaders.map { hId =>
-        history.forgetHeader(hId)
+    val bestHeaderHeight = history.headersHeight
+
+    @tailrec
+    def checkHeightsFrom(h: Int): Unit = {
+      val headerIds = history.headerIdsAtHeight(h)
+      if (headerIds.nonEmpty) {
+        val notInvalidHeaders = headerIds.filter { headerId =>
+          if (history.isSemanticallyValid(headerId) == Invalid) {
+            log.warn(s"Clearing invalid header: $headerId at height $h")
+            history.forgetHeader(headerId)
+            false
+          } else {
+            true
+          }
+        }
+        val updatedHeightIdsValue: Array[Byte] = notInvalidHeaders.foldLeft(Array.empty[Byte]) { case (acc, id) =>
+          acc ++ idToBytes(id)
+        }
+        if(updatedHeightIdsValue.isEmpty) {
+          //could be the case after bestHeaderHeight
+          history.historyStorage.remove(Array(history.heightIdsKey(h)), Nil)
+        } else {
+          history.historyStorage.insert(Array(history.heightIdsKey(h) -> updatedHeightIdsValue), Nil)
+        }
+        checkHeightsFrom(h + 1)
       }
-      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Nil)
-      true
-    } else {
-      false
     }
+
+    log.info("Checking invalid headers started")
+    checkHeightsFrom(bestHeaderHeight - RepairDepth)
+    log.info("Checking invalid headers finished")
   }
 
   def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {

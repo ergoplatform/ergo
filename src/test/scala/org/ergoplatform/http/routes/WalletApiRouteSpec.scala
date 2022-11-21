@@ -1,6 +1,6 @@
 package org.ergoplatform.http.routes
 
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.server.{Route, ValidationRejection}
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
@@ -18,9 +18,11 @@ import org.ergoplatform.wallet.{Constants => WalletConstants}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.util.{Random, Try}
+import scala.util.Try
 import scala.concurrent.duration._
 import akka.http.scaladsl.server.MissingQueryParamRejection
+import akka.stream.scaladsl.Source
+import akka.util.ByteString
 
 class WalletApiRouteSpec extends AnyFlatSpec
   with Matchers
@@ -98,15 +100,14 @@ class WalletApiRouteSpec extends AnyFlatSpec
   }
 
   it should "sign a transaction" in {
-    val digest = Random.nextBoolean()
-    val (tsr, r) = if (digest) {
-      (ErgoTransactionGenerators.transactionSigningRequestGen(true).sample.get, route)
-    } else {
-      (ErgoTransactionGenerators.transactionSigningRequestGen(utxoState).sample.get, utxoRoute)
-    }
-    Post(prefix + "/transaction/sign", tsr.asJson) ~> r ~> check {
+    val transactionRequest = ErgoTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val r = transactionRequest.asJson.spaces2
+    println(r)
+    val entity = HttpEntity.Default.apply(ContentTypes.`application/json`, r.length, Source.single(ByteString(r)))
+    Post(prefix + "/transaction/sign", entity) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      responseAs[ErgoTransaction].id shouldBe tsr.unsignedTx.id
+      println(responseAs[ErgoTransaction].asJson.spaces2)
+      responseAs[ErgoTransaction].id shouldBe transactionRequest.unsignedTx.id
     }
   }
 

@@ -135,7 +135,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
 
     //randomly creating a new asset
     if (rnd.nextBoolean() && issueNew) {
-      assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
+      assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), Long.MaxValue)
     }
 
     val minValue = BoxUtils.sufficientAmount(extendedParameters)
@@ -224,7 +224,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {
     val tokensDistribution = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
     (1 to tokensCount).foreach { i =>
-      val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)) -> (Random.nextInt(Int.MaxValue).toLong + 100)
+      val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)) -> Long.MaxValue
       val idx = i % tokensDistribution.size
       val s = tokensDistribution(idx)
       tokensDistribution(idx) = s :+ (id -> amt)

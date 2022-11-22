@@ -495,6 +495,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
                   chainProgress =
                     Some(ChainProgress(pmod, headersHeight, fullBlockHeight, timeProvider.time()))
+
+                  if (progressInfo.chainSwitchingNeeded) {
+                    context.system.eventStream.publish(Rollback(progressInfo.branchPoint.get))
+                  }
                 case Failure(e) =>
                   log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
                   updateNodeView(updatedHistory = Some(newHistory))

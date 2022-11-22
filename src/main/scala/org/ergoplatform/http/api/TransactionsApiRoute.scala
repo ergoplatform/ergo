@@ -104,6 +104,9 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
   }
 
+  /**
+    * Validate and broadcast transaction given as hex-encoded bytes
+    */
   def sendTransactionBytesR: Route = (path("bytes") & pathEnd & post & entity(as[String])) { txBytesStr =>
     Base16.decode(txBytesStr).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
       case Success(tx) =>
@@ -117,6 +120,9 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
   }
 
+  /**
+    * Check transaction given as hex-encoded bytes
+    */
   def checkTransactionBytesR: Route = (path("checkBytes") & post & entity(as[String])) { txBytesStr =>
     Base16.decode(txBytesStr).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
       case Success(tx) =>

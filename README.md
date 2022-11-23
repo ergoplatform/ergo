@@ -12,7 +12,7 @@ Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
 * Memory-hard Proof-of-Work function [Autolykos2](https://docs.ergoplatform.com/ErgoPow.pdf)
 * Support for stateless clients (asymmetric, based on [https://eprint.iacr.org/2016/994](https://eprint.iacr.org/2016/994)),
 [NiPoPoWs](https://eprint.iacr.org/2017/963.pdf), hybrid modes
-* [Alternative transactional language](https://github.com/ScorexFoundation/sigmastate-interpreter), which is more powerful that Bitcoin Script but also safe against
+* [Alternative transactional language](https://github.com/ScorexFoundation/sigmastate-interpreter), which is more powerful than Bitcoin Script but also safe against
 heavy validation attacks
 * Alternative fee model with [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf )
 

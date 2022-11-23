@@ -6,11 +6,12 @@ import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FullBlockApplied, Rollback}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.ReceivableMessages.Start
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.segmentTreshold
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -40,6 +41,7 @@ class ExtraIndexer(cacheSettings: CacheSettings)
   private val saveLimit: Int = cacheSettings.history.extraCacheSize * 10
 
   private var caughtUp: Boolean = false
+  private var rollback: Boolean = false
 
   private def chainHeight: Int = _history.fullBlockHeight
 
@@ -193,7 +195,7 @@ class ExtraIndexer(cacheSettings: CacheSettings)
       if(height != 1) { //only after 1st block (skip genesis box)
         cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
           val boxIndex: Int = findAndSpendBox(tx.inputs(i).boxId, tx.id, height)
-          if(boxIndex >= 0) findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(boxes(boxIndex).box.ergoTree)), Left(boxes(boxIndex).box)) // spend box and add tx
+          if(boxIndex >= 0) findAndUpdateTree(bytesToId(hashErgoTree(boxes(boxIndex).box.ergoTree)), Left(boxes(boxIndex).box)) // spend box and add tx
         }
       }
 
@@ -204,7 +206,7 @@ class ExtraIndexer(cacheSettings: CacheSettings)
         general += NumericBoxIndex(globalBoxIndex, bytesToId(box.id)) // box id by global box number
 
         // box by address
-        findAndUpdateTree(bytesToId(IndexedErgoAddressSerializer.hashErgoTree(box.ergoTree)), Right(boxes(findBox(box.id).get)))
+        findAndUpdateTree(bytesToId(hashErgoTree(box.ergoTree)), Right(boxes(findBox(box.id).get)))
 
         // check if box is creating a new token, if yes record it
         if(box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))
@@ -250,18 +252,49 @@ class ExtraIndexer(cacheSettings: CacheSettings)
 
     log.info(s"Started extra indexer at height $indexedHeight")
 
-    while(indexedHeight < chainHeight) {
+    while(indexedHeight < chainHeight && !rollback) {
       indexedHeight += 1
       index(history.bestBlockTransactionsAt(indexedHeight).get, indexedHeight)
     }
 
-    caughtUp = true
-
-    log.info("Indexer caught up with chain")
+    if(rollback)
+      caughtUp = true
+      log.info("Indexer caught up with chain")
   }
 
-  override def preStart(): Unit =
+  /**
+    * Remove all indexes after given height.
+    * @param height - starting height
+    */
+  def removeAfter(height: Int): Unit = {
+
+    log.info(s"Performing rollback from $indexedHeight to $height")
+
+    cfor(indexedHeight)(_ > height, _ - 1) { block => // remove all block parts down to "height"
+      val bt: Array[ErgoTransaction] = history.bestBlockTransactionsAt(block).get.txs.toArray
+      cfor(bt.length - 1)(_ >= 0, _ - 1) { tx =>
+        val boxes: Array[ErgoBox] = bt(tx).outputs.toArray
+        cfor(boxes.length - 1)(_ >= 0, _ - 1) { box => // revert balances
+          val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(boxes(box).ergoTree))).get
+          // TODO
+        }
+        historyStorage.removeExtra(boxes.map(x => bytesToId(x.id))) // remove all boxes in tx
+      }
+      historyStorage.removeExtra(bt.map(_.id)) // remove all txs in block
+    }
+
+    // save new height and start indexer
+    indexedHeight = height
+    indexedHeightBuffer.clear()
+    historyStorage.insertExtra(Array((IndexedHeightKey, indexedHeightBuffer.putInt(indexedHeight).array)), Array.empty)
+    run()
+    rollback = false
+  }
+
+  override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
+    context.system.eventStream.subscribe(self, classOf[Rollback])
+  }
 
   override def postStop(): Unit =
     log.info(s"Stopped extra indexer at height ${if(lastWroteToDB > 0) lastWroteToDB else indexedHeight}")
@@ -269,6 +302,10 @@ class ExtraIndexer(cacheSettings: CacheSettings)
   override def receive: Receive = {
     case FullBlockApplied(header: Header) if caughtUp =>
       index(history.typedModifierById[BlockTransactions](header.transactionsId).get, header.height) // after the indexer caught up with the chain, stay up to date
+    case Rollback(branchPoint: ModifierId) =>
+      val branchHeight: Int = history.heightOf(branchPoint).get
+      rollback = branchHeight < indexedHeight
+      if(rollback) removeAfter(branchHeight)
     case Start(history: ErgoHistory) =>
       _history = history
       run()

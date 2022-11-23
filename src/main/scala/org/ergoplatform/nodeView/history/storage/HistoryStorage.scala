@@ -134,6 +134,11 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
     cfor(0)(_ < indexesToInsert.length, _ + 1) { i => extraStore.insert(indexesToInsert(i)._1, indexesToInsert(i)._2)}
   }
 
+  def removeExtra(indexesToRemove: Array[ModifierId]) : Unit = {
+    extraStore.remove(indexesToRemove.map(idToBytes))
+    cfor(0)(_ < indexesToRemove.length, _ + 1) { i => removeModifier(indexesToRemove(i)) }
+  }
+
   /**
     * Insert single object to database. This version allows for efficient insert
     * when identifier and bytes of object (i.e. modifier, a block section) are known.
@@ -168,6 +173,7 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
 
   override def close(): Unit = {
     log.warn("Closing history storage...")
+    extraStore.close()
     indexStore.close()
     objectsStore.close()
   }

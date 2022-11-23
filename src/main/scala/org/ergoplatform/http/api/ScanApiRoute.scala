@@ -5,7 +5,7 @@ import akka.http.scaladsl.server.Route
 import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -13,7 +13,10 @@ import scorex.core.settings.RESTApiSettings
 
 import scala.util.{Failure, Success}
 import ScanEntities._
+import org.ergoplatform.ErgoBox.R1
 import org.ergoplatform.wallet.Constants.ScanId
+import sigmastate.Values.ByteArrayConstant
+import sigmastate.serialization.ValueSerializer
 
 /**
   * This class contains methods to register / deregister and list external scans, and also to serve them.
@@ -40,7 +43,8 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       unspentR ~
       spentR ~
       stopTrackingR ~
-      addBoxR
+      addBoxR ~
+      p2sRuleR
   }
 
   def registerR: Route = (path("register") & post & entity(as[ScanRequest])) { request =>
@@ -89,6 +93,20 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     withWalletOp(_.addBox(scanIdsBox.box, scanIdsBox.scanIds).map(_.status)) {
       case Failure(e) => BadRequest(s"Bad request ($scanIdsBox): ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(_) => ApiResponse(scanIdsBox.box.id)
+    }
+  }
+
+  def p2sRuleR: Route = (path("p2sRule") & post & entity(as[String])) { p2s =>
+    addressEncoder.fromString(p2s) match {
+      case Success(p2sAddr) =>
+        val scriptBytes = ByteArrayConstant(ValueSerializer.serialize(p2sAddr.script.toProposition(replaceConstants = true).propBytes))
+        val trackingRule = EqualsScanningPredicate(R1, scriptBytes)
+        val request = ScanRequest(p2s, trackingRule, None, None)
+        withWalletOp(_.addScan(request).map(_.response)) {
+          case Failure(e) => BadRequest(s"Bad request $request. ${Option(e.getMessage).getOrElse(e.toString)}")
+          case Success(app) => ApiResponse(ScanIdWrapper(app.scanId))
+        }
+      case Failure(e) => BadRequest(s"Can't parse $p2s. ${Option(e.getMessage).getOrElse(e.toString)}")
     }
   }
 }

@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.39"
+  version: "5.0.4"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1560,6 +1560,7 @@ components:
       required:
         - pass
         - mnemonic
+        - usePre1627KeyDerivation
       properties:
         pass:
           type: string
@@ -1570,6 +1571,9 @@ components:
         mnemonicPass:
           type: string
           description: Optional pass to password-protect mnemonic seed
+        usePre1627KeyDerivation:
+          type: boolean
+          description: use incorrect(previous) BIP32 key derivation (see https://github.com/ergoplatform/ergo/issues/1627 for details). It's recommended to set to 'true' if the original wallet was created by ergo node before v4.0.105.
 
     CheckWallet:
       type: object
@@ -2879,6 +2883,279 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /transactions/unconfirmed/{txId}:
+    parameters:
+      - in: path
+        name: txId
+        required: true
+        description: ID of a transaction in question
+        schema:
+          type: string
+    head:
+      summary: Check if given transaction is unconfirmed in pool
+      operationId: checkUnconfirmedTransaction
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Transaction is in pool
+        '404':
+          description: Transaction is not in pool
+
+  /transactions/unconfirmed/byTransactionId/{txId}:
+    parameters:
+      - in: path
+        name: txId
+        required: true
+        description: ID of a transaction in question
+        schema:
+          type: string
+    get:
+      summary: Get unconfirmed transaction from pool
+      operationId: getUnconfirmedTransactionById
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransaction'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/byErgoTree:
+    parameters:
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
+    post:
+      summary: Finds unconfirmed transactions by ErgoTree hex of one of its output or input boxes (if present in UtxoState)
+      operationId: getUnconfirmedTransactionsByErgoTree
+      tags:
+        - transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: string
+              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+      responses:
+        '200':
+          description: Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transactions'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/inputs/byBoxId/{boxId}:
+    parameters:
+      - in: path
+        name: boxId
+        required: true
+        description: ID of an input box in question
+        schema:
+          type: string
+    get:
+      summary: Get input box from unconfirmed transactions in pool
+      operationId: getUnconfirmedTransactionInputBoxById
+      tags:
+        - inputs
+      responses:
+        '200':
+          description: Unspent Ergo Box that is to be used as Input in unconfirmed tx
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransactionOutput'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/outputs/byBoxId/{boxId}:
+    parameters:
+      - in: path
+        name: boxId
+        required: true
+        description: ID of an output box in question
+        schema:
+          type: string
+    get:
+      summary: Get output box from unconfirmed transactions in pool
+      operationId: getUnconfirmedTransactionOutputBoxById
+      tags:
+        - outputs
+      responses:
+        '200':
+          description: Unspent Ergo Box that is to be created by unconfirmed tx
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransactionOutput'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/outputs/byErgoTree:
+    parameters:
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
+    post:
+      summary: Finds all output boxes by ErgoTree hex among unconfirmed transactions
+      operationId: getUnconfirmedTransactionOutputBoxesByErgoTree
+      tags:
+        - outputs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: string
+              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+      responses:
+        '200':
+          description: Unconfirmed transaction output boxes that correspond to given ErgoTree hex
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: ErgoBox
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/outputs/byTokenId/{tokenId}:
+    parameters:
+      - in: path
+        name: tokenId
+        required: true
+        description: ID of a token in question
+        schema:
+          type: string
+    get:
+      summary: Get output box from unconfirmed transactions in pool by tokenId
+      operationId: getUnconfirmedTransactionOutputBoxesByTokenId
+      tags:
+        - outputs
+      responses:
+        '200':
+          description: Unspent Ergo Boxes that are to be created by unconfirmed tx and contain given token
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: ErgoBox
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/outputs/byRegisters:
+    parameters:
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
+    post:
+      summary: Finds all output boxes among unconfirmed transactions that contain given registers
+      operationId: getUnconfirmedTransactionOutputBoxesByRegisters
+      tags:
+        - outputs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Registers'
+      responses:
+        '200':
+          description: Unconfirmed transaction output boxes that contain given registers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: ErgoBox
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /transactions/poolHistogram:
     parameters:
       - in: query
@@ -3177,8 +3454,8 @@ paths:
 
   /utils/address/{address}:
     get:
-      summary: Check address validity
-      operationId: CheckAddressValidity
+      summary: Check address validity (prefer POST request as addresses can be too big)
+      operationId: CheckAddressValidityWithGet
       tags:
         - utils
       parameters:
@@ -3188,6 +3465,35 @@ paths:
           description: address to check
           schema:
             $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Address validity with validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressValidity'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utils/address:
+    post:
+      summary: Checks address validity
+      operationId: CheckAddressValidity
+      tags:
+        - utils
+      requestBody:
+        required: true
+        description: address to check
+        content:
+          application/json:
+            schema:
+              description: Encoded Ergo Address
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
       responses:
         '200':
           description: Address validity with validation error
@@ -3260,8 +3566,8 @@ paths:
 
   /utils/ergoTreeToAddress/{ergoTreeHex}:
     get:
-      summary: Generate Ergo address from hex-encoded ErgoTree
-      operationId: ErgoTreeToAddress
+      summary: Generate Ergo address from hex-encoded ErgoTree (prefer POST request as ErgoTree can be too big)
+      operationId: ErgoTreeToAddressWithGet
       tags:
         - utils
       parameters:
@@ -3272,6 +3578,34 @@ paths:
           schema:
             type: string
             example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
+      responses:
+        '200':
+          description: Ergo address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoAddress'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utils/ergoTreeToAddress:
+    post:
+      summary: Generate Ergo address from hex-encoded ErgoTree
+      operationId: ErgoTreeToAddress
+      tags:
+        - utils
+      requestBody:
+        required: true
+        description: ErgoTree hex to derive an address from
+        content:
+          application/json:
+            schema:
+              type: string
+              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
       responses:
         '200':
           description: Ergo address

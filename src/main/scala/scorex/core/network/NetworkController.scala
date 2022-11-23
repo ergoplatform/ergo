@@ -1,18 +1,19 @@
 package scorex.core.network
 
 import java.net._
-import akka.actor._
+import akka.actor.{ActorRef, _}
 import akka.io.Tcp._
 import akka.io.{IO, Tcp}
 import akka.pattern.ask
 import akka.util.Timeout
 import scorex.core.app.{ScorexContext, Version}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{DisconnectedPeer, HandshakedPeer}
+import org.ergoplatform.network.ModePeerFeature
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.network.message.Message.MessageCode
-import scorex.core.network.message.{Message, MessageSpec}
+import scorex.core.network.message.Message
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
 import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
-import scorex.core.settings.ScorexSettings
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.{NetworkUtils, TimeProvider}
 import scorex.util.ScorexLogging
@@ -25,10 +26,11 @@ import scala.util.{Random, Try}
   * Control all network interaction
   * must be singleton
   */
-class NetworkController(scorexSettings: ScorexSettings,
+class NetworkController(ergoSettings: ErgoSettings,
                         peerManagerRef: ActorRef,
                         scorexContext: ScorexContext,
-                        tcpManager: ActorRef
+                        tcpManager: ActorRef,
+                        messageHandlersPartial: ActorRef => Map[MessageCode, ActorRef]
                        )(implicit ec: ExecutionContext) extends Actor with ScorexLogging {
 
   import NetworkController.ReceivableMessages._
@@ -48,11 +50,14 @@ class NetworkController(scorexSettings: ScorexSettings,
       Restart
   }
 
+  private val scorexSettings = ergoSettings.scorexSettings
   private val networkSettings = scorexSettings.network
+
+  // capabilities of our node
+  private val modePeerFeature = ModePeerFeature(ergoSettings.nodeSettings)
+  private val messageHandlers = messageHandlersPartial(self)
+
   private implicit val timeout: Timeout = Timeout(networkSettings.controllerTimeout.getOrElse(5.seconds))
-
-  private var messageHandlers = Map.empty[MessageCode, ActorRef]
-
   private lazy val bindAddress = networkSettings.bindAddress
 
   private var connections = Map.empty[InetSocketAddress, ConnectedPeer]
@@ -130,10 +135,6 @@ class NetworkController(scorexSettings: ScorexSettings,
       filterConnections(sendingStrategy, message.spec.protocolVersion).foreach { connectedPeer =>
         connectedPeer.handlerRef ! message
       }
-
-    case RegisterMessageSpecs(specs, handler) =>
-      log.info(s"Registering handlers for ${specs.map(s => s.messageCode -> s.messageName)}")
-      messageHandlers ++= specs.map(_.messageCode -> handler)
   }
 
   private def peerCommands: Receive = {
@@ -186,8 +187,8 @@ class NetworkController(scorexSettings: ScorexSettings,
     case f@CommandFailed(c: Connect) =>
       unconfirmedConnections -= c.remoteAddress
       f.cause match {
-        case Some(t) => log.info("Failed to connect to : " + c.remoteAddress, t)
-        case None => log.info("Failed to connect to : " + c.remoteAddress)
+        case Some(t) => log.info(s"Failed to connect to ${c.remoteAddress} - ${t.getMessage}")
+        case None => log.info(s"Failed to connect to ${c.remoteAddress}")
       }
 
       // If a message received from p2p within connection timeout,
@@ -341,7 +342,7 @@ class NetworkController(scorexSettings: ScorexSettings,
       }
     }
 
-    val mandatoryFeatures = scorexContext.features ++ Seq(mySessionIdFeature)
+    val mandatoryFeatures = Array(modePeerFeature, mySessionIdFeature)
 
     val remoteAddress = connectionId.remoteAddress.getAddress
     val isLocal = (remoteAddress != null) && (remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress)
@@ -531,7 +532,7 @@ object NetworkController {
 
     case class Handshaked(peer: PeerInfo)
 
-    case class RegisterMessageSpecs(specs: Seq[MessageSpec[_]], handler: ActorRef)
+    //case class RegisterMessageSpecs(specs: Seq[MessageSpec[_]], handler: ActorRef)
 
     case class SendToNetwork(message: Message[_], sendingStrategy: SendingStrategy)
 
@@ -555,22 +556,24 @@ object NetworkController {
 }
 
 object NetworkControllerRef {
-  def props(settings: ScorexSettings,
+
+  def props(settings: ErgoSettings,
             peerManagerRef: ActorRef,
             scorexContext: ScorexContext,
-            tcpManager: ActorRef)(implicit ec: ExecutionContext): Props = {
-    Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager))
+            tcpManager: ActorRef,
+            messageHandlers: ActorRef => Map[MessageCode, ActorRef]
+           )(implicit ec: ExecutionContext): Props = {
+    Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager, messageHandlers)
+    )
   }
 
   def apply(name: String,
-            settings: ScorexSettings,
+            settings: ErgoSettings,
             peerManagerRef: ActorRef,
-            scorexContext: ScorexContext)
+            scorexContext: ScorexContext,
+            messageHandlers: ActorRef => Map[MessageCode, ActorRef])
            (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
 
-    system.actorOf(
-      props(settings, peerManagerRef, scorexContext, IO(Tcp)),
-      name)
+    system.actorOf(props(settings, peerManagerRef, scorexContext, IO(Tcp), messageHandlers), name)
   }
-
 }

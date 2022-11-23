@@ -17,7 +17,7 @@ class ErgoUnsafeProverSpec
 
   it should "produce the same proof as a fully-functional prover" in {
     val entropy = Random.randomBytes(32)
-    val extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy)
+    val extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy, usePre1627KeyDerivation = false)
     val fullProver = ErgoProvingInterpreter(extendedSecretKey, parameters)
     val unsafeProver = ErgoUnsafeProver
 

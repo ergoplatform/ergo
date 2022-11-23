@@ -1,6 +1,6 @@
 package scorex.testkit.properties.mempool
 
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalacheck.Gen
@@ -29,7 +29,7 @@ trait MempoolRemovalTest extends AnyPropSpec
       var m: ErgoMemPool = memPool
       // var h: ErgoHistory = historyGen.sample.get
       forAll(transactionGenerator) { tx: ErgoTransaction =>
-        m = m.put(tx).get
+        m = m.put(UnconfirmedTransaction(tx, None)).get
       }
       // var prevMempoolSize = m.size
       // val b = modifierWithTransactions(Some(m), None)

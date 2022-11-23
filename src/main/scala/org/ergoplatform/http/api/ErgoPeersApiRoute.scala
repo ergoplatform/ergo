@@ -1,6 +1,6 @@
 package org.ergoplatform.http.api
 
-import java.net.{InetAddress, InetSocketAddress, URL}
+import java.net.{InetAddress, InetSocketAddress}
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.util.Timeout
@@ -44,7 +44,7 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
   def allPeers: Route = (path("all") & get) {
     val result = askActor[Map[InetSocketAddress, PeerInfo]](peerManager, GetAllPeers).map {
       _.map { case (address, peerInfo) =>
-        PeerInfoResponse.fromAddressAndInfo(address, settings.publicUrl, peerInfo)
+        PeerInfoResponse.fromAddressAndInfo(address, peerInfo)
       }
     }
     ApiResponse(result)
@@ -121,13 +121,13 @@ object ErgoPeersApiRoute {
                               restApiUrl: Option[String])
 
   object PeerInfoResponse {
-    def fromAddressAndInfo(address: InetSocketAddress, restApiUrl: Option[URL], peerInfo: PeerInfo): PeerInfoResponse = PeerInfoResponse(
+    def fromAddressAndInfo(address: InetSocketAddress, peerInfo: PeerInfo): PeerInfoResponse = PeerInfoResponse(
       address.toString,
       0,
       peerInfo.lastHandshake,
       peerInfo.peerSpec.nodeName,
       peerInfo.connectionType.map(_.toString),
-      restApiUrl.map(_.toString)
+      peerInfo.peerSpec.publicUrlOpt.map(_.toString)
     )
 
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))

@@ -1,8 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
-import cats.Traverse
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
@@ -16,14 +14,16 @@ import org.ergoplatform.settings.{Algos, ErgoAlgos}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
+import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.ModifierValidator
+import scorex.core.validation.{ModifierValidator}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.util.ModifierId
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
@@ -66,10 +66,18 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
+  /**
+    *
+    * @param transactions to be applied to state
+    * @param headerId of the block these transactions belong to
+    * @param expectedDigest AVL+ tree digest of UTXO set after applying operations from txs
+    * @param currentStateContext Additional data required for transactions validation
+    * @return
+    */
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
+                                       headerId: ModifierId,
                                        expectedDigest: ADDigest,
                                        currentStateContext: ErgoStateContext): Try[Unit] = {
-    import cats.implicits._
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
     def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
@@ -79,14 +87,25 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
-      val resultTry =
-        ErgoState.stateChanges(transactions).map { stateChanges =>
-          val mods = stateChanges.operations
-          Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+      log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
+      val blockOpsTry = ErgoState.stateChanges(transactions).flatMap { stateChanges =>
+        val operations = stateChanges.operations
+        var opsResult: Try[Unit] = Success(())
+        operations.foreach { op =>
+          if (opsResult.isSuccess) {
+            persistentProver.performOneOperation(op) match {
+              case Success(_) =>
+              case Failure(t) =>
+                log.error(s"Operation $op failed during $headerId transactions validation")
+                opsResult = Failure(t)
+            }
+          }
         }
+        opsResult
+      }
       ModifierValidator(stateContext.validationSettings)
-        .validateNoFailure(fbOperationFailed, resultTry)
-        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
+        .validateNoFailure(fbOperationFailed, blockOpsTry, Transaction.ModifierTypeId)
+        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry
     } else {
@@ -140,7 +159,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.id, fb.header.stateRoot, newStateContext)
 
           txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
@@ -182,7 +201,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               ErgoState.stateChanges(fb.blockTransactions.txs) match {
                 case Success(stateChanges) =>
                  val mods = stateChanges.operations
-                  mods.foreach(persistentProver.performOneOperation)
+                  mods.foreach( modOp => persistentProver.performOneOperation(modOp))
 
                   // meta is the same as it is block-specific
                   proofBytes = persistentProver.generateProofAndUpdateStorage(meta)

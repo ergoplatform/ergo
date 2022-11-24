@@ -14,10 +14,16 @@ import scorex.util.encode.Base16
 
 import scala.util.{Failure, Success, Try}
 
+/**
+  * Container for available UTXO set snapshots
+  * @param availableManifests - available UTXO set snapshot manifests and corresponding heights
+  */
 case class SnapshotsInfo(availableManifests: Map[Height, ManifestId]) {
   def withNewManifest(height: Height, manifestId: ManifestId): SnapshotsInfo = {
     SnapshotsInfo(availableManifests.updated(height, manifestId))
   }
+
+  def nonEmpty: Boolean = availableManifests.nonEmpty
 }
 
 object SnapshotsInfo {
@@ -51,14 +57,20 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     store.insert(Seq(snapshotInfoKey -> snapshotsInfoToBytes(snapshotsInfo)))
   }
 
-  def readSnapshotsInfo: Option[SnapshotsInfo] = {
-    store.get(snapshotInfoKey).map(snapshotsInfoFromBytes)
+  def readSnapshotsInfo: SnapshotsInfo = {
+    store.get(snapshotInfoKey).map(snapshotsInfoFromBytes).getOrElse(SnapshotsInfo.empty)
+  }
+
+  def notEmpty(): Boolean = {
+    store.get(snapshotInfoKey).isDefined
   }
 
   def pruneSnapshots(before: Height): Unit = {
     log.info("Starting snapshots pruning")
-    readSnapshotsInfo.foreach { si =>
-      si.availableManifests.filterKeys(_ < before).foreach { case (h, manifestId) =>
+    readSnapshotsInfo
+      .availableManifests
+      .filterKeys(_ < before)
+      .foreach { case (h, manifestId) =>
         log.info(s"Pruning snapshot at height $h")
         val keysToRemove = store.get(manifestId) match {
           case Some(manifestBytes) =>
@@ -75,7 +87,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
         }
         store.remove(keysToRemove)
       }
-    }
+
     log.info("Snapshots pruning finished")
   }
 
@@ -87,7 +99,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     //todo: RAM consumption doubles here, avoid it
     val subTreesToWrite = subtrees.map(s => s.id -> serializer.subtreeToBytes(s))
     store.insert(Seq(manifestId -> manifestBytes) ++ subTreesToWrite)
-    val si = readSnapshotsInfo.getOrElse(SnapshotsInfo.empty).withNewManifest(height, manifestId)
+    val si = readSnapshotsInfo.withNewManifest(height, manifestId)
     writeSnapshotsInfo(si)
   }
 

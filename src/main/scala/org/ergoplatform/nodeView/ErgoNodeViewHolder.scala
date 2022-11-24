@@ -407,7 +407,24 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
     val constants = StateConstants(settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[State], history) match {
+    val stateRead = ErgoState.readOrGenerate(settings, constants).asInstanceOf[State]
+    val stateRestored: State = stateRead match {
+      case us: UtxoState =>
+        // todo: check if wallet is initialized
+        if (us.isGenesis && us.snapshotsAvailable().nonEmpty) {
+          // start from UTXO set snapshot available
+          UtxoState.fromLatestSnapshot(settings) match {
+            case Success(s) => s.asInstanceOf[State]
+            case Failure(e) =>
+              log.error("Can't restore UTXO set from snapshot ", e)
+              stateRead
+          }
+        } else {
+          stateRead
+        }
+      case _ => stateRead
+    }
+    restoreConsistentState(stateRestored, history) match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
@@ -530,10 +547,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val constants = StateConstants(settings)
     ErgoState.readOrGenerate(settings, constants)
       .asInstanceOf[State]
-      .ensuring(
-        state => java.util.Arrays.equals(state.rootHash, settings.chainSettings.genesisStateDigest),
-        "State root is incorrect"
-      )
+      .ensuring(_.isGenesis, "State root is incorrect")
   }
 
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): Try[State] = {

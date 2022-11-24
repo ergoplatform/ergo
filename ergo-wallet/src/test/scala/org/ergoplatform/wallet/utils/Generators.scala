@@ -1,12 +1,13 @@
 package org.ergoplatform.wallet.utils
 
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
+import org.ergoplatform.sdk.wallet.{Constants => SdkConstants}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.mnemonic.{Mnemonic, WordList}
-import org.ergoplatform.wallet.secrets.ExtendedPublicKey
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, SecretKey}
-import org.ergoplatform.wallet.settings.EncryptionSettings
+import org.ergoplatform.sdk.wallet.secrets.ExtendedPublicKey
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, SecretKey}
+import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.ADKey
@@ -65,11 +66,11 @@ trait Generators {
   def genExactSizeBytes(size: Int): Gen[Array[Byte]] = genLimitedSizedBytes(size, size)
 
   val boxIdGen: Gen[BoxId] = {
-    val x = ADKey @@ genExactSizeBytes(Constants.ModifierIdLength)
+    val x = ADKey @@ genExactSizeBytes(SdkConstants.ModifierIdLength)
     x
   }
 
-  val modIdGen: Gen[ModifierId] = genExactSizeBytes(Constants.ModifierIdLength).map(bytesToId)
+  val modIdGen: Gen[ModifierId] = genExactSizeBytes(SdkConstants.ModifierIdLength).map(bytesToId)
 
   val assetGen: Gen[(TokenId, Long)] = for {
     id <- boxIdGen
@@ -117,7 +118,7 @@ trait Generators {
                  heightGen: Gen[Int] = heightGen): Gen[ErgoBox] = for {
     h <- heightGen
     prop <- propGen
-    transactionId: Array[Byte] <- genExactSizeBytes(Constants.ModifierIdLength)
+    transactionId: Array[Byte] <- genExactSizeBytes(SdkConstants.ModifierIdLength)
     boxId: Short <- boxIndexGen
     ar <- additionalRegistersGen
     tokens <- tokensGen
@@ -140,7 +141,7 @@ trait Generators {
   } yield DerivationPath(0 +: indices, isPublic)
 
   def extendedSecretGen: Gen[ExtendedSecretKey] = for {
-    seed <- Gen.const(Constants.SecretKeyLength).map(scorex.utils.Random.randomBytes)
+    seed <- Gen.const(SdkConstants.SecretKeyLength).map(scorex.utils.Random.randomBytes)
   } yield ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = false)
 
   def extendedPubKeyGen: Gen[ExtendedPublicKey] = extendedSecretGen.map(_.publicKey)

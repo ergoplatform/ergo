@@ -1,11 +1,11 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.{Constants, TokensMap}
+import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
+import org.ergoplatform.sdk.wallet.{Constants, TokensMap}
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.{idToBytes, bytesToId, ModifierId}
 import org.ergoplatform.ErgoBoxAssets
 
 /**
@@ -109,7 +109,7 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
 
     val appsCount = obj.scans.size.toShort
 
-    if (appsCount == 1 && obj.scans.head == Constants.PaymentsScanId) {
+    if (appsCount == 1 && obj.scans.head == PaymentsScanId) {
       w.putShort(0)
     } else {
       w.putShort(appsCount)
@@ -129,7 +129,7 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
 
     val appsCount = r.getShort()
     val appStatuses: Set[ScanId] = if (appsCount == 0){
-      Set(Constants.PaymentsScanId)
+      Set(PaymentsScanId)
     } else {
       (0 until appsCount).map(_ => ScanId @@ r.getShort()).toSet
     }

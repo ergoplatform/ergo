@@ -1,8 +1,10 @@
 package org.ergoplatform.wallet.secrets
 
+import org.ergoplatform.sdk.SecretString
+import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
+
 import java.io.File
 import scala.util.Try
-import org.ergoplatform.wallet.interface4j.SecretString
 
 /**
   * Secret storage trait.

@@ -1,8 +1,9 @@
 package org.ergoplatform.wallet.mnemonic
 
+import org.ergoplatform.sdk.SecretString
+
 import java.text.Normalizer.Form.NFKD
 import java.text.Normalizer.normalize
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.Assertion
 import org.scalatest.flatspec.AnyFlatSpec

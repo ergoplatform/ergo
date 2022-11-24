@@ -1,13 +1,14 @@
 package org.ergoplatform.wallet.secrets
 
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.wallet.settings.SecretStorageSettings
-import org.ergoplatform.wallet.utils.{Generators, FileUtils}
+import org.ergoplatform.wallet.utils.{FileUtils, Generators}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.scalacheck.Arbitrary
-import org.ergoplatform.wallet.settings.EncryptionSettings
+import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
+
 import java.io.{File, PrintWriter}
 import java.util.UUID
 

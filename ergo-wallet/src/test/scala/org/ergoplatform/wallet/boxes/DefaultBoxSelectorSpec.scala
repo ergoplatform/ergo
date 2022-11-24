@@ -2,13 +2,14 @@ package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.SigmaConstants.MaxBoxSize
-import org.ergoplatform.wallet.Constants.{MaxAssetsPerBox, PaymentsScanId}
+import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.ErgoLikeTransaction
+import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
 import sigmastate.helpers.TestingHelpers._
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.{idToBytes, bytesToId, ModifierId}
 import org.scalatest.EitherValues
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughErgsError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughTokensError

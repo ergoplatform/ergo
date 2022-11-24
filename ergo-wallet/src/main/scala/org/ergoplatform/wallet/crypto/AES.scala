@@ -2,7 +2,7 @@ package org.ergoplatform.wallet.crypto
 
 import javax.crypto.spec.{GCMParameterSpec, PBEKeySpec, SecretKeySpec}
 import javax.crypto.{Cipher, SecretKeyFactory}
-import org.ergoplatform.wallet.settings.EncryptionSettings
+import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
 
 import scala.util.Try
 

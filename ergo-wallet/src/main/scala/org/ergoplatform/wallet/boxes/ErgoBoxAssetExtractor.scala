@@ -3,6 +3,8 @@ package org.ergoplatform.wallet.boxes
 import org.ergoplatform.ErgoBoxCandidate
 import sigmastate.eval.Extensions._
 import java7.compat.Math
+import special.collection.Extensions.PairCollOps
+
 import scala.collection.mutable
 import scala.util.Try
 

@@ -2,13 +2,13 @@ package org.ergoplatform.wallet;
 
 import org.ergoplatform.ErgoAddressEncoder;
 import org.ergoplatform.P2PKAddress;
+import org.ergoplatform.sdk.SecretString;
 import org.ergoplatform.wallet.mnemonic.Mnemonic;
-import org.ergoplatform.wallet.interface4j.SecretString;
-import org.ergoplatform.wallet.secrets.DerivationPath;
-import org.ergoplatform.wallet.secrets.ExtendedPublicKey;
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey;
+import org.ergoplatform.sdk.wallet.secrets.DerivationPath;
+import org.ergoplatform.sdk.wallet.secrets.ExtendedPublicKey;
+import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey;
 import scala.Option;
-
+import org.ergoplatform.sdk.wallet.Constants;
 /**
  * This runnable example is showing how to derive change address and other addresses according to EIP-3
  */

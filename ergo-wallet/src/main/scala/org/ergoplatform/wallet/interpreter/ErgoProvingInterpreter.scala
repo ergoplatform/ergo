@@ -1,25 +1,23 @@
 package org.ergoplatform.wallet.interpreter
 
 import java.util
-
 import org.ergoplatform._
-import org.ergoplatform.utils.ArithUtils.{addExact, multiplyExact}
+import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.validation.SigmaValidationSettings
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
-import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
+import sigmastate.interpreter.{ProverInterpreter, ContextExtension}
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
-import org.ergoplatform.wallet.secrets.SecretKey
+import org.ergoplatform.wallet.protocol.context.{ErgoLikeStateContext, ErgoLikeParameters}
 import sigmastate.basics.SigmaProtocolPrivateInput
-import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedSecretKey, ExtendedPublicKey, SecretKey}
 import scorex.util.encode.Base16
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import special.collection.Coll
 import special.sigma.{Header, PreHeader}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 /**
   * A class which is holding secrets and signing transactions.

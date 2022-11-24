@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.secrets
 import io.circe.syntax._
 import cats.syntax.either._  // don't remove, it is needed for scala 2.11
 import io.circe.{Decoder, Encoder, HCursor, Json}
-import org.ergoplatform.wallet.settings.EncryptionSettings
+import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
 import scorex.util.encode.Base16
 
 /**

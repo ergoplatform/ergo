@@ -3,6 +3,8 @@ package org.ergoplatform.nodeView.history.extra
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
+import org.ergoplatform.nodeView.history.extra.IndexedErgoBoxSerializer.getAddress
+import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
@@ -18,7 +20,7 @@ class BalanceInfo(var nanoErgs: Long = 0L,
 
   def retreiveAdditionalTokenInfo(history: ErgoHistoryReader): BalanceInfo = {
     additionalTokenInfo ++= tokens.map(token => {
-      val iT: IndexedToken = history.typedExtraIndexById[IndexedToken](IndexedTokenSerializer.uniqueId(token._1)).get
+      val iT: IndexedToken = history.typedExtraIndexById[IndexedToken](uniqueId(token._1)).get
       (token._1,(iT.name,iT.decimals))
     })
     this
@@ -53,7 +55,7 @@ class BalanceInfo(var nanoErgs: Long = 0L,
             tokens.remove(n)
           else
             tokens(n) = (id, newVal)
-        case None => log.warn(s"Failed to subtract token $id from address ${IndexedErgoBoxSerializer.getAddress(box.ergoTree)}")
+        case None => log.warn(s"Failed to subtract token $id from address ${getAddress(box.ergoTree)}")
       }
 
     }

@@ -99,15 +99,16 @@ class ExtraIndexer(cacheSettings: CacheSettings)
     * Add or subtract a box from an address in the buffer or in database.
     * @param id             - hash of the (ergotree) address
     * @param spendOrReceive - ErgoBox to spend or IndexedErgoBox to receive
+    * @return index of updated tree in buffer or -1 if the tree was unknown
     */
-  private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[ErgoBox,IndexedErgoBox]): Unit = {
+  private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[ErgoBox,IndexedErgoBox]): Int = {
     cfor(trees.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
       if(trees(i).id == id) { // address found in last saveLimit modifiers
         spendOrReceive match {
           case Left(box) => trees(i).addTx(globalTxIndex).spendBox(box) // spend box
           case Right(iEb) => trees(i).addTx(globalTxIndex).addBox(iEb) // receive box
         }
-        return
+        return i
       }
     }
     history.typedExtraIndexById[IndexedErgoAddress](id) match { // address not found in last saveLimit modifiers
@@ -116,11 +117,13 @@ class ExtraIndexer(cacheSettings: CacheSettings)
           case Left(box) => trees += x.addTx(globalTxIndex).spendBox(box) // spend box
           case Right(iEb) => trees += x.addTx(globalTxIndex).addBox(iEb) // receive box
         }
+        trees.length - 1
       case None => // address not found at all
         spendOrReceive match {
           case Left(box) => log.warn(s"Unknown address spent box ${bytesToId(box.id)}") // spend box should never happen by an unknown address
           case Right(iEb) => trees += IndexedErgoAddress(id, ListBuffer(globalTxIndex), ListBuffer.empty[Long], Some(new BalanceInfo)).addBox(iEb) // receive box
         }
+        -1
     }
   }
 
@@ -132,7 +135,7 @@ class ExtraIndexer(cacheSettings: CacheSettings)
   /**
     * Write buffered indexes to database and clear buffers.
     */
-  private def saveProgress(): Unit = {
+  private def saveProgress(writeLog: Boolean = true): Unit = {
 
     val start: Long = System.nanoTime()
 
@@ -159,7 +162,8 @@ class ExtraIndexer(cacheSettings: CacheSettings)
 
     val end: Long = System.nanoTime()
 
-    log.info(s"Processed ${trees.length} ErgoTrees with ${boxes.length} boxes and inserted them to database in ${(end - start) / 1000000D}ms")
+    if(writeLog)
+      log.info(s"Processed ${trees.length} ErgoTrees with ${boxes.length} boxes and inserted them to database in ${(end - start) / 1000000D}ms")
 
     // clear buffers for next batch
     general.clear()
@@ -268,27 +272,55 @@ class ExtraIndexer(cacheSettings: CacheSettings)
     */
   def removeAfter(height: Int): Unit = {
 
-    log.info(s"Performing rollback from $indexedHeight to $height")
+    saveProgress(false)
+
+    log.info(s"Rolling back indexes from $indexedHeight to $height")
 
     cfor(indexedHeight)(_ > height, _ - 1) { block => // remove all block parts down to "height"
+
       val bt: Array[ErgoTransaction] = history.bestBlockTransactionsAt(block).get.txs.toArray
       cfor(bt.length - 1)(_ >= 0, _ - 1) { tx =>
-        val boxes: Array[ErgoBox] = bt(tx).outputs.toArray
-        cfor(boxes.length - 1)(_ >= 0, _ - 1) { box => // revert balances
-          val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(boxes(box).ergoTree))).get
-          // TODO
+
+        val outputs: Array[ErgoBox] = bt(tx).outputs.toArray
+        cfor(outputs.length - 1)(_ >= 0, _ - 1) { n => // revert outputs from addresses
+
+          val i: Int = findAndUpdateTree(bytesToId(hashErgoTree(outputs(n).ergoTree)), Left(outputs(n))) // remove this boxes ergs/tokens
+          trees(i).txs.remove(trees(i).txs.length - 1) // remove tx number duplicate
+          trees(i).boxes.remove(trees(i).boxes.length - 1) // remove box number
+
         }
-        historyStorage.removeExtra(boxes.map(x => bytesToId(x.id))) // remove all boxes in tx
+
+        boxes ++= bt(tx).inputs.map(x => history.typedExtraIndexById[IndexedErgoBox](bytesToId(x.boxId)).get)
+        cfor(boxes.length - 1)(_ >= 0, _ - 1) { n => // revert inputs from addresses
+
+          boxes(n).spendingTxIdOpt = None
+          boxes(n).spendingHeightOpt = None
+          val i: Int = findAndUpdateTree(bytesToId(hashErgoTree(boxes(n).box.ergoTree)), Right(boxes(n))) // add this boxes ergs/tokens
+          trees(i).txs.remove(trees(i).txs.length - 1) // remove tx number duplicate
+          trees(i).boxes.remove(trees(i).boxes.length - 1) // remove box number duplicate
+
+        }
+
+        historyStorage.removeExtra(outputs.map(x => bytesToId(x.id))) // remove all boxes in tx
+
       }
+
+      // save updated height and indexes
+
+      indexedHeight = block
+      globalTxIndex = history.typedExtraIndexById[IndexedErgoTransaction](bt.last.id).get.globalIndex
+      globalBoxIndex = history.typedExtraIndexById[IndexedErgoBox](bytesToId(bt.last.outputs.last.id)).get.globalIndex
+      saveProgress(false)
+
       historyStorage.removeExtra(bt.map(_.id)) // remove all txs in block
     }
 
-    // save new height and start indexer
-    indexedHeight = height
-    indexedHeightBuffer.clear()
-    historyStorage.insertExtra(Array((IndexedHeightKey, indexedHeightBuffer.putInt(indexedHeight).array)), Array.empty)
-    run()
+    log.info(s"Successfully rolled back indexes to $height")
+
+    // restart indexer
     rollback = false
+    run()
+
   }
 
   override def preStart(): Unit = {
@@ -300,15 +332,19 @@ class ExtraIndexer(cacheSettings: CacheSettings)
     log.info(s"Stopped extra indexer at height ${if(lastWroteToDB > 0) lastWroteToDB else indexedHeight}")
 
   override def receive: Receive = {
+
     case FullBlockApplied(header: Header) if caughtUp =>
       index(history.typedModifierById[BlockTransactions](header.transactionsId).get, header.height) // after the indexer caught up with the chain, stay up to date
+
     case Rollback(branchPoint: ModifierId) =>
       val branchHeight: Int = history.heightOf(branchPoint).get
       rollback = branchHeight < indexedHeight
       if(rollback) removeAfter(branchHeight)
+
     case Start(history: ErgoHistory) =>
       _history = history
       run()
+
   }
 }
 

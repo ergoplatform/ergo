@@ -3,28 +3,28 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R1}
 import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{UnconfirmedTransaction, ErgoTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, OffChainRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, AssetIssueRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, EqualsScanningPredicate, ScanWalletInteraction}
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
-import org.ergoplatform.utils.{ErgoPropertyTest, MempoolTestHelpers, WalletTestOps}
-import org.ergoplatform.wallet.interface4j.SecretString
+import org.ergoplatform.utils.{WalletTestOps, MempoolTestHelpers, ErgoPropertyTest}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
+import org.ergoplatform.wallet.boxes.{TrackedBox, ErgoBoxSerializer, ReplaceCompactCollectBoxSelector}
 import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey
+import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
-import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
+import sigmastate.Values.{EvaluatedValue, ByteArrayConstant}
 import sigmastate.helpers.TestingHelpers.testBox
 import sigmastate.{SType, Values}
 

@@ -6,15 +6,15 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UpcomingStateContext}
+import org.ergoplatform.nodeView.state.{StateConstants, UpcomingStateContext, ErgoStateContext, StateType, ErgoState}
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.Parameters.{MaxBlockCostIncrease, MinValuePerByteIncrease}
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey
+import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.{DataInput, ErgoBox, ErgoTreePredef}
 import scorex.core.app.Version
 import scorex.core.network.PeerSpec
@@ -23,7 +23,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
 import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 

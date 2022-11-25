@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.ScorexLogging
 
 import scala.util.Try

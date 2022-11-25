@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
+import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeStateContext
 import scorex.core.serialization.{ScorexSerializer, BytesSerializable}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationState}

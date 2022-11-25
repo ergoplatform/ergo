@@ -15,7 +15,6 @@ import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetPeersStatus, GetConnectedPeers}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.network.ErgoSyncTracker
-import scorex.core.app.Version
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
@@ -51,7 +50,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
   private var nodeInfo = NodeInfo(
     settings.scorexSettings.network.nodeName,
-    Version.VersionString,
+    org.ergoplatform.Version.VersionString,
     settings.networkType.verboseName,
     0,
     0,
@@ -207,7 +206,7 @@ object ErgoStatsCollector {
         ni.restApiUrl.map(_.toString).map(restApiUrl => Map("restApiUrl" -> restApiUrl.asJson)).getOrElse(Map.empty)
       (Map(
         "name" -> ni.nodeName.asJson,
-        "appVersion" -> Version.VersionString.asJson,
+        "appVersion" -> org.ergoplatform.Version.VersionString.asJson,
         "network" -> ni.network.asJson,
         "headersHeight" -> ni.bestHeaderOpt.map(_.height).asJson,
         "fullHeight" -> ni.bestFullBlockOpt.map(_.header.height).asJson,

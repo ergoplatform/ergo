@@ -4,13 +4,14 @@ import io.circe.syntax._
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
+import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestConstants}
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
-import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import org.ergoplatform.wallet.protocol.context.{InputContext}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import scalan.util.BenchmarkUtil

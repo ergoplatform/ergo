@@ -9,7 +9,7 @@ import org.ergoplatform.utils.ErgoTestConstants
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 import sigmastate.Values.ErgoTree

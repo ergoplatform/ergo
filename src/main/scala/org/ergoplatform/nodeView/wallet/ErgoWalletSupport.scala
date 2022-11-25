@@ -3,22 +3,23 @@ package org.ergoplatform.nodeView.wallet
 import cats.implicits._
 import cats.Traverse
 import org.ergoplatform.ErgoBox.{BoxId, R4, R5, R6}
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoBox, ErgoBoxAssets, ErgoBoxCandidate, P2PKAddress, UnsignedInput}
+import org.ergoplatform.{ErgoBoxAssets, UnsignedInput, P2PKAddress, ErgoBox, ErgoAddress, DataInput, ErgoBoxCandidate}
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.nodeView.wallet.requests._
+import org.ergoplatform.sdk
+import org.ergoplatform.sdk.SecretString
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedSecretKey, DerivationPath, ExtendedPublicKey}
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.wallet.{AssetUtils, Constants, TokensMap}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
+import org.ergoplatform.wallet.boxes.{TrackedBox, BoxSelector}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.crypto.hash.Digest32
 import scorex.util.{ScorexLogging, idToBytes}
@@ -27,7 +28,7 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 trait ErgoWalletSupport extends ScorexLogging {
 
@@ -161,7 +162,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         }
       } else {
         if (pubKeys.size == 1 &&
-              pubKeys.head.path == Constants.eip3DerivationPath.toPublicBranch &&
+              pubKeys.head.path == sdk.wallet.Constants.eip3DerivationPath.toPublicBranch &&
               state.storage.readChangeAddress.isEmpty) {
           val changeAddress = P2PKAddress(pubKeys.head.key)(addressEncoder)
           log.info(s"Update change address to $changeAddress")

@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform.wallet.TokensMap
+import org.ergoplatform.sdk.wallet.TokensMap
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, bytesToId}

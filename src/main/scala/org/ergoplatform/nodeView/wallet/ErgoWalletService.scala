@@ -4,28 +4,29 @@ import cats.implicits._
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
+import org.ergoplatform.modifiers.mempool.{UnsignedErgoTransaction, ErgoTransaction}
+import org.ergoplatform.nodeView.state.{UtxoStateReader, ErgoStateContext}
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
-import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
+import org.ergoplatform.nodeView.wallet.models.{CollectedBoxes, ChangeBox}
 import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
-import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
-import org.ergoplatform.settings.{ErgoSettings, Parameters}
+import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, Scan}
+import org.ergoplatform.sdk.SecretString
+import org.ergoplatform.settings.{Parameters, ErgoSettings}
 import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.boxes.{BoxSelector, ErgoBoxSerializer}
-import org.ergoplatform.wallet.interface4j.SecretString
-import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
+import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, BoxSelector}
+import org.ergoplatform.wallet.interpreter.{TransactionHintsBag, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedSecretKey, DerivationPath}
+import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{bytesToId, ModifierId}
 import sigmastate.Values.SigmaBoolean
 
 import java.io.FileNotFoundException
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 /**
   * Operations accessible from [[ErgoWalletActor]]

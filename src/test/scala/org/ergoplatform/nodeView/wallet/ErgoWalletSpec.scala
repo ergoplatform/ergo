@@ -16,7 +16,7 @@ import sigmastate.eval.Extensions._
 
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import org.ergoplatform.wallet.secrets.PrimitiveSecretKey
+import org.ergoplatform.sdk.wallet.secrets.PrimitiveSecretKey
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import scorex.crypto.hash.Digest32

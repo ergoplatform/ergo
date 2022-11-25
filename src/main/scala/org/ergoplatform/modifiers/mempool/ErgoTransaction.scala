@@ -10,13 +10,14 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.sdk.utils.ArithUtils._
+import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.EphemerealNodeViewModifier
-import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import org.ergoplatform.wallet.protocol.context.{InputContext}
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction

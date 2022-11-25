@@ -3,7 +3,7 @@ package org.ergoplatform.utils.generators
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{UnsignedErgoTransaction, ErgoTransaction}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -11,16 +11,17 @@ import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionSigningRequest}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction}
 import org.ergoplatform.settings.Parameters._
-import org.ergoplatform.settings.{Constants, Parameters}
-import org.ergoplatform.utils.{BoxUtils, RandomLike, RandomWrapper}
-import org.ergoplatform.wallet.Constants.{MaxAssetsPerBox, ScanId}
-import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
+import org.ergoplatform.settings.{Parameters, Constants}
+import org.ergoplatform.utils.{RandomLike, RandomWrapper, BoxUtils}
+import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.UnsignedInput
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.utils.Generators
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
-import org.scalacheck.{Arbitrary, Gen}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoAddress, DataInput, ErgoBoxCandidate, P2PKAddress, Input}
+import org.scalacheck.{Gen, Arbitrary}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16

@@ -1,52 +1,52 @@
 package org.ergoplatform.utils
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor.{ActorSystem, ActorRef, Actor, Props}
 import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
+import org.ergoplatform.mining.{AutolykosSolution, ErgoMiner, CandidateGenerator, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{UnconfirmedTransaction, ErgoTransaction}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
+import org.ergoplatform.nodeView.ErgoReadersHolder.{Readers, GetReaders, GetDataFromHistory}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.{ProcessingOutcome, SortingOption}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.{SortingOption, ProcessingOutcome}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
+import org.ergoplatform.nodeView.state.{StateType, DigestState, ErgoStateContext}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.sanity.ErgoSanity.HT
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
-import org.ergoplatform.wallet.interface4j.SecretString
+import org.ergoplatform.utils.generators.{ErgoTransactionGenerators, ErgoGenerators, ChainGenerator}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
-import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
+import org.ergoplatform.wallet.boxes.{TrackedBox, ChainStatus}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedSecretKey, DerivationPath}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
-import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
-import scorex.core.network.{Handshake, PeerSpec}
+import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetBlacklistedPeers, GetAllPeers}
+import scorex.core.network.{PeerSpec, Handshake}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.ByteArrayWrapper
 import scorex.util.Random
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with TestFileUtils {
 

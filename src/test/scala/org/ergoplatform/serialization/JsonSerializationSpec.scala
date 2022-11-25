@@ -16,7 +16,7 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.scalatest.Inspectors
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}

@@ -1,4 +1,4 @@
-package org.ergoplatform.sdk.wallet.secrets
+package org.ergoplatform.wallet.secrets
 
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.secrets.{ExtendedSecretKey, DerivationPath}

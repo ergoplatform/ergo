@@ -10,11 +10,11 @@ import org.ergoplatform.it.api.NodeApi.UnexpectedStatusCodeException
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.ergoplatform.it.util.RichEither
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
-import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestEncoder, RequestsHolder, RequestsHolderEncoder}
+import org.ergoplatform.nodeView.wallet.requests.{RequestsHolderEncoder, RequestsHolder, PaymentRequest, PaymentRequestEncoder}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoWalletServiceImpl}
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.settings.{Args, ErgoSettings}
-import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
-import org.ergoplatform.wallet.interface4j.SecretString
+import org.ergoplatform.utils.{WalletTestOps, ErgoTestHelpers}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.scalatest.wordspec.AsyncWordSpec

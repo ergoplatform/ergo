@@ -1,11 +1,12 @@
 package org.ergoplatform.wallet
 
+import org.ergoplatform.sdk.wallet.AssetUtils.{subtractAssets, mergeAssets}
+import org.ergoplatform.sdk.wallet.TokensMap
 import org.ergoplatform.wallet.utils.WalletTestHelpers
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 class AssetUtilsSpec extends WalletTestHelpers with Matchers with TableDrivenPropertyChecks {
-  import AssetUtils._
 
   val tid1 = stringToId("t1")
   val tid2 = stringToId("t2")
@@ -48,7 +49,7 @@ class AssetUtilsSpec extends WalletTestHelpers with Matchers with TableDrivenPro
 
     forAll(failExamples) { (small, big) =>
       assertExceptionThrown({
-        AssetUtils.subtractAssets(small, big)
+        subtractAssets(small, big)
       },
       { // expected one of the following exceptions
         case e: IllegalArgumentException

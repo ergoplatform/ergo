@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.interpreter
 
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
+import org.ergoplatform.sdk.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import scorex.crypto.authds.ADDigest
 import scorex.util.encode.Base16
 import sigmastate.eval.{CGroupElement, CPreHeader, Colls}

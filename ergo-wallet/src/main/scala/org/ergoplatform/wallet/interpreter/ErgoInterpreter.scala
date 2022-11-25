@@ -1,10 +1,8 @@
 package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.settings.ErgoAlgos
-import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.Constants
-import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
+import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeParameters
 import org.ergoplatform.{ErgoLikeContext, ErgoBox, ErgoBoxCandidate, ErgoLikeInterpreter}
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging

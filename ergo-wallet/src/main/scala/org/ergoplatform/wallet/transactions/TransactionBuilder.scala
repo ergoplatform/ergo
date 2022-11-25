@@ -9,7 +9,7 @@ import special.collection.Coll
 import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId
 import scorex.crypto.hash.Digest32
-import org.ergoplatform.wallet.{AssetUtils, TokensMap}
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
 import scorex.crypto.authds.ADKey

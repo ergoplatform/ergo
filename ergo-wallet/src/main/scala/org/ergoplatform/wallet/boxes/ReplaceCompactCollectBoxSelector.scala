@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.boxes
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 import org.ergoplatform.ErgoBoxAssets
-import org.ergoplatform.wallet.{AssetUtils, TokensMap}
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
 import scorex.util.ModifierId
 import org.ergoplatform.wallet.transactions.TransactionBuilder._
 

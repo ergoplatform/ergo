@@ -3,15 +3,15 @@ package org.ergoplatform.wallet.interpreter
 import java.util
 import org.ergoplatform._
 import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
+import org.ergoplatform.sdk.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import org.ergoplatform.validation.SigmaValidationSettings
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
 import sigmastate.interpreter.{ProverInterpreter, ContextExtension}
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeStateContext, ErgoLikeParameters}
 import sigmastate.basics.SigmaProtocolPrivateInput
-import org.ergoplatform.sdk.wallet.secrets.{ExtendedSecretKey, ExtendedPublicKey, SecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{SecretKey, ExtendedSecretKey, ExtendedPublicKey}
 import scorex.util.encode.Base16
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import special.collection.Coll

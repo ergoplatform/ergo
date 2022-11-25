@@ -9,7 +9,7 @@ import sigmastate.utils.Helpers._
 import org.ergoplatform._
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.sdk.SecretString
-import org.ergoplatform.wallet.TokensMap
+import org.ergoplatform.sdk.wallet.TokensMap
 
 import scala.util.{Try, Success}
 import scorex.crypto.hash.Digest32

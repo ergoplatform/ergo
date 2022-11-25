@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet.requests
 
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 
 /**
   * A request to sign a transaction

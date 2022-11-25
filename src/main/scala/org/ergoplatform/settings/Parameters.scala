@@ -11,7 +11,7 @@ import scorex.util.Extensions._
 import scala.util.Try
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
-import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
+import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeParameters
 import Extension.SystemParametersPrefix
 
 /**

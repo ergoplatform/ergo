@@ -1,21 +1,21 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor.{ActorSystem, ActorRef, Actor, Props}
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.Version
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
+import org.ergoplatform.local.ErgoStatsCollector.{NodeInfo, GetNodeInfo}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.ErgoReadersHolder.{Readers, GetReaders}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
-import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.nodeView.state.{StateType, ErgoStateReader}
+import org.ergoplatform.settings.{Parameters, Algos, ErgoSettings, LaunchParameters}
 import scorex.core.network.ConnectedPeer
-import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
+import scorex.core.network.NetworkController.ReceivableMessages.{GetPeersStatus, GetConnectedPeers}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.network.ErgoSyncTracker
+import scorex.core.app.Version
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging

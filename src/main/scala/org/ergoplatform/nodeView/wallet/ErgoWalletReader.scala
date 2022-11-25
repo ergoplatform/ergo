@@ -6,15 +6,15 @@ import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.{ErgoBox, P2PKAddress}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{UnsignedErgoTransaction, ErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
-import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
-import org.ergoplatform.wallet.interface4j.SecretString
+import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest, BoxesRequest}
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.wallet.boxes.ChainStatus
-import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
+import org.ergoplatform.wallet.boxes.ChainStatus.{OnChain, OffChain}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import scorex.core.NodeViewComponent

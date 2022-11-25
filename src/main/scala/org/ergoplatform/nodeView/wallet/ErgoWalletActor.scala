@@ -1,33 +1,33 @@
 package org.ergoplatform.nodeView.wallet
 
-import akka.actor.SupervisorStrategy.{Restart, Stop}
+import akka.actor.SupervisorStrategy.{Stop, Restart}
 import akka.actor._
 import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{UnsignedErgoTransaction, ErgoTransaction}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
-import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, Scan}
 import org.ergoplatform.settings._
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, ErgoBox, GlobalConstants, P2PKAddress}
+import org.ergoplatform.{GlobalConstants, ErgoAddressEncoder, P2PKAddress, ErgoBox, ErgoApp}
 import scorex.core.VersionTag
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedState, ChangedMempool}
+import org.ergoplatform.sdk.SecretString
 import scorex.core.utils.ScorexEncoding
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ScorexLogging, ModifierId}
 import sigmastate.Values.SigmaBoolean
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
 
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 
 class ErgoWalletActor(settings: ErgoSettings,

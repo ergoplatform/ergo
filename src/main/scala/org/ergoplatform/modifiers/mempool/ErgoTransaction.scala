@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.utils.ArithUtils._
+import org.ergoplatform.sdk.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils

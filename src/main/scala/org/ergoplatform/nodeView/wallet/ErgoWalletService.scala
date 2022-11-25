@@ -17,7 +17,7 @@ import org.ergoplatform.wallet.boxes.{BoxSelector, ErgoBoxSerializer}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, JsonSecretStorage}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.encode.Base16

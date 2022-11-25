@@ -1,18 +1,17 @@
 package org.ergoplatform.http.api
 
-import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
+import akka.actor.{ActorRefFactory, ActorRef}
+import akka.http.scaladsl.server.{Directive1, ValidationRejection, Directive, Route}
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.http.api.requests.HintExtractionRequest
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.modifiers.mempool.{UnconfirmedTransaction, ErgoTransaction}
+import org.ergoplatform.nodeView.ErgoReadersHolder.{Readers, GetReaders}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
@@ -23,8 +22,9 @@ import scorex.util.encode.Base16
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 import akka.http.scaladsl.server.MissingQueryParamRejection
+import org.ergoplatform.sdk.SecretString
 
 case class WalletApiRoute(readersHolder: ActorRef,
                           nodeViewActorRef: ActorRef,

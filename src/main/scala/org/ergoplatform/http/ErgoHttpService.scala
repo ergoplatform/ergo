@@ -1,11 +1,10 @@
 package org.ergoplatform.http
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler, Route}
-import akka.http.scaladsl.server.directives.RouteDirectives
+import akka.http.scaladsl.server.directives.{DebuggingDirectives, RouteDirectives}
 import scorex.core.api.http.{ApiErrorHandler, ApiRejectionHandler, ApiRoute, CorsHandler}
-
 
 final case class ErgoHttpService(
   apiRoutes: Seq[ApiRoute],
@@ -17,15 +16,21 @@ final case class ErgoHttpService(
 
   def exceptionHandler: ExceptionHandler = ApiErrorHandler.exceptionHandler
 
+  def requestMethod(req: HttpRequest): String = s"${req.method} : ${req.uri}"
+
+  def loggingDirective = DebuggingDirectives.logRequest(requestMethod _)
+
   val compositeRoute: Route =
     handleRejections(rejectionHandler) {
       handleExceptions(exceptionHandler) {
         corsHandler {
-          apiR ~
-            apiSpecR ~
-            swaggerRoute.route ~
-            panelRoute.route ~
-            redirectToSwaggerR
+          loggingDirective {
+            apiR ~
+              apiSpecR ~
+              swaggerRoute.route ~
+              panelRoute.route ~
+              redirectToSwaggerR
+          }
         }
       }
     }

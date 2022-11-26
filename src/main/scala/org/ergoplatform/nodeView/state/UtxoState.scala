@@ -116,7 +116,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   private def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
 
-    val SnapshotEvery = 10 // test value, switch to 51840 after testing
+    val SnapshotEvery = 5 // test value, switch to 51840 after testing
 
     if (estimatedTip.nonEmpty &&
         (height % SnapshotEvery == 0) &&
@@ -129,7 +129,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       snapshotsDb.pruneSnapshots(height - SnapshotEvery * 2)
       snapshotsDb.writeSnapshot(height, manifest, subtrees)
       val ms = System.currentTimeMillis()
-      println("Time to dump utxo set snapshot: " + (ms - ms0))
+      log.info("Time to dump utxo set snapshot: " + (ms - ms0))
     }
   }
 

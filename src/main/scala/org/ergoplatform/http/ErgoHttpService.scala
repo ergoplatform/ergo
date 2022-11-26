@@ -12,13 +12,13 @@ final case class ErgoHttpService(
   panelRoute: NodePanelRoute
 )(implicit val system: ActorSystem) extends CorsHandler {
 
-  def rejectionHandler: RejectionHandler = ApiRejectionHandler.rejectionHandler
+  private def rejectionHandler: RejectionHandler = ApiRejectionHandler.rejectionHandler
 
-  def exceptionHandler: ExceptionHandler = ApiErrorHandler.exceptionHandler
+  private def exceptionHandler: ExceptionHandler = ApiErrorHandler.exceptionHandler
 
-  def requestMethod(req: HttpRequest): String = s"${req.method} : ${req.uri}"
+  private def requestMethod(req: HttpRequest): String = s"${req.method.value}: ${req.uri}"
 
-  def loggingDirective = DebuggingDirectives.logRequest(requestMethod _)
+  private def loggingDirective = DebuggingDirectives.logRequest(requestMethod _)
 
   val compositeRoute: Route =
     handleRejections(rejectionHandler) {

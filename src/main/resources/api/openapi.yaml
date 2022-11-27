@@ -2820,7 +2820,7 @@ paths:
   /transactions/bytes:
       post:
         summary: Submit an Ergo transaction given as hex-encoded transaction bytes to unconfirmed pool to send it over the network
-        operationId: sendTransactionBytes
+        operationId: sendTransactionAsBytes
         tags:
           - transactions
         requestBody:
@@ -2876,7 +2876,7 @@ paths:
         summary: Checks an Ergo transaction without sending it over the network given in form of hex-encoded transaction
           bytes. Checks that transaction is valid and its inputs are in the UTXO set. Returns transaction identifier
           if the transaction is passing the checks.
-        operationId: checkTransactionBytes
+        operationId: checkTransactionAsBytes
         tags:
           - transactions
         requestBody:

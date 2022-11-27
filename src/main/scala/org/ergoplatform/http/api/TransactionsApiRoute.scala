@@ -58,7 +58,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   override val route: Route = pathPrefix("transactions") {
     checkTransactionR ~
-      checkTransactionBytesR ~
+      checkTransactionAsBytesR ~
       getUnconfirmedOutputByRegistersR ~
       getUnconfirmedOutputByTokenIdR ~
       getUnconfirmedOutputByErgoTreeR ~
@@ -69,7 +69,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
       getUnconfirmedTransactionsR ~
       unconfirmedContainsR ~
       sendTransactionR ~
-      sendTransactionBytesR ~
+      sendTransactionAsBytesR ~
       getFeeHistogramR ~
       getRecommendedFeeR ~
       getExpectedWaitTimeR
@@ -107,7 +107,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   /**
     * Validate and broadcast transaction given as hex-encoded bytes
     */
-  def sendTransactionBytesR: Route = (path("bytes") & pathEnd & post & entity(as[String])) { txBytesStr =>
+  def sendTransactionAsBytesR: Route = (path("bytes") & pathEnd & post & entity(as[String])) { txBytesStr =>
     Base16.decode(txBytesStr).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
       case Success(tx) =>
         validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
@@ -123,7 +123,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   /**
     * Check transaction given as hex-encoded bytes
     */
-  def checkTransactionBytesR: Route = (path("checkBytes") & post & entity(as[String])) { txBytesStr =>
+  def checkTransactionAsBytesR: Route = (path("checkBytes") & post & entity(as[String])) { txBytesStr =>
     Base16.decode(txBytesStr).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
       case Success(tx) =>
         validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))

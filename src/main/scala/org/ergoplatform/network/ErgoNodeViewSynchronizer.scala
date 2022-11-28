@@ -137,7 +137,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Counter which contains per-peer total cost of transactions entered mempool or rejected by it since last block
     * processed.
     */
-  private val txInfo = mutable.Map[ConnectedPeer, IncomingTxInfo]()
+  private val perPeerCost = mutable.Map[ConnectedPeer, IncomingTxInfo]()
 
   /**
     * Cache which contains bytes of transactions we received but not parsed and processed yet
@@ -602,7 +602,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                      remote: ConnectedPeer): Unit = {
     // filter out transactions already in the mempool
     val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
-    val peerCost = txInfo.get(remote).map(_.totalCost).getOrElse(0)
+    val peerCost = perPeerCost.get(remote).map(_.totalCost).getOrElse(0)
 
     val (toProcess, toPutIntoCache) =
       if (peerCost < MempoolPeerCostPerBlock || interblockCost.totalCost < MempoolCostPerBlock) {
@@ -773,7 +773,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                            peer: ConnectedPeer,
                            blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
 
-    val peerCost = txInfo.get(peer).map(_.totalCost).getOrElse(0)
+    val peerCost = perPeerCost.get(peer).map(_.totalCost).getOrElse(0)
 
     // We download transactions only if following conditions met:
     def txAcceptanceFilter: Boolean = {
@@ -1038,7 +1038,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
       clearDeclined()
       clearInterblockCost()
-      txInfo.clear()
+      perPeerCost.clear()
       processFirstTxProcessingCacheRecord() // resume cache processing
 
     case st@SuccessfulTransaction(utx) =>

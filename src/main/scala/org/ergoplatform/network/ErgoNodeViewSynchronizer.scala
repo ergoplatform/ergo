@@ -606,7 +606,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val peerCost = perPeerCost.getOrElse(remote, IncomingTxInfo.empty()).totalCost
 
     val (toProcess, toPutIntoCache) =
-      if (peerCost < MempoolPeerCostPerBlock || interblockCost.totalCost < MempoolCostPerBlock) {
+      if (peerCost < MempoolPeerCostPerBlock && interblockCost.totalCost < MempoolCostPerBlock) {
         // if we are within peer and total per-block limits, parse and process first transaction
         (notInThePool.headOption, notInThePool.tail)
       } else {

@@ -602,7 +602,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                      remote: ConnectedPeer): Unit = {
     // filter out transactions already in the mempool
     val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
-    val peerCost = perPeerCost.get(remote).map(_.totalCost).getOrElse(0)
+    val peerCost = perPeerCost.getOrElse(remote, IncomingTxInfo.empty()).totalCost
 
     val (toProcess, toPutIntoCache) =
       if (peerCost < MempoolPeerCostPerBlock || interblockCost.totalCost < MempoolCostPerBlock) {

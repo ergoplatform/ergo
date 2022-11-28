@@ -177,7 +177,10 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
   def process(unconfirmedTx: UnconfirmedTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTx.transaction
+
     log.info(s"Processing mempool transaction: $tx")
+    log.debug(s"Mempool: pool size: ${this.size}")
+
     val validationStartTime = System.currentTimeMillis()
 
     val blacklistedTransactions = nodeSettings.blacklistedTransactions

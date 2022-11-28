@@ -66,13 +66,15 @@ trait ErgoWalletService {
     * @param mnemonic that was used to initialize wallet with
     * @param mnemonicPassOpt that was used to initialize wallet with
     * @param walletPass that was used to initialize wallet with
+    * @param usePre1627KeyDerivation - use incorrect(previous) BIP32 derivation, expected to be false for new wallets, and true for old pre-1627 wallets (see https://github.com/ergoplatform/ergo/issues/1627 for details)
     * @return new wallet state
     */
   def restoreWallet(state: ErgoWalletState,
                     settings: ErgoSettings,
                     mnemonic: SecretString,
                     mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString): Try[ErgoWalletState]
+                    walletPass: SecretString, 
+                    usePre1627KeyDerivation: Boolean): Try[ErgoWalletState]
 
   /**
     * Decrypt underlying encrypted storage using `walletPass` and update public keys
@@ -109,12 +111,14 @@ trait ErgoWalletService {
   def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
 
   /**
-    * @param state current wallet state
-    * @param scanId to get boxes for
+    * @param state               current wallet state
+    * @param scanId              to get boxes for
     * @param considerUnconfirmed whether to look for boxes in off-chain registry
+    * @param minHeight           min inclusion height of unspent boxes
+    * @param maxHeight           max inclusion height of unspent boxes
     * @return Unspent wallet boxes corresponding to `scanId`
     */
-  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox]
+  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox]
 
   /**
     * @param state current wallet state
@@ -292,7 +296,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     log.info("Initializing wallet")
 
     def initStorage(mnemonic: SecretString): Try[JsonSecretStorage] =
-      Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass)(walletSettings.secretStorage))
+      Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass, usePre1627KeyDerivation = false)(walletSettings.secretStorage))
 
     val result =
       new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
@@ -316,11 +320,12 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
                     settings: ErgoSettings,
                     mnemonic: SecretString,
                     mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString): Try[ErgoWalletState] =
+                    walletPass: SecretString,
+                    usePre1627KeyDerivation: Boolean): Try[ErgoWalletState] =
     if (settings.nodeSettings.isFullBlocksPruned)
       Failure(new IllegalArgumentException("Unable to restore wallet when pruning is enabled"))
     else
-      Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage))
+      Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage, usePre1627KeyDerivation))
         .flatMap { secretStorage =>
           // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
           recreateRegistry(state, settings).flatMap { stateV1 =>
@@ -402,7 +407,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
-  override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox] = {
+  override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox] = {
     val unconfirmed = if (considerUnconfirmed) {
       state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
     } else {
@@ -410,8 +415,8 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     }
 
     val currentHeight = state.fullHeight
-    val boxes = state.registry.unspentBoxes(scanId)  ++ unconfirmed
-    boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+    val unspentBoxes = state.registry.unspentBoxesByInclusionHeight(scanId, minHeight, maxHeight)
+    (unspentBoxes ++ unconfirmed).map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
   override def getScanSpentBoxes(state: ErgoWalletState, scanId: ScanId): Seq[WalletBox] = {
@@ -551,8 +556,16 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     }
 
   override def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =
-      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter, dustLimit)
-        .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
+      WalletScanLogic.scanBlockTransactions(
+        state.registry,
+        state.offChainRegistry,
+        state.walletVars,
+        block,
+        state.outputsFilter,
+        dustLimit,
+        ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
+        state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
+      }
 
   override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

@@ -16,9 +16,9 @@ import scala.annotation.tailrec
   * Public key, its chain code and path in key tree.
   * (see: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
   */
-final class ExtendedPublicKey(val keyBytes: Array[Byte],
-                              val chainCode: Array[Byte],
-                              val path: DerivationPath)
+final class ExtendedPublicKey(private[secrets] val keyBytes: Array[Byte],
+                              private[secrets] val chainCode: Array[Byte],
+                              val path: DerivationPath) 
   extends ExtendedKey[ExtendedPublicKey] {
 
   def selfReflection: ExtendedPublicKey = this

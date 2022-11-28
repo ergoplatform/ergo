@@ -6,6 +6,7 @@ import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils.ArithUtils._
@@ -157,7 +158,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   private def verifyOutput(validationBefore: ValidationState[Long],
                            out: ErgoBox,
-                           stateContext: ErgoStateContext): ValidationResult[Long] = {
+                           stateContext: ErgoStateContext,
+                           maxCreationHeightInInputs: Int): ValidationResult[Long] = {
 
     val blockVersion = stateContext.blockVersion
 
@@ -165,6 +167,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), InvalidModifier(s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}", id, modifierTypeId))
       .validate(txFuture, out.creationHeight <= stateContext.currentHeight, InvalidModifier(s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out", id, modifierTypeId))
       .validate(txNegHeight, (blockVersion == 1) || out.creationHeight >= 0, InvalidModifier(s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out", id, modifierTypeId))
+      .validate(txMonotonicHeight, out.creationHeight >= maxCreationHeightInInputs, InvalidModifier(s" ${out.creationHeight} is less than max creation height in inputs($maxCreationHeightInInputs), output id: $id: output $out", id, modifierTypeId))
       .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, InvalidModifier(s"$id: output $out", id, modifierTypeId))
       .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, InvalidModifier(s"$id: output $out", id, modifierTypeId))
   }
@@ -371,6 +374,17 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     // Cost limit per block
     val maxCost = stateContext.currentParameters.maxBlockCost.toLong
 
+    val blockVersion = stateContext.blockVersion
+
+    // Before 5.0 soft-fork (v3 block version), we are checking only that
+    // creation height in outputs is not negative
+    // After, we are checking that it is not less that max creation height in inputs
+    val maxCreationHeightInInputs = if (blockVersion <= Header.HardeningVersion) {
+      0
+    } else {
+      boxesToSpend.map(_.creationHeight).max
+    }
+
     // We sum up previously accumulated cost and transaction initialization cost
     val startCost = addExact(initialCost, accumulatedCost)
     ModifierValidator(stateContext.validationSettings)
@@ -384,7 +398,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)),
         InvalidModifier(s"$id: ${outputCandidates.map(_.additionalTokens)}", id, modifierTypeId))
       // Check that outputs are not dust, and not created in future
-      .validateSeq(outputs) { case (validationState, out) => verifyOutput(validationState, out, stateContext) }
+      .validateSeq(outputs) { case (validationState, out) =>
+        verifyOutput(validationState, out, stateContext, maxCreationHeightInInputs)
+      }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
       // Normally, this check should always pass, if the client is implemented properly
       // so it is not part of the protocol really.

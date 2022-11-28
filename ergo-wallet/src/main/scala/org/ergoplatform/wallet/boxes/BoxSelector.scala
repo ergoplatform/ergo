@@ -48,9 +48,7 @@ trait BoxSelector extends ScorexLogging {
     */
   def reemissionAmount[T <: ErgoBoxAssets](boxes: Seq[T]): Long = {
     reemissionDataOpt.map { reemissionData =>
-      boxes
-        .flatMap(_.tokens.get(reemissionData.reemissionTokenId))
-        .sum
+      boxes.foldLeft(0L) { case (sum, b) => sum + b.tokens.getOrElse(reemissionData.reemissionTokenId, 0L) }
     }.getOrElse(0L)
   }
 

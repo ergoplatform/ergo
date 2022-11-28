@@ -44,11 +44,11 @@ object WalletScanLogic extends ScorexLogging {
                             walletVars: WalletVars,
                             block: ErgoFullBlock,
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
-                            dustLimit: Option[Long]
-                           ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
+                            dustLimit: Option[Long],
+                            walletProfile: WalletProfile): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
     scanBlockTransactions(
       registry, offChainRegistry, walletVars,
-      block.height, block.id, block.transactions, cachedOutputsFilter, dustLimit)
+      block.height, block.id, block.transactions, cachedOutputsFilter, dustLimit, walletProfile)
   }
 
   /**
@@ -70,15 +70,13 @@ object WalletScanLogic extends ScorexLogging {
                             blockId: ModifierId,
                             transactions: Seq[ErgoTransaction],
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
-                            dustLimit: Option[Long]
-                           ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
+                            dustLimit: Option[Long],
+                            walletProfile: WalletProfile): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
 
     // Take unspent wallet outputs Bloom Filter from cache
     // or recreate it from unspent outputs stored in the database
     val outputsFilter = cachedOutputsFilter.getOrElse {
-      // todo: currently here and other places hardcoded values are used for Bloom filter parameters
-      // todo: consider different profiles for the config, such as "user", "wallet", "app hub"
-      val bf = WalletCache.emptyFilter(expectedKeys = 20000)
+      val bf = WalletCache.emptyFilter(walletProfile.outputsFilterSize)
 
       registry.allUnspentBoxes().foreach { tb =>
         bf.put(tb.box.id)
@@ -200,7 +198,7 @@ object WalletScanLogic extends ScorexLogging {
       val boxScript = bx.propositionBytes
 
       // then check whether Bloom filter built on top of payment & mining scripts of the p2pk-wallet
-      val statuses: Set[ScanId] = if (walletVars.filter.mightContain(boxScript)) {
+      val statuses: Set[ScanId] = if (walletVars.scriptsFilter.mightContain(boxScript)) {
 
         // first, we are checking mining script
         val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))

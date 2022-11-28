@@ -15,10 +15,6 @@ package org.ergoplatform.wallet.secrets
   */
 trait ExtendedKey[T <: ExtendedKey[T]] {
 
-  val keyBytes: Array[Byte]
-
-  val chainCode: Array[Byte]
-
   val path: DerivationPath
 
   /** Returns subtype reference.

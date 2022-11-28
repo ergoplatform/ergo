@@ -217,13 +217,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case _ => log.debug("No peer set, perPeerCost not updated.")
     }
 
+    val withinGlobalLimit = interblockCost.totalCost < MempoolCostPerBlock
     val withinPeerLimit = peerOpt.isDefined &&
       perPeerCost.getOrElse(peerOpt.get, IncomingTxInfo.empty()).totalCost < MempoolPeerCostPerBlock
 
-    val withinGlobalLimit = interblockCost.totalCost < MempoolCostPerBlock
-
-    if ((peerOpt.isDefined && withinPeerLimit && withinGlobalLimit) ||
-      (peerOpt.isEmpty && withinGlobalLimit)) {
+    if (withinGlobalLimit && (peerOpt.isEmpty || (peerOpt.isDefined && withinPeerLimit))) {
       processFirstTxProcessingCacheRecord()
     }
   }

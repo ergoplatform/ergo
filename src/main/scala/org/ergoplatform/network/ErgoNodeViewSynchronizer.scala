@@ -198,27 +198,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case _: DeclinedTransaction => interblockCost.copy(declinedCost = interblockCost.declinedCost + cost)
     }
 
-    log.debug(s"Old global cost info: $interblockCost, new: $newInterblockCost, tx processing cache size: ${txProcessingCache.size}")
+    log.debug(s"Old global cost info: $interblockCost, " +
+      s"new: $newInterblockCost, tx processing cache size: ${txProcessingCache.size}")
     interblockCost = newInterblockCost
 
     val peerOpt = processingResult.transaction.source
     peerOpt match {
-      case Some(peer) => {
+      case Some(peer) =>
         val peerTxInfo = perPeerCost.getOrElse(peer, IncomingTxInfo.empty())
         val newPeerCost = processingResult match {
           case _: FailedTransaction => peerTxInfo.copy(invalidatedCost = peerTxInfo.invalidatedCost + cost)
           case _: SuccessfulTransaction => peerTxInfo.copy(acceptedCost = peerTxInfo.acceptedCost + cost)
           case _: DeclinedTransaction => peerTxInfo.copy(declinedCost = peerTxInfo.declinedCost + cost)
         }
-
         log.debug(s"Old peer ${peer.connectionId} cost info: ${peerTxInfo.totalCost}, " +
           s"new: $newPeerCost, tx processing cache size: ${txProcessingCache.size}")
         perPeerCost.put(peer, newPeerCost)
-      }
       case _ => log.debug("No peer set, perPeerCost not updated.")
     }
 
-    if ((peerOpt.isDefined && perPeerCost(peerOpt.get).totalCost < MempoolPeerCostPerBlock) || interblockCost.totalCost < MempoolCostPerBlock) {
+    if ((peerOpt.isDefined &&
+      perPeerCost.getOrElse(peerOpt.get, IncomingTxInfo.empty()).totalCost < MempoolPeerCostPerBlock) ||
+      interblockCost.totalCost < MempoolCostPerBlock) {
       processFirstTxProcessingCacheRecord()
     }
   }

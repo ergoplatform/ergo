@@ -40,6 +40,12 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
   /**
+    * @return min full block height the node has
+    * // todo: improve scaladoc
+    */
+  def minFullBlockAvailable: Int = pruningProcessor.minimalFullBlockHeight
+
+  /**
     * Get modifier ids to download to synchronize full blocks
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
     * @param condition filter only ModifierIds that pass this condition

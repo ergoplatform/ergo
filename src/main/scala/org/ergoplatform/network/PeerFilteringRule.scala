@@ -78,10 +78,22 @@ final case class BlockSectionsDownloadFilter(stateType: StateType) extends PeerF
   * If peer's version is >= 4.0.16, the peer is supporting sync V2
   */
 object SyncV2Filter extends PeerFilteringRule {
+  private val syncV2Version = Version(4, 0, 16)
 
   override def condition(version: Version): Boolean = {
-    val syncV2Version = Version(4, 0, 16)
     version.compare(syncV2Version) >= 0
+  }
+
+}
+
+/**
+  * If peer's version is >= 4.0.16, the peer is supporting sync V2
+  */
+object SyncV3Filter extends PeerFilteringRule {
+  private val syncV3Version = Version(5, 0, 10) // todo: set before release
+
+  override def condition(version: Version): Boolean = {
+    version.compare(syncV3Version) >= 0
   }
 
 }

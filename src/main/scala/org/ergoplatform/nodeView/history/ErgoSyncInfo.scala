@@ -31,10 +31,9 @@ case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {
   override val nonEmpty: Boolean = lastHeaderIds.nonEmpty
 }
 
-/**
-  * @param lastHeaders - some recent headers (including last one) known to a peer
-  */
-case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
+trait HeadersBasedSyncInfo extends ErgoSyncInfo {
+  val lastHeaders: Seq[Header]
+
   /**
     * Height of a chain reported by a peer (so most recent header it shows)
     */
@@ -43,11 +42,14 @@ case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
   override val nonEmpty: Boolean = lastHeaders.nonEmpty
 }
 
+/**
+  * @param lastHeaders - some recent headers (including last one) known to a peer
+  */
+case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo with HeadersBasedSyncInfo
+
 case class ErgoSyncInfoV3(lastHeaders: Seq[Header],
                           headersRanges: Seq[(Height, Height)],
-                          fullBlocksRanges: Seq[(Height, Height)]) extends ErgoSyncInfo {
-  override val nonEmpty: Boolean = lastHeaders.nonEmpty
-}
+                          fullBlocksRanges: Seq[(Height, Height)]) extends ErgoSyncInfo with HeadersBasedSyncInfo
 
 object ErgoSyncInfo {
   val MaxBlockIds = 1000
@@ -128,8 +130,11 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
           HeaderSerializer.parseBytes(headerBytes)
         }
         ErgoSyncInfoV2(headers)
+      } else if (mode == v3HeaderMode) {
+        //todo: do sync v3 reader
+        ???
       } else {
-        throw new Exception(s"Wrong SyncInfo version: $r")
+        throw new Exception(s"Wrong SyncInfo version encoded with $mode")
       }
     } else { // parse v1 sync message
       require(length <= ErgoSyncInfo.MaxBlockIds + 1, "Too many block ids in sync info")

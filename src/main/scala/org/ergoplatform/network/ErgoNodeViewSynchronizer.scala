@@ -190,34 +190,35 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.warn("Cost is empty in processMempoolResult")
     }
 
-    //TODO peer should always be set?  Throw exception?
-    val peer = processingResult.transaction.source.get
-    val peerTxInfo = txInfo(peer)
-
     val cost = costOpt.getOrElse(FallbackCostValue)
-    val ng = processingResult match {
-      case _: FailedTransaction => {
-        interblockCost.copy(invalidatedCost = interblockCost.invalidatedCost + cost)
-        peerTxInfo.copy(invalidatedCost = peerTxInfo.invalidatedCost + cost)
-      }
-      case _: SuccessfulTransaction => {
-        interblockCost.copy(acceptedCost = interblockCost.acceptedCost + cost)
-        peerTxInfo.copy(acceptedCost = peerTxInfo.acceptedCost + cost)
-      }
-      case _: DeclinedTransaction => {
-        interblockCost.copy(declinedCost = interblockCost.declinedCost + cost)
-        peerTxInfo.copy(declinedCost = peerTxInfo.declinedCost + cost)
-      }
+
+    val newInterblockCost = processingResult match {
+      case _: FailedTransaction => interblockCost.copy(invalidatedCost = interblockCost.invalidatedCost + cost)
+      case _: SuccessfulTransaction => interblockCost.copy(acceptedCost = interblockCost.acceptedCost + cost)
+      case _: DeclinedTransaction => interblockCost.copy(declinedCost = interblockCost.declinedCost + cost)
     }
 
-    log.debug(s"Old global cost info: $interblockCost, new $ng, tx processing cache size: ${txProcessingCache.size}")
-    interblockCost = ng
+    log.debug(s"Old global cost info: $interblockCost, new: $newInterblockCost, tx processing cache size: ${txProcessingCache.size}")
+    interblockCost = newInterblockCost
 
-    log.debug(s"Old peer cost info: ${txInfo.get(peer).map(_.totalCost).getOrElse(0)}, " +
-      s"new $ng, tx processing cache size: ${txProcessingCache.size}")
-    txInfo.put(peer, ng)
+    val peerOpt = processingResult.transaction.source
+    peerOpt match {
+      case Some(peer) => {
+        val peerTxInfo = perPeerCost.getOrElse(peer, IncomingTxInfo.empty())
+        val newPeerCost = processingResult match {
+          case _: FailedTransaction => peerTxInfo.copy(invalidatedCost = peerTxInfo.invalidatedCost + cost)
+          case _: SuccessfulTransaction => peerTxInfo.copy(acceptedCost = peerTxInfo.acceptedCost + cost)
+          case _: DeclinedTransaction => peerTxInfo.copy(declinedCost = peerTxInfo.declinedCost + cost)
+        }
 
-    if (txInfo(peer).totalCost < MempoolPeerCostPerBlock || interblockCost.totalCost < MempoolCostPerBlock) {
+        log.debug(s"Old peer ${peer.connectionId} cost info: ${peerTxInfo.totalCost}, " +
+          s"new: $newPeerCost, tx processing cache size: ${txProcessingCache.size}")
+        perPeerCost.put(peer, newPeerCost)
+      }
+      case _ => log.debug("No peer set, perPeerCost not updated.")
+    }
+
+    if ((peerOpt.isDefined && perPeerCost(peerOpt.get).totalCost < MempoolPeerCostPerBlock) || interblockCost.totalCost < MempoolCostPerBlock) {
       processFirstTxProcessingCacheRecord()
     }
   }

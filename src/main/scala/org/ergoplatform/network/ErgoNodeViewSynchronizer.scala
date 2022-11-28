@@ -773,7 +773,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                            peer: ConnectedPeer,
                            blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
 
-    val peerCost = perPeerCost.get(peer).map(_.totalCost).getOrElse(0)
+    val peerCost = perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost
 
     // We download transactions only if following conditions met:
     def txAcceptanceFilter: Boolean = {

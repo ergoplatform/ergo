@@ -1023,8 +1023,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           minModifiersPerBucket,
           maxModifiersPerBucket
         )(getPeersForDownloadingBlocks) { howManyPerType =>
-          val tip = historyReader.estimatedTip()
-          historyReader.nextModifiersToDownload(howManyPerType, tip, downloadRequired(historyReader))
+          historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
         }
       }
 

@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
@@ -35,6 +36,8 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   def isInBestChain(id: ModifierId): Boolean
 
+  def estimatedTip(): Option[Height]
+
   /** Returns true if we estimate that our chain is synced with the network. Start downloading full blocks after that
     */
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
@@ -52,13 +55,11 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
   def nextModifiersToDownload(howManyPerType: Int,
-                              estimatedTip: Option[Int],
                               condition: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
 
     val FullBlocksToDownloadAhead = 192 // how many full blocks to download forwards during active sync
 
-    
-    def farAwayFromBeingSynced(fb: ErgoFullBlock) = fb.height < (estimatedTip.getOrElse(0) - 128)
+    def farAwayFromBeingSynced(fb: ErgoFullBlock) = fb.height < (estimatedTip().getOrElse(0) - 128)
 
     @tailrec
     def continuation(height: Int,

@@ -64,7 +64,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     @tailrec
     def continuation(height: Int,
                      acc: Map[ModifierTypeId, Vector[ModifierId]],
-                     maxHeight: Int = Int.MaxValue): Map[ModifierTypeId, Vector[ModifierId]] = {
+                     maxHeight: Int): Map[ModifierTypeId, Vector[ModifierId]] = {
       if (height > maxHeight) {
         acc
       } else {
@@ -97,10 +97,10 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         // when blockchain is about to be synced,
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
         val minHeight = Math.max(1, fb.header.height - 100)
-        continuation(minHeight, Map.empty)
+        continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
       case _ =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
-        continuation(pruningProcessor.minimalFullBlockHeight, Map.empty)
+        continuation(pruningProcessor.minimalFullBlockHeight, Map.empty, maxHeight = Int.MaxValue)
     }
   }
 

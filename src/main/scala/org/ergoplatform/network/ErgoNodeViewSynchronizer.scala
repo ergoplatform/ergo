@@ -111,7 +111,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Max cost of per-peer transactions we are going to process between blocks
     */
-  private val MempoolPeerCostPerBlock = 12000000
+  private val MempoolPeerCostPerBlock = 10000000
 
   /**
     * Currently max transaction cost is higher but will be eventually cut down to this value

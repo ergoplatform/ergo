@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
@@ -32,6 +33,8 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
 
   def isInBestChain(id: ModifierId): Boolean
 
+  def estimatedTip(): Option[Height]
+
   /**
     * Get modifier ids to download to synchronize full blocks
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
@@ -39,18 +42,16 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
   def nextModifiersToDownload(howManyPerType: Int,
-                              estimatedTip: Option[Int],
                               condition: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
 
     val FullBlocksToDownloadAhead = 192 // how many full blocks to download forwards during active sync
 
-    
-    def farAwayFromBeingSynced(fb: ErgoFullBlock) = fb.height < (estimatedTip.getOrElse(0) - 128)
+    def farAwayFromBeingSynced(fb: ErgoFullBlock) = fb.height < (estimatedTip().getOrElse(0) - 128)
 
     @tailrec
     def continuation(height: Int,
                      acc: Map[ModifierTypeId, Vector[ModifierId]],
-                     maxHeight: Int = Int.MaxValue): Map[ModifierTypeId, Vector[ModifierId]] = {
+                     maxHeight: Int): Map[ModifierTypeId, Vector[ModifierId]] = {
       if (height > maxHeight) {
         acc
       } else {
@@ -83,10 +84,10 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
         // when blockchain is about to be synced,
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
         val minHeight = Math.max(1, fb.header.height - 100)
-        continuation(minHeight, Map.empty)
+        continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
       case _ =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
-        continuation(minimalFullBlockHeight, Map.empty)
+        continuation(minimalFullBlockHeight, Map.empty, maxHeight = Int.MaxValue)
     }
   }
 

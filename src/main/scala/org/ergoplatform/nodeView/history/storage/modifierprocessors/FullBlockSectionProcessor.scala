@@ -49,7 +49,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     ).getOrElse(
       // Block section can not be validated without a corresponding header
       initialValidationState
-        .validate(bsNoHeader, condition = false, s"Block section id: ${Algos.encode(m.id)}")
+        .validate(bsNoHeader, condition = false, InvalidModifier(s"Block section id: ${Algos.encode(m.id)}", m.id, m.modifierTypeId))
         .result
     ).toTry
   }
@@ -94,12 +94,12 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
     def validate(m: NonHeaderBlockSection, header: Header): ValidationResult[Unit] = {
       initialValidationState
-        .validate(alreadyApplied, !historyStorage.contains(m.id), s"${m.encodedId}")
-        .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), s"header=${header.encodedId}, id=${m.encodedId}")
-        .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), s"header=${header.encodedId}, id=${m.encodedId}")
-        .validate(bsHeadersChainSynced, isHeadersChainSynced)
-        .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height),
-          s"header=${header.encodedId}, id=${m.encodedId}")
+        .validate(alreadyApplied, !historyStorage.contains(m.id), InvalidModifier(m.encodedId, m.id, m.modifierTypeId))
+        .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
+        .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
+        .validate(bsHeadersChainSynced, isHeadersChainSynced, InvalidModifier(header.id, m.id, m.modifierTypeId))
+        .validate(bsTooOld, isHistoryADProof(m, header) || shouldDownloadBlockAtHeight(header.height),
+          InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
         .result
     }
 

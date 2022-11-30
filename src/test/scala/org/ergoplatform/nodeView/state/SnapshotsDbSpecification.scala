@@ -17,7 +17,7 @@ class SnapshotsDbSpecification extends ErgoPropertyTest {
       val db = SnapshotsDb.create(dir)
       db.writeSnapshotsInfo(si)
 
-      val read = db.readSnapshotsInfo.get.availableManifests.mapValues(bs => bytesToId(bs))
+      val read = db.readSnapshotsInfo.availableManifests.mapValues(bs => bytesToId(bs))
       val siTocompare = si.availableManifests.mapValues(bs => bytesToId(bs))
 
       read shouldBe siTocompare

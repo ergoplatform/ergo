@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
@@ -40,8 +39,8 @@ trait ErgoWalletReader extends NodeViewComponent {
     (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[SecretString]]
 
   def restoreWallet(encryptionPass: SecretString, mnemonic: SecretString,
-                    mnemonicPassOpt: Option[SecretString] = None): Future[Try[Unit]] =
-    (walletActor ? RestoreWallet(mnemonic, mnemonicPassOpt, encryptionPass)).mapTo[Try[Unit]]
+                    mnemonicPassOpt: Option[SecretString] = None, usePre1627KeyDerivation: Boolean): Future[Try[Unit]] =
+    (walletActor ? RestoreWallet(mnemonic, mnemonicPassOpt, encryptionPass, usePre1627KeyDerivation)).mapTo[Try[Unit]]
 
   def unlockWallet(pass: SecretString): Future[Try[Unit]] =
     (walletActor ? UnlockWallet(pass)).mapTo[Try[Unit]]
@@ -76,8 +75,8 @@ trait ErgoWalletReader extends NodeViewComponent {
   def walletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 
-  def scanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean = false): Future[Seq[WalletBox]] =
-    (walletActor ? GetScanUnspentBoxes(scanId, considerUnconfirmed)).mapTo[Seq[WalletBox]]
+  def scanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Future[Seq[WalletBox]] =
+    (walletActor ? GetScanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight)).mapTo[Seq[WalletBox]]
 
   def scanSpentBoxes(scanId: ScanId): Future[Seq[WalletBox]] =
     (walletActor ? GetScanSpentBoxes(scanId)).mapTo[Seq[WalletBox]]
@@ -94,7 +93,8 @@ trait ErgoWalletReader extends NodeViewComponent {
   def generateTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
                           dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true)).mapTo[Try[ErgoTransaction]]
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true))
+      .mapTo[Try[ErgoTransaction]]
 
   def generateCommitmentsFor(unsignedErgoTransaction: UnsignedErgoTransaction,
                              externalSecretsOpt: Option[Seq[ExternalSecret]],

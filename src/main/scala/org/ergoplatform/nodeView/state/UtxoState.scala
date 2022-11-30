@@ -1,8 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
-import cats.Traverse
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
@@ -11,11 +9,11 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
-import org.ergoplatform.settings.{Algos, Parameters}
-import org.ergoplatform.settings.{Algos, ErgoAlgos}
+import org.ergoplatform.settings.{Algos, ErgoAlgos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
+import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
@@ -24,6 +22,7 @@ import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest,
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.util.ModifierId
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
@@ -44,6 +43,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     with TransactionValidation
     with UtxoStateReader
     with ScorexEncoding {
+
+  private val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move to some other place ?
 
   override def rootHash: ADDigest = persistentProver.synchronized {
     persistentProver.digest
@@ -66,10 +67,18 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
+  /**
+    *
+    * @param transactions to be applied to state
+    * @param headerId of the block these transactions belong to
+    * @param expectedDigest AVL+ tree digest of UTXO set after applying operations from txs
+    * @param currentStateContext Additional data required for transactions validation
+    * @return
+    */
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
+                                       headerId: ModifierId,
                                        expectedDigest: ADDigest,
                                        currentStateContext: ErgoStateContext): Try[Unit] = {
-    import cats.implicits._
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
     def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
@@ -79,14 +88,25 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
-      val resultTry =
-        ErgoState.stateChanges(transactions).map { stateChanges =>
-          val mods = stateChanges.operations
-          Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+      log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
+      val blockOpsTry = ErgoState.stateChanges(transactions).flatMap { stateChanges =>
+        val operations = stateChanges.operations
+        var opsResult: Try[Unit] = Success(())
+        operations.foreach { op =>
+          if (opsResult.isSuccess) {
+            persistentProver.performOneOperation(op) match {
+              case Success(_) =>
+              case Failure(t) =>
+                log.error(s"Operation $op failed during $headerId transactions validation")
+                opsResult = Failure(t)
+            }
+          }
         }
+        opsResult
+      }
       ModifierValidator(stateContext.validationSettings)
-        .validateNoFailure(fbOperationFailed, resultTry)
-        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
+        .validateNoFailure(fbOperationFailed, blockOpsTry, Transaction.ModifierTypeId)
+        .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry
     } else {
@@ -96,9 +116,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   private def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
 
-    val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
-
-    val SnapshotEvery = 10 // test value, switch to 51840 after testing
+    val SnapshotEvery = 5 // test value, switch to 51840 after testing
 
     if (estimatedTip.nonEmpty &&
         (height % SnapshotEvery == 0) &&
@@ -110,7 +128,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       snapshotsDb.pruneSnapshots(height - SnapshotEvery * 2)
       snapshotsDb.writeSnapshot(height, manifest, subtrees)
       val ms = System.currentTimeMillis()
-      println("Time to dump utxo set snapshot: " + (ms - ms0))
+      log.info("Time to dump utxo set snapshot: " + (ms - ms0))
     }
   }
 
@@ -139,7 +157,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.id, fb.header.stateRoot, newStateContext)
 
           txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
@@ -181,7 +199,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               ErgoState.stateChanges(fb.blockTransactions.txs) match {
                 case Success(stateChanges) =>
                  val mods = stateChanges.operations
-                  mods.foreach(persistentProver.performOneOperation)
+                  mods.foreach( modOp => persistentProver.performOneOperation(modOp))
 
                   // meta is the same as it is block-specific
                   proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
@@ -234,6 +252,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     persistentProver.storage.rollbackVersions.map { v =>
       bytesToVersion(store.get(Algos.hash(v)).get)
     }
+  }
+
+  def snapshotsAvailable(): SnapshotsInfo = {
+    snapshotsDb.readSnapshotsInfo
   }
 
 }
@@ -306,32 +328,36 @@ object UtxoState extends ScorexLogging {
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }
 
+  def fromLatestSnapshot(settings: ErgoSettings): Try[UtxoState] = {
+    val stateDir = ErgoState.stateDir(settings)
+    stateDir.mkdirs()
+    val snapshotsDb = SnapshotsDb.create(settings)
+    val constants = StateConstants(settings)
+    fromLatestSnapshot(stateDir, snapshotsDb, constants)
+  }
+
   def fromLatestSnapshot(dir: File,
                          snapshotDb: SnapshotsDb,
                          constants: StateConstants): Try[UtxoState] = Try {
-    snapshotDb.readSnapshotsInfo match {
-      case Some(snapshotsInfo) =>
-        val (h, manifestId) = snapshotsInfo.availableManifests.maxBy(_._1)
-        log.info(s"Reading snapshot from height $h")
-        val manifest = snapshotDb.readManifest(manifestId).get
-        val subtreeIds = manifest.subtreesIds
-        val subtrees = subtreeIds.map(sid => snapshotDb.readSubtree(sid).get)
-        val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
-        val prover = serializer.combine(manifest -> subtrees, Algos.hash.DigestSize, None).get
+    val snapshotsInfo = snapshotDb.readSnapshotsInfo
+    val (h, manifestId) = snapshotsInfo.availableManifests.maxBy(_._1)
+    log.info(s"Reading snapshot from height $h")
+    val manifest = snapshotDb.readManifest(manifestId).get
+    val subtreeIds = manifest.subtreesIds
+    val subtrees = subtreeIds.map(sid => snapshotDb.readSubtree(sid).get)
+    val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
+    val prover = serializer.combine(manifest -> subtrees, Algos.hash.DigestSize, None).get
 
-        //todo: code below is mostly copied from .create, unify ?
-        val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
-        val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
-          .getOrElse(ErgoState.genesisStateVersion)
-        val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
-          val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-          val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
-          PersistentBatchAVLProver.create(prover, storage).get
-        }
-        new UtxoState(persistentProver, version, store, constants)
-
-      case None => ???
+    //todo: code below is mostly copied from .create, unify ?
+    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
+    val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
+      .getOrElse(ErgoState.genesisStateVersion)
+    val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
+      val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
+      val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+      PersistentBatchAVLProver.create(prover, storage).get
     }
+    new UtxoState(persistentProver, version, store, constants)
   }
 
 }

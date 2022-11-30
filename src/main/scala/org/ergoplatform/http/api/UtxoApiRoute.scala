@@ -15,7 +15,8 @@ import scorex.util.encode.Base16
 
 import scala.concurrent.Future
 
-case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiSettings)
+case class UtxoApiRoute(readersHolder: ActorRef,
+                        override val settings: RESTApiSettings)
                        (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   private def getState: Future[ErgoStateReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.s)
@@ -85,7 +86,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
   def getSnapshotsInfo: Route = (get & path("getSnapshotsInfo")) {
     ApiResponse(getState.map {
       case usr: UtxoStateReader =>
-        usr.getSnapshotInfo()
+        Some(usr.getSnapshotInfo())
       case _ => None
     })
   }

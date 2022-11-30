@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos
@@ -177,9 +177,23 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Producing a copy of the state which takes into account outputs of given transactions.
     * Useful when checking mempool transactions.
     */
-  def withTransactions(txns: Seq[ErgoTransaction]): UtxoState = {
+  def withUnconfirmedTransactions(unconfirmedTxs: Seq[UnconfirmedTransaction]): UtxoState = {
     new UtxoState(persistentProver, version, store, constants) {
-      lazy val createdBoxes: Seq[ErgoBox] = txns.flatMap(_.outputs)
+      lazy val createdBoxes: Seq[ErgoBox] = unconfirmedTxs.map(_.transaction).flatMap(_.outputs)
+
+      override def boxById(id: ADKey): Option[ErgoBox] = {
+        super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
+      }
+    }
+  }
+
+  /**
+   * Producing a copy of the state which takes into account outputs of given transactions.
+   * Useful when checking mempool transactions.
+   */
+  def withTransactions(transactions: Seq[ErgoTransaction]): UtxoState = {
+    new UtxoState(persistentProver, version, store, constants) {
+      lazy val createdBoxes: Seq[ErgoBox] = transactions.flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {
         super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
@@ -191,9 +205,9 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Producing a copy of the state which takes into account pool of unconfirmed transactions.
     * Useful when checking mempool transactions.
     */
-  def withMempool(mp: ErgoMemPoolReader): UtxoState = withTransactions(mp.getAll)
+  def withMempool(mp: ErgoMemPoolReader): UtxoState = withUnconfirmedTransactions(mp.getAll)
 
-  def getSnapshotInfo(): Option[SnapshotsInfo] = {
+  def getSnapshotInfo(): SnapshotsInfo = {
     val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
     snapshotsDb.readSnapshotsInfo
   }

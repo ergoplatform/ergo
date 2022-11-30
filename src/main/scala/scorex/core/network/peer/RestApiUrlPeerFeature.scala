@@ -6,7 +6,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization._
 import java.net.URL
 
-import org.ergoplatform.settings.PeerFeatureIds
+import org.ergoplatform.settings.PeerFeatureDescriptors
 
 /**
   * Peer may have rest-api URL enabled in which case it needs to be passed to/from other peers
@@ -14,7 +14,7 @@ import org.ergoplatform.settings.PeerFeatureIds
   */
 case class RestApiUrlPeerFeature(restApiUrl: URL) extends PeerFeature {
   override type M = RestApiUrlPeerFeature
-  override val featureId: Id = PeerFeatureIds.RestApiUrlFeatureId
+  override val featureId: Id = PeerFeatureDescriptors.RestApiUrlFeatureId
 
   override def serializer: RestApiUrlPeerFeatureSerializer.type = RestApiUrlPeerFeatureSerializer
 }

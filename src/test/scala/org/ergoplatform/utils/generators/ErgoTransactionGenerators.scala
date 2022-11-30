@@ -232,11 +232,11 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     tokensDistribution.ensuring(_.forall(_.forall(_._2 > 0)))
   }
 
-  private def boxesGenTemplate(minAssets: Int,
-                               maxAssets: Int,
-                               minInputs: Int,
-                               maxInputs: Int,
-                               propositionGen: Gen[ErgoTree]): Gen[(IndexedSeq[ErgoBox], ErgoTree)] = for {
+  def boxesGenTemplate(minAssets: Int,
+                       maxAssets: Int,
+                       minInputs: Int,
+                       maxInputs: Int,
+                       propositionGen: Gen[ErgoTree]): Gen[(IndexedSeq[ErgoBox], ErgoTree)] = for {
     inputsCount <- Gen.choose(minInputs, maxInputs)
     tokensCount <- Gen.choose(
       minAssets,

@@ -93,28 +93,30 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private def loadedWallet(state: ErgoWalletState): Receive = {
     // Init wallet (w. mnemonic generation) if secret is not set yet
-    case InitWallet(pass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.initWallet(state, settings, pass, mnemonicPassOpt) match {
+    case InitWallet(walletPass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
+      ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt) match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
           context.become(loadedWallet(newState))
-          self ! UnlockWallet(pass)
+          self ! UnlockWallet(walletPass)
           sender() ! Success(mnemonic)
         case Failure(t) =>
+          walletPass.erase()
           val f = wrapLegalExc(t) // getting nicer message for illegal key size exception
           log.error(s"Wallet initialization is failed, details: ${f.exception.getMessage}")
           sender() ! f
       }
 
     // Restore wallet with mnemonic if secret is not set yet
-    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass) match {
+    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
+      ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) match {
         case Success(newState) =>
           log.info("Wallet is restored")
           context.become(loadedWallet(newState))
           self ! UnlockWallet(walletPass)
           sender() ! Success(())
         case Failure(t) =>
+          walletPass.erase()
           val f = wrapLegalExc(t) //getting nicer message for illegal key size exception
           log.error(s"Wallet restoration is failed, details: ${f.exception.getMessage}")
           sender() ! f
@@ -179,8 +181,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       val boxes = ergoWalletService.getWalletBoxes(state, unspent, considerUnconfirmed)
       sender() ! boxes
 
-    case GetScanUnspentBoxes(scanId, considerUnconfirmed) =>
-      val boxes = ergoWalletService.getScanUnspentBoxes(state, scanId, considerUnconfirmed)
+    case GetScanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight) =>
+      val boxes = ergoWalletService.getScanUnspentBoxes(state, scanId, considerUnconfirmed, minHeight, maxHeight)
       sender() ! boxes
 
     case GetScanSpentBoxes(scanId) =>
@@ -312,14 +314,16 @@ class ErgoWalletActor(settings: ErgoSettings,
           sender() ! Failure(new Exception("Wallet not initialized"))
       }
 
-    case UnlockWallet(encPass) =>
+    case UnlockWallet(walletPass) =>
       log.info("Unlocking wallet")
-      ergoWalletService.unlockWallet(state, encPass, settings.walletSettings.usePreEip3Derivation) match {
+      ergoWalletService.unlockWallet(state, walletPass, settings.walletSettings.usePreEip3Derivation) match {
         case Success(newState) =>
           log.info("Wallet successfully unlocked")
+          walletPass.erase()
           context.become(loadedWallet(newState))
           sender() ! Success(())
         case f@Failure(t) =>
+          walletPass.erase()
           log.warn("Wallet unlock failed with: ", t)
           sender() ! f
       }
@@ -635,7 +639,7 @@ object ErgoWalletActor extends ScorexLogging {
     * @param mnemonicPassOpt
     * @param walletPass
     */
-  final case class RestoreWallet(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString], walletPass: SecretString)
+  final case class RestoreWallet(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString], walletPass: SecretString, usePre1627KeyDerivation: Boolean)
 
   /**
     * Unlock wallet with wallet password
@@ -695,8 +699,10 @@ object ErgoWalletActor extends ScorexLogging {
     *
     * @param scanId              - scan identifier
     * @param considerUnconfirmed - consider boxes from mempool
+    * @param minHeight - min inclusion height of unspent boxes
+    * @param maxHeight - max inclusion height of unspent boxes
     */
-  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean)
+  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int)
 
   /**
     * Get spent boxes related to a scan

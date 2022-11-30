@@ -20,3 +20,16 @@ Implementation Details
 UTXO set is authenticated via AVL+ tree.
 
 Time is broken into epochs, 1 epoch = 51,840 blocks (~72 days).
+
+Networking Layer
+----------------
+
+Bootstrapping
+-------------
+
+
+Node Config
+-----------
+
+Sync Info V3
+------------

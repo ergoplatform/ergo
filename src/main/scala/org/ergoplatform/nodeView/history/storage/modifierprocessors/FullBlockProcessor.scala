@@ -59,8 +59,8 @@ trait FullBlockProcessor extends HeadersProcessor {
       nonBestBlock
 
   private def isValidFirstFullBlock(header: Header): Boolean = {
-    pruningProcessor.isHeadersChainSynced &&
-      header.height == pruningProcessor.minimalFullBlockHeight &&
+    isHeadersChainSynced &&
+      header.height == minimalFullBlockHeight &&
       bestFullBlockIdOpt.isEmpty
   }
 
@@ -106,7 +106,7 @@ trait FullBlockProcessor extends HeadersProcessor {
         if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
         if (nodeSettings.isFullBlocksPruned) {
-          val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
+          val lastKept = updateBestFullBlock(fullBlock.header)
           val bestHeight: Int = newBestBlockHeader.height
           val diff = bestHeight - prevBest.header.height
           pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))

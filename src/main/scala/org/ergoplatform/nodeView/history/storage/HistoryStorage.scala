@@ -1,13 +1,15 @@
 package org.ergoplatform.nodeView.history.storage
 
-import com.google.common.cache.CacheBuilder
+import com.github.benmanes.caffeine.cache.Caffeine
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
+import scorex.core.ModifierTypeId
 import scorex.core.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import supertagged.PostfixSugar
 
 import scala.util.{Failure, Success, Try}
 
@@ -24,17 +26,20 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
     with AutoCloseable
     with ScorexEncoding {
 
-  private val headersCache = CacheBuilder.newBuilder()
-    .maximumSize(config.history.headersCacheSize)
-    .build[String, BlockSection]
+  private val headersCache =
+    Caffeine.newBuilder()
+      .maximumSize(config.history.headersCacheSize)
+      .build[String, BlockSection]()
 
-  private val blockSectionsCache = CacheBuilder.newBuilder()
-    .maximumSize(config.history.blockSectionsCacheSize)
-    .build[String, BlockSection]
+  private val blockSectionsCache =
+    Caffeine.newBuilder()
+      .maximumSize(config.history.blockSectionsCacheSize)
+      .build[String, BlockSection]()
 
-  private val indexCache = CacheBuilder.newBuilder()
-    .maximumSize(config.history.indexesCacheSize)
-    .build[ByteArrayWrapper, Array[Byte]]
+  private val indexCache =
+    Caffeine.newBuilder()
+      .maximumSize(config.history.indexesCacheSize)
+      .build[ByteArrayWrapper, Array[Byte]]
 
   private def cacheModifier(mod: BlockSection): Unit = mod.modifierTypeId match {
     case Header.modifierTypeId => headersCache.put(mod.id, mod)
@@ -51,6 +56,10 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
 
   def modifierBytesById(id: ModifierId): Option[Array[Byte]] = {
     objectsStore.get(idToBytes(id)).map(_.tail) // removing modifier type byte with .tail
+  }
+
+  def modifierTypeAndBytesById(id: ModifierId): Option[(ModifierTypeId, Array[Byte])] = {
+    objectsStore.get(idToBytes(id)).map(bs => (bs.head @@ ModifierTypeId, bs.tail)) // first byte is type id, tail is modifier bytes
   }
 
   def modifierById(id: ModifierId): Option[BlockSection] =

@@ -23,7 +23,7 @@ and currently the reference implementation code should be considered as the spec
 
 ## Building and Running Node and UI
 
-See [documentation](https://docs.ergoplatform.com/node/install/install/)
+See [documentation](https://docs.ergoplatform.com/node/install/)
 
 ## Testing
 

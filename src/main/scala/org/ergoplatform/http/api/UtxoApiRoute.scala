@@ -15,7 +15,8 @@ import scorex.util.encode.Base16
 
 import scala.concurrent.Future
 
-case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiSettings)
+case class UtxoApiRoute(readersHolder: ActorRef,
+                        override val settings: RESTApiSettings)
                        (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   private def getState: Future[ErgoStateReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.s)
@@ -24,7 +25,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
 
   override val route: Route = pathPrefix("utxo") {
-    byId ~ serializedById ~ genesis ~ withPoolById ~ withPoolSerializedById ~ getBoxesBinaryProof
+    byId ~ serializedById ~ genesis ~ withPoolById ~ withPoolSerializedById ~ getBoxesBinaryProof ~ getSnapshotsInfo
   }
 
   def withPoolById: Route = (get & path("withPool" / "byId" / Segment)) { id =>
@@ -79,6 +80,13 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     ApiResponse(getState.map {
       case usr: UtxoStateReader =>
         Some(Base16.encode(usr.generateBatchProofForBoxes(boxes)))
+      case _ => None
+    })
+  }
+  def getSnapshotsInfo: Route = (get & path("getSnapshotsInfo")) {
+    ApiResponse(getState.map {
+      case usr: UtxoStateReader =>
+        Some(usr.getSnapshotInfo())
       case _ => None
     })
   }

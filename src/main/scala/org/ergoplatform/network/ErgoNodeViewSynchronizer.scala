@@ -13,6 +13,8 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
@@ -20,9 +22,12 @@ import scorex.core.{ModifierTypeId, NodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
+import scorex.core.network.message._
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
+import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import scorex.core.network.message.{InvData, Message, ModifiersData}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
@@ -34,6 +39,7 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.app.Version
+import scorex.crypto.hash.Digest32
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -231,7 +237,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   override def preStart(): Unit = {
     // subscribe for history and mempool changes
-    viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
+    viewHolderRef ! GetNodeViewChanges(history = true, state = true, vault = false, mempool = true)
 
     val toDownloadCheckInterval = networkSettings.syncInterval
 
@@ -242,6 +248,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // subscribe for all the node view holder events involving modifiers and transactions
     context.system.eventStream.subscribe(self, classOf[ChangedHistory])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool])
+    context.system.eventStream.subscribe(self, classOf[ChangedState])
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
@@ -576,15 +583,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @param maxModifiers maximum modifiers to download
     * @param minModifiersPerBucket minimum modifiers to download per bucket
     * @param maxModifiersPerBucket maximum modifiers to download per bucket
-    * @param getPeersOpt optionally get peers to download from, all peers have the same PeerSyncState
-    * @param fetchMax function that fetches modifiers, it is passed how many of them tops
+    * @param getPeersOpt           optionally get peers to download from, all peers have the same PeerSyncState
+    * @param fetchMax              function that fetches modifiers, it is passed how many of them tops
     */
   protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
                                (getPeersOpt: => Option[Iterable[ConnectedPeer]])
                                (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit =
     getPeersOpt
       .foreach { peers =>
-        val modifiersByBucket = ElementPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
+        val peersCount = peers.size
+        val maxElementsToFetch = Math.min(maxModifiers, peersCount * maxModifiersPerBucket)
+        val fetched = if (maxElementsToFetch <= 0) {
+          Map.empty
+        } else {
+          fetchMax(maxElementsToFetch)
+        }
+        val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched)
         // collect and log useful downloading progress information, don't worry it does not run frequently
         modifiersByBucket.headOption.foreach { _ =>
           modifiersByBucket
@@ -763,6 +777,31 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
     }
     modifiersByStatus.getOrElse(Requested, Map.empty)
+  }
+
+  protected def sendSnapshotsInfo(usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
+    val msg = Message(SnapshotsInfoSpec, Right(usr.getSnapshotInfo()), None)
+    networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+  }
+
+  protected def sendManifest(id: ManifestId, usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
+    usr.getManifest(id) match {
+      case Some(manifest) => {
+        val msg = Message(ManifestSpec, Right(manifest), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      }
+      case _ => log.warn(s"No manifest ${Algos.encode(id)} available")
+    }
+  }
+
+  protected def sendUtxoSnapshotChunk(id: SubtreeId, usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
+    usr.getUtxoSnapshotChunk(id) match {
+      case Some(snapChunk) => {
+        val msg = Message(UtxoSnapshotChunkSpec, Right(snapChunk), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      }
+      case _ => log.warn(s"No chunk ${Algos.encode(id)} available")
+    }
   }
 
   /**
@@ -1016,6 +1055,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def viewHolderEvents(historyReader: ErgoHistory,
                                  mempoolReader: ErgoMemPool,
+                                 utxoStateReaderOpt: Option[UtxoStateReader],
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
@@ -1088,10 +1128,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
-      context.become(initialized(newHistoryReader, mempoolReader, blockAppliedTxsCache))
+      context.become(initialized(newHistoryReader, mempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
 
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
-      context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
+      context.become(initialized(historyReader, newMempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
+
+    case ChangedState(reader: ErgoStateReader) =>
+      reader match {
+        case utxoStateReader: UtxoStateReader =>
+          context.become(initialized(historyReader, mempoolReader, Some(utxoStateReader), blockAppliedTxsCache))
+        case _ =>
+      }
 
     case BlockSectionsProcessingCacheUpdate(headersCacheSize, blockSectionsCacheSize, cleared) =>
       val HeadersCacheSizeToDownloadMore = 3184
@@ -1116,7 +1163,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
       // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
       logger.debug("Caching applied transactions")
-      context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache.putAll(transactionIds)))
+      context.become(initialized(historyReader, mempoolReader, utxoStateReaderOpt, blockAppliedTxsCache.putAll(transactionIds)))
 
     case ChainIsHealthy =>
       // good news
@@ -1130,6 +1177,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /** get handlers of messages coming from peers */
   private def msgHandlers(hr: ErgoHistory,
                           mp: ErgoMemPool,
+                          usrOpt: Option[UtxoStateReader],
                           blockAppliedTxsCache: FixedSizeApproximateCacheQueue
                          ): PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: ErgoSyncInfoMessageSpec.type @unchecked, data: ErgoSyncInfo @unchecked, remote) =>
@@ -1140,13 +1188,31 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       modifiersReq(hr, mp, data, remote)
     case (_: ModifiersSpec.type, data: ModifiersData, remote) =>
       modifiersFromRemote(hr, mp, data, remote, blockAppliedTxsCache)
+    case (spec: MessageSpec[_], _, remote) if spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
+      usrOpt match {
+        case Some(usr) => sendSnapshotsInfo(usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+    case (_: GetManifestSpec, id: Array[Byte], remote) =>
+      usrOpt match {
+        case Some(usr) => sendManifest(Digest32 @@ id, usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+    case (_: GetUtxoSnapshotChunkSpec,  id: Array[Byte], remote) =>
+      usrOpt match {
+        case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ id, usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
   }
 
-  def initialized(hr: ErgoHistory, mp: ErgoMemPool, blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
-    processDataFromPeer(msgHandlers(hr, mp, blockAppliedTxsCache)) orElse
+  def initialized(hr: ErgoHistory,
+                  mp: ErgoMemPool,
+                  usr: Option[UtxoStateReader],
+                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
+    processDataFromPeer(msgHandlers(hr, mp, usr, blockAppliedTxsCache)) orElse
       onDownloadRequest(hr) orElse
       sendLocalSyncInfo(hr) orElse
-      viewHolderEvents(hr, mp, blockAppliedTxsCache) orElse
+      viewHolderEvents(hr, mp, usr, blockAppliedTxsCache) orElse
       peerManagerEvents orElse
       checkDelivery orElse {
       case a: Any => log.error("Strange input: " + a)
@@ -1154,27 +1220,37 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /** Wait until both historyReader and mempoolReader instances are received so actor can be operational */
-  def initializing(hr: Option[ErgoHistory], mp: Option[ErgoMemPool], blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
+  def initializing(hr: Option[ErgoHistory],
+                   mp: Option[ErgoMemPool],
+                   usr: Option[UtxoStateReader],
+                   blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
     case ChangedHistory(historyReader: ErgoHistory) =>
       mp match {
         case Some(mempoolReader) =>
-          context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache))
+          context.become(initialized(historyReader, mempoolReader, usr, blockAppliedTxsCache))
         case _ =>
-          context.become(initializing(Option(historyReader), mp, blockAppliedTxsCache))
+          context.become(initializing(Option(historyReader), mp, usr, blockAppliedTxsCache))
       }
     case ChangedMempool(mempoolReader: ErgoMemPool) =>
       hr match {
         case Some(historyReader) =>
-          context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache))
+          context.become(initialized(historyReader, mempoolReader, usr, blockAppliedTxsCache))
         case _ =>
-          context.become(initializing(hr, Option(mempoolReader), blockAppliedTxsCache))
+          context.become(initializing(hr, Option(mempoolReader), usr, blockAppliedTxsCache))
+      }
+    case ChangedState(reader: ErgoStateReader) =>
+      reader match {
+        case utxoStateReader: UtxoStateReader =>
+          context.become(initializing(hr, mp, Some(utxoStateReader), blockAppliedTxsCache))
+        case _ =>
+          context.become(initializing(hr, mp, None, blockAppliedTxsCache))
       }
     case msg =>
       // Actor not initialized yet, scheduling message until it is
       context.system.scheduler.scheduleOnce(1.second, self, msg)
   }
 
-  override def receive: Receive = initializing(None, None, FixedSizeApproximateCacheQueue.empty(cacheQueueSize = 5))
+  override def receive: Receive = initializing(None, None, None, FixedSizeApproximateCacheQueue.empty(cacheQueueSize = 5))
 
 }
 

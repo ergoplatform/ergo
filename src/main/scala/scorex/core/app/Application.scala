@@ -58,7 +58,10 @@ trait Application extends ScorexLogging {
       new PeersSpec(scorexSettings.network.maxPeerSpecObjects),
       InvSpec,
       RequestModifierSpec,
-      ModifiersSpec
+      ModifiersSpec,
+      GetSnapshotsInfoSpec,
+      new GetManifestSpec,
+      new GetUtxoSnapshotChunkSpec
     )
   }
 

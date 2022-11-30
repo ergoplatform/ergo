@@ -75,7 +75,10 @@ class ErgoApp(args: Args) extends ScorexLogging {
       new PeersSpec(scorexSettings.network.maxPeerSpecObjects),
       InvSpec,
       RequestModifierSpec,
-      ModifiersSpec
+      ModifiersSpec,
+      GetSnapshotsInfoSpec,
+      new GetManifestSpec,
+      new GetUtxoSnapshotChunkSpec
     )
   }
 

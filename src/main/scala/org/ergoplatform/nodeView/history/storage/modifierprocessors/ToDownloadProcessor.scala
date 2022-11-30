@@ -4,6 +4,8 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.nodeView.state.SnapshotsInfo
+import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
@@ -15,7 +17,7 @@ import scala.annotation.tailrec
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
 trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders with ScorexLogging {
-  import ToDownloadProcessor._
+  import scorex.core.utils.MapPimp
 
   protected val timeProvider: NetworkTimeProvider
 
@@ -35,10 +37,12 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
 
   def estimatedTip(): Option[Height]
 
+  private val manifestChosen: Option[ManifestId] = None
+
   /**
     * Get modifier ids to download to synchronize full blocks
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
-    * @param condition filter only ModifierIds that pass this condition
+    * @param filterFn only ModifierIds which pass filter are included into results
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
   def nextModifiersToDownload(howManyPerType: Int,
@@ -85,7 +89,13 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
         val minHeight = Math.max(1, fb.header.height - 100)
         continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
-      case _ =>
+      case None if nodeSettings.utxoBootstrap =>
+        if (manifestChosen.nonEmpty){
+          ???
+        } else {
+          Map(SnapshotsInfo.modifierTypeId -> Seq.empty)
+        }
+      case None =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
         continuation(minimalFullBlockHeight, Map.empty, maxHeight = Int.MaxValue)
     }
@@ -121,16 +131,4 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
     }
   }
 
-}
-
-object ToDownloadProcessor {
-  implicit class MapPimp[K, V](underlying: Map[K, V]) {
-    /**
-      * One liner for updating a Map with the possibility to handle case of missing Key
-      * @param k map key
-      * @param f function that is passed Option depending on Key being present or missing, returning new Value
-      * @return new Map with value updated under given key
-      */
-    def adjust(k: K)(f: Option[V] => V): Map[K, V] = underlying.updated(k, f(underlying.get(k)))
-  }
 }

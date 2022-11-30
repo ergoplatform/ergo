@@ -14,11 +14,14 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeV
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.state.UtxoState.ManifestId
+import org.ergoplatform.nodeView.state.{ErgoState, SnapshotsDb, SnapshotsInfo, UtxoStateReader}
+import org.ergoplatform.settings.Algos
 import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
+import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
@@ -28,6 +31,7 @@ import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.Random
 
 @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
 trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
@@ -38,6 +42,8 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
 
   val historyGen: Gen[ErgoHistory]
   val memPool: ErgoMemPool
+
+  val stateGen: Gen[ST]
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
     (ActorRef, ErgoSyncInfo, BlockSection, ErgoTransaction, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[BlockSection])
@@ -224,5 +230,99 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
     }
   }
 
+
+  property("NodeViewSynchronizer: GetSnapshotInfo") {
+    withFixture { ctx =>
+      import ctx._
+
+      val s = stateGen.sample.get
+
+      if (s.isInstanceOf[UtxoStateReader]) {
+        // To initialize utxoStateReaderOpt in ErgoNodeView Synchronizer
+        node ! ChangedState(s)
+
+        // First, store snapshots info in DB
+        val m = (0 until 100).map { _ =>
+          Random.nextInt(1000000) -> (Digest32 @@ Algos.decode(mod.id).get)
+        }.toMap
+        val si = SnapshotsInfo(m)
+        val db = SnapshotsDb.create(s.constants.settings)
+        db.writeSnapshotsInfo(si)
+
+        // Then send message to request it
+        node ! Message[Unit](GetSnapshotsInfoSpec, Left(Array.empty[Byte]), Option(peer))
+        ncProbe.fishForMessage(5 seconds) {
+          case stn: SendToNetwork if stn.message.spec.isInstanceOf[SnapshotsInfoSpec.type] => true
+          case _: Any => false
+        }
+      } else {
+        log.info("Snapshots not supported by digest-state")
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: GetManifest") {
+    withFixture { ctx =>
+      import ctx._
+
+      val s = stateGen.sample.get
+
+      s match {
+        case usr: UtxoStateReader => {
+          // To initialize utxoStateReaderOpt in ErgoNodeView Synchronizer
+          node ! ChangedState(s)
+
+          // Generate some snapshot
+          val height = 1
+          usr.applyModifier(mod, Some(height))(_ => ())
+          val (manifest, subtrees) = usr.slicedTree()
+
+          val db = SnapshotsDb.create(s.constants.settings)
+          db.writeSnapshot(height, manifest, subtrees)
+
+          // Then send message to request it
+          node ! Message[ManifestId](new GetManifestSpec, Left(manifest.id), Option(peer))
+          ncProbe.fishForMessage(5 seconds) {
+            case stn: SendToNetwork if stn.message.spec.isInstanceOf[ManifestSpec.type] => true
+            case _: Any => false
+          }
+        }
+        case _ =>
+          log.info("Snapshots not supported by digest-state")
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: GetSnapshotChunk") {
+    withFixture { ctx =>
+      import ctx._
+
+      val s = stateGen.sample.get
+
+      s match {
+        case usr: UtxoStateReader => {
+          // To initialize utxoStateReaderOpt in ErgoNodeView Synchronizer
+          node ! ChangedState(s)
+
+          // Generate some snapshot
+          val height = 1
+          usr.applyModifier(mod, Some(height))(_ => ())
+          val (manifest, subtrees) = usr.slicedTree()
+
+          val db = SnapshotsDb.create(s.constants.settings)
+          db.writeSnapshot(height, manifest, subtrees)
+
+          // Then send message to request it
+          node ! Message[ManifestId](new GetUtxoSnapshotChunkSpec, Left(subtrees.last.id), Option(peer))
+          ncProbe.fishForMessage(5 seconds) {
+            case stn: SendToNetwork if stn.message.spec.isInstanceOf[UtxoSnapshotChunkSpec.type] => true
+            case _: Any => false
+          }
+        }
+        case _ =>
+          log.info("Snapshots not supported by digest-state")
+      }
+    }
+  }
 
 }

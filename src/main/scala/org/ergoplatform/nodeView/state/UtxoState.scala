@@ -122,8 +122,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         (height % SnapshotEvery == 0) &&
           estimatedTip.get - height <= SnapshotEvery) {
 
-      val serializer = new BatchAVLProverSerializer[Digest32, HF]
-      val (manifest, subtrees) = serializer.slice(persistentProver.avlProver, subtreeDepth = 12)
+      val (manifest, subtrees) = slicedTree()
 
       val ms0 = System.currentTimeMillis()
       snapshotsDb.pruneSnapshots(height - SnapshotEvery * 2)
@@ -343,9 +342,9 @@ object UtxoState extends ScorexLogging {
     val snapshotsInfo = snapshotDb.readSnapshotsInfo
     val (h, manifestId) = snapshotsInfo.availableManifests.maxBy(_._1)
     log.info(s"Reading snapshot from height $h")
-    val manifest = snapshotDb.readManifestBytes(manifestId).get
+    val manifest = snapshotDb.readManifest(manifestId).get
     val subtreeIds = manifest.subtreesIds
-    val subtrees = subtreeIds.map(sid => snapshotDb.readSubtreeBytes(sid).get)
+    val subtrees = subtreeIds.map(sid => snapshotDb.readSubtree(sid).get)
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     val prover = serializer.combine(manifest -> subtrees, Algos.hash.DigestSize, None).get
 

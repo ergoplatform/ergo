@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.HeaderSerializer
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockProcessor, ToDownloadProcessor}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
@@ -12,7 +12,7 @@ import scorex.core.ModifierTypeId
 import scorex.core.consensus.ProgressInfo
 
 class VerifyNonADHistorySpecification extends HistoryTestHelpers {
-  import ToDownloadProcessor._
+  import scorex.core.utils.MapPimp
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)

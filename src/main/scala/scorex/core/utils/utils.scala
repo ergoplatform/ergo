@@ -74,8 +74,17 @@ package object utils {
     result
   }
 
+  implicit class MapPimp[K, V](underlying: Map[K, V]) {
+    /**
+      * One liner for updating a Map with the possibility to handle case of missing Key
+      * @param k map key
+      * @param f function that is passed Option depending on Key being present or missing, returning new Value
+      * @return new Map with value updated under given key
+      */
+    def adjust(k: K)(f: Option[V] => V): Map[K, V] = underlying.updated(k, f(underlying.get(k)))
+  }
 
-  implicit class MapPimp[K, V](underlying: mutable.Map[K, V]) {
+  implicit class MapPimpMutable[K, V](underlying: mutable.Map[K, V]) {
     /**
       * One liner for updating a Map with the possibility to handle case of missing Key
       * @param k map key
@@ -97,4 +106,5 @@ package object utils {
         case Some(v) => underlying.put(k, v)
       }
   }
+
 }

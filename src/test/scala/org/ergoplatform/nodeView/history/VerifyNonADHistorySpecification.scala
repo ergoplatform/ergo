@@ -20,8 +20,8 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
   property("block sections application in incorrect order") {
     var history = genHistory()
     val chain = genChain(6, history)
-    if (!history.pruningProcessor.isHeadersChainSynced) {
-      history.pruningProcessor.updateBestFullBlock(chain.last.header)
+    if (!history.isHeadersChainSynced) {
+      history.updateBestFullBlock(chain.last.header)
     }
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     chain.foreach(fb => history.append(fb.extension).get)
@@ -96,8 +96,8 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     history.bestHeaderOpt.value shouldBe chain.last.header
     history.bestFullBlockOpt shouldBe None
 
-    if (!history.pruningProcessor.isHeadersChainSynced) {
-      history.pruningProcessor.updateBestFullBlock(chain.last.header)
+    if (!history.isHeadersChainSynced) {
+      history.updateBestFullBlock(chain.last.header)
     }
 
     // Until UTXO snapshot synchronization is implemented, we should always start to apply full blocks from genesis

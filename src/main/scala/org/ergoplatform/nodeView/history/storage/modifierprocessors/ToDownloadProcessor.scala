@@ -13,7 +13,7 @@ import scala.annotation.tailrec
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
-trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
+trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders with ScorexLogging {
   import ToDownloadProcessor._
 
   protected val timeProvider: NetworkTimeProvider
@@ -24,9 +24,6 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   // than headerChainDiff blocks on average from future
   private lazy val headerChainDiff = settings.nodeSettings.headerChainDiff
 
-  protected[history] lazy val pruningProcessor: FullBlockPruningProcessor =
-    new FullBlockPruningProcessor(nodeSettings, chainSettings)
-
   protected def nodeSettings: NodeConfigurationSettings = settings.nodeSettings
 
   protected def chainSettings: ChainSettings = settings.chainSettings
@@ -34,10 +31,6 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
 
   def isInBestChain(id: ModifierId): Boolean
-
-  /** Returns true if we estimate that our chain is synced with the network. Start downloading full blocks after that
-    */
-  def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
   /**
     * Get modifier ids to download to synchronize full blocks
@@ -93,7 +86,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         continuation(minHeight, Map.empty)
       case _ =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
-        continuation(pruningProcessor.minimalFullBlockHeight, Map.empty)
+        continuation(minimalFullBlockHeight, Map.empty)
     }
   }
 
@@ -104,12 +97,12 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
       Nil
-    } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
+    } else if (shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
     } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * headerChainDiff)) {
       // Headers chain is synced after this header. Start downloading full blocks
-      pruningProcessor.updateBestFullBlock(header)
+      updateBestFullBlock(header)
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
       Nil
     } else {

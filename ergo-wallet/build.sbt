@@ -6,7 +6,7 @@ val circeVersion = "0.13.0"
 val circeVersion211 = "0.10.0"
 
 libraryDependencies ++= Seq(
-  "org.scodec" %% "scodec-bits" % "1.1.6",
+  "org.scodec" %% "scodec-bits" % "1.1.34",
 
   "io.circe" %% "circe-core" % (if (scalaVersion.value == scala211) circeVersion211 else circeVersion),
   "io.circe" %% "circe-generic" % (if (scalaVersion.value == scala211) circeVersion211 else circeVersion),

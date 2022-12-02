@@ -328,7 +328,7 @@ object ManifestSpec extends MessageSpecV1[Array[Byte]] {
   override val messageName: String = "Manifest"
 
   override def serialize(manifestBytes: Array[Byte], w: Writer): Unit = {
-    w.putUInt(manifestBytes.size)
+    w.putUInt(manifestBytes.length)
     w.putBytes(manifestBytes)
   }
 

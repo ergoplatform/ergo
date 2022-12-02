@@ -47,7 +47,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Random, Success}
 
 /**
   * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the
@@ -554,17 +554,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  def requestSnapshotsInfo() = {
+  def requestSnapshotsInfo(): Unit = {
     val msg = Message(GetSnapshotsInfoSpec, Right(()), None)
     val peers = UtxoSetNetworkingFilter.filter(syncTracker.peersToSyncWith()).toSeq
-    val stn = SendToNetwork(msg, SendToPeers(peers))
-    networkControllerRef ! stn
+    networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
   }
 
-  def requestManifest(manifestId: ManifestId, peer: ConnectedPeer) = {
+  def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
     val msg = Message(GetManifestSpec, Right(manifestId), None)
-    val stn = SendToNetwork(msg, SendToPeer(peer))
-    networkControllerRef ! stn
+    networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
 
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
@@ -1094,15 +1092,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.warn(s"Different manifests found at height $h: $idsSet")
             false
           } else {
-            requestManifest(records.head._2, records.head._1)
             true
           }
         } else {
           false
         }
       }
-      if (res.isEmpty) {
-        availableManifests.clear()
+      res match {
+        case Some((height, records)) =>
+          log.info(s"Downloading manifest for height $height from ${records.size} peers")
+          val manifestId = records.head._2
+          val peers = records.map(_._1)
+          val randomPeer = peers(Random.nextInt(peers.length))
+          requestManifest(manifestId, randomPeer)
+        case None =>
+          log.info("No manifests to download found ")
       }
     }
   }

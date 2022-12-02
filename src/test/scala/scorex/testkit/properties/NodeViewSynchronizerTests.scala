@@ -281,7 +281,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
           db.writeSnapshot(height, manifest, subtrees)
 
           // Then send message to request it
-          node ! Message[ManifestId](new GetManifestSpec, Left(manifest.id), Option(peer))
+          node ! Message[ManifestId](GetManifestSpec, Left(manifest.id), Option(peer))
           ncProbe.fishForMessage(5 seconds) {
             case stn: SendToNetwork if stn.message.spec.isInstanceOf[ManifestSpec.type] => true
             case _: Any => false
@@ -313,7 +313,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
           db.writeSnapshot(height, manifest, subtrees)
 
           // Then send message to request it
-          node ! Message[ManifestId](new GetUtxoSnapshotChunkSpec, Left(subtrees.last.id), Option(peer))
+          node ! Message[ManifestId](GetUtxoSnapshotChunkSpec, Left(subtrees.last.id), Option(peer))
           ncProbe.fishForMessage(5 seconds) {
             case stn: SendToNetwork if stn.message.spec.isInstanceOf[UtxoSnapshotChunkSpec.type] => true
             case _: Any => false

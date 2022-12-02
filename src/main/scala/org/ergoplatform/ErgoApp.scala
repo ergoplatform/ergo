@@ -77,8 +77,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
       RequestModifierSpec,
       ModifiersSpec,
       GetSnapshotsInfoSpec,
-      new GetManifestSpec,
-      new GetUtxoSnapshotChunkSpec
+      GetManifestSpec,
+      GetUtxoSnapshotChunkSpec
     )
   }
 

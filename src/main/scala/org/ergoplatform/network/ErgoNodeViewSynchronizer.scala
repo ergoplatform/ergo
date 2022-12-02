@@ -21,7 +21,7 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoStateReader}
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import scorex.core.network.message._
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
@@ -552,6 +552,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  def requestSnapshotsInfo() = {
+    val msg = Message(GetSnapshotsInfoSpec, Right(()), None)
+    val peers = UtxoSetNetworkingFilter.filter(syncTracker.peersToSyncWith()).toSeq
+    val stn = SendToNetwork(msg, SendToPeers(peers))
+    networkControllerRef ! stn
+  }
+
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifiersToFetch: Map[ModifierTypeId, Seq[ModifierId]]) =>
       log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
@@ -597,6 +604,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Map.empty
         } else {
           fetchMax(maxElementsToFetch)
+        }
+        if (fetched.size == 1 && fetched.head._1 == SnapshotsInfo.modifierTypeId) {
+          requestSnapshotsInfo()
         }
         val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched)
         // collect and log useful downloading progress information, don't worry it does not run frequently
@@ -1193,12 +1203,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Some(usr) => sendSnapshotsInfo(usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
-    case (_: GetManifestSpec, id: Array[Byte], remote) =>
+    case (_: GetManifestSpec.type, id: Array[Byte], remote) =>
       usrOpt match {
         case Some(usr) => sendManifest(Digest32 @@ id, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
-    case (_: GetUtxoSnapshotChunkSpec,  id: Array[Byte], remote) =>
+    case (_: GetUtxoSnapshotChunkSpec.type,  id: Array[Byte], remote) =>
       usrOpt match {
         case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ id, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")

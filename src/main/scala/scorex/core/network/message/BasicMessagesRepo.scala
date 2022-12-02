@@ -301,7 +301,7 @@ object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
 /**
   * The `GetManifest` sends manifest (BatchAVLProverManifest) identifier
   */
-class GetManifestSpec extends MessageSpecV1[ManifestId] {
+object GetManifestSpec extends MessageSpecV1[ManifestId] {
   private val SizeLimit = 100
 
   override val messageCode: MessageCode = 78: Byte
@@ -343,7 +343,7 @@ object ManifestSpec extends MessageSpecV1[Array[Byte]] {
 /**
   * The `GetManifest` sends send utxo subtree (BatchAVLProverSubtree) identifier
   */
-class GetUtxoSnapshotChunkSpec() extends MessageSpecV1[SubtreeId] {
+object GetUtxoSnapshotChunkSpec extends MessageSpecV1[SubtreeId] {
   private val SizeLimit = 100
 
   override val messageCode: MessageCode = 80: Byte

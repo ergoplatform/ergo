@@ -371,7 +371,7 @@ object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
   override val messageName: String = "UtxoSnapshotChunk"
 
   override def serialize(subtree: Array[Byte], w: Writer): Unit = {
-    w.putUInt(subtree.size)
+    w.putUInt(subtree.length)
     w.putBytes(subtree)
   }
 

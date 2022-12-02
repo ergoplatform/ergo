@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
@@ -40,6 +41,7 @@ import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.app.Version
 import scorex.crypto.hash.Digest32
+import scorex.util.encode.Base16
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -559,6 +561,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! stn
   }
 
+  def requestManifest(manifestId: ManifestId, peer: ConnectedPeer) = {
+    val msg = Message(GetManifestSpec, Right(manifestId), None)
+    val stn = SendToNetwork(msg, SendToPeer(peer))
+    networkControllerRef ! stn
+  }
+
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifiersToFetch: Map[ModifierTypeId, Seq[ModifierId]]) =>
       log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
@@ -801,6 +809,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
       }
       case _ => log.warn(s"No manifest ${Algos.encode(id)} available")
+    }
+  }
+
+  private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
+
+  protected def processSnapshotsInfo(snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
+    snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
+      val existingOffers = availableManifests.getOrElse(height, Seq.empty)
+      availableManifests.put(height, existingOffers :+ (remote -> manifestId))
     }
   }
 
@@ -1063,6 +1080,34 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  protected def checkUtxoSetManifests(historyReader: ErgoHistory) = {
+    val MinSnapshots = 3 //todo: set to 1 during testing
+
+    if (settings.nodeSettings.utxoBootstrap &&
+          historyReader.fullBlockHeight == 0 &&
+          availableManifests.nonEmpty) {
+      val res = availableManifests.find { case (h, records) =>
+        // todo: consider h when asking manifest
+        if (records.length >= MinSnapshots) {
+          val idsSet = records.map(_._2).map(Base16.encode).toSet
+          if (idsSet.size > 1) {
+            log.warn(s"Different manifests found at height $h: $idsSet")
+            false
+          } else {
+            requestManifest(records.head._2, records.head._1)
+            true
+          }
+        } else {
+          false
+        }
+      }
+      if (res.isEmpty) {
+        availableManifests.clear()
+      }
+    }
+  }
+
+
   protected def viewHolderEvents(historyReader: ErgoHistory,
                                  mempoolReader: ErgoMemPool,
                                  utxoStateReaderOpt: Option[UtxoStateReader],
@@ -1203,6 +1248,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Some(usr) => sendSnapshotsInfo(usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
+    case (spec: MessageSpec[_], data: SnapshotsInfo, remote) if spec.messageCode == SnapshotsInfoSpec.messageCode =>
+      processSnapshotsInfo(data, remote)
     case (_: GetManifestSpec.type, id: Array[Byte], remote) =>
       usrOpt match {
         case Some(usr) => sendManifest(Digest32 @@ id, usr, remote)

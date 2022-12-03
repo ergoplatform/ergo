@@ -12,9 +12,8 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoAlgos, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
@@ -26,6 +25,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoStat
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import scorex.core.network.message._
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
+import org.ergoplatform.settings.Algos.HF
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
@@ -40,6 +40,7 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.app.Version
+import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 
@@ -565,6 +566,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
 
+  def requestUtxoSetChunk(subtreeId: SubtreeId, peer: ConnectedPeer): Unit = {
+    val msg = Message(GetUtxoSnapshotChunkSpec, Right(subtreeId), None)
+    networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+  }
+
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifiersToFetch: Map[ModifierTypeId, Seq[ModifierId]]) =>
       log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
@@ -811,6 +817,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
+
+  protected def processManifest(manifestBytes: Array[Byte], remote: ConnectedPeer) = {
+    //todo : check that mnifestBytes were requested
+    val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
+    serializer.manifestFromBytes(manifestBytes, keyLength = 32) match {
+      case Success(manifest) =>
+        manifest.subtreesIds.foreach {subtreeId =>
+          requestUtxoSetChunk(subtreeId, remote)
+        }
+      case Failure(e) =>
+        //todo:
+        log.info("Cant' restore manifest from bytes ", e)
+        ???
+    }
+  }
 
   protected def processSnapshotsInfo(snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
@@ -1259,6 +1280,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Some(usr) => sendManifest(Digest32 @@ id, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
+    case (_: ManifestSpec.type, manifestBytes: Array[Byte], remote) =>
+      processManifest(manifestBytes, remote)
     case (_: GetUtxoSnapshotChunkSpec.type,  id: Array[Byte], remote) =>
       usrOpt match {
         case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ id, usr, remote)

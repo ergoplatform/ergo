@@ -5,13 +5,7 @@
     <property name="default.pattern" value="%d{HH:mm:ss.SSS} %-5level [%.25thread] %logger{26} - %msg%n"/>
     <!--<property name="logback.file.final-directory" value="${logback.file.directory:-${ergo.directory}}"/>-->
 
-    <define name="loglevel" class="scorex.core.utils.TypesafeConfigPropertyDefiner"/>
-
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <target>System.out</target>
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>${logback.stdout.level:-INFO}</level>
-        </filter>
         <encoder>
             <pattern>${logback.pattern:-${default.pattern}}</pattern>
         </encoder>
@@ -36,8 +30,35 @@
         </encoder>
     </appender>
 
-    <root level="${loglevel}">
+    <!-- default level should be lowest here, since DynamicThresholdFilter cannot change it *down* otherwise -->
+    <root level="TRACE">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="FILE"/>
     </root>
+
+    <turboFilter class="ch.qos.logback.classic.turbo.DynamicThresholdFilter">
+        <Key>set-log-level</Key>
+        <DefaultThreshold>TRACE</DefaultThreshold>
+        <MDCValueLevelPair>
+            <value>ERROR</value>
+            <level>ERROR</level>
+        </MDCValueLevelPair>
+        <MDCValueLevelPair>
+            <value>WARN</value>
+            <level>WARN</level>
+        </MDCValueLevelPair>
+        <MDCValueLevelPair>
+            <value>INFO</value>
+            <level>INFO</level>
+        </MDCValueLevelPair>
+        <MDCValueLevelPair>
+            <value>DEBUG</value>
+            <level>DEBUG</level>
+        </MDCValueLevelPair>
+        <MDCValueLevelPair>
+            <value>TRACE</value>
+            <level>TRACE</level>
+        </MDCValueLevelPair>
+    </turboFilter>
+
 </configuration>

@@ -40,7 +40,7 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.app.Version
-import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 
@@ -823,6 +823,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.manifestFromBytes(manifestBytes, keyLength = 32) match {
       case Success(manifest) =>
+        storedManifest = Some(manifest)
         manifest.subtreesIds.foreach {subtreeId =>
           requestUtxoSetChunk(subtreeId, remote)
         }
@@ -837,6 +838,42 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
       val existingOffers = availableManifests.getOrElse(height, Seq.empty)
       availableManifests.put(height, existingOffers :+ (remote -> manifestId))
+    }
+  }
+
+  private var storedManifest: Option[BatchAVLProverManifest[Digest32]] = None
+  private val expectedSubtrees= mutable.Set[ModifierId]()
+
+  //todo: store on disk
+  private val storedChunks = mutable.Buffer[BatchAVLProverSubtree[Digest32]]()
+
+  protected def processUtxoSnapshotChunk(serializedChunk: Array[Byte],
+                                         usr: UtxoStateReader,
+                                         remote: ConnectedPeer): Unit = {
+    val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
+    serializer.subtreeFromBytes(serializedChunk, 32) match {
+      case Success(subtree) =>
+        //todo: set expectedSubtrees before
+        expectedSubtrees -= ModifierId @@ Base16.encode(subtree.id)
+        storedChunks += subtree
+        if(expectedSubtrees.isEmpty){
+          storedManifest match {
+            case Some (manifest) =>
+              serializer.combine(manifest -> storedChunks, 32, None) match {
+                case Success(_) =>
+                  ???
+                  //todo: set prover in the set
+                case Failure(_) =>
+                  ???
+                  //todo: process
+              }
+            case None =>
+          }
+        }
+      case Failure(e) =>
+        //todo:
+        log.info("Cant' restore manifest from bytes ", e)
+        ???
     }
   }
 
@@ -1282,11 +1319,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
     case (_: ManifestSpec.type, manifestBytes: Array[Byte], remote) =>
       processManifest(manifestBytes, remote)
-    case (_: GetUtxoSnapshotChunkSpec.type,  id: Array[Byte], remote) =>
+    case (_: GetUtxoSnapshotChunkSpec.type,  subtreeId: Array[Byte], remote) =>
       usrOpt match {
-        case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ id, usr, remote)
+        case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ subtreeId, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
+    case (_: UtxoSnapshotChunkSpec.type,  serializedChunk: Array[Byte], remote) =>
+      usrOpt match {
+        case Some(usr) => processUtxoSnapshotChunk(serializedChunk, usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+
   }
 
   def initialized(hr: ErgoHistory,

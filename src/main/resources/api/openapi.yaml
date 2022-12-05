@@ -3858,7 +3858,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Rescan wallet (all the available full blocks)
+      summary: Rescan wallet (all the available full blocks). When fromHeight is set wallet would not see any boxes below it.
       operationId: walletRescan
       tags:
         - wallet

@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.mnemonic
 
-import org.ergoplatform.sdk.SecretString
+import org.ergoplatform.sdk.{SecretString, JavaHelpers}
 
 import java.text.Normalizer.Form.NFKD
 import java.text.Normalizer.normalize
@@ -406,6 +406,7 @@ class MnemonicSpec
     val mnemonic = new Mnemonic(langId, strength)
     Base16.encode(Mnemonic.toSeed(SecretString.create(sentence), Some(SecretString.create(pass)))) shouldEqual seed
     normalize(mnemonic.toMnemonic(Base16.decode(entropy).get).get.getData(), NFKD) shouldEqual normalize(sentence, NFKD)
+    Base16.encode(JavaHelpers.mnemonicToSeed(sentence, Some(pass))) shouldEqual seed
   }
 
 }

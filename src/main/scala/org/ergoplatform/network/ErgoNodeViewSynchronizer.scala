@@ -40,8 +40,9 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.app.Version
+import scorex.crypto.authds.avltree.batch.BatchAVLProver
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
-import scorex.crypto.hash.Digest32
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.encode.Base16
 
 import scala.annotation.tailrec
@@ -817,6 +818,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
+  private var storedManifest: Option[BatchAVLProverManifest[Digest32]] = None
+  private val expectedSubtrees= mutable.Set[ModifierId]()
+
+  //todo: store on disk
+  private val storedChunks = mutable.Buffer[BatchAVLProverSubtree[Digest32]]()
+
+  protected def processSnapshotsInfo(snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
+    snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
+      val existingOffers = availableManifests.getOrElse(height, Seq.empty)
+      availableManifests.put(height, existingOffers :+ (remote -> manifestId))
+    }
+  }
 
   protected def processManifest(manifestBytes: Array[Byte], remote: ConnectedPeer) = {
     //todo : check that mnifestBytes were requested
@@ -825,6 +838,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Success(manifest) =>
         storedManifest = Some(manifest)
         manifest.subtreesIds.foreach {subtreeId =>
+          expectedSubtrees += (ModifierId @@ Base16.encode(subtreeId))
           requestUtxoSetChunk(subtreeId, remote)
         }
       case Failure(e) =>
@@ -834,35 +848,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  protected def processSnapshotsInfo(snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
-    snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
-      val existingOffers = availableManifests.getOrElse(height, Seq.empty)
-      availableManifests.put(height, existingOffers :+ (remote -> manifestId))
-    }
-  }
-
-  private var storedManifest: Option[BatchAVLProverManifest[Digest32]] = None
-  private val expectedSubtrees= mutable.Set[ModifierId]()
-
-  //todo: store on disk
-  private val storedChunks = mutable.Buffer[BatchAVLProverSubtree[Digest32]]()
-
   protected def processUtxoSnapshotChunk(serializedChunk: Array[Byte],
                                          usr: UtxoStateReader,
                                          remote: ConnectedPeer): Unit = {
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.subtreeFromBytes(serializedChunk, 32) match {
       case Success(subtree) =>
-        //todo: set expectedSubtrees before
         expectedSubtrees -= ModifierId @@ Base16.encode(subtree.id)
         storedChunks += subtree
         if(expectedSubtrees.isEmpty){
           storedManifest match {
             case Some (manifest) =>
               serializer.combine(manifest -> storedChunks, 32, None) match {
-                case Success(_) =>
-                  ???
-                  //todo: set prover in the set
+                case Success(prover: BatchAVLProver[Digest32, Blake2b256.type]) =>
+                  viewHolderRef ! InitStateFromSnapshot(prover)
                 case Failure(_) =>
                   ???
                   //todo: process
@@ -1519,6 +1518,8 @@ object ErgoNodeViewSynchronizer {
       * @param mempool - mempool to check
       */
     case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
+
+    case class InitStateFromSnapshot(prover: BatchAVLProver[Digest32, Blake2b256.type])
   }
 
 }

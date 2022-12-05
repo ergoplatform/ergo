@@ -279,6 +279,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     processingOutcome
   }
 
+  def processStateSnapshot: Receive = {
+    case InitStateFromSnapshot(prover) =>
+      log.info(s"Restoring state from prover with digest ${prover.digest} reconstructed")
+      updateNodeView(updatedState = Some(UtxoState.fromSnapshot(prover, settings).asInstanceOf[State]))
+  }
+
   /**
     * Process new modifiers from remote.
     * Put all candidates to modifiersCache and then try to apply as much modifiers from cache as possible.
@@ -683,6 +689,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       transactionsProcessing orElse
       getCurrentInfo orElse
       getNodeViewChanges orElse
+      processStateSnapshot orElse
       handleHealthCheck orElse {
         case a: Any => log.error("Strange input: " + a)
       }

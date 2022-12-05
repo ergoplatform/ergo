@@ -20,7 +20,7 @@ import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
-import scorex.crypto.hash.Digest32
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.ModifierId
 import scorex.util.ScorexLogging
@@ -328,17 +328,32 @@ object UtxoState extends ScorexLogging {
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }
 
-  def fromLatestSnapshot(settings: ErgoSettings): Try[UtxoState] = {
+  def fromSnapshot(prover: BatchAVLProver[Digest32, Blake2b256.type],
+                   settings: ErgoSettings) = {
     val stateDir = ErgoState.stateDir(settings)
     stateDir.mkdirs()
-    val snapshotsDb = SnapshotsDb.create(settings)
     val constants = StateConstants(settings)
-    fromLatestSnapshot(stateDir, snapshotsDb, constants)
+
+    val store = new LDBVersionedStore(stateDir, initialKeepVersions = constants.keepVersions)
+    val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
+      .getOrElse(ErgoState.genesisStateVersion)
+    val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
+      val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
+      val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+      PersistentBatchAVLProver.create(prover, storage).get
+    }
+    new UtxoState(persistentProver, version, store, constants)
   }
 
-  def fromLatestSnapshot(dir: File,
-                         snapshotDb: SnapshotsDb,
-                         constants: StateConstants): Try[UtxoState] = Try {
+  // todo: do we need to restore from disk?
+  def fromLatestSnapshot(settings: ErgoSettings): Try[UtxoState] = {
+    val snapshotsDb = SnapshotsDb.create(settings)
+    fromLatestSnapshot(settings, snapshotsDb)
+  }
+
+  // todo: do we need to restore from disk?
+  def fromLatestSnapshot(settings: ErgoSettings,
+                         snapshotDb: SnapshotsDb): Try[UtxoState] = Try {
     val snapshotsInfo = snapshotDb.readSnapshotsInfo
     val (h, manifestId) = snapshotsInfo.availableManifests.maxBy(_._1)
     log.info(s"Reading snapshot from height $h")
@@ -348,16 +363,7 @@ object UtxoState extends ScorexLogging {
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     val prover = serializer.combine(manifest -> subtrees, Algos.hash.DigestSize, None).get
 
-    //todo: code below is mostly copied from .create, unify ?
-    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
-    val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
-      .getOrElse(ErgoState.genesisStateVersion)
-    val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
-      val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-      val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
-      PersistentBatchAVLProver.create(prover, storage).get
-    }
-    new UtxoState(persistentProver, version, store, constants)
+    fromSnapshot(prover, settings)
   }
 
 }

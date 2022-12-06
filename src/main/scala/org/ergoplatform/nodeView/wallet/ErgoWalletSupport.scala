@@ -242,7 +242,13 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
 
     val dataInputs = dataInputBoxes.map(dataInputBox => DataInput(dataInputBox.id))
-    val changeBoxCandidates = selectionResult.changeBoxes.map { changeBoxAssets =>
+    val changeBoxCandidates = {
+      // EIP-27 output
+      selectionResult.payToReemissionBox.toSeq.map {eip27OutputAssets =>
+        val p2r = ergoSettings.chainSettings.reemission.reemissionRules.payToReemission
+        new ErgoBoxCandidate(eip27OutputAssets.value, p2r, walletHeight)
+      }
+    } ++ selectionResult.changeBoxes.map { changeBoxAssets =>
       changeBoxAssets match {
         case candidate: ErgoBoxCandidate =>
           candidate

@@ -88,8 +88,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
     val compactedBalance = boxes.foldLeft(0L) { case (sum, b) => sum + BoxSelector.valueOf(b, reemissionDataOpt) }
     val compactedAssets = mutable.Map[ModifierId, Long]()
     AssetUtils.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
-    val ra = reemissionAmount(boxes)
-    super.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets, ra)
+    super.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets)
   }
 
   protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
@@ -102,7 +101,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
     val dust = tail.sortBy(_.value).take(diff).filter(b => !bsr.boxes.contains(b))
 
     val boxes = bsr.boxes ++ dust
-    calcChange(boxes, targetBalance, targetAssets).mapRight(changeBoxes => BoxSelectionResult(boxes, changeBoxes))
+    calcChange(boxes, targetBalance, targetAssets).mapRight(changeBoxes => selectionResultWithEip27Output(boxes, changeBoxes))
   }
 
   protected[boxes] def compress[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
@@ -124,7 +123,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
       }
       val compactedBoxes = boxes.filter(b => !thrownBoxes.contains(b))
       calcChange(compactedBoxes, targetBalance, targetAssets)
-        .mapRight(changeBoxes => BoxSelectionResult(compactedBoxes, changeBoxes))
+        .mapRight(changeBoxes => selectionResultWithEip27Output(compactedBoxes, changeBoxes))
     } else {
       Right(bsr)
     }
@@ -166,7 +165,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
     if (boxesToAdd.nonEmpty) {
       val compactedBoxes = bsr.boxes.filter(b => !boxesToDrop.contains(b)) ++ boxesToAdd
       calcChange(compactedBoxes, targetBalance, targetAssets)
-        .mapRight(changeBoxes => BoxSelectionResult(compactedBoxes, changeBoxes))
+        .mapRight(changeBoxes => selectionResultWithEip27Output(compactedBoxes, changeBoxes))
     } else {
       Right(bsr)
     }

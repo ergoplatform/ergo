@@ -268,9 +268,8 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     val s2 = selector.select(Iterator(uBox), noFilter, (fullValue - reemissionAmt) / 4, Map.empty)
 
-    val cb2 = s2.right.get.changeBoxes
+    val cb2 = s2.right.get.payToReemissionBox
 
-    cb2.length shouldBe 2
-    cb2.head.value shouldBe reemissionAmt
+    cb2.get.value shouldBe reemissionAmt
   }
 }

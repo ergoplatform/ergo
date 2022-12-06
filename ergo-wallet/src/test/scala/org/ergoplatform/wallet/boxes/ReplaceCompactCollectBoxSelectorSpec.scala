@@ -35,7 +35,9 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
 
     //now we test that compress works under select
     val sr = selector.select(inputValues.map(trackedBox).toIterator, noFilter, targetBalance, Map()).right.value
-    sr shouldBe res
+    sr.boxes shouldBe res.boxes
+    sr.changeBoxes shouldBe res.changeBoxes
+    sr.payToReemissionBox shouldBe res.payToReemissionBox
   }
 
   property("replace() - no candidates") {

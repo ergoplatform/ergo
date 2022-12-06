@@ -30,12 +30,12 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
       inputValues.map(trackedBox), Seq(), None
     )
     val res = selector.compress(boxSelectionResult, targetBalance, Map()).right.value
-    res.boxes.length shouldBe 3
-    res.boxes.map(_.value) shouldBe Seq(100L, 200L, 1000L)
+    res.inputBoxes.length shouldBe 3
+    res.inputBoxes.map(_.value) shouldBe Seq(100L, 200L, 1000L)
 
     //now we test that compress works under select
     val sr = selector.select(inputValues.map(trackedBox).toIterator, noFilter, targetBalance, Map()).right.value
-    sr.boxes shouldBe res.boxes
+    sr.inputBoxes shouldBe res.inputBoxes
     sr.changeBoxes shouldBe res.changeBoxes
     sr.payToReemissionBox shouldBe res.payToReemissionBox
   }
@@ -46,7 +46,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     val targetBalance = 1303
     val boxSelectionResult = new BoxSelectionResult(inputValues.map(trackedBox), Seq(), None)
     val res = selector.replace(boxSelectionResult, Seq(), targetBalance, Map()).right.value
-    res.boxes.map(_.value) shouldBe inputValues
+    res.inputBoxes.map(_.value) shouldBe inputValues
   }
 
   property("replace() done - partial replacement") {
@@ -55,8 +55,8 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     val targetBalance = 1303
     val boxSelectionResult = new BoxSelectionResult(inputValues.map(trackedBox), Seq(), None)
     val res = selector.replace(boxSelectionResult, Seq(trackedBox(300), trackedBox(200)), targetBalance, Map()).right.value
-    res.boxes.length shouldBe 3
-    res.boxes.map(_.value) shouldBe Seq(200L, 1000L, 300L)
+    res.inputBoxes.length shouldBe 3
+    res.inputBoxes.map(_.value) shouldBe Seq(200L, 1000L, 300L)
   }
 
   property("replace() done - full replacement") {
@@ -65,8 +65,8 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     val targetBalance = 1303
     val boxSelectionResult = new BoxSelectionResult(inputValues.map(trackedBox), Seq(), None)
     val res = selector.replace(boxSelectionResult, Seq(trackedBox(2000)), targetBalance, Map()).right.value
-    res.boxes.length shouldBe 1
-    res.boxes.map(_.value) shouldBe Seq(2000L)
+    res.inputBoxes.length shouldBe 1
+    res.inputBoxes.map(_.value) shouldBe Seq(2000L)
   }
 
   property("compact() and replace() under select()"){
@@ -76,25 +76,25 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     {
       val targetBalance = 6
       val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
-      res.boxes.map(_.value) shouldBe Seq(1, 2, 3)
+      res.inputBoxes.map(_.value) shouldBe Seq(1, 2, 3)
     }
 
     {
       val targetBalance = 17
       val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
-      res.boxes.map(_.value) shouldBe Seq(10, 9, 8)
+      res.inputBoxes.map(_.value) shouldBe Seq(10, 9, 8)
     }
 
     {
       val targetBalance = 25
       val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
-      res.boxes.map(_.value) shouldBe Seq(10, 9, 8)
+      res.inputBoxes.map(_.value) shouldBe Seq(10, 9, 8)
     }
 
     {
       val targetBalance = 27
       val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
-      res.boxes.map(_.value) shouldBe Seq(10, 9, 8)
+      res.inputBoxes.map(_.value) shouldBe Seq(10, 9, 8)
     }
   }
 
@@ -106,14 +106,14 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     {
       val targetBalance = 6
       val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
-      res.boxes.length shouldBe optimalInputs
+      res.inputBoxes.length shouldBe optimalInputs
     }
 
     {
       val targetBalance = 1
       val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
-      res.boxes.length shouldBe res.boxes.distinct.length
-      res.boxes.length shouldBe optimalInputs
+      res.inputBoxes.length shouldBe res.inputBoxes.distinct.length
+      res.inputBoxes.length shouldBe optimalInputs
     }
   }
 }

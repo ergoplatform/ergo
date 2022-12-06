@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.ErgoBoxAssets
+import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder}
 import org.ergoplatform.SigmaConstants.MaxBoxSize
 import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectionResult}
@@ -52,6 +52,17 @@ trait BoxSelector extends ScorexLogging {
     }.getOrElse(0L)
   }
 
+  def selectionResultWithEip27Output[T <: ErgoBoxAssets](inputBoxes: Seq[T],
+                                                         changeBoxes: Seq[ErgoBoxAssets]): BoxSelectionResult[T] = {
+    val reemissionAmt = reemissionAmount(inputBoxes)
+    val payToReemissionBox = if(reemissionAmt > 0) {
+      Some(ErgoBoxAssetsHolder(reemissionAmt))
+    } else {
+      None
+    }
+    new BoxSelectionResult(inputBoxes, changeBoxes, payToReemissionBox)
+  }
+
 }
 
 object BoxSelector {
@@ -66,7 +77,16 @@ object BoxSelector {
     */
   val ScanDepthFactor = 300
 
-  final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
+  /**
+    * Containter for box selector output
+    *
+    * @param inputBoxes - transaction inputs chosen by a selector
+    * @param changeBoxes - change outputs
+    * @param payToReemissionBox - pay-to-reemission output mde according to EIP-27, if needed
+    */
+  class BoxSelectionResult[T <: ErgoBoxAssets](val inputBoxes: Seq[T],
+                                               val changeBoxes: Seq[ErgoBoxAssets],
+                                               val payToReemissionBox: Option[ErgoBoxAssets])
 
   /**
     * Returns how much ERG can be taken from a box when it is spent.

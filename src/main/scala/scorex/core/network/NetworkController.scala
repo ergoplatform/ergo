@@ -532,8 +532,6 @@ object NetworkController {
 
     case class Handshaked(peer: PeerInfo)
 
-    //case class RegisterMessageSpecs(specs: Seq[MessageSpec[_]], handler: ActorRef)
-
     case class SendToNetwork(message: Message[_], sendingStrategy: SendingStrategy)
 
     case object ShutdownNetwork

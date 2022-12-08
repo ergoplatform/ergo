@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.SnapshotsInfo
-import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
@@ -36,8 +35,6 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
   def isInBestChain(id: ModifierId): Boolean
 
   def estimatedTip(): Option[Height]
-
-  private val manifestChosen: Option[ManifestId] = None
 
   /**
     * Get modifier ids to download to synchronize full blocks
@@ -90,11 +87,8 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
         val minHeight = Math.max(1, fb.header.height - 100)
         continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
       case None if nodeSettings.utxoBootstrap =>
-        if (manifestChosen.nonEmpty){
-          ???
-        } else {
-          Map(SnapshotsInfo.modifierTypeId -> Seq.empty)
-        }
+        // todo: can be requested multiple times, prevent it
+        Map(SnapshotsInfo.modifierTypeId -> Seq.empty)
       case None =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
         continuation(minimalFullBlockHeight, Map.empty, maxHeight = Int.MaxValue)

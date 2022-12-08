@@ -826,6 +826,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def processSnapshotsInfo(snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
+      log.debug(s"Got manifest $manifestId for height $height from $remote")
       val existingOffers = availableManifests.getOrElse(height, Seq.empty)
       availableManifests.put(height, existingOffers :+ (remote -> manifestId))
     }
@@ -836,6 +837,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.manifestFromBytes(manifestBytes, keyLength = 32) match {
       case Success(manifest) =>
+        log.info(s"Got manifest ${Algos.encode(manifest.id)}, going to download chunks for it")
         storedManifest = Some(manifest)
         manifest.subtreesIds.foreach {subtreeId =>
           expectedSubtrees += (ModifierId @@ Base16.encode(subtreeId))
@@ -854,6 +856,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.subtreeFromBytes(serializedChunk, 32) match {
       case Success(subtree) =>
+        log.debug(s"Got utxo snapshot chunk, id: ${subtree.id}")
         expectedSubtrees -= ModifierId @@ Base16.encode(subtree.id)
         storedChunks += subtree
         if(expectedSubtrees.isEmpty){
@@ -1136,7 +1139,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def checkUtxoSetManifests(historyReader: ErgoHistory) = {
-    val MinSnapshots = 3 //todo: set to 1 during testing
+    val MinSnapshots = 1 //todo: set to 3 after testing
 
     if (settings.nodeSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&

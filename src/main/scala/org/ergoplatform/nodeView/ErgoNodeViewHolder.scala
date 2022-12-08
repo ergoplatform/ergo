@@ -414,8 +414,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val memPool = ErgoMemPool.empty(settings)
     val constants = StateConstants(settings)
     val stateRead = ErgoState.readOrGenerate(settings, constants).asInstanceOf[State]
-    val stateRestored: State = stateRead match {
-      case us: UtxoState =>
+    val stateRestored: State = stateRead /* match {
+       case us: UtxoState =>
         // todo: check if wallet is initialized
         if (us.isGenesis && us.snapshotsAvailable().nonEmpty) {
           // start from UTXO set snapshot available
@@ -429,7 +429,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           stateRead
         }
       case _ => stateRead
-    }
+    } */
     restoreConsistentState(stateRestored, history) match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")

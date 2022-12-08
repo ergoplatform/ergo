@@ -10,15 +10,15 @@ import org.ergoplatform.settings.ErgoSettings
   */
 trait FullBlockPruningProcessor {
 
-  protected val settings: ErgoSettings
+  protected def settings: ErgoSettings
 
-  private val nodeConfig = settings.nodeSettings
-  private val chainSettings = settings.chainSettings
+  private def nodeConfig = settings.nodeSettings
+  private def chainSettings = settings.chainSettings
+
+  private def VotingEpochLength = chainSettings.voting.votingLength
 
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
   @volatile private[history] var minimalFullBlockHeightVar: Int = ErgoHistory.GenesisHeight
-
-  private val VotingEpochLength = chainSettings.voting.votingLength
 
   private def extensionWithParametersHeight(height: Int): Int = {
     require(height >= VotingEpochLength)

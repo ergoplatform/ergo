@@ -72,14 +72,14 @@ case class Header(override val version: Header.Version,
 
   override def minerPk: EcPointType = powSolution.pk
 
-  val sectionIdsWithNoProof: Seq[(ModifierTypeId, ModifierId)] = Seq(
+  lazy val sectionIdsWithNoProof: Seq[(ModifierTypeId, ModifierId)] = Seq(
     (BlockTransactions.modifierTypeId, transactionsId),
     (Extension.modifierTypeId, extensionId))
 
   /**
     * Expected identifiers of the block sections
     */
-  val sectionIds: Seq[(ModifierTypeId, ModifierId)] =
+  lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] =
     Seq((ADProofs.modifierTypeId, ADProofsId)) ++
       sectionIdsWithNoProof
 

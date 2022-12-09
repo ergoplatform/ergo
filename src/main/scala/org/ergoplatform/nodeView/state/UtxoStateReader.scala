@@ -14,7 +14,6 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.validation.MalformedModifierError
 import scorex.crypto.authds.avltree.batch.{Lookup, NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
-import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
@@ -34,15 +33,6 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
   def generateBatchProofForBoxes(boxes: Seq[ErgoBox.BoxId]): SerializedAdProof = persistentProver.synchronized {
     boxes.map { box => persistentProver.performOneOperation(Lookup(ADKey @@ box)) }
     persistentProver.prover().generateProof()
-  }
-
-  //todo: scaladoc
-  //todo: used in tests only, make private[] ?
-  def slicedTree(): (BatchAVLProverManifest[Digest32], Seq[BatchAVLProverSubtree[Digest32]]) = {
-    persistentProver.synchronized {
-      val serializer = new BatchAVLProverSerializer[Digest32, HF]
-      serializer.slice(persistentProver.avlProver, subtreeDepth = 12)
-    }
   }
 
   /**

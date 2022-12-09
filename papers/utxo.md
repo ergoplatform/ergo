@@ -33,3 +33,10 @@ Node Config
 
 Sync Info V3
 ------------
+
+
+
+Testing
+-------
+
+1. No nodes with UTXO set snapshots around - stuck with headers synced - tested

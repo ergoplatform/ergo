@@ -42,15 +42,14 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   extends ErgoState[UtxoState]
     with TransactionValidation
     with UtxoStateReader
+    with UtxoSetSnapshotPersistence
     with ScorexEncoding {
 
-  private val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move to some other place ?
+  import UtxoState.metadata
 
   override def rootHash: ADDigest = persistentProver.synchronized {
     persistentProver.digest
   }
-
-  import UtxoState.metadata
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
@@ -111,24 +110,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         .toTry
     } else {
       txProcessing.toTry.map(_ => ())
-    }
-  }
-
-  private def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
-
-    val SnapshotEvery = 5 // test value, switch to 51840 after testing
-
-    if (estimatedTip.nonEmpty &&
-        (height % SnapshotEvery == 0) &&
-          estimatedTip.get - height <= SnapshotEvery) {
-
-      val (manifest, subtrees) = slicedTree()
-
-      val ms0 = System.currentTimeMillis()
-      snapshotsDb.pruneSnapshots(height - SnapshotEvery * 2)
-      snapshotsDb.writeSnapshot(height, manifest, subtrees)
-      val ms = System.currentTimeMillis()
-      log.info("Time to dump utxo set snapshot: " + (ms - ms0))
     }
   }
 
@@ -254,9 +235,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  def snapshotsAvailable(): SnapshotsInfo = {
-    snapshotsDb.readSnapshotsInfo
-  }
+
 
 }
 

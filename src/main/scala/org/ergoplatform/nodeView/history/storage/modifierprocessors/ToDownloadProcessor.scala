@@ -76,7 +76,7 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
 
     bestFullBlockOpt match {
       case _ if !isHeadersChainSynced || !nodeSettings.verifyTransactions =>
-        // do not download full blocks if no headers-chain synced yet and suffix enabled or SPV mode
+        // do not download full blocks if no headers-chain synced yet or SPV mode
         Map.empty
       case Some(fb) if farAwayFromBeingSynced(fb) =>
         // when far away from blockchain tip

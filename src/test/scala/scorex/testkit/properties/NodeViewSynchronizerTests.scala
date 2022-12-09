@@ -15,7 +15,7 @@ import scorex.core.consensus.SyncInfo
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
-import org.ergoplatform.nodeView.state.{ErgoState, SnapshotsDb, SnapshotsInfo, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoState, SnapshotsDb, SnapshotsInfo, UtxoState, UtxoStateReader}
 import org.ergoplatform.settings.Algos
 import scorex.core.network._
 import scorex.core.network.message._
@@ -268,7 +268,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       val s = stateGen.sample.get
 
       s match {
-        case usr: UtxoStateReader => {
+        case usr: UtxoState => {
           // To initialize utxoStateReaderOpt in ErgoNodeView Synchronizer
           node ! ChangedState(s)
 
@@ -300,7 +300,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       val s = stateGen.sample.get
 
       s match {
-        case usr: UtxoStateReader => {
+        case usr: UtxoState => {
           // To initialize utxoStateReaderOpt in ErgoNodeView Synchronizer
           node ! ChangedState(s)
 

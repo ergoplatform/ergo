@@ -826,12 +826,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   //todo: store on disk
   private val storedChunks = mutable.Buffer[BatchAVLProverSubtree[Digest32]]()
 
-  protected def processSnapshotsInfo(snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
+  protected def processSnapshotsInfo(hr: ErgoHistory, snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
       log.debug(s"Got manifest $manifestId for height $height from $remote")
       val existingOffers = availableManifests.getOrElse(height, Seq.empty)
       availableManifests.put(height, existingOffers :+ (remote -> manifestId))
     }
+    checkUtxoSetManifests(hr)
   }
 
   protected def processManifest(manifestBytes: Array[Byte], remote: ConnectedPeer) = {
@@ -1143,6 +1144,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def checkUtxoSetManifests(historyReader: ErgoHistory) = {
     val MinSnapshots = 1 //todo: set to 3 after testing
 
+    //todo: choose latest snapshot
     if (settings.nodeSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&
           availableManifests.nonEmpty) {
@@ -1315,7 +1317,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
     case (spec: MessageSpec[_], data: SnapshotsInfo, remote) if spec.messageCode == SnapshotsInfoSpec.messageCode =>
-      processSnapshotsInfo(data, remote)
+      processSnapshotsInfo(hr, data, remote)
     case (_: GetManifestSpec.type, id: Array[Byte], remote) =>
       usrOpt match {
         case Some(usr) => sendManifest(Digest32 @@ id, usr, remote)

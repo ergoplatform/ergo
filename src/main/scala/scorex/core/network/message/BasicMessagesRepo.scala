@@ -272,7 +272,7 @@ object GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
   * The `SnapshotsInfo` message is a reply to a `GetSnapshotsInfo` message.
   */
 object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
-  private val SizeLimit = 1000
+  private val SizeLimit = 10000
 
   override val messageCode: MessageCode = 77: Byte
 
@@ -287,7 +287,7 @@ object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
   }
 
   override def parse(r: Reader): SnapshotsInfo = {
-    require(r.remaining <= SizeLimit, s"Too big SnapshotsInfo message.")
+    require(r.remaining <= SizeLimit, s"Too big SnapshotsInfo message: ${r.remaining} bytes found, $SizeLimit max expected.")
 
     val length = r.getUInt().toIntExact
     SnapshotsInfo((0 until length).map { _ =>

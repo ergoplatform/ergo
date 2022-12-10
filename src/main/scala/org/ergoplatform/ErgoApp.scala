@@ -73,19 +73,21 @@ class ErgoApp(args: Args) extends ScorexLogging {
     Seq(
       GetPeersSpec,
       new PeersSpec(scorexSettings.network.maxPeerSpecObjects),
+      ErgoSyncInfoMessageSpec,
       InvSpec,
       RequestModifierSpec,
       ModifiersSpec,
       GetSnapshotsInfoSpec,
+      SnapshotsInfoSpec,
       GetManifestSpec,
-      GetUtxoSnapshotChunkSpec
+      ManifestSpec,
+      GetUtxoSnapshotChunkSpec,
+      UtxoSnapshotChunkSpec
     )
   }
 
-  private val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-
   private val scorexContext = ScorexContext(
-    messageSpecs        = basicSpecs ++ additionalMessageSpecs,
+    messageSpecs        = basicSpecs,
     upnpGateway         = upnpGateway,
     timeProvider        = timeProvider,
     externalNodeAddress = externalSocketAddress

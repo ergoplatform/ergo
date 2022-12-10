@@ -803,7 +803,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def sendSnapshotsInfo(usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
-    val msg = Message(SnapshotsInfoSpec, Right(usr.getSnapshotInfo()), None)
+    val snapshotsInfo = usr.getSnapshotInfo()
+    log.debug(s"Sending snapshots info with ${snapshotsInfo.availableManifests.size} to $peer")
+    val msg = Message(SnapshotsInfoSpec, Right(snapshotsInfo), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
 

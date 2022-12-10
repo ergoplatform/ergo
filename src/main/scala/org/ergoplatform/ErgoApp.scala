@@ -128,7 +128,14 @@ class ErgoApp(args: Args) extends ScorexLogging {
         InvSpec.messageCode                 -> ergoNodeViewSynchronizerRef,
         RequestModifierSpec.messageCode     -> ergoNodeViewSynchronizerRef,
         ModifiersSpec.messageCode           -> ergoNodeViewSynchronizerRef,
-        ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef
+        ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef,
+        // utxo set snapshot exchange related messages
+        GetSnapshotsInfoSpec.messageCode    -> ergoNodeViewSynchronizerRef,
+        SnapshotsInfoSpec.messageCode       -> ergoNodeViewSynchronizerRef,
+        GetManifestSpec.messageCode         -> ergoNodeViewSynchronizerRef,
+        ManifestSpec.messageCode            -> ergoNodeViewSynchronizerRef,
+        GetUtxoSnapshotChunkSpec.messageCode-> ergoNodeViewSynchronizerRef,
+        UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef
       )
       // Launching PeerSynchronizer actor which is then registering itself at network controller
       if (ergoSettings.scorexSettings.network.peerDiscovery) {

@@ -558,7 +558,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   def requestSnapshotsInfo(): Unit = {
     val msg = Message(GetSnapshotsInfoSpec, Right(()), None)
-    val peers = UtxoSetNetworkingFilter.filter(syncTracker.peersToSyncWith()).toSeq
+    val peers = UtxoSetNetworkingFilter.filter(syncTracker.knownPeers()).toSeq
     networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
   }
 

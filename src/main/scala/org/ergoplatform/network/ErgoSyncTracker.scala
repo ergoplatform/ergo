@@ -155,6 +155,8 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings, timeProvider:
     }
   }
 
+  def knownPeers(): Iterable[ConnectedPeer] = statuses.keys
+
   /**
     * Return the peers to which this node should send a sync signal, including:
     * outdated peers, if any, otherwise, all the peers with unknown status plus a random peer with

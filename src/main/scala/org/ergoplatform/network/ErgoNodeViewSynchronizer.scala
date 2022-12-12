@@ -882,13 +882,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  protected def sendUtxoSnapshotChunk(id: SubtreeId, usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
-    usr.getUtxoSnapshotChunk(id) match {
+  protected def sendUtxoSnapshotChunk(subtreeId: SubtreeId, usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
+    usr.getUtxoSnapshotChunk(subtreeId) match {
       case Some(snapChunk) => {
         val msg = Message(UtxoSnapshotChunkSpec, Right(snapChunk), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
       }
-      case _ => log.warn(s"No chunk ${Algos.encode(id)} available")
+      case _ => log.warn(s"No chunk ${Algos.encode(subtreeId)} available")
     }
   }
 
@@ -1144,12 +1144,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def checkUtxoSetManifests(historyReader: ErgoHistory) = {
     val MinSnapshots = 1 //todo: set to 3 after testing
 
-    //todo: choose latest snapshot
     if (settings.nodeSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&
           availableManifests.nonEmpty) {
-      val res = availableManifests.find { case (h, records) =>
-        // todo: consider h when asking manifest
+      val res = availableManifests.filter { case (h, records) =>
         if (records.length >= MinSnapshots) {
           val idsSet = records.map(_._2).map(Base16.encode).toSet
           if (idsSet.size > 1) {
@@ -1162,15 +1160,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           false
         }
       }
-      res match {
-        case Some((height, records)) =>
-          log.info(s"Downloading manifest for height $height from ${records.size} peers")
-          val manifestId = records.head._2
-          val peers = records.map(_._1)
-          val randomPeer = peers(Random.nextInt(peers.length))
-          requestManifest(manifestId, randomPeer)
-        case None =>
-          log.info("No manifests to download found ")
+      if (res.nonEmpty) {
+        val(height, records) = res.maxBy(_._1)
+        log.info(s"Downloading manifest for height $height from ${records.size} peers")
+        val manifestId = records.head._2
+        val peers = records.map(_._1)
+        val randomPeer = peers(Random.nextInt(peers.length))
+        requestManifest(manifestId, randomPeer)
+      } else {
+        log.info("No manifests to download found ")
       }
     }
   }

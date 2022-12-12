@@ -26,7 +26,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
   protected def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
 
-    val SnapshotEvery = 5 // test value, switch to 51840 after testing
+    val SnapshotEvery = 25 // test value, switch to 51840 after testing
 
     if (estimatedTip.nonEmpty &&
       (height % SnapshotEvery == 0) &&

@@ -885,6 +885,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def sendUtxoSnapshotChunk(subtreeId: SubtreeId, usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
     usr.getUtxoSnapshotChunk(subtreeId) match {
       case Some(snapChunk) => {
+        log.debug(s"Sending utxo snapshot chunk (${Algos.encode(subtreeId)}) to $peer")
         val msg = Message(UtxoSnapshotChunkSpec, Right(snapChunk), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
       }

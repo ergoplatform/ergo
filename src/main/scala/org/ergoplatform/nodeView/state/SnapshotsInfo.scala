@@ -30,7 +30,7 @@ case class SnapshotsInfo(availableManifests: Map[Height, ManifestId]) {
 object SnapshotsInfo {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (127: Byte)
 
-  val empty = SnapshotsInfo(Map.empty)
+  def empty: SnapshotsInfo = SnapshotsInfo(Map.empty)
 }
 
 class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
@@ -41,14 +41,14 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
   private def snapshotsInfoToBytes(snapshotsInfo: SnapshotsInfo): Array[Byte] = {
     Bytes.concat(
-      snapshotsInfo.availableManifests.map{case (h, manifestId) =>
+      snapshotsInfo.availableManifests.map { case (h, manifestId) =>
         Bytes.concat(Ints.toByteArray(h), manifestId)
-      }.toSeq :_*
+      }.toSeq: _*
     )
   }
 
   private def snapshotsInfoFromBytes(bytes: Array[Byte]): SnapshotsInfo = {
-    val manifests = bytes.grouped(36).map {rowBytes =>
+    val manifests = bytes.grouped(36).map { rowBytes =>
       val height = Ints.fromByteArray(rowBytes.take(4))
       val manifestId = Digest32 @@ rowBytes.drop(4)
       height -> manifestId
@@ -91,6 +91,8 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
         store.remove(keysToRemove)
       }
 
+
+
     log.info("Snapshots pruning finished")
   }
 
@@ -121,6 +123,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
   def readSubtreeBytes(id: SubtreeId): Option[Array[Byte]] = {
     store.get(id)
   }
+
 }
 
 object SnapshotsDb {

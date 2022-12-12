@@ -6,7 +6,7 @@ import akka.pattern.ask
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoSetSnapshotPersistence, UtxoStateReader}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -85,7 +85,7 @@ case class UtxoApiRoute(readersHolder: ActorRef,
   }
   def getSnapshotsInfo: Route = (get & path("getSnapshotsInfo")) {
     ApiResponse(getState.map {
-      case usr: UtxoStateReader =>
+      case usr: UtxoSetSnapshotPersistence =>
         Some(usr.getSnapshotInfo())
       case _ => None
     })

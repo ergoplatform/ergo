@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import scorex.crypto.authds.avltree.batch.PersistentBatchAVLProver
@@ -11,7 +12,7 @@ import scorex.util.ScorexLogging
 trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
   def constants: StateConstants
-  def persistentProver: PersistentBatchAVLProver[Digest32, HF]
+  protected def persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
   private val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move to some other place ?
 
@@ -43,6 +44,19 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
   def snapshotsAvailable(): SnapshotsInfo = {
     snapshotsDb.readSnapshotsInfo
+  }
+
+
+  def getSnapshotInfo(): SnapshotsInfo = {
+    snapshotsDb.readSnapshotsInfo
+  }
+
+  def getManifest(id: ManifestId): Option[Array[Byte]] = {
+    snapshotsDb.readManifestBytes(id)
+  }
+
+  def getUtxoSnapshotChunk(id: SubtreeId): Option[Array[Byte]] = {
+    snapshotsDb.readSubtreeBytes(id)
   }
 
 }

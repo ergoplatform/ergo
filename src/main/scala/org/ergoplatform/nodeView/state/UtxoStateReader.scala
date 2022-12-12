@@ -5,7 +5,6 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
@@ -19,7 +18,7 @@ import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
+trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence with TransactionValidation {
 
   protected implicit val hf: HF = Algos.hash
 
@@ -196,20 +195,4 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Useful when checking mempool transactions.
     */
   def withMempool(mp: ErgoMemPoolReader): UtxoState = withUnconfirmedTransactions(mp.getAll)
-
-  def getSnapshotInfo(): SnapshotsInfo = {
-    val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
-    snapshotsDb.readSnapshotsInfo
-  }
-
-  def getManifest(id: ManifestId): Option[Array[Byte]] = {
-    val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
-    snapshotsDb.readManifestBytes(id)
-  }
-
-  def getUtxoSnapshotChunk(id: SubtreeId): Option[Array[Byte]] = {
-    val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
-    snapshotsDb.readSubtreeBytes(id)
-  }
-
 }

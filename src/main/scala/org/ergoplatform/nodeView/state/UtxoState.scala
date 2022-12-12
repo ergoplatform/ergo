@@ -42,7 +42,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   extends ErgoState[UtxoState]
     with TransactionValidation
     with UtxoStateReader
-    with UtxoSetSnapshotPersistence
     with ScorexEncoding {
 
   import UtxoState.metadata

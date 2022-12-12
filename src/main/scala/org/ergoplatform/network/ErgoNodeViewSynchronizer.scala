@@ -21,7 +21,7 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoSetSnapshotPersistence, UtxoStateReader}
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import scorex.core.network.message._
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
@@ -802,14 +802,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     modifiersByStatus.getOrElse(Requested, Map.empty)
   }
 
-  protected def sendSnapshotsInfo(usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
+  protected def sendSnapshotsInfo(usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
     val snapshotsInfo = usr.getSnapshotInfo()
     log.debug(s"Sending snapshots info with ${snapshotsInfo.availableManifests.size} to $peer")
     val msg = Message(SnapshotsInfoSpec, Right(snapshotsInfo), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
 
-  protected def sendManifest(id: ManifestId, usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
+  protected def sendManifest(id: ManifestId, usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
     usr.getManifest(id) match {
       case Some(manifest) => {
         val msg = Message(ManifestSpec, Right(manifest), None)
@@ -882,7 +882,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  protected def sendUtxoSnapshotChunk(id: SubtreeId, usr: UtxoStateReader, peer: ConnectedPeer): Unit = {
+  protected def sendUtxoSnapshotChunk(id: SubtreeId, usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
     usr.getUtxoSnapshotChunk(id) match {
       case Some(snapChunk) => {
         val msg = Message(UtxoSnapshotChunkSpec, Right(snapChunk), None)

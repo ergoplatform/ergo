@@ -272,7 +272,7 @@ object GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
   * The `SnapshotsInfo` message is a reply to a `GetSnapshotsInfo` message.
   */
 object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
-  private val SizeLimit = 10000
+  private val SizeLimit = 20000
 
   override val messageCode: MessageCode = 77: Byte
 

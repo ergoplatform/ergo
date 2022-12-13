@@ -64,10 +64,6 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
     */
   def getReader: ErgoStateReader = this
 
-  def isGenesis: Boolean = {
-    rootHash.sameElements(constants.settings.chainSettings.genesisStateDigest)
-  }
-
 }
 
 object ErgoState extends ScorexLogging {

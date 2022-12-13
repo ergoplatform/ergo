@@ -27,8 +27,6 @@ trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
     rootHash.sameElements(constants.settings.chainSettings.genesisStateDigest)
   }
 
-  def isInitialized: Boolean = !isGenesis
-
   def stateContext: ErgoStateContext = ErgoStateReader.storageStateContext(store, constants)
 
   /**

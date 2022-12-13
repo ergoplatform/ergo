@@ -820,6 +820,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
+  private var storedManifestHeight: Height = 0
   private var storedManifest: Option[BatchAVLProverManifest[Digest32]] = None
 
   private val expectedSubtrees= mutable.Set[ModifierId]()
@@ -877,15 +878,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.info(s"Awaiting ${requestedSubtrees.size} chunks, in queue ${expectedSubtrees.size} chunks")//todo: change to debug on release
         requestedSubtrees -= ModifierId @@ Base16.encode(subtree.id)
         storedChunks += subtree
-        if(expectedSubtrees.isEmpty && requestedSubtrees.isEmpty){
+        if (expectedSubtrees.isEmpty && requestedSubtrees.isEmpty) {
           storedManifest match {
-            case Some (manifest) =>
+            case Some(manifest) =>
               serializer.combine(manifest -> storedChunks, 32, None) match {
                 case Success(prover: BatchAVLProver[Digest32, Blake2b256.type]) =>
-                  viewHolderRef ! InitStateFromSnapshot(prover)
+                  viewHolderRef ! InitStateFromSnapshot(storedManifestHeight, prover)
                 case Failure(_) =>
                   ???
-                  //todo: process
+                //todo: process
               }
             case None =>
           }
@@ -1185,6 +1186,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val manifestId = records.head._2
         val peers = records.map(_._1)
         val randomPeer = peers(Random.nextInt(peers.length))
+        storedManifestHeight = height
         requestManifest(manifestId, randomPeer)
       } else {
         log.info("No manifests to download found ")
@@ -1543,7 +1545,7 @@ object ErgoNodeViewSynchronizer {
       */
     case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
 
-    case class InitStateFromSnapshot(prover: BatchAVLProver[Digest32, Blake2b256.type])
+    case class InitStateFromSnapshot(height: Height, prover: BatchAVLProver[Digest32, Blake2b256.type])
   }
 
 }

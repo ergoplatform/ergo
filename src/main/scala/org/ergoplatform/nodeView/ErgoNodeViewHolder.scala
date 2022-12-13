@@ -280,8 +280,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   def processStateSnapshot: Receive = {
-    case InitStateFromSnapshot(prover) =>
-      log.info(s"Restoring state from prover with digest ${prover.digest} reconstructed")
+    case InitStateFromSnapshot(height, prover) =>
+      log.info(s"Restoring state from prover with digest ${prover.digest} reconstructed for height $height")
+      history().utxoSnapshotApplied(height)
       updateNodeView(updatedState = Some(UtxoState.fromSnapshot(prover, settings).asInstanceOf[State]))
   }
 

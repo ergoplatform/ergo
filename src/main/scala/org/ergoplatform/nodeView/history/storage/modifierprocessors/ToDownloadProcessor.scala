@@ -36,10 +36,17 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
 
   def estimatedTip(): Option[Height]
 
+  var _utxoSnapshotApplied = false
+
+  def utxoSnapshotApplied(height: Height): Unit = {
+    _utxoSnapshotApplied = true
+    minimalFullBlockHeightVar = height + 1  //todo: or height + 1?
+  }
+
   /**
     * Get modifier ids to download to synchronize full blocks
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
-    * @param filterFn only ModifierIds which pass filter are included into results
+    * @param condition only ModifierIds which pass filter are included into results
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
   def nextModifiersToDownload(howManyPerType: Int,
@@ -86,12 +93,14 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
         val minHeight = Math.max(1, fb.header.height - 100)
         continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
-      case None if nodeSettings.utxoBootstrap =>
+      case None if (nodeSettings.utxoBootstrap && !_utxoSnapshotApplied) =>
         // todo: can be requested multiple times, prevent it
         Map(SnapshotsInfo.modifierTypeId -> Seq.empty)
       case None =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
-        continuation(minimalFullBlockHeight, Map.empty, maxHeight = Int.MaxValue)
+        val res = continuation(minimalFullBlockHeight, Map.empty, maxHeight = Int.MaxValue)
+        log.info("To download: " + res.size)
+        res
     }
   }
 

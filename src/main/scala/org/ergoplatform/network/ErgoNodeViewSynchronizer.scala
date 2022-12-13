@@ -821,7 +821,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
   private var storedManifest: Option[BatchAVLProverManifest[Digest32]] = None
+
   private val expectedSubtrees= mutable.Set[ModifierId]()
+  private val requestedSubtrees= mutable.Set[ModifierId]()
 
   //todo: store on disk
   private val storedChunks = mutable.Buffer[BatchAVLProverSubtree[Digest32]]()
@@ -835,17 +837,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     checkUtxoSetManifests(hr)
   }
 
+  private def requestMoreChunksIfNeeded(remote: ConnectedPeer): Unit = {
+    if (requestedSubtrees.size < 50) {
+      val toRequest = expectedSubtrees.take(50)
+      toRequest.foreach { subtreeId =>
+        expectedSubtrees -= subtreeId
+        requestedSubtrees += subtreeId
+        requestUtxoSetChunk(Digest32 @@ Base16.decode(subtreeId).get, remote)
+      }
+    }
+  }
+
   protected def processManifest(manifestBytes: Array[Byte], remote: ConnectedPeer) = {
     //todo : check that mnifestBytes were requested
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.manifestFromBytes(manifestBytes, keyLength = 32) match {
       case Success(manifest) =>
-        log.info(s"Got manifest ${Algos.encode(manifest.id)}, going to download chunks for it")
+        val subtrees = manifest.subtreesIds
+        log.info(s"Got manifest ${Algos.encode(manifest.id)}, going to download ${subtrees.size} chunks for it")
         storedManifest = Some(manifest)
-        manifest.subtreesIds.foreach {subtreeId =>
+        subtrees.foreach {subtreeId =>  //todo: remove take() with gradual download
           expectedSubtrees += (ModifierId @@ Base16.encode(subtreeId))
-          requestUtxoSetChunk(subtreeId, remote)
         }
+        requestMoreChunksIfNeeded(remote)
       case Failure(e) =>
         //todo:
         log.info("Cant' restore manifest from bytes ", e)
@@ -859,10 +873,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.subtreeFromBytes(serializedChunk, 32) match {
       case Success(subtree) =>
-        log.debug(s"Got utxo snapshot chunk, id: ${subtree.id}")
-        expectedSubtrees -= ModifierId @@ Base16.encode(subtree.id)
+        log.info(s"Got utxo snapshot chunk, id: ${Algos.encode(subtree.id)}, size: ${serializedChunk.length}")  //todo: change to debug on release
+        log.info(s"Awaiting ${requestedSubtrees.size} chunks, in queue ${expectedSubtrees.size} chunks")//todo: change to debug on release
+        requestedSubtrees -= ModifierId @@ Base16.encode(subtree.id)
         storedChunks += subtree
-        if(expectedSubtrees.isEmpty){
+        if(expectedSubtrees.isEmpty && requestedSubtrees.isEmpty){
           storedManifest match {
             case Some (manifest) =>
               serializer.combine(manifest -> storedChunks, 32, None) match {
@@ -874,6 +889,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               }
             case None =>
           }
+        } else{
+          requestMoreChunksIfNeeded(remote)
         }
       case Failure(e) =>
         //todo:
@@ -1147,7 +1164,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (settings.nodeSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&
-          availableManifests.nonEmpty) {
+          availableManifests.nonEmpty &&
+          storedManifest.isEmpty) {
       val res = availableManifests.filter { case (h, records) =>
         if (records.length >= MinSnapshots) {
           val idsSet = records.map(_._2).map(Base16.encode).toSet

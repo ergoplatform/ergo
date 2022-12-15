@@ -4,11 +4,12 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
 import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverManifest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ByteArrayBuilder, ScorexLogging}
 import scorex.util.serialization.{VLQByteBufferReader, VLQByteBufferWriter}
+
 import java.nio.ByteBuffer
 import scala.collection.mutable
 
@@ -33,12 +34,35 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   private val expectedChunksPrefix = Blake2b256.hash("expected chunk").drop(4)
   private val downloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
 
-  def pruneSnapshot(downloadPlan: UtxoSetSnapshotDownloadPlan) = ???
+  private val downloadPlanKey = Blake2b256.hash("download plan")
 
-  def writeDownloadPlanToTheDb(plan: UtxoSetSnapshotDownloadPlan) = {
+  private var _cachedDownloadPlan: Option[UtxoSetSnapshotDownloadPlan] = None
+
+  def pruneSnapshot(downloadPlan: UtxoSetSnapshotDownloadPlan) = ??? //todo: implement
+
+  def registerManifestToDownload(manifest: BatchAVLProverManifest[Digest32], blockHeight: Height) = {
+    val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight)
+    _cachedDownloadPlan = Some(plan)
+    historyStorage.insert(downloadPlanKey, plan.id)
+    writeDownloadPlanToTheDb(plan)
+  }
+
+  def getUtxoSetSnapshotDownloadPlan() : Option[UtxoSetSnapshotDownloadPlan] = {
+    _cachedDownloadPlan match {
+      case s@Some(_) => s
+      case None => historyStorage.get(downloadPlanKey).flatMap { planId =>
+        val planOpt = readDownloadPlanFromDb(Digest32 @@ planId)
+        if (planOpt.isEmpty) log.warn(s"No download plam with id ${Algos.encode(planId)} found")
+        planOpt
+      }
+    }
+  }
+
+
+  private def writeDownloadPlanToTheDb(plan: UtxoSetSnapshotDownloadPlan) = {
     val w = new VLQByteBufferWriter(new ByteArrayBuilder())
     w.putULong(plan.startingTime)
-    w.putULong(plan.latestChunkFetchTime)
+    w.putULong(plan.latestUpdateTime)
     w.putUInt(plan.snapshotHeight)
     w.putBytes(plan.utxoSetRootHash)
     w.put(plan.utxoSetTreeHeight)
@@ -64,7 +88,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
-  def readDownloadPlanFromDb(id: Digest32): Option[UtxoSetSnapshotDownloadPlan] = {
+  private def readDownloadPlanFromDb(id: Digest32): Option[UtxoSetSnapshotDownloadPlan] = {
     historyStorage.get(id).map {bytes =>
       val r = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
       val startingTime = r.getULong()
@@ -105,8 +129,9 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   }
 }
 
+//todo: add peers to download from
 case class UtxoSetSnapshotDownloadPlan(startingTime: Long,
-                                       latestChunkFetchTime: Long,
+                                       latestUpdateTime: Long,
                                        snapshotHeight: Height,
                                        utxoSetRootHash: Digest32,
                                        utxoSetTreeHeight: Byte,

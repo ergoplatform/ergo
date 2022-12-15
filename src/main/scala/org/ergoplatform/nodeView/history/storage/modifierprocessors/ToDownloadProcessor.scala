@@ -15,7 +15,9 @@ import scala.annotation.tailrec
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
-trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders with ScorexLogging {
+trait ToDownloadProcessor
+  extends FullBlockPruningProcessor with UtxoSetSnapshotProcessor with BasicReaders with ScorexLogging {
+
   import scorex.core.utils.MapPimp
 
   protected val timeProvider: NetworkTimeProvider
@@ -35,13 +37,6 @@ trait ToDownloadProcessor extends FullBlockPruningProcessor with BasicReaders wi
   def isInBestChain(id: ModifierId): Boolean
 
   def estimatedTip(): Option[Height]
-
-  var _utxoSnapshotApplied = false
-
-  def utxoSnapshotApplied(height: Height): Unit = {
-    _utxoSnapshotApplied = true
-    minimalFullBlockHeightVar = height + 1  //todo: or height + 1?
-  }
 
   /**
     * Get modifier ids to download to synchronize full blocks

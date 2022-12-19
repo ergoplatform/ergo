@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{ErgoAlgos, ErgoSettings}
 import org.ergoplatform.wallet.Constants
-import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBFactory, LDBKVStore}
 import scorex.util.ScorexLogging
@@ -91,7 +91,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     writeSnapshotsInfo(si)
   }
 
-  def readManifest(id: ManifestId): Option[BatchAVLProverManifest[Digest32]] = {
+  def readManifest(id: ManifestId): Option[UtxoState.Manifest] = {
     readManifestBytes(id).flatMap(bs => serializer.manifestFromBytes(bs, Constants.ModifierIdLength).toOption)
   }
 

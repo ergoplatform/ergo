@@ -40,9 +40,8 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.app.Version
-import scorex.crypto.authds.avltree.batch.BatchAVLProver
 import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 
 import scala.annotation.tailrec
@@ -879,23 +878,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.subtreeFromBytes(serializedChunk, 32) match {
       case Success(subtree) =>
-        val downloadPlan = hr.getUtxoSetSnapshotDownloadPlan()
+        val downloadPlan = hr.getUtxoSetSnapshotDownloadPlan() // todo: match for optional result
         log.info(s"Got utxo snapshot chunk, id: ${Algos.encode(subtree.id)}, size: ${serializedChunk.length}")  //todo: change to debug on release
       //  log.info(s"Awaiting ${requestedSubtrees.size} chunks, in queue ${expectedSubtrees.size} chunks")//todo: change to debug on release
         hr.registerDownloadedChunk(subtree.id, serializedChunk)
         if (downloadPlan.map(_.fullyDownloaded).getOrElse(false)) {
-          ???
-          /* storedManifest match {
-            case Some(manifest) =>
-              serializer.combine(manifest -> storedChunks, 32, None) match {
-                case Success(prover: BatchAVLProver[Digest32, Blake2b256.type]) =>
-                  viewHolderRef ! InitStateFromSnapshot(storedManifestHeight, prover)
-                case Failure(_) =>
-                  ???
-                //todo: process
-              }
-            case None =>
-          } */
+          viewHolderRef ! InitStateFromSnapshot()
         } else{
           requestMoreChunksIfNeeded(hr, remote)
         }
@@ -1550,7 +1538,7 @@ object ErgoNodeViewSynchronizer {
       */
     case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
 
-    case class InitStateFromSnapshot(height: Height, prover: BatchAVLProver[Digest32, Blake2b256.type])
+    case class InitStateFromSnapshot()
   }
 
 }

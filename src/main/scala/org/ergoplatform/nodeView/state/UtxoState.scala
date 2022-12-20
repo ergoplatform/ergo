@@ -12,6 +12,7 @@ import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperation
 import org.ergoplatform.settings.{Algos, ErgoAlgos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core._
 import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation

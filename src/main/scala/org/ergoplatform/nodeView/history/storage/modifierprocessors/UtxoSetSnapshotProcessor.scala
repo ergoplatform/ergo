@@ -5,6 +5,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
 import org.ergoplatform.settings.{Algos, Constants}
+import scorex.crypto.authds.avltree.batch.BatchAVLProver
 import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverManifest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ByteArrayBuilder, ScorexLogging}
@@ -37,6 +38,8 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   private val downloadPlanKey = Blake2b256.hash("download plan")
 
+  private var _manifest: Option[BatchAVLProverManifest[Digest32]] = None
+
   private var _cachedDownloadPlan: Option[UtxoSetSnapshotDownloadPlan] = None
 
   def pruneSnapshot(downloadPlan: UtxoSetSnapshotDownloadPlan) = ??? //todo: implement
@@ -44,6 +47,8 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   def registerManifestToDownload(manifest: BatchAVLProverManifest[Digest32],
                                  blockHeight: Height): UtxoSetSnapshotDownloadPlan = {
     val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight)
+    _manifest = Some(manifest)
+    println(_manifest.get.id)
     updateUtxoSetSnashotDownloadPlan(plan)
   }
 
@@ -103,7 +108,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan) = {
     _cachedDownloadPlan = Some(plan)
     historyStorage.insert(downloadPlanKey, plan.id)
-    writeDownloadPlanToTheDb(plan)
+    writeDownloadPlanToTheDb(plan) // todo: not always write to db
     plan
   }
 
@@ -167,6 +172,17 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
+
+  import scala.util.Try
+  import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedAVLStorage, VersionedLDBAVLStorage}
+  import org.ergoplatform.settings.Algos.HF
+
+  def createPersistentProver(): Try[PersistentBatchAVLProver[Digest32, HF]] = Try {
+    val manifest = _manifest.get
+    var avlProver: BatchAVLProver[Digest32, HF] =
+    val storage: VersionedAVLStorage[Digest32] = new VersionedLDBAVLStorage(???, ???)
+    storage.update()
+  }
 }
 
 //todo: add peers to download from

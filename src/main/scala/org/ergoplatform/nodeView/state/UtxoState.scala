@@ -259,10 +259,10 @@ object UtxoState extends ScorexLogging {
     * @param context
     * @return
     */
-  private def metadata(modId: VersionTag,
-                       stateRoot: ADDigest,
-                       currentEmissionBoxOpt: Option[ErgoBox],
-                       context: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = {
+  def metadata(modId: VersionTag,
+               stateRoot: ADDigest,
+               currentEmissionBoxOpt: Option[ErgoBox],
+               context: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = {
     val modIdBytes = versionToBytes(modId)
     val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modIdBytes -> stateRoot
     val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modIdBytes

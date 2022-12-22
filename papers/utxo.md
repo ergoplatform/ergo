@@ -19,7 +19,8 @@ Implementation Details
 
 UTXO set is authenticated via AVL+ tree.
 
-Time is broken into epochs, 1 epoch = 51,840 blocks (~72 days).
+Time is broken into epochs, 1 epoch = 51,200 blocks (~72 days).
+Snapshot is taken after last block of an epoch, so block with height h % 51200 == 51199
 
 Chunk format
 ------------

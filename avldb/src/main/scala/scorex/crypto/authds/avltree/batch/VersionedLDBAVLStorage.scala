@@ -78,19 +78,10 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
              chunks: Iterator[BatchAVLProverSubtree[D]],
              additionalData: Iterator[(Array[Byte], Array[Byte])]): Try[Unit] = {
     //todo: the function below copy-pasted from BatchAVLProver, eliminate boilerplate
-    def digest(rootNode: Node[D], rootNodeHeight: Int): ADDigest = {
-      assert(rootNodeHeight >= 0 && rootNodeHeight < 256)
-      // rootNodeHeight should never be more than 255, so the toByte conversion is safe (though it may cause an incorrect
-      // sign on the signed byte if rootHeight>127, but we handle that case correctly on decoding the byte back to int in the
-      // verifier, by adding 256 if it's negative).
-      // The reason rootNodeHeight should never be more than 255 is that if height is more than 255,
-      // then the AVL tree has at least  2^{255/1.4405} = 2^177 leaves, which is more than the number of atoms on planet Earth.
-      ADDigest @@ (rootNode.label :+ rootNodeHeight.toByte)
-    }
 
     val rootNode = manifest.root
     val rootNodeHeight = manifest.rootHeight
-    val digestWrapper = digest(rootNode, rootNodeHeight)
+    val digestWrapper = VersionedLDBAVLStorage.digest(rootNode, rootNodeHeight)
     val indexes = Iterator(TopNodeKey -> nodeKey(rootNode), TopNodeHeight -> Ints.toByteArray(rootNodeHeight))
     val nodesIterator = visitedNodesSerializer(manifest, chunks)
 
@@ -194,4 +185,18 @@ object VersionedLDBAVLStorage {
         l
     }
   }
+
+  //todo: move to more appropriate place
+  def digest[D <: hash.Digest](rootNodeLabel:D, rootNodeHeight: Int): ADDigest = {
+    assert(rootNodeHeight >= 0 && rootNodeHeight < 256)
+    // rootNodeHeight should never be more than 255, so the toByte conversion is safe (though it may cause an incorrect
+    // sign on the signed byte if rootHeight>127, but we handle that case correctly on decoding the byte back to int in the
+    // verifier, by adding 256 if it's negative).
+    // The reason rootNodeHeight should never be more than 255 is that if height is more than 255,
+    // then the AVL tree has at least  2^{255/1.4405} = 2^177 leaves, which is more than the number of atoms on planet Earth.
+    ADDigest @@ (rootNodeLabel :+ rootNodeHeight.toByte)
+  }
+
+  def digest[D <: hash.Digest](rootNode: Node[D], rootNodeHeight: Int): ADDigest = digest(rootNode.label, rootNodeHeight)
 }
+

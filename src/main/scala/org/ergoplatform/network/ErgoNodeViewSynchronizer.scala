@@ -883,7 +883,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       //  log.info(s"Awaiting ${requestedSubtrees.size} chunks, in queue ${expectedSubtrees.size} chunks")//todo: change to debug on release
         hr.registerDownloadedChunk(subtree.id, serializedChunk)
         if (downloadPlan.map(_.fullyDownloaded).getOrElse(false)) {
-          viewHolderRef ! InitStateFromSnapshot()
+          val h = downloadPlan.get.snapshotHeight  // todo: .get
+          val blockId = hr.bestHeaderIdAtHeight(h).get // todo: .get
+          viewHolderRef ! InitStateFromSnapshot(h, blockId)
         } else{
           requestMoreChunksIfNeeded(hr, remote)
         }
@@ -1538,7 +1540,7 @@ object ErgoNodeViewSynchronizer {
       */
     case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
 
-    case class InitStateFromSnapshot()
+    case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
   }
 
 }

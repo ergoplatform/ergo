@@ -2,6 +2,7 @@ package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{InternalNodePrefix, LeafPrefix}
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, Balance}
 import scorex.util.encode.Base58
 import scorex.crypto.hash
@@ -20,9 +21,9 @@ import scala.util.{Failure, Try}
   * @param hf - hash function used to construct the tree
   * @tparam D - type of hash function digest
   */
-class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
+class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDBVersionedStore,
                                           nodeParameters: NodeParameters)
-                                         (implicit val hf: CryptographicHash[D]) extends VersionedAVLStorage[D] with ScorexLogging {
+                                         (implicit val hf: HF) extends VersionedAVLStorage[D] with ScorexLogging {
 
   private lazy val labelSize = nodeParameters.labelSize
 
@@ -31,19 +32,28 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
 
   private val fixedSizeValueMode = nodeParameters.valueSize.isDefined
 
-  override def rollback(version: ADDigest): Try[(ProverNodes[D], Int)] = Try {
-    if (!this.version.contains(version)) { // do not rollback to self
-      store.rollbackTo(version)
+  def restorePrunedProver(): Try[BatchAVLProver[D, HF]] = {
+    restorePrunedTopNode().map {recoveredTop =>
+      new BatchAVLProver(nodeParameters.keySize, nodeParameters.valueSize, Some(recoveredTop))(hf)
     }
+  }
 
+  private def restorePrunedTopNode(): Try[(ProverNodes[D], Int)] = Try {
     val top = VersionedLDBAVLStorage.fetch[D](ADKey @@ store.get(TopNodeKey).get)(hf, store, nodeParameters)
     val topHeight = Ints.fromByteArray(store.get(TopNodeHeight).get)
 
     top -> topHeight
-  }.recoverWith { case e =>
-    log.warn(s"Failed to recover tree for digest ${Base58.encode(version)}:", e)
-    Failure(e)
   }
+
+  override def rollback(version: ADDigest): Try[(ProverNodes[D], Int)] = Try {
+    if (!this.version.contains(version)) { // do not rollback to self
+      store.rollbackTo(version)
+    }
+  }.flatMap(_ => restorePrunedTopNode())
+    .recoverWith { case e =>
+      log.warn(s"Failed to recover tree for digest ${Base58.encode(version)}:", e)
+      Failure(e)
+    }
 
   override def version: Option[ADDigest] = store.lastVersionID.map(d => ADDigest @@ d)
 
@@ -62,6 +72,47 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
     val toUpdateWithWrapped = toUpdate ++ additionalData
 
     store.update(digestWrapper, toRemove, toUpdateWithWrapped)
+  }
+
+  def update(manifest: BatchAVLProverManifest[D],
+             chunks: Iterator[BatchAVLProverSubtree[D]],
+             additionalData: Iterator[(Array[Byte], Array[Byte])]): Try[Unit] = {
+    //todo: the function below copy-pasted from BatchAVLProver, eliminate boilerplate
+    def digest(rootNode: Node[D], rootNodeHeight: Int): ADDigest = {
+      assert(rootNodeHeight >= 0 && rootNodeHeight < 256)
+      // rootNodeHeight should never be more than 255, so the toByte conversion is safe (though it may cause an incorrect
+      // sign on the signed byte if rootHeight>127, but we handle that case correctly on decoding the byte back to int in the
+      // verifier, by adding 256 if it's negative).
+      // The reason rootNodeHeight should never be more than 255 is that if height is more than 255,
+      // then the AVL tree has at least  2^{255/1.4405} = 2^177 leaves, which is more than the number of atoms on planet Earth.
+      ADDigest @@ (rootNode.label :+ rootNodeHeight.toByte)
+    }
+
+    val rootNode = manifest.root
+    val rootNodeHeight = manifest.rootHeight
+    val digestWrapper = digest(rootNode, rootNodeHeight)
+    val indexes = Iterator(TopNodeKey -> nodeKey(rootNode), TopNodeHeight -> Ints.toByteArray(rootNodeHeight))
+    val nodesIterator = visitedNodesSerializer(manifest, chunks)
+
+    store.update(digestWrapper, Nil, toUpdate = indexes ++ nodesIterator ++ additionalData)
+  }
+
+  private def visitedNodesSerializer(manifest: BatchAVLProverManifest[D],
+                                     chunks: Iterator[BatchAVLProverSubtree[D]]) = {
+    def idCollector(node: ProverNodes[D],
+                    acc: Iterator[(Array[Byte], Array[Byte])]): Iterator[(Array[Byte], Array[Byte])] = {
+      val pair: (Array[Byte], Array[Byte]) = (nodeKey(node), toBytes(node))
+      node match {
+        case n: ProxyInternalNode[D] if n.isEmpty =>
+          acc ++ Iterator(pair)
+        case i : InternalProverNode[D] =>
+          acc ++ Iterator(pair) ++ idCollector(i.left, acc) ++ idCollector(i.right, acc)
+        case _: ProverLeaf[D] =>
+          acc ++ Iterator(pair)
+      }
+    }
+
+    idCollector(manifest.root, Iterator.empty) ++ chunks.flatMap(subtree => idCollector(subtree.subtreeTop, Iterator.empty))
   }
 
   private def serializedVisitedNodes(node: ProverNodes[D],

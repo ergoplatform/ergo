@@ -25,7 +25,7 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence wi
   val constants: StateConstants
 
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-  protected lazy val storage = new VersionedLDBAVLStorage(store, np)
+  protected lazy val storage = new VersionedLDBAVLStorage[Digest32, HF](store, np)
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 

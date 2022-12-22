@@ -5,8 +5,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.crypto.authds.avltree.batch.BatchAVLProver
-import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverManifest
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ByteArrayBuilder, ScorexLogging}
 import scorex.util.serialization.{VLQByteBufferReader, VLQByteBufferWriter}
@@ -22,9 +21,14 @@ import scala.collection.mutable
   */
 trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
+  import org.ergoplatform.settings.ErgoAlgos.HF
+
   protected val historyStorage: HistoryStorage
 
   private[history] var minimalFullBlockHeightVar: Int
+
+  private implicit val hf = Blake2b256
+  private val avlTreeSerializer = new BatchAVLProverSerializer[Digest32, Blake2b256.type]()
 
   var _utxoSnapshotApplied = false
 
@@ -105,6 +109,21 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
+  def chunksIterator(): Iterator[BatchAVLProverSubtree[Digest32]] = {
+    getUtxoSetSnapshotDownloadPlan() match {
+      case Some(plan) =>
+        Iterator.range(0, plan.totalChunks).flatMap{idx =>
+          val idxBytes = Ints.toByteArray(idx)
+          historyStorage
+            .get(downloadedChunksPrefix ++ idxBytes)
+            .flatMap(bs => avlTreeSerializer.subtreeFromBytes(bs, 32).toOption)
+        }
+      case None =>
+        log.error("todo: msg") // todo:
+      Iterator.empty
+    }
+  }
+
   private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan) = {
     _cachedDownloadPlan = Some(plan)
     historyStorage.insert(downloadPlanKey, plan.id)
@@ -174,14 +193,19 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
 
   import scala.util.Try
-  import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedAVLStorage, VersionedLDBAVLStorage}
-  import org.ergoplatform.settings.Algos.HF
+  import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
   def createPersistentProver(): Try[PersistentBatchAVLProver[Digest32, HF]] = Try {
-    val manifest = _manifest.get
-    var avlProver: BatchAVLProver[Digest32, HF] =
-    val storage: VersionedAVLStorage[Digest32] = new VersionedLDBAVLStorage(???, ???)
-    storage.update()
+    val manifest = _manifest.get //todo: .get
+    val ldbStorage = new VersionedLDBAVLStorage[Digest32, HF](null, null)
+    //todo: write metadata, see UtxoState.metadata
+    ldbStorage.update(manifest, chunksIterator(), Iterator.empty)
+    ldbStorage.restorePrunedProver().map { prunedAvlProver =>
+      new PersistentBatchAVLProver[Digest32, HF] {
+        override var avlProver = prunedAvlProver
+        override val storage = ldbStorage
+      }
+    }.get   //todo: .get
   }
 }
 

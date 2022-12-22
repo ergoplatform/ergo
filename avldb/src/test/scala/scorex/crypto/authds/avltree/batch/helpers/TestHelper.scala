@@ -15,7 +15,7 @@ trait TestHelper extends FileHelper {
   type PROVER = BatchAVLProver[D, HF]
   type VERIFIER = BatchAVLVerifier[D, HF]
   type PERSISTENT_PROVER = PersistentBatchAVLProver[D, HF]
-  type STORAGE = VersionedLDBAVLStorage[D]
+  type STORAGE = VersionedLDBAVLStorage[D, HF]
 
   protected val KL: Int
   protected val VL: Int

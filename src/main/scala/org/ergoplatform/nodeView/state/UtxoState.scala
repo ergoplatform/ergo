@@ -12,7 +12,6 @@ import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperation
 import org.ergoplatform.settings.{Algos, ErgoAlgos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core._
 import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
@@ -21,7 +20,7 @@ import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.ModifierId
 import scorex.util.ScorexLogging
@@ -251,6 +250,15 @@ object UtxoState extends ScorexLogging {
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
   // block-specific metadata to write into database (in addition to AVL+ tree)
+
+  /**
+    *
+    * @param modId - ID of a block (header) corresponding to UTXO set
+    * @param stateRoot - UTXO set digest (hash and tree height) AFTER applying block `modId`
+    * @param currentEmissionBoxOpt
+    * @param context
+    * @return
+    */
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,
                        currentEmissionBoxOpt: Option[ErgoBox],
@@ -272,7 +280,7 @@ object UtxoState extends ScorexLogging {
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
       val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-      val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+      val storage: VersionedLDBAVLStorage[Digest32, HF] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
     new UtxoState(persistentProver, version, store, constants)
@@ -296,7 +304,7 @@ object UtxoState extends ScorexLogging {
 
     val defaultStateContext = ErgoStateContext.empty(constants, parameters)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-    val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+    val storage: VersionedLDBAVLStorage[Digest32, HF] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(
       p,
       storage,
@@ -307,7 +315,7 @@ object UtxoState extends ScorexLogging {
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
   }
 
-  def fromSnapshot(prover: BatchAVLProver[Digest32, Blake2b256.type],
+  def fromSnapshot(prover: BatchAVLProver[Digest32, HF],
                    settings: ErgoSettings) = {
     val stateDir = ErgoState.stateDir(settings)
     stateDir.mkdirs()
@@ -318,7 +326,7 @@ object UtxoState extends ScorexLogging {
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-      val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+      val storage: VersionedLDBAVLStorage[Digest32, HF] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(prover, storage).get
     }
     new UtxoState(persistentProver, version, store, constants)

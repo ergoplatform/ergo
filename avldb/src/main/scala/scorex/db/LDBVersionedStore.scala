@@ -232,8 +232,8 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
   }
 
   def update(versionID: VersionID,
-             toRemove: Iterable[Array[Byte]],
-             toUpdate: Iterable[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
+             toRemove: TraversableOnce[Array[Byte]],
+             toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
     lock.writeLock().lock()
     val lastLsn = lsn // remember current LSN value
     val batch = db.createWriteBatch()

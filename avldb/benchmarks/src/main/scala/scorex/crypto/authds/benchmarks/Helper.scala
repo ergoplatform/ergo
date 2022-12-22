@@ -12,7 +12,7 @@ object Helper {
   type HF = Blake2b256.type
   type Prover = PersistentBatchAVLProver[Digest32, HF]
 
-  implicit val hf = Blake2b256
+  implicit val hf: HF = Blake2b256
 
   val kl = 32
   val vl = 8
@@ -34,11 +34,11 @@ object Helper {
   }
 
   def persistentProverWithVersionedStore(initialKeepVersions: Int,
-                                         baseOperationsCount: Int = 0): (Prover, LDBVersionedStore, VersionedLDBAVLStorage[Digest32]) = {
+                                         baseOperationsCount: Int = 0): (Prover, LDBVersionedStore, VersionedLDBAVLStorage[Digest32, HF]) = {
     val dir = java.nio.file.Files.createTempDirectory("bench_testing_" + scala.util.Random.alphanumeric.take(15)).toFile
     dir.deleteOnExit()
     val store = new LDBVersionedStore(dir, initialKeepVersions = initialKeepVersions)
-    val storage = new VersionedLDBAVLStorage(store, NodeParameters(kl, Some(vl), ll))
+    val storage = new VersionedLDBAVLStorage[Digest32, HF](store, NodeParameters(kl, Some(vl), ll))
     require(storage.isEmpty)
     val prover = new BatchAVLProver[Digest32, HF](kl, Some(vl))
 

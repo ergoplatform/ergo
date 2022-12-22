@@ -5,8 +5,10 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
 import org.ergoplatform.settings.{Algos, Constants}
+import scorex.crypto.authds.avltree.batch.NodeParameters
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.LDBVersionedStore
 import scorex.util.{ByteArrayBuilder, ScorexLogging}
 import scorex.util.serialization.{VLQByteBufferReader, VLQByteBufferWriter}
 import spire.syntax.all.cfor
@@ -195,11 +197,14 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   import scala.util.Try
   import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
-  def createPersistentProver(): Try[PersistentBatchAVLProver[Digest32, HF]] = Try {
+  def createPersistentProver(stateStore: LDBVersionedStore): Try[PersistentBatchAVLProver[Digest32, HF]] = Try {
     val manifest = _manifest.get //todo: .get
-    val ldbStorage = new VersionedLDBAVLStorage[Digest32, HF](null, null)
+    val np = NodeParameters(32, None, 32) // todo: use constants
+    val ldbStorage = new VersionedLDBAVLStorage[Digest32, HF](stateStore, np)
     //todo: write metadata, see UtxoState.metadata
-    ldbStorage.update(manifest, chunksIterator(), Iterator.empty)
+    log.info("Starting UTXO set snapshot transfer into state database")
+    ldbStorage.update(manifest, chunksIterator(), additionalData = Iterator.empty)
+    log.info("Finished UTXO set snapshot transfer into state database")
     ldbStorage.restorePrunedProver().map { prunedAvlProver =>
       new PersistentBatchAVLProver[Digest32, HF] {
         override var avlProver = prunedAvlProver

@@ -145,7 +145,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
 
-
   private def trimChainSuffix(suffix: IndexedSeq[BlockSection],
                               rollbackPoint: ModifierId): IndexedSeq[BlockSection] = {
     val idx = suffix.indexWhere(_.id == rollbackPoint)
@@ -153,36 +152,36 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   /**
-
-  Assume that history knows the following blocktree:
-
-           G
-          / \
-         *   G
-        /     \
-       *       G
-
-    where path with G-s is about canonical chain (G means semantically valid modifier), path with * is sidechain (* means
-    that semantic validity is unknown). New modifier is coming to the sidechain, it sends rollback to the root +
-    application of the sidechain to the state. Assume that state is finding that some modifier in the sidechain is
-    incorrect:
-
-           G
-          / \
-         G   G
-        /     \
-       B       G
-      /
     *
-
-  In this case history should be informed about the bad modifier and it should retarget state
-
-    //todo: improve the comment below
-
-    We assume that we apply modifiers sequentially (on a single modifier coming from the network or generated locally),
-    and in case of failed application of some modifier in a progressInfo, rollback point in an alternative should be not
-    earlier than a rollback point of an initial progressInfo.
-    **/
+    * Assume that history knows the following blocktree:
+    *
+    * G
+    * / \
+    * G
+    * /     \
+    * G
+    *
+    * where path with G-s is about canonical chain (G means semantically valid modifier), path with * is sidechain (* means
+    * that semantic validity is unknown). New modifier is coming to the sidechain, it sends rollback to the root +
+    * application of the sidechain to the state. Assume that state is finding that some modifier in the sidechain is
+    * incorrect:
+    *
+    * G
+    * / \
+    * G   G
+    * /     \
+    * B       G
+    * /
+    *
+    *
+    * In this case history should be informed about the bad modifier and it should retarget state
+    *
+    * //todo: improve the comment below
+    *
+    * We assume that we apply modifiers sequentially (on a single modifier coming from the network or generated locally),
+    * and in case of failed application of some modifier in a progressInfo, rollback point in an alternative should be not
+    * earlier than a rollback point of an initial progressInfo.
+    * */
 
   @tailrec
   protected final def updateState(history: ErgoHistory,
@@ -237,7 +236,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
-                if(modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
+                if (modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
                   context.system.eventStream.publish(FullBlockApplied(modToApply.asInstanceOf[ErgoFullBlock].header))
                 }
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
@@ -281,10 +280,21 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   def processStateSnapshot: Receive = {
     case InitStateFromSnapshot() =>
-      ???
-      /* log.info(s"Restoring state from prover with digest ${prover.digest} reconstructed for height $height")
-      history().utxoSnapshotApplied(height)
-      updateNodeView(updatedState = Some(UtxoState.fromSnapshot(prover, settings).asInstanceOf[State])) */
+      val store = minimalState().store
+      history().createPersistentProver(store) match {
+        //todo: pass metadata
+        case Success(pp) =>
+          /*
+             todo: restore state?
+             log.info(s"Restoring state from prover with digest ${prover.digest} reconstructed for height $height")
+             history().utxoSnapshotApplied(height)
+         */
+          // todo: pass version
+          val newState = new UtxoState(pp, version = null, store, StateConstants(settings))
+          updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+        case Failure(_) => ???
+      }
+
   }
 
   /**
@@ -352,7 +362,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           val at0 = System.currentTimeMillis()
           applyFromCacheLoop(modifiersCache)
           val at = System.currentTimeMillis()
-          log.debug(s"Application time: ${at-at0}")
+          log.debug(s"Application time: ${at - at0}")
 
           val cleared = modifiersCache.cleanOverfull()
 
@@ -449,10 +459,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   //todo: update state in async way?
+
   /**
     * Remote and local persistent modifiers need to be appended to history, applied to state
     * which also needs to be git propagated to mempool and wallet
-    * @param pmod Remote or local persistent modifier
+    *
+    * @param pmod  Remote or local persistent modifier
     * @param local whether the modifier was generated locally or not
     */
   protected def pmodModify(pmod: BlockSection, local: Boolean): Unit = {
@@ -487,7 +499,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   val fullBlockHeight = newHistory.fullBlockHeight
                   val almostSynced = (headersHeight - fullBlockHeight) < almostSyncedGap
 
-                  val newMemPool = if(almostSynced) {
+                  val newMemPool = if (almostSynced) {
                     updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool())
                   } else {
                     memoryPool()
@@ -693,8 +705,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       getNodeViewChanges orElse
       processStateSnapshot orElse
       handleHealthCheck orElse {
-        case a: Any => log.error("Strange input: " + a)
-      }
+      case a: Any => log.error("Strange input: " + a)
+    }
 
 }
 
@@ -735,8 +747,11 @@ object ErgoNodeViewHolder {
     case class EliminateTransactions(ids: Seq[ModifierId])
 
     case object IsChainHealthy
+
     sealed trait HealthCheckResult
+
     case object ChainIsHealthy extends HealthCheckResult
+
     case class ChainIsStuck(reason: String) extends HealthCheckResult
   }
 
@@ -748,18 +763,21 @@ object ErgoNodeViewHolder {
 
   /**
     * Checks whether chain got stuck by comparing timestamp of bestFullBlock or last time a modifier was applied to history.
+    *
     * @param progress metadata of last chain update
     * @return ChainIsHealthy if chain is healthy and ChainIsStuck(error) with details if it got stuck
     */
   def checkChainIsHealthy(
-      progress: ChainProgress,
-      history: ErgoHistory,
-      timeProvider: NetworkTimeProvider,
-      settings: ErgoSettings): HealthCheckResult = {
+                           progress: ChainProgress,
+                           history: ErgoHistory,
+                           timeProvider: NetworkTimeProvider,
+                           settings: ErgoSettings): HealthCheckResult = {
     val ChainProgress(lastMod, headersHeight, blockHeight, lastUpdate) = progress
     val chainUpdateDelay = timeProvider.time() - lastUpdate
     val acceptableChainUpdateDelay = settings.nodeSettings.acceptableChainUpdateDelay
+
     def chainUpdateDelayed = chainUpdateDelay > acceptableChainUpdateDelay.toMillis
+
     def chainSynced =
       history.bestFullBlockOpt.map(_.id) == history.bestHeaderOpt.map(_.id)
 
@@ -788,7 +806,6 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
   extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
 
 
-
 object ErgoNodeViewRef {
 
   private def digestProps(settings: ErgoSettings,
@@ -808,5 +825,5 @@ object ErgoNodeViewRef {
 
   def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
     system.actorOf(props(settings, timeProvider))
-  
+
 }

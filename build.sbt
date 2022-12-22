@@ -77,7 +77,7 @@ libraryDependencies ++= Seq(
   
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "com.iheart" %% "ficus" % "1.4.7",
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "ch.qos.logback" % "logback-classic" % "1.3.5",
   "com.google.guava" % "guava" % "21.0",
   "com.github.ben-manes.caffeine" % "caffeine" % "2.9.3", // use 3.x only for java 11+
   "com.github.scopt" %% "scopt" % "4.0.1",

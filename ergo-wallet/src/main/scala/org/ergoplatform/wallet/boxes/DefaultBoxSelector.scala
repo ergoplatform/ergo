@@ -103,9 +103,8 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
           },
         assetsMet
       )) {
-        val ra = reemissionAmount(res)
-        formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets, ra).mapRight { changeBoxes =>
-          BoxSelectionResult(res, changeBoxes)
+        formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBoxes =>
+          selectionResultWithEip27Output(res, changeBoxes)
         }
       } else {
         Left(NotEnoughTokensError(
@@ -127,14 +126,12 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
     * @param targetBalance - ERG amount to be transferred to recipients
     * @param foundBoxAssets - assets balances of boxes
     * @param targetBoxAssets - assets amounts to be transferred to recipients
-    * @param reemissionAmt - amount of re-emission tokens in collected boxes
     * @return
     */
   def formChangeBoxes(foundBalance: Long,
                       targetBalance: Long,
                       foundBoxAssets: mutable.Map[ModifierId, Long],
-                      targetBoxAssets: TokensMap,
-                      reemissionAmt: Long): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+                      targetBoxAssets: TokensMap): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     AssetUtils.subtractAssetsMut(foundBoxAssets, targetBoxAssets)
     val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxAssetsPerBox).toIndexedSeq
     val changeBalance = foundBalance - targetBalance
@@ -164,26 +161,7 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
       } else {
         Seq.empty
       }
-
-      if (reemissionAmt > 0) {
-        reemissionDataOpt match {
-          case Some(reemissionData) =>
-            // we construct this instance to get pay-to-reemission contract from it
-            // we set re-emission contract NFT id, re-emission start height is not used so we set it to 0
-            val rc: ReemissionContracts = new ReemissionContracts {
-              override val reemissionNftIdBytes: Array[Byte] = idToBytes(reemissionData.reemissionNftId)
-              override val reemissionStartHeight: Int = 0
-            }
-            val p2r = rc.payToReemission
-            val payToReemissionBox = new ErgoBoxCandidate(reemissionAmt, p2r, creationHeight = 0)
-            Right(payToReemissionBox +: changeBoxes)
-          case None =>
-            log.error("reemissionData when reemissionAmt > 0, should not happen at all")
-            Right(changeBoxes)
-        }
-      } else {
-        Right(changeBoxes)
-      }
+      Right(changeBoxes)
     }
   }
 

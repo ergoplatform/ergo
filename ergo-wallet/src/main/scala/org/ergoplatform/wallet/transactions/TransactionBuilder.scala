@@ -242,7 +242,7 @@ object TransactionBuilder {
       case Right(v) => v
     }
     // although we're only interested in change boxes, make sure selection contains exact inputs
-    assert(selection.boxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.boxes}")
+    assert(selection.inputBoxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.inputBoxes}")
     val changeBoxes = selection.changeBoxes
     val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty)
 

@@ -21,44 +21,52 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import spire.syntax.all.cfor
 
 /**
-  * Actor that constructs an index of database elements.
-  * @param cacheSettings - cacheSettings to use for saveLimit size
+  * Base trait for extra indexer actor and its test.
   */
-class ExtraIndexer(cacheSettings: CacheSettings)
-  extends Actor with ScorexLogging {
+trait ExtraIndexerBase extends ScorexLogging {
 
-  private var indexedHeight: Int = 0
-  private val indexedHeightBuffer : ByteBuffer = ByteBuffer.allocate(4)
+  // Indexed block height
+  protected var indexedHeight: Int = 0
+  private val indexedHeightBuffer: ByteBuffer = ByteBuffer.allocate(4)
 
-  private var globalTxIndex: Long = 0L
+  // Indexed transaction count
+  protected var globalTxIndex: Long = 0L
   private val globalTxIndexBuffer: ByteBuffer = ByteBuffer.allocate(8)
 
-  private var globalBoxIndex: Long = 0L
+  // Indexed box count
+  protected var globalBoxIndex: Long = 0L
   private val globalBoxIndexBuffer: ByteBuffer = ByteBuffer.allocate(8)
 
-  private var lastWroteToDB: Int = 0
+  // Last block height when buffer contents were saved to database
+  protected var lastWroteToDB: Int = 0
 
-  private val saveLimit: Int = cacheSettings.history.extraCacheSize * 10
+  // Max buffer size (determined by config)
+  protected val saveLimit: Int
 
-  private var caughtUp: Boolean = false
-  private var rollback: Boolean = false
+  // Flag to signal when indexer has reached current block height
+  protected var caughtUp: Boolean = false
 
-  private def chainHeight: Int = _history.fullBlockHeight
+  // Flag to signal a rollback
+  protected var rollback: Boolean = false
 
-  private var _history: ErgoHistory = null
-  private def history: ErgoHistoryReader = _history.getReader
-  private def historyStorage: HistoryStorage = _history.historyStorage
+  // Database handle
+  protected var _history: ErgoHistory = null
 
-  // fast access
+  protected def chainHeight: Int = _history.fullBlockHeight
+  protected def history: ErgoHistoryReader = _history.getReader
+  protected def historyStorage: HistoryStorage = _history.historyStorage
+
+  // fast access buffers
   private val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
   private val boxes: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
   private val trees: ArrayBuffer[IndexedErgoAddress] = ArrayBuffer.empty[IndexedErgoAddress]
 
   // input tokens in a tx
-  private val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
+  protected val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
 
   /**
     * Find a box in the boxes buffer.
+    *
     * @param id - id of the wanted box
     * @return an Option containing the index of the wanted box in the boxes buffer or None if box was not found
     */
@@ -72,6 +80,7 @@ class ExtraIndexer(cacheSettings: CacheSettings)
 
   /**
     * Spend an IndexedErgoBox from buffer or database. Also record tokens for later use in balance tracking logic.
+    *
     * @param id     - id of the wanted box
     * @param txId   - id of the spending transaction
     * @param height - height of the block the spending transaction is included in
@@ -97,13 +106,14 @@ class ExtraIndexer(cacheSettings: CacheSettings)
 
   /**
     * Add or subtract a box from an address in the buffer or in database.
+    *
     * @param id             - hash of the (ergotree) address
     * @param spendOrReceive - ErgoBox to spend or IndexedErgoBox to receive
     * @return index of updated tree in buffer or -1 if the tree was unknown
     */
-  private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[ErgoBox,IndexedErgoBox]): Int = {
+  private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[ErgoBox, IndexedErgoBox]): Int = {
     cfor(trees.length - 1)(_ >= 0, _ - 1) { i => // loop backwards to test latest modifiers first
-      if(trees(i).id == id) { // address found in last saveLimit modifiers
+      if (trees(i).id == id) { // address found in last saveLimit modifiers
         spendOrReceive match {
           case Left(box) => trees(i).addTx(globalTxIndex).spendBox(box) // spend box
           case Right(iEb) => trees(i).addTx(globalTxIndex).addBox(iEb) // receive box
@@ -142,27 +152,27 @@ class ExtraIndexer(cacheSettings: CacheSettings)
     // perform segmentation on big modifiers
     val addressesLen: Int = trees.length
     cfor(0)(_ < addressesLen, _ + 1) { i =>
-      if(trees(i).txs.length > segmentTreshold || trees(i).boxes.length > segmentTreshold) trees ++= trees(i).splitToSegments()
+      if (trees(i).txs.length > segmentTreshold || trees(i).boxes.length > segmentTreshold) trees ++= trees(i).splitToSegments()
     }
 
     // merge all modifiers to an Array, avoids reallocations durin concatenation (++)
     val all: Array[ExtraIndex] = new Array[ExtraIndex](modCount)
     val offset: Array[Int] = Array(0, general.length, general.length + boxes.length)
     cfor(0)(_ < general.length, _ + 1) { i => all(i + offset(0)) = general(i) }
-    cfor(0)(_ < boxes.length  , _ + 1) { i => all(i + offset(1)) = boxes(i) }
-    cfor(0)(_ < trees.length  , _ + 1) { i => all(i + offset(2)) = trees(i) }
+    cfor(0)(_ < boxes.length, _ + 1) { i => all(i + offset(1)) = boxes(i) }
+    cfor(0)(_ < trees.length, _ + 1) { i => all(i + offset(2)) = trees(i) }
 
     // insert modifiers and progress info to db
     indexedHeightBuffer.clear()
     globalTxIndexBuffer.clear()
     globalBoxIndexBuffer.clear()
-    historyStorage.insertExtra(Array((IndexedHeightKey , indexedHeightBuffer .putInt (indexedHeight ).array),
-                                     (GlobalTxIndexKey , globalTxIndexBuffer .putLong(globalTxIndex ).array),
-                                     (GlobalBoxIndexKey, globalBoxIndexBuffer.putLong(globalBoxIndex).array)), all)
+    historyStorage.insertExtra(Array((IndexedHeightKey, indexedHeightBuffer.putInt(indexedHeight).array),
+      (GlobalTxIndexKey, globalTxIndexBuffer.putLong(globalTxIndex).array),
+      (GlobalBoxIndexKey, globalBoxIndexBuffer.putLong(globalBoxIndex).array)), all)
 
     val end: Long = System.nanoTime()
 
-    if(writeLog)
+    if (writeLog)
       log.info(s"Processed ${trees.length} ErgoTrees with ${boxes.length} boxes and inserted them to database in ${(end - start) / 1000000D}ms")
 
     // clear buffers for next batch
@@ -175,12 +185,13 @@ class ExtraIndexer(cacheSettings: CacheSettings)
 
   /**
     * Process a batch of BlockTransactions into memory and occasionally write them to database.
+    *
     * @param bt     - BlockTransaction to process
     * @param height - height of the block containing the transactions
     */
-  private def index(bt: BlockTransactions, height: Int): Unit = {
+  protected def index(bt: BlockTransactions, height: Int): Unit = {
 
-    if(caughtUp && height <= indexedHeight) return // do not process older blocks again after caught up (due to actor message queue)
+    if (caughtUp && height <= indexedHeight) return // do not process older blocks again after caught up (due to actor message queue)
 
     var boxCount: Int = 0
 
@@ -196,10 +207,10 @@ class ExtraIndexer(cacheSettings: CacheSettings)
       tokens.clear()
 
       //process transaction inputs
-      if(height != 1) { //only after 1st block (skip genesis box)
+      if (height != 1) { //only after 1st block (skip genesis box)
         cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
           val boxIndex: Int = findAndSpendBox(tx.inputs(i).boxId, tx.id, height)
-          if(boxIndex >= 0) findAndUpdateTree(bytesToId(hashErgoTree(boxes(boxIndex).box.ergoTree)), Left(boxes(boxIndex).box)) // spend box and add tx
+          if (boxIndex >= 0) findAndUpdateTree(bytesToId(hashErgoTree(boxes(boxIndex).box.ergoTree)), Left(boxes(boxIndex).box)) // spend box and add tx
         }
       }
 
@@ -213,9 +224,9 @@ class ExtraIndexer(cacheSettings: CacheSettings)
         findAndUpdateTree(bytesToId(hashErgoTree(box.ergoTree)), Right(boxes(findBox(box.id).get)))
 
         // check if box is creating a new token, if yes record it
-        if(box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))
+        if (box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))
           cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
-            if(!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1))) {
+            if (!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1))) {
               general += IndexedTokenSerializer.fromBox(box)
             }
           }
@@ -231,46 +242,46 @@ class ExtraIndexer(cacheSettings: CacheSettings)
 
     log.info(s"Buffered block #$height / $chainHeight [txs: ${bt.txs.length}, boxes: $boxCount] (buffer: $modCount / $saveLimit)")
 
-    if(caughtUp) {
+    if (caughtUp) {
 
       indexedHeight = height // update height here after caught up with chain
 
-      if(modCount >= saveLimit || // modifier limit reached to write to db
-         history.fullBlockHeight == history.headersHeight) // write to db every block after chain synced
+      if (modCount >= saveLimit || // modifier limit reached to write to db
+        history.fullBlockHeight == history.headersHeight) // write to db every block after chain synced
         saveProgress()
 
-    }else
-      if(modCount >= saveLimit)
-        saveProgress() // active syncing, write to db after modifier limit
+    } else if (modCount >= saveLimit)
+      saveProgress() // active syncing, write to db after modifier limit
 
   }
 
   /**
     * Main indexer loop that tries to catch up with the already present blocks in database.
     */
-  private def run(): Unit = {
+  protected def run(): Unit = {
 
-    indexedHeight  = ByteBuffer.wrap(history.modifierBytesById(bytesToId(IndexedHeightKey)) .getOrElse(Array.fill[Byte](4){0})).getInt
-    globalTxIndex  = ByteBuffer.wrap(history.modifierBytesById(bytesToId(GlobalTxIndexKey)) .getOrElse(Array.fill[Byte](8){0})).getLong
+    indexedHeight  = ByteBuffer.wrap(history.modifierBytesById(bytesToId(IndexedHeightKey)).getOrElse(Array.fill[Byte](4){0})).getInt
+    globalTxIndex  = ByteBuffer.wrap(history.modifierBytesById(bytesToId(GlobalTxIndexKey)).getOrElse(Array.fill[Byte](8){0})).getLong
     globalBoxIndex = ByteBuffer.wrap(history.modifierBytesById(bytesToId(GlobalBoxIndexKey)).getOrElse(Array.fill[Byte](8){0})).getLong
 
     log.info(s"Started extra indexer at height $indexedHeight")
 
-    while(indexedHeight < chainHeight && !rollback) {
+    while (indexedHeight < chainHeight && !rollback) {
       indexedHeight += 1
       index(history.bestBlockTransactionsAt(indexedHeight).get, indexedHeight)
     }
 
-    if(rollback)
+    if (rollback)
       caughtUp = true
-      log.info("Indexer caught up with chain")
+    log.info("Indexer caught up with chain")
   }
 
   /**
     * Remove all indexes after given height.
+    *
     * @param height - starting height
     */
-  def removeAfter(height: Int): Unit = {
+  protected def removeAfter(height: Int): Unit = {
 
     saveProgress(false)
 
@@ -322,6 +333,18 @@ class ExtraIndexer(cacheSettings: CacheSettings)
     run()
 
   }
+
+}
+
+
+/**
+  * Actor that constructs an index of database elements.
+  * @param cacheSettings - cacheSettings to use for saveLimit size
+  */
+class ExtraIndexer(cacheSettings: CacheSettings)
+  extends Actor with ExtraIndexerBase {
+
+  override val saveLimit: Int = cacheSettings.history.extraCacheSize * 10
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[FullBlockApplied])

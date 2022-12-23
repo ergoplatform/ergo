@@ -39,7 +39,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   def utxoSnapshotApplied(height: Height): Unit = {
     _utxoSnapshotApplied = true
-    minimalFullBlockHeightVar = height + 1 //todo: or height + 1?
+    minimalFullBlockHeightVar = height + 1
   }
 
   private val expectedChunksPrefix = Blake2b256.hash("expected chunk").drop(4)
@@ -114,7 +114,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
-  def chunksIterator(): Iterator[BatchAVLProverSubtree[Digest32]] = {
+  def downloadedChunksIterator(): Iterator[BatchAVLProverSubtree[Digest32]] = {
     getUtxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
         Iterator.range(0, plan.totalChunks).flatMap{idx =>
@@ -209,7 +209,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     //todo: form state context correctly?
     val esc = ErgoStateReader.storageStateContext(stateStore, StateConstants(settings))
     val metadata = UtxoState.metadata(VersionTag @@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
-    ldbStorage.update(manifest, chunksIterator(), additionalData = metadata.toIterator)
+    ldbStorage.update(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator)
     log.info("Finished UTXO set snapshot transfer into state database")
     ldbStorage.restorePrunedProver().map { prunedAvlProver =>
       new PersistentBatchAVLProver[Digest32, HF] {

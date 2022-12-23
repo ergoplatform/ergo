@@ -7,6 +7,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateReader, StateConstants, UtxoSta
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.VersionTag
+import scorex.core.network.ConnectedPeer
 import scorex.crypto.authds.avltree.batch.NodeParameters
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -17,6 +18,7 @@ import spire.syntax.all.cfor
 
 import java.nio.ByteBuffer
 import scala.collection.mutable
+import scala.util.Random
 
 /**
   * Stores:
@@ -51,12 +53,16 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   private var _cachedDownloadPlan: Option[UtxoSetSnapshotDownloadPlan] = None
 
+  private var _peersToDownload: Seq[ConnectedPeer] = Seq.empty //todo: move to ErgoNodeViewSynchronizer?
+
   def pruneSnapshot(downloadPlan: UtxoSetSnapshotDownloadPlan) = ??? //todo: implement
 
   def registerManifestToDownload(manifest: BatchAVLProverManifest[Digest32],
-                                 blockHeight: Height): UtxoSetSnapshotDownloadPlan = {
+                                 blockHeight: Height,
+                                 peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = {
     val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight)
     _manifest = Some(manifest)
+    _peersToDownload = peersToDownload
     println(_manifest.get.id)
     updateUtxoSetSnashotDownloadPlan(plan)
   }
@@ -71,6 +77,14 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
           if (planOpt.nonEmpty) _cachedDownloadPlan = planOpt
           planOpt
         }
+    }
+  }
+
+  def getRandomPeerToDownloadChunks(): Option[ConnectedPeer] = {
+    if (_peersToDownload.nonEmpty) {
+      Some(_peersToDownload(Random.nextInt(_peersToDownload.size)))
+    } else {
+      None
     }
   }
 
@@ -89,6 +103,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
         plan.copy(latestUpdateTime = System.currentTimeMillis(), downloadedChunkIds = newDownloaded, downloadingChunks = newDownloading)
         _cachedDownloadPlan = Some(plan) // we update only in-memory cache, so in case of node restart, chunks won't be missed
         toDownload
+
       case None =>
         log.warn(s"No download plan is found when requested to propose $howMany chunks to download")
         Seq.empty

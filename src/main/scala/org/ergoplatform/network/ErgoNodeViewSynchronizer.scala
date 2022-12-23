@@ -821,12 +821,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   //todo: clear the table below
   private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
 
-  private def heightOfManifest(manifestId: ManifestId): Option[Height] = {
-    availableManifests
-      .find(_._2.exists(_._2.sameElements(manifestId)))
-      .map(_._1)
-  }
-
   protected def processSnapshotsInfo(hr: ErgoHistory, snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
       log.debug(s"Got manifest $manifestId for height $height from $remote")
@@ -836,32 +830,41 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     checkUtxoSetManifests(hr)
   }
 
-  private def requestMoreChunksIfNeeded(hr: ErgoHistory, remote: ConnectedPeer): Unit = {
+  private def requestMoreChunksIfNeeded(hr: ErgoHistory): Unit = {
     hr.getUtxoSetSnapshotDownloadPlan() match {
       case Some(downloadPlan) =>
         if (downloadPlan.downloadingChunks < 50) {
-          val toRequest = hr.getChunkIdsToDownload(50)
-          toRequest.foreach {
-            subtreeId =>
-              requestUtxoSetChunk(subtreeId, remote)
+          (1 to 10).foreach { _ =>
+            val toRequest = hr.getChunkIdsToDownload(5)
+            hr.getRandomPeerToDownloadChunks() match {
+              case Some(remote) => toRequest.foreach {
+                subtreeId =>
+                  requestUtxoSetChunk(subtreeId, remote)
+              }
+              case None =>
+                log.warn(s"No peers to download chunks from")
+            }
           }
         }
       case None =>
-        // todo: log
+      // todo: log
     }
   }
 
   protected def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer) = {
-    //todo : check that mnifestBytes were requested
+    //todo : check that manifestBytes were requested
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.manifestFromBytes(manifestBytes, keyLength = 32) match {
       case Success(manifest) =>
-        log.info(s"Got manifest ${Algos.encode(manifest.id)}")
-        heightOfManifest(manifest.id) match {
+        log.info(s"Got manifest ${Algos.encode(manifest.id)} from $remote")
+        val manifestRecords = availableManifests.filter(_._2.exists(_._2.sameElements(manifest.id)))
+        val heightOfManifest = manifestRecords.headOption.map(_._1)
+        val peersToDownload: Seq[ConnectedPeer] = manifestRecords.flatMap(_._2.map(_._1)).toSeq
+        heightOfManifest match {
           case Some(height) =>
-            hr.registerManifestToDownload(manifest, height)
+            hr.registerManifestToDownload(manifest, height, peersToDownload)
             log.info(s"Going to download ${50} chunks for manifest ${Algos.encode(manifest.id)}") // todo: fix msg
-            requestMoreChunksIfNeeded(hr, remote)
+            requestMoreChunksIfNeeded(hr)
           case None =>
             log.error(s"No height found for manifest ${Algos.encode(manifest.id)}")
         }
@@ -887,7 +890,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val blockId = hr.bestHeaderIdAtHeight(h).get // todo: .get
           viewHolderRef ! InitStateFromSnapshot(h, blockId)
         } else{
-          requestMoreChunksIfNeeded(hr, remote)
+          requestMoreChunksIfNeeded(hr)
         }
       case Failure(e) =>
         //todo:

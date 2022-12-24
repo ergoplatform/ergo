@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateConstants, UtxoState}
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.VersionTag
 import scorex.core.network.ConnectedPeer
 import scorex.crypto.authds.avltree.batch.NodeParameters
@@ -13,11 +13,9 @@ import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest,
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
 import scorex.util.{ByteArrayBuilder, ModifierId, ScorexLogging}
-import scorex.util.serialization.{VLQByteBufferReader, VLQByteBufferWriter}
+import scorex.util.serialization.VLQByteBufferWriter
 import spire.syntax.all.cfor
 
-import java.nio.ByteBuffer
-import scala.collection.mutable
 import scala.util.Random
 
 /**
@@ -70,13 +68,14 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   def getUtxoSetSnapshotDownloadPlan(): Option[UtxoSetSnapshotDownloadPlan] = {
     _cachedDownloadPlan match {
       case s@Some(_) => s
-      case None =>
+      case None => None
+        /*
         historyStorage.get(downloadPlanKey).flatMap { planId =>
           val planOpt = readDownloadPlanFromDb(Digest32 @@ planId)
           if (planOpt.isEmpty) log.warn(s"No download plan with id ${Algos.encode(planId)} found")
           if (planOpt.nonEmpty) _cachedDownloadPlan = planOpt
           planOpt
-        }
+        }*/
     }
   }
 
@@ -98,10 +97,11 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
         } else {
           IndexedSeq.empty
         }
+        log.info(s"Downloaded or waiting ${plan.downloadedChunkIds.size} chunks out of ${expected.size}, downloading ${toDownload.size} more")
         val newDownloaded = plan.downloadedChunkIds ++ toDownload.map(_ => false)
         val newDownloading = plan.downloadingChunks + toDownload.size
-        plan.copy(latestUpdateTime = System.currentTimeMillis(), downloadedChunkIds = newDownloaded, downloadingChunks = newDownloading)
-        _cachedDownloadPlan = Some(plan) // we update only in-memory cache, so in case of node restart, chunks won't be missed
+        val updPlan = plan.copy(latestUpdateTime = System.currentTimeMillis(), downloadedChunkIds = newDownloaded, downloadingChunks = newDownloading)
+        _cachedDownloadPlan = Some(updPlan)
         toDownload
 
       case None =>
@@ -173,6 +173,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   }
 
+  /*
   private def readDownloadPlanFromDb(id: Digest32): Option[UtxoSetSnapshotDownloadPlan] = {
     historyStorage.get(id).map { bytes =>
       val r = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
@@ -209,7 +210,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
         downloadingChunks = 0
       )
     }
-  }
+  }*/
 
 
   import scala.util.Try

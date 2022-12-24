@@ -803,7 +803,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def sendSnapshotsInfo(usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
     val snapshotsInfo = usr.getSnapshotInfo()
-    log.debug(s"Sending snapshots info with ${snapshotsInfo.availableManifests.size} to $peer")
+    log.debug(s"Sending snapshots info with ${snapshotsInfo.availableManifests.size} snapshots to $peer")
     val msg = Message(SnapshotsInfoSpec, Right(snapshotsInfo), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
@@ -1159,7 +1159,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  protected def checkUtxoSetManifests(historyReader: ErgoHistory) = {
+  protected def checkUtxoSetManifests(historyReader: ErgoHistory): Unit = {
     val MinSnapshots = 1 //todo: set to 3 after testing
 
     if (settings.nodeSettings.utxoBootstrap &&

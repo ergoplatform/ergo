@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
@@ -567,6 +568,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   def requestUtxoSetChunk(subtreeId: SubtreeId, peer: ConnectedPeer): Unit = {
+    deliveryTracker.setRequested(UTXOSnapshotChunk.modifierTypeId, ModifierId @@ Algos.encode(subtreeId), peer){ deliveryCheck =>
+      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+    }
     val msg = Message(GetUtxoSnapshotChunkSpec, Right(subtreeId), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
@@ -881,6 +885,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.subtreeFromBytes(serializedChunk, 32) match {
       case Success(subtree) =>
+        deliveryTracker.setUnknown(ModifierId @@ Algos.encode(subtree.id), UTXOSnapshotChunk.modifierTypeId)
         val downloadPlan = hr.getUtxoSetSnapshotDownloadPlan() // todo: match for optional result
         log.info(s"Got utxo snapshot chunk, id: ${Algos.encode(subtree.id)}, size: ${serializedChunk.length}")  //todo: change to debug on release
       //  log.info(s"Awaiting ${requestedSubtrees.size} chunks, in queue ${expectedSubtrees.size} chunks")//todo: change to debug on release
@@ -1057,7 +1062,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * wait for delivery until the number of checks exceeds the maximum if the peer sent `Inv` for this modifier
     * re-request modifier from a different random peer, if our node does not know a peer who have it
     */
-  protected def checkDelivery: Receive = {
+  protected def checkDelivery(hr: ErgoHistory): Receive = {
     case CheckDelivery(peer, modifierTypeId, modifierId) =>
       if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
         // If transaction not delivered on time, we just forget about it.
@@ -1087,6 +1092,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             // randomly choose a peer for another download attempt
             val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
               getPeersForDownloadingHeaders(peer).toSeq
+            } else if (modifierTypeId == UTXOSnapshotChunk.modifierTypeId) {
+              hr.getPeersToDownloadChunks()
             } else {
               getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
             }
@@ -1364,7 +1371,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       sendLocalSyncInfo(hr) orElse
       viewHolderEvents(hr, mp, usr, blockAppliedTxsCache) orElse
       peerManagerEvents orElse
-      checkDelivery orElse {
+      checkDelivery(hr) orElse {
       case a: Any => log.error("Strange input: " + a)
     }
   }

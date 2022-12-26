@@ -79,6 +79,8 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
+  def getPeersToDownloadChunks(): Seq[ConnectedPeer] = _peersToDownload
+
   def getRandomPeerToDownloadChunks(): Option[ConnectedPeer] = {
     if (_peersToDownload.nonEmpty) {
       Some(_peersToDownload(Random.nextInt(_peersToDownload.size)))

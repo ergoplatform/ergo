@@ -17,6 +17,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
   private val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move to some other place ?
 
   //todo: scaladoc
+  //todo: return Iterator?
   def slicedTree(): (BatchAVLProverManifest[Digest32], Seq[BatchAVLProverSubtree[Digest32]]) = {
     persistentProver.synchronized {
       val serializer = new BatchAVLProverSerializer[Digest32, HF]()(Algos.hash)

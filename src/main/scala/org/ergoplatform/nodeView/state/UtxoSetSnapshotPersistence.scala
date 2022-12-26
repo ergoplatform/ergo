@@ -21,7 +21,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
   def slicedTree(): (BatchAVLProverManifest[Digest32], Seq[BatchAVLProverSubtree[Digest32]]) = {
     persistentProver.synchronized {
       val serializer = new BatchAVLProverSerializer[Digest32, HF]()(Algos.hash)
-      serializer.slice(persistentProver.avlProver, subtreeDepth = 12)
+      serializer.slice(persistentProver.avlProver, subtreeDepth = 12) //todo: name constant
     }
   }
 

@@ -277,6 +277,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   lazy val validErgoTransactionWithAssetsGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] =
     validErgoTransactionGenTemplate(minAssets = 1)
 
+  def boxesHolderGenOfSize(numBoxes:Int): Gen[BoxHolder] = Gen.listOfN(numBoxes, ergoBoxGenForTokens(Seq(), trueLeafGen))
+    .map(l => BoxHolder(l))
+
   lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, ergoBoxGenForTokens(Seq(), trueLeafGen))
     .map(l => BoxHolder(l))
 

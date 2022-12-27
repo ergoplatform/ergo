@@ -22,10 +22,10 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
   }
 
   property("registerManifestToDownload + getUtxoSetSnapshotDownloadPlan + getChunkIdsToDownload") {
-    val bh     = boxesHolderGen.sample.get
+    val bh     = boxesHolderGenOfSize(65536).sample.get
     val us     = createUtxoState(bh, parameters)
     val (manifest, subtrees) = us.slicedTree()
-    println(s"Subtrees: ${subtrees.size}")
+    println("Subtrees: " + subtrees.size)
     val snapshotHeight = 1
     val blockId = ModifierId @@ Algos.encode(Array.fill(32)(Random.nextInt(100).toByte))
     utxoSetSnapshotProcessor.registerManifestToDownload(manifest, snapshotHeight, Seq.empty)
@@ -43,10 +43,10 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
     }
     utxoSetSnapshotProcessor.downloadedChunksIterator().toSeq.map(s => ModifierId @@ Algos.encode(s.id)) shouldBe subtreeIds
     val restoredState = utxoSetSnapshotProcessor.createPersistentProver(us.store, blockId).get
-    restoredState.checkTree()
     bh.sortedBoxes.foreach { box =>
       restoredState.unauthenticatedLookup(box.id).isDefined shouldBe true
     }
+    restoredState.checkTree(postProof = false)
   }
 
 }

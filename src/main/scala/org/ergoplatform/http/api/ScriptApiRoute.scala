@@ -18,8 +18,8 @@ import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
-import sigmastate.lang.SigmaCompiler
+import sigmastate.eval.CompiletimeIRContext
+import sigmastate.lang.{SigmaCompiler, CompilerResult}
 import sigmastate.interpreter.Interpreter
 import sigmastate.serialization.ValueSerializer
 

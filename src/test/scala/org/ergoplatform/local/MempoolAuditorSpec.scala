@@ -1,22 +1,23 @@
 package org.ergoplatform.local
 
-import akka.actor.{ActorRef, ActorSystem}
-import akka.testkit.{TestActorRef, TestProbe}
+import akka.actor.{ActorSystem, ActorRef}
+import akka.testkit.{TestProbe, TestActorRef}
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
-import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef}
+import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, Constants}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
-import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
+import org.ergoplatform.utils.{NodeViewTestOps, MempoolTestHelpers, RandomWrapper, ErgoTestHelpers}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction, RecheckMempool}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
+import sigmastate.lang.SigmaCompiler
 
 import scala.concurrent.duration._
 import sigmastate.lang.Terms.ValueOps
@@ -54,7 +55,8 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     boxes.nonEmpty shouldBe true
 
     val script = s"{sigmaProp(HEIGHT == ${genesis.height})}"
-    val prop = ErgoScriptPredef.compileWithCosting(emptyEnv, script, ErgoAddressEncoder.MainnetNetworkPrefix)
+    val compiler = new SigmaCompiler(ErgoAddressEncoder.MainnetNetworkPrefix)
+    val prop = compiler.compile(emptyEnv, script).buildTree
     val tree = ErgoTree.fromProposition(prop.asSigmaProp)
 
     val bs = ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(tree)

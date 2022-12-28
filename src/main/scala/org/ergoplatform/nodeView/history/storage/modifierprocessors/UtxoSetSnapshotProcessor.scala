@@ -222,6 +222,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
                              blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = Try {
     val manifest = _manifest.get //todo: .get
     val np = NodeParameters(32, None, 32) // todo: use constants
+    // todo: recreate database?
     val ldbStorage = new VersionedLDBAVLStorage[Digest32, HF](stateStore, np)
     log.info("Starting UTXO set snapshot transfer into state database")
     //todo: form state context correctly?

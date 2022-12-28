@@ -33,7 +33,7 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
   private val fixedSizeValueMode = nodeParameters.valueSize.isDefined
 
   def restorePrunedProver(): Try[BatchAVLProver[D, HF]] = {
-    restorePrunedTopNode().map {recoveredTop =>
+    restorePrunedTopNode().map { recoveredTop =>
       new BatchAVLProver(nodeParameters.keySize, nodeParameters.valueSize, Some(recoveredTop))(hf)
     }
   }
@@ -82,21 +82,20 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
     val rootNode = manifest.root
     val rootNodeHeight = manifest.rootHeight
     val digestWrapper = VersionedLDBAVLStorage.digest(rootNode, rootNodeHeight)
-    val indexes = Iterator(TopNodeKey -> nodeKey(rootNode), TopNodeHeight -> Ints.toByteArray(rootNodeHeight))
-    val nodesIterator = visitedNodesSerializer(manifest, chunks)
-
-    store.update(digestWrapper, Nil, toUpdate = indexes ++ nodesIterator ++ additionalData)
+    val indices = Iterator(TopNodeKey -> nodeKey(rootNode), TopNodeHeight -> Ints.toByteArray(rootNodeHeight))
+    val nodesIterator = serializedAllNodes(manifest, chunks)
+    store.update(digestWrapper, toRemove = Nil, toUpdate = indices ++ nodesIterator ++ additionalData)
   }
 
-  private def visitedNodesSerializer(manifest: BatchAVLProverManifest[D],
-                                     chunks: Iterator[BatchAVLProverSubtree[D]]) = {
+  private def serializedAllNodes(manifest: BatchAVLProverManifest[D],
+                              chunks: Iterator[BatchAVLProverSubtree[D]]) = {
     def idCollector(node: ProverNodes[D],
                     acc: Iterator[(Array[Byte], Array[Byte])]): Iterator[(Array[Byte], Array[Byte])] = {
       val pair: (Array[Byte], Array[Byte]) = (nodeKey(node), toBytes(node))
       node match {
         case n: ProxyInternalNode[D] if n.isEmpty =>
           acc ++ Iterator(pair)
-        case i : InternalProverNode[D] =>
+        case i: InternalProverNode[D] =>
           acc ++ Iterator(pair) ++ idCollector(i.left, acc) ++ idCollector(i.right, acc)
         case _: ProverLeaf[D] =>
           acc ++ Iterator(pair)
@@ -129,6 +128,8 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
   private def toBytes(node: ProverNodes[D]): Array[Byte] = {
     val builder = new mutable.ArrayBuilder.ofByte;
     node match {
+      case n: ProxyInternalNode[D] =>
+        builder += InternalNodePrefix += n.balance ++= n.key ++= n.leftLabel ++= n.rightLabel
       case n: InternalProverNode[D] =>
         builder += InternalNodePrefix += n.balance ++= n.key ++= n.left.label ++= n.right.label
       case n: ProverLeaf[D] =>

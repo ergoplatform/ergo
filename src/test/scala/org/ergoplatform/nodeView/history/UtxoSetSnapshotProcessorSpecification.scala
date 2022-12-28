@@ -2,11 +2,14 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
+import org.ergoplatform.nodeView.state.{StateConstants, UtxoState}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.HistoryTestHelpers
+import scorex.core.VersionTag
 import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.hash.Digest32
+import scorex.db.LDBVersionedStore
 import scorex.util.ModifierId
 
 import scala.util.Random
@@ -22,7 +25,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
   }
 
   property("registerManifestToDownload + getUtxoSetSnapshotDownloadPlan + getChunkIdsToDownload") {
-    val bh     = boxesHolderGenOfSize(65536).sample.get
+    val bh     = boxesHolderGenOfSize(32 * 1024).sample.get
     val us     = createUtxoState(bh, parameters)
     val (manifest, subtrees) = us.slicedTree()
     println("Subtrees: " + subtrees.size)
@@ -42,11 +45,18 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
       utxoSetSnapshotProcessor.registerDownloadedChunk(subtree.id, serializer.subtreeToBytes(subtree))
     }
     utxoSetSnapshotProcessor.downloadedChunksIterator().toSeq.map(s => ModifierId @@ Algos.encode(s.id)) shouldBe subtreeIds
-    val restoredState = utxoSetSnapshotProcessor.createPersistentProver(us.store, blockId).get
+
+    val dir = createTempDir
+    val store = new LDBVersionedStore(dir, initialKeepVersions = 100)
+    val restoredProver = utxoSetSnapshotProcessor.createPersistentProver(store, blockId).get
     bh.sortedBoxes.foreach { box =>
-      restoredState.unauthenticatedLookup(box.id).isDefined shouldBe true
+      restoredProver.unauthenticatedLookup(box.id).isDefined shouldBe true
     }
-    restoredState.checkTree(postProof = false)
+    restoredProver.checkTree(postProof = false)
+    val restoredState = new UtxoState(restoredProver, version = VersionTag @@ blockId, store, StateConstants(settings))
+    bh.sortedBoxes.foreach { box =>
+      restoredState.boxById(box.id).isDefined shouldBe true
+    }
   }
 
 }

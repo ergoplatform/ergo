@@ -837,8 +837,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def requestMoreChunksIfNeeded(hr: ErgoHistory): Unit = {
     hr.getUtxoSetSnapshotDownloadPlan() match {
       case Some(downloadPlan) =>
-        if (downloadPlan.downloadingChunks < 50) {
-          (1 to 10).foreach { _ =>
+        if (downloadPlan.downloadingChunks < 25) {
+          (1 to 5).foreach { _ =>
             val toRequest = hr.getChunkIdsToDownload(5)
             hr.getRandomPeerToDownloadChunks() match {
               case Some(remote) => toRequest.foreach {
@@ -890,7 +890,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.info(s"Got utxo snapshot chunk, id: ${Algos.encode(subtree.id)}, size: ${serializedChunk.length}")  //todo: change to debug on release
       //  log.info(s"Awaiting ${requestedSubtrees.size} chunks, in queue ${expectedSubtrees.size} chunks")//todo: change to debug on release
         hr.registerDownloadedChunk(subtree.id, serializedChunk)
-        if (downloadPlan.map(_.fullyDownloaded).getOrElse(false)) {
+        if (downloadPlan.map(_.fullyDownloaded).getOrElse(false) && !hr.isUtxoSnapshotApplied) {
           val h = downloadPlan.get.snapshotHeight  // todo: .get
           val blockId = hr.bestHeaderIdAtHeight(h).get // todo: .get
           viewHolderRef ! InitStateFromSnapshot(h, blockId)
@@ -1089,19 +1089,27 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
           if (checksDone < maxDeliveryChecks) {
-            // randomly choose a peer for another download attempt
-            val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
-              getPeersForDownloadingHeaders(peer).toSeq
-            } else if (modifierTypeId == UTXOSnapshotChunk.modifierTypeId) {
-              hr.getPeersToDownloadChunks()
+            if(modifierTypeId == UTXOSnapshotChunk.modifierTypeId){
+              val newPeerOpt = hr.getRandomPeerToDownloadChunks()
+              log.info(s"Rescheduling request for UTXO set chunk $modifierId , new peer $newPeerOpt")
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+              newPeerOpt match {
+                case Some(newPeer) => requestUtxoSetChunk (Digest32 @@ Algos.decode (modifierId).get, newPeer)
+                case None => log.warn(s"No peer found to download UTXO set chunk $modifierId")
+              }
             } else {
-              getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
+              // randomly choose a peer for another download attempt
+              val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
+                getPeersForDownloadingHeaders(peer).toSeq
+              } else {
+                getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
+              }
+              val newPeerIndex = scala.util.Random.nextInt(newPeerCandidates.size)
+              val newPeer = newPeerCandidates(newPeerIndex)
+              log.info(s"Rescheduling request for $modifierId , new peer $newPeer")
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+              requestBlockSection(modifierTypeId, Seq(modifierId), newPeer, checksDone)
             }
-            val newPeerIndex = scala.util.Random.nextInt(newPeerCandidates.size)
-            val newPeer = newPeerCandidates(newPeerIndex)
-            log.info(s"Rescheduling request for $modifierId , new peer $newPeer")
-            deliveryTracker.setUnknown(modifierId, modifierTypeId)
-            requestBlockSection(modifierTypeId, Seq(modifierId), newPeer, checksDone)
           } else {
             log.error(s"Exceeded max delivery attempts($maxDeliveryChecks) limit for $modifierId")
             if (modifierTypeId == Header.modifierTypeId) {

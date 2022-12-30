@@ -280,15 +280,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   def processStateSnapshot: Receive = {
     case InitStateFromSnapshot(height, blockId) =>
-      val store = minimalState().store
-      history().createPersistentProver(store, blockId) match {
-        //todo: pass metadata
-        case Success(pp) =>
-          log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
-          history().utxoSnapshotApplied(height)
-          val newState = new UtxoState(pp, version = VersionTag @@ blockId, store, StateConstants(settings))
-          updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
-        case Failure(_) => ???
+      if (!history().isUtxoSnapshotApplied) {
+        val store = minimalState().store
+        history().createPersistentProver(store, blockId) match {
+          //todo: pass metadata
+          case Success(pp) =>
+            log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
+            history().utxoSnapshotApplied(height)
+            val newState = new UtxoState(pp, version = VersionTag @@ blockId, store, StateConstants(settings))
+            updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+          case Failure(_) => ???
+        }
       }
 
   }

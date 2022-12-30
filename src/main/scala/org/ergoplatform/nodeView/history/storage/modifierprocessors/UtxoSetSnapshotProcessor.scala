@@ -37,6 +37,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   var _utxoSnapshotApplied = false //todo: persistence?
 
+  def isUtxoSnapshotApplied = _utxoSnapshotApplied
   def utxoSnapshotApplied(height: Height): Unit = {
     _utxoSnapshotApplied = true
     minimalFullBlockHeightVar = height + 1
@@ -78,8 +79,6 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
         }*/
     }
   }
-
-  def getPeersToDownloadChunks(): Seq[ConnectedPeer] = _peersToDownload
 
   def getRandomPeerToDownloadChunks(): Option[ConnectedPeer] = {
     if (_peersToDownload.nonEmpty) {

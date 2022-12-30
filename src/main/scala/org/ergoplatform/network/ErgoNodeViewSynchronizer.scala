@@ -882,6 +882,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def processUtxoSnapshotChunk(serializedChunk: Array[Byte],
                                          hr: ErgoHistory,
                                          remote: ConnectedPeer): Unit = {
+    //todo: check if subtree was requested, penalize remote is not so
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.subtreeFromBytes(serializedChunk, 32) match {
       case Success(subtree) =>
@@ -890,10 +891,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.info(s"Got utxo snapshot chunk, id: ${Algos.encode(subtree.id)}, size: ${serializedChunk.length}")  //todo: change to debug on release
       //  log.info(s"Awaiting ${requestedSubtrees.size} chunks, in queue ${expectedSubtrees.size} chunks")//todo: change to debug on release
         hr.registerDownloadedChunk(subtree.id, serializedChunk)
-        if (downloadPlan.map(_.fullyDownloaded).getOrElse(false) && !hr.isUtxoSnapshotApplied) {
-          val h = downloadPlan.get.snapshotHeight  // todo: .get
-          val blockId = hr.bestHeaderIdAtHeight(h).get // todo: .get
-          viewHolderRef ! InitStateFromSnapshot(h, blockId)
+        if (downloadPlan.map(_.fullyDownloaded).getOrElse(false)) {
+          if (!hr.isUtxoSnapshotApplied) {
+            val h = downloadPlan.get.snapshotHeight // todo: .get
+            val blockId = hr.bestHeaderIdAtHeight(h).get // todo: .get
+            viewHolderRef ! InitStateFromSnapshot(h, blockId)
+          } else {
+            log.warn("UTXO set snapshot already applied, double application attemt")
+          }
         } else{
           requestMoreChunksIfNeeded(hr)
         }
@@ -1089,12 +1094,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
           if (checksDone < maxDeliveryChecks) {
-            if(modifierTypeId == UTXOSnapshotChunk.modifierTypeId){
+            if (modifierTypeId == UTXOSnapshotChunk.modifierTypeId) {
               val newPeerOpt = hr.getRandomPeerToDownloadChunks()
               log.info(s"Rescheduling request for UTXO set chunk $modifierId , new peer $newPeerOpt")
               deliveryTracker.setUnknown(modifierId, modifierTypeId)
               newPeerOpt match {
-                case Some(newPeer) => requestUtxoSetChunk (Digest32 @@ Algos.decode (modifierId).get, newPeer)
+                case Some(newPeer) => requestUtxoSetChunk(Digest32 @@ Algos.decode(modifierId).get, newPeer)
                 case None => log.warn(s"No peer found to download UTXO set chunk $modifierId")
               }
             } else {

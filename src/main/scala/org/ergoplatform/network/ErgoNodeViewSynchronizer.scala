@@ -894,18 +894,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     serializer.subtreeFromBytes(serializedChunk, 32) match {
       case Success(subtree) =>
         deliveryTracker.setUnknown(ModifierId @@ Algos.encode(subtree.id), UTXOSnapshotChunk.modifierTypeId)
-        val downloadPlanOpt = hr.getUtxoSetSnapshotDownloadPlan() // todo: match for optional result
         log.info(s"Got utxo snapshot chunk, id: ${Algos.encode(subtree.id)}, size: ${serializedChunk.length}")  //todo: change to debug on release?
-        log.info(s"Downloaded chunks: ${downloadPlanOpt.map(_.downloadedChunkIds.size)}, true: ${downloadPlanOpt.map(_.downloadedChunkIds.filter(_ == true).size)}") //todo: remove after tests
         hr.registerDownloadedChunk(subtree.id, serializedChunk)
-        log.info(s"After! Downloaded chunks: ${downloadPlanOpt.map(_.downloadedChunkIds.size)}, true: ${downloadPlanOpt.map(_.downloadedChunkIds.filter(_ == true).size)}") //todo: remove after tests
 
-        //todo: remove after testing
-        if (downloadPlanOpt.map(p => p.downloadedChunkIds.size == p.expectedChunkIds.size).getOrElse(false)) {
-          val notDownloaded = downloadPlanOpt.get.downloadedChunkIds.filter(_ == true)
-          log.info("Not downloaded yet: " + notDownloaded.size, " plan: " + downloadPlanOpt.get)
-        }
-
+        val downloadPlanOpt = hr.getUtxoSetSnapshotDownloadPlan() // todo: match for optional result
         if (downloadPlanOpt.map(_.fullyDownloaded).getOrElse(false)) {
           if (!hr.isUtxoSnapshotApplied) {
             val h = downloadPlanOpt.get.snapshotHeight // todo: .get

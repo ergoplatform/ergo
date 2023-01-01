@@ -822,7 +822,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  //todo: clear the table below
+  /**
+    * UTXO set snapshot manifests found in the p2p are stored in this table. The table is cleared when manifest
+    * available for download from at least min number of peers required
+    */
   private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
 
   protected def processSnapshotsInfo(hr: ErgoHistory, snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
@@ -868,6 +871,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           case Some(height) =>
             log.info(s"Going to download chunks for manifest ${Algos.encode(manifest.id)} at height $height from $peersToDownload")
             hr.registerManifestToDownload(manifest, height, peersToDownload)
+            availableManifests.clear()
             requestMoreChunksIfNeeded(hr)
           case None =>
             log.error(s"No height found for manifest ${Algos.encode(manifest.id)}")

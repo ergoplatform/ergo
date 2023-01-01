@@ -832,7 +832,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
       log.debug(s"Got manifest $manifestId for height $height from $remote")
       val existingOffers = availableManifests.getOrElse(height, Seq.empty)
-      availableManifests.put(height, existingOffers :+ (remote -> manifestId))
+      if (!existingOffers.exists(_._1 == remote)) {
+        log.info(s"Found new manifest ${Algos.encode(manifestId)} for height $height at $remote")
+        availableManifests.put(height, existingOffers :+ (remote -> manifestId))
+      }
     }
     checkUtxoSetManifests(hr)
   }

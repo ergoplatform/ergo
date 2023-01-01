@@ -866,8 +866,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val peersToDownload: Seq[ConnectedPeer] = manifestRecords.flatMap(_._2.map(_._1)).toSeq
         heightOfManifest match {
           case Some(height) =>
+            log.info(s"Going to download chunks for manifest ${Algos.encode(manifest.id)} at height $height from $peersToDownload")
             hr.registerManifestToDownload(manifest, height, peersToDownload)
-            log.info(s"Going to download chunks for manifest ${Algos.encode(manifest.id)} at height $height")
             requestMoreChunksIfNeeded(hr)
           case None =>
             log.error(s"No height found for manifest ${Algos.encode(manifest.id)}")

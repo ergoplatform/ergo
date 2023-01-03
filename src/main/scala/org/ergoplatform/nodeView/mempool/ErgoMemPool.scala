@@ -117,12 +117,6 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     new ErgoMemPool(pool.remove(unconfirmedTransaction), updStats, sortingOption)
   }
 
-  def filter(condition: UnconfirmedTransaction => Boolean): ErgoMemPool = {
-    new ErgoMemPool(pool.filter(condition), stats, sortingOption)
-  }
-
-  def filter(txs: Seq[UnconfirmedTransaction]): ErgoMemPool = filter(t => !txs.exists(_.transaction.id == t.transaction.id))
-
   /**
     * Invalidate transaction and delete it from pool
     *
@@ -130,6 +124,13 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     */
   def invalidate(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
     new ErgoMemPool(pool.invalidate(unconfirmedTransaction), stats, sortingOption)
+  }
+
+  def invalidate(unconfirmedTransactionId: ModifierId): ErgoMemPool = {
+    pool.get(unconfirmedTransactionId) match {
+      case Some(utx) => new ErgoMemPool(pool.invalidate(utx), stats, sortingOption)
+      case None => this
+    }
   }
 
   /**

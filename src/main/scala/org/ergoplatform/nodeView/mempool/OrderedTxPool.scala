@@ -133,7 +133,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     */
   def canAccept(unconfirmedTx: UnconfirmedTransaction): Boolean = {
     val tx = unconfirmedTx.transaction
-    !contains(tx.id) && size <= mempoolCapacity
+    !contains(tx.id) && !isInvalidated(tx.id) && size <= mempoolCapacity
   }
 
   /**

@@ -246,10 +246,11 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime)
           }
         } else {
-          val contains = this.contains(tx.id)
-          val msg = if(contains) {
+          val msg = if (this.contains(tx.id)) {
             s"Pool can not accept transaction ${tx.id}, it is already in the mempool"
-          } else if(pool.size == settings.nodeSettings.mempoolCapacity) {
+          } else if (this.isInvalidated(tx.id)) {
+            s"Pool can not accept transaction ${tx.id}, it is already invalidated"
+          } else if (pool.size == settings.nodeSettings.mempoolCapacity) {
             s"Pool can not accept transaction ${tx.id}, the mempool is full"
           } else {
             s"Pool can not accept transaction ${tx.id}"

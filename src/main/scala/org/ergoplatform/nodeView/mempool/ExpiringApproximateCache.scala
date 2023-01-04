@@ -43,7 +43,7 @@ case class ExpiringApproximateCache(
     BloomFilter.create[String](
       Funnels.stringFunnel(Charset.forName("UTF-8")),
       frontCacheMaxSize,
-      0.005d   // 0.5 % false positive rate
+      0.001d   // 0.1 % false positive rate
     )
 
   /**

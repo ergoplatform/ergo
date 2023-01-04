@@ -55,7 +55,7 @@ class ExpiringApproximateCacheSpec
   it should "have a fixed size expiring cache before bloom filters" in {
     val cache = ExpiringApproximateCache.empty(
       frontCacheSize            = 100,
-      frontCacheExpiration      = 500.millis
+      frontCacheExpiration      = 50.millis
     )
     // let's add 100 elems directly to front cache
     val fullCache =
@@ -67,34 +67,23 @@ class ExpiringApproximateCacheSpec
     fullCache.frontCache.size shouldBe 100
     // now let's add another element which won't with to front cache so it goes to bloom filters
     val updatedCache = fullCache.put("101")
-    updatedCache.frontCache.size shouldBe 100
-    updatedCache.frontCache.contains("101") shouldBe false
-    assert(updatedCache.mightContain("101"), s"101 should be in bloom filter")
+    updatedCache.frontCache.size shouldBe 1
+    updatedCache.frontCache.contains("101") shouldBe true
+    assert(updatedCache.mightContain("100"), s"100 should be in bloom filter")
+
+    val expiringCache = (102 to 200).map(_.toString).foldLeft(updatedCache) { case (acc, n) =>
+      acc.put(n)
+    }
+
+    expiringCache.frontCache.size shouldBe 100
 
     // test that all elements in front cache expire
-    Thread.sleep(550)
-    updatedCache.put("102").frontCache.size shouldBe 1
-  }
-
-  it should "handle millions of realistic elements" in {
-    import org.scalactic._
-
-    val cache = ExpiringApproximateCache.empty(
-      frontCacheSize            = 10000,
-      frontCacheExpiration      = 1.hour
-    )
-    // let's add 2 millions of realistic elems to cache
-    val elemCount = 2000000
-    val uuids     = (1 to elemCount).map(_ => UUID.randomUUID().toString)
-    val fullCache = uuids.foldLeft(cache) { case (acc, n) => acc.put(n) }
-
-    val notIncludedUuids = uuids.filterNot(fullCache.mightContain)
-    notIncludedUuids shouldBe empty
-
-    implicit val approxEquality: Equality[Int] =
-      TolerantNumerics.tolerantIntEquality(tolerance = 5000)
-
-    fullCache.approximateElementCount.toInt === elemCount
+    Thread.sleep(200)
+    val expriredCache = expiringCache.put("201")
+    expriredCache.frontCache.size shouldBe 1
+    // expired elements are not in the filters as well
+    val fp = (102 to 200).map(_.toString).count(expriredCache.mightContain)
+    (fp < 5) shouldBe true // no more than 5% false positives, with some extra buffer given
   }
 
   it should "overflow properly" in {
@@ -102,12 +91,16 @@ class ExpiringApproximateCacheSpec
       frontCacheSize            = 10000,
       frontCacheExpiration      = 1.hour
     )
-    // let's add 2 millions of realistic elems to cache
-    val elemCount = 200000
+    // let's add 2M of realistic elems to cache
+    val elemCount = 2000000
     val uuids     = (1 to elemCount).map(_ => UUID.randomUUID().toString)
     val fullCache = uuids.foldLeft(cache) { case (acc, n) => acc.put(n) }
 
     uuids.forall(fullCache.mightContain) shouldBe false
     uuids.takeRight(10000).forall(fullCache.mightContain) shouldBe true // last elements there
+    // first ids forgotten, except of false positives (with some buffer we add)
+    val fp = uuids.take(10000).count(id => fullCache.mightContain(id))
+    (fp < 100) shouldBe true // we allow up to 1% false positives
   }
+
 }

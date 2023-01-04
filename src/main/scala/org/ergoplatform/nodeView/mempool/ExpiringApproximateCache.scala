@@ -41,7 +41,7 @@ case class ExpiringApproximateCache(
     BloomFilter.create[String](
       Funnels.stringFunnel(Charset.forName("UTF-8")),
       bloomFilterApproxElemCount,
-      0.05d
+      0.005d
     )
 
   /**

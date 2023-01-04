@@ -132,5 +132,5 @@ object ExpiringApproximateCache {
       frontCache                 = TreeMap.empty[String, Long]
     )
   }
-  
+
 }

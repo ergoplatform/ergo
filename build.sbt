@@ -36,7 +36,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "5.0.2-144-a98447dd-SNAPSHOT"
+val sigmaStateVersion = "5.0.3"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)

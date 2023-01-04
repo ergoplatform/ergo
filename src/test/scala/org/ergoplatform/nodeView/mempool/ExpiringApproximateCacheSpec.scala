@@ -102,4 +102,20 @@ class ExpiringApproximateCacheSpec
 
     fullCache.approximateElementCount.toInt === elemCount
   }
+
+  it should "overflow properly" in {
+    val cache = ExpiringApproximateCache.empty(
+      bloomFilterCapacity       = 50000,
+      bloomFilterExpirationRate = 0.25,
+      frontCacheSize            = 10000,
+      frontCacheExpiration      = 1.hour
+    )
+    // let's add 2 millions of realistic elems to cache
+    val elemCount = 200000
+    val uuids     = (1 to elemCount).map(_ => UUID.randomUUID().toString)
+    val fullCache = uuids.foldLeft(cache) { case (acc, n) => acc.put(n) }
+
+    uuids.forall(fullCache.mightContain) shouldBe false
+    uuids.takeRight(10000).forall(fullCache.mightContain) shouldBe true // last elements there
+  }
 }

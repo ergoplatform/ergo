@@ -1,6 +1,8 @@
 package org.ergoplatform.nodeView.mempool
 
 import com.google.common.hash.{BloomFilter, Funnels}
+import scorex.util.ScorexLogging
+
 import java.nio.charset.Charset
 import scala.collection.immutable.TreeMap
 import scala.concurrent.duration.FiniteDuration
@@ -35,13 +37,15 @@ case class ExpiringApproximateCache(
   frontCacheMaxSize: Int,
   frontCacheElemExpirationMs: Long,
   frontCache: TreeMap[String, Long]
-) extends ApproximateCacheLike[String] {
+) extends ApproximateCacheLike[String] with ScorexLogging {
 
-  private def createNewFilter =
+  require(bloomFilterApproxElemCount >= frontCacheMaxSize, "Bloom filter is smaller than front cache")
+
+  private def createNewFilter: BloomFilter[String] =
     BloomFilter.create[String](
       Funnels.stringFunnel(Charset.forName("UTF-8")),
       bloomFilterApproxElemCount,
-      0.005d
+      0.001d   // 0.1 % false positive rate
     )
 
   /**
@@ -51,36 +55,33 @@ case class ExpiringApproximateCache(
     */
   override def put(elem: String): ExpiringApproximateCache = {
     val now = System.currentTimeMillis()
-    val updatedCache = frontCache.dropWhile {
-      case (_, timestamp) =>
-        now - timestamp > frontCacheElemExpirationMs
-    }
+    var updatedCache = frontCache
+    var updatedFilters = bloomFilterQueue
 
-    if (updatedCache.size < frontCacheMaxSize) {
-      this.copy(frontCache = updatedCache + (elem -> now))
-    } else {
-      bloomFilterQueue.headOption match {
-        case None =>
-          val bf = createNewFilter
-          bf.put(elem)
-          this.copy(bloomFilterQueue = Vector(0L -> bf))
-        case Some((_, headBf))
-            if headBf.approximateElementCount() < bloomFilterApproxElemCount =>
-          headBf.put(elem)
-          this
-        case Some((idx, _)) =>
-          val newIdx = idx + 1
-          val bf     = createNewFilter
-          bf.put(elem)
-          val newFilters =
-            if (bloomFilterQueue.size >= bloomFilterQueueSize) {
+    if (frontCache.size == frontCacheMaxSize) {
+      val filteredCache = frontCache.filter(kv => now - kv._2 < frontCacheElemExpirationMs)
+      if (filteredCache.size > frontCacheMaxSize / 2) {
+        val bf = createNewFilter
+        filteredCache.keysIterator.foreach(bf.put)
+        updatedCache = TreeMap.empty
+
+        bloomFilterQueue.headOption match {
+          case None => updatedFilters = Vector(0L -> bf)
+          case Some((idx, _)) =>
+            val normalizedFilters = if (bloomFilterQueue.size >= bloomFilterQueueSize) {
               bloomFilterQueue.dropRight(1)
             } else {
               bloomFilterQueue
             }
-          this.copy(bloomFilterQueue = (newIdx -> bf) +: newFilters)
+            updatedFilters = ((idx + 1) -> bf) +: normalizedFilters
+        }
+      } else {
+        updatedCache = filteredCache
       }
     }
+
+    log.debug(s"Adding $elem to front cache, its size after operation ${updatedCache.size + 1} ")
+    this.copy(frontCache = updatedCache + (elem -> now), bloomFilterQueue = updatedFilters)
   }
 
   /**

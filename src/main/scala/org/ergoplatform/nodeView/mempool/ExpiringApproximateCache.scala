@@ -61,6 +61,7 @@ case class ExpiringApproximateCache(
     if (frontCache.size == frontCacheMaxSize) {
       val filteredCache = frontCache.filter(kv => now - kv._2 < frontCacheElemExpirationMs)
       if (filteredCache.size > frontCacheMaxSize / 2) {
+        log.debug(s"Reset front cache, ${filteredCache.size} elements will be put into Bloom filter")
         val bf = createNewFilter
         filteredCache.keysIterator.foreach(bf.put)
         updatedCache = TreeMap.empty
@@ -76,6 +77,7 @@ case class ExpiringApproximateCache(
             updatedFilters = ((idx + 1) -> bf) +: normalizedFilters
         }
       } else {
+        log.debug(s"Cleared expiring front cache, old size ${updatedCache.size}, new size ${filteredCache.size}")
         updatedCache = filteredCache
       }
     }
@@ -130,4 +132,5 @@ object ExpiringApproximateCache {
       frontCache                 = TreeMap.empty[String, Long]
     )
   }
+  
 }

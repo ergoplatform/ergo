@@ -24,7 +24,6 @@ sealed trait ApproximateCacheLike[T] {
   * Ie. we expire whole bloom filters instead of expiring elements and we check all bloom filters for element presence
   *
   * @param bloomFilterQueueSize how many bloom filters at maximum to keep in FIFO queue
-  * @param bloomFilterApproxElemCount approximate element size of a single bloom filter
   * @param bloomFilterQueue fifo collection of bloom filters with tracking index
   * @param frontCacheMaxSize maximum number of elements to keep in cache, following elems are kept in bloom filters
   * @param frontCacheElemExpirationMs for how long to keep elems in cache
@@ -32,20 +31,19 @@ sealed trait ApproximateCacheLike[T] {
   */
 case class ExpiringApproximateCache(
   bloomFilterQueueSize: Int,
-  bloomFilterApproxElemCount: Int,
   bloomFilterQueue: Vector[(Long, BloomFilter[String])],
   frontCacheMaxSize: Int,
   frontCacheElemExpirationMs: Long,
   frontCache: TreeMap[String, Long]
 ) extends ApproximateCacheLike[String] with ScorexLogging {
 
-  require(bloomFilterApproxElemCount >= frontCacheMaxSize, "Bloom filter is smaller than front cache")
+  require(frontCacheMaxSize > 0)
 
   private def createNewFilter: BloomFilter[String] =
     BloomFilter.create[String](
       Funnels.stringFunnel(Charset.forName("UTF-8")),
-      bloomFilterApproxElemCount,
-      0.001d   // 0.1 % false positive rate
+      frontCacheMaxSize,
+      0.005d   // 0.5 % false positive rate
     )
 
   /**
@@ -67,7 +65,8 @@ case class ExpiringApproximateCache(
         updatedCache = TreeMap.empty
 
         bloomFilterQueue.headOption match {
-          case None => updatedFilters = Vector(0L -> bf)
+          case None =>
+            updatedFilters = Vector(0L -> bf)
           case Some((idx, _)) =>
             val normalizedFilters = if (bloomFilterQueue.size >= bloomFilterQueueSize) {
               bloomFilterQueue.dropRight(1)
@@ -105,27 +104,15 @@ case class ExpiringApproximateCache(
 object ExpiringApproximateCache {
 
   /**
-    * @param bloomFilterCapacity Maximum number of elements to store in bloom filters
-    * @param bloomFilterExpirationRate Non-zero fraction of 1 as a rate of element expiration when capacity is full,
-    *                                  the lower the more gradual expiration.
-    *                                  example : 0.1 is represented as 10 bloom filters expiring one by one
     * @param frontCacheSize Maximum number of elements to store in front-cache
     * @param frontCacheExpiration Maximum period to keep cached elements before expiration
     */
   def empty(
-             bloomFilterCapacity: Int,
-             bloomFilterExpirationRate: Double,
              frontCacheSize: Int,
              frontCacheExpiration: FiniteDuration
   ): ExpiringApproximateCache = {
-    require(
-      bloomFilterExpirationRate > 0 && bloomFilterExpirationRate < 1,
-      "expirationRate must be (0 - 1) exclusive"
-    )
     ExpiringApproximateCache(
-      bloomFilterQueueSize = Math.round(1 / bloomFilterExpirationRate).toInt,
-      bloomFilterApproxElemCount =
-        Math.round(bloomFilterCapacity * bloomFilterExpirationRate).toInt,
+      bloomFilterQueueSize       = 4,
       bloomFilterQueue           = Vector.empty,
       frontCacheMaxSize          = frontCacheSize,
       frontCacheElemExpirationMs = frontCacheExpiration.toMillis,

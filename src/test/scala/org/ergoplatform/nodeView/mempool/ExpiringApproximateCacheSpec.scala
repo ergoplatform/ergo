@@ -14,13 +14,10 @@ class ExpiringApproximateCacheSpec
 
   it should "behave as fixed sized FIFO collection of bloom filters" in {
     val cache = ExpiringApproximateCache.empty(
-      bloomFilterCapacity       = 500,
-      bloomFilterExpirationRate = 0.2,
-      frontCacheSize            = 0,
+      frontCacheSize            = 100,
       frontCacheExpiration      = 1.hour
     )
-    cache.bloomFilterQueueSize shouldBe 5
-    cache.bloomFilterApproxElemCount shouldBe 100
+    cache.bloomFilterQueueSize shouldBe 4
     val fullCache =
       (1 to 500).map(_.toString).foldLeft(cache) { case (acc, n) => acc.put(n) }
 
@@ -28,10 +25,12 @@ class ExpiringApproximateCacheSpec
       assert(fullCache.mightContain(n.toString), s"$n should be in bloom filter")
     }
 
-    fullCache.bloomFilterQueue.size shouldBe 5
+    println("size: " + fullCache.bloomFilterQueue.size)
+
+    fullCache.bloomFilterQueue.size shouldBe 4
     assert(
-      fullCache.bloomFilterQueue.map(_._1) == Vector(4, 3, 2, 1, 0),
-      "BF indexes must be 4-0"
+      fullCache.bloomFilterQueue.map(_._1) == Vector(3, 2, 1, 0),
+      "BF indexes must be 3-0"
     )
     assert(
       fullCache.approximateElementCount > 430,
@@ -41,9 +40,9 @@ class ExpiringApproximateCacheSpec
     // add some more elements over limit
     val newCache =
       (501 to 1000).map(_.toString).foldLeft(fullCache) { case (acc, n) => acc.put(n) }
-    newCache.bloomFilterQueue.size shouldBe 5
+    newCache.bloomFilterQueue.size shouldBe 4
     assert(
-      newCache.bloomFilterQueue.map(_._1) == Vector(9, 8, 7, 6, 5),
+      newCache.bloomFilterQueue.map(_._1) == Vector(8, 7, 6, 5),
       "BF indexes must be 9-5"
     )
     assert(newCache.approximateElementCount < 570, "Max 600 elements must be present")
@@ -55,8 +54,6 @@ class ExpiringApproximateCacheSpec
 
   it should "have a fixed size expiring cache before bloom filters" in {
     val cache = ExpiringApproximateCache.empty(
-      bloomFilterCapacity       = 500,
-      bloomFilterExpirationRate = 0.2,
       frontCacheSize            = 100,
       frontCacheExpiration      = 500.millis
     )
@@ -67,7 +64,6 @@ class ExpiringApproximateCacheSpec
     (1 to 100).foreach { n =>
       assert(fullCache.mightContain(n.toString), s"$n should be in front cache")
     }
-    fullCache.bloomFilterApproxElemCount shouldBe 100
     fullCache.frontCache.size shouldBe 100
     // now let's add another element which won't with to front cache so it goes to bloom filters
     val updatedCache = fullCache.put("101")
@@ -84,8 +80,6 @@ class ExpiringApproximateCacheSpec
     import org.scalactic._
 
     val cache = ExpiringApproximateCache.empty(
-      bloomFilterCapacity       = 10000000,
-      bloomFilterExpirationRate = 0.1,
       frontCacheSize            = 10000,
       frontCacheExpiration      = 1.hour
     )
@@ -105,8 +99,6 @@ class ExpiringApproximateCacheSpec
 
   it should "overflow properly" in {
     val cache = ExpiringApproximateCache.empty(
-      bloomFilterCapacity       = 50000,
-      bloomFilterExpirationRate = 0.25,
       frontCacheSize            = 10000,
       frontCacheExpiration      = 1.hour
     )

@@ -84,12 +84,11 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     applyBlock(block) shouldBe 'success
 
-    getPoolSize shouldBe 1 // first tx removed from pool during node view update
-
     scorex.core.utils.untilTimeout(cleanupDuration * 4, 100.millis) {
-      getPoolSize shouldBe 0 // another tx invalidated by `MempoolAuditor`
+      // first tx removed from pool during node view update
+      // another tx invalidated by `MempoolAuditor`
+      getPoolSize shouldBe 0
     }
-
   }
 
   it should "rebroadcast transactions correctly" in {

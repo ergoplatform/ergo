@@ -370,11 +370,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                               blocksApplied: Seq[BlockSection],
                               memPool: ErgoMemPool): ErgoMemPool = {
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
-    val rolledBackTxs = blocksRemoved
-                          .flatMap(extractTransactions)
-                          .filter(tx => !appliedTxs.exists(_.id == tx.id))
-                          .map(tx => UnconfirmedTransaction(tx, None))
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
+    val rolledBackTxs = blocksRemoved
+      .flatMap(extractTransactions)
+      .filter(tx => !appliedTxs.exists(_.id == tx.id))
+      .map(tx => UnconfirmedTransaction(tx, None))
     memPool.putWithoutCheck(rolledBackTxs)
   }
 

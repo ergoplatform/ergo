@@ -57,7 +57,10 @@ case class ExpiringApproximateCache(
     var updatedFilters = bloomFilterQueue
 
     if (frontCache.size == frontCacheMaxSize) {
+      // if the cache is full, we clear expired records
       val filteredCache = frontCache.filter(kv => now - kv._2 < frontCacheElemExpirationMs)
+
+      // if cache more than half-full still, move all the elements to a Bloom filter
       if (filteredCache.size > frontCacheMaxSize / 2) {
         log.debug(s"Reset front cache, ${filteredCache.size} elements will be put into Bloom filter")
         val bf = createNewFilter
@@ -103,16 +106,15 @@ case class ExpiringApproximateCache(
 
 object ExpiringApproximateCache {
 
+  private val BloomFiltersNumber = 4 // hard-coded Bloom filters number for all the cache instances
+
   /**
     * @param frontCacheSize Maximum number of elements to store in front-cache
     * @param frontCacheExpiration Maximum period to keep cached elements before expiration
     */
-  def empty(
-             frontCacheSize: Int,
-             frontCacheExpiration: FiniteDuration
-  ): ExpiringApproximateCache = {
+  def empty(frontCacheSize: Int, frontCacheExpiration: FiniteDuration): ExpiringApproximateCache = {
     ExpiringApproximateCache(
-      bloomFilterQueueSize       = 4,
+      bloomFilterQueueSize       = BloomFiltersNumber,
       bloomFilterQueue           = Vector.empty,
       frontCacheMaxSize          = frontCacheSize,
       frontCacheElemExpirationMs = frontCacheExpiration.toMillis,

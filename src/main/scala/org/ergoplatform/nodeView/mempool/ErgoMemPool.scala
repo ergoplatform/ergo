@@ -140,6 +140,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     }
   }
 
+  /**
+    * Check if transaction was invalidated earlier
+    */
   def isInvalidated(id: ModifierId): Boolean = pool.isInvalidated(id)
 
   /**

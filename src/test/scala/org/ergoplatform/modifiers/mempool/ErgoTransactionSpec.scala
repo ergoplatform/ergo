@@ -367,44 +367,47 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     assert(time > Timeout)
   }
 
-//  property("transaction cost") {
-//    def paramsWith(manualCost: Int) = Parameters(
-//      0,
-//      Parameters.DefaultParameters + (MaxBlockCostIncrease -> manualCost),
-//      ErgoValidationSettingsUpdate.empty
-//    )
-//
-//    val gen = validErgoTransactionGenTemplate(0, 0,10, trueLeafGen)
-//    val (from, tx) = gen.sample.get
-//    tx.statelessValidity().isSuccess shouldBe true
-//
-//    // calculate costs manually
-//    val initialCost: Long =
-//      tx.inputs.size * parameters.inputCost +
-//        tx.dataInputs.size * parameters.dataInputCost +
-//        tx.outputs.size * parameters.outputCost +
-//        10000
-//    val (outAssets, outAssetsNum) = tx.outAssetsTry.get
-//    val (inAssets, inAssetsNum) = ErgoBoxAssetExtractor.extractAssets(from).get
-//    val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * parameters.tokenAccessCost +
-//      (inAssets.size + outAssets.size) * parameters.tokenAccessCost
-//    val scriptsValidationCosts = tx.inputs.size * (CostTable.constCost + CostTable.logicCost + CostTable.logicCost + from.head.ergoTree.complexity)
-//    val manualCost: Int = (initialCost + totalAssetsAccessCost + scriptsValidationCosts).toInt
+  property("transaction cost") {
+    def paramsWith(manualCost: Int) = Parameters(
+      0,
+      Parameters.DefaultParameters + (MaxBlockCostIncrease -> manualCost),
+      ErgoValidationSettingsUpdate.empty
+    )
+
+    val gen = validErgoTransactionGenTemplate(0, 0,10, trueLeafGen)
+    val (from, tx) = gen.sample.get
+    tx.statelessValidity().isSuccess shouldBe true
+
+    // calculate costs manually
+    val initialCost: Long =
+      tx.inputs.size * parameters.inputCost +
+        tx.dataInputs.size * parameters.dataInputCost +
+        tx.outputs.size * parameters.outputCost +
+        ErgoInterpreter.interpreterInitCost
+    val (outAssets, outAssetsNum) = tx.outAssetsTry.get
+    val (inAssets, inAssetsNum) = ErgoBoxAssetExtractor.extractAssets(from).get
+    val totalAssetsAccessCost =
+      (outAssetsNum + inAssetsNum) * parameters.tokenAccessCost +
+      (inAssets.size + outAssets.size) * parameters.tokenAccessCost
+    val scriptsValidationCosts = tx.inputs.size + 1 // +1 for the block to JIT cost scaling
+    println(s"tx.inputs.size: ${tx.inputs.size}")
+    println(s"initialCost + totalAssetsAccessCost: ${initialCost + totalAssetsAccessCost}")
+    val approxCost: Int = (initialCost + totalAssetsAccessCost + scriptsValidationCosts).toInt
 
 
-    // check that validation pass if cost limit equals to manually calculated cost
-//    val sc = stateContextWith(paramsWith(manualCost))
-//    sc.currentParameters.maxBlockCost shouldBe manualCost
-//    val calculatedCost = tx.statefulValidity(from, IndexedSeq(), sc)(ErgoInterpreter(sc.currentParameters)).get
-//    manualCost shouldBe calculatedCost
+    // check that validation pass if cost limit equals to approximated cost
+    val sc = stateContextWith(paramsWith(approxCost))
+    sc.currentParameters.maxBlockCost shouldBe approxCost
+    val calculatedCost = tx.statefulValidity(from, IndexedSeq(), sc)(ErgoInterpreter(sc.currentParameters)).get
+    approxCost - calculatedCost <= 1 shouldBe true
 
-//    // transaction exceeds computations limit
-//    val sc2 = stateContextWith(paramsWith(manualCost - 1))
-//    tx.statefulValidity(from, IndexedSeq(), sc2)(ErgoInterpreter(sc2.currentParameters)) shouldBe 'failure
-//
-//    // transaction exceeds computations limit due to non-zero accumulated cost
-//    tx.statefulValidity(from, IndexedSeq(), sc, 1)(ErgoInterpreter(sc.currentParameters)) shouldBe 'failure
-//  }
+    // transaction exceeds computations limit
+    val sc2 = stateContextWith(paramsWith(approxCost - 1))
+    tx.statefulValidity(from, IndexedSeq(), sc2)(ErgoInterpreter(sc2.currentParameters)) shouldBe 'failure
+
+    // transaction exceeds computations limit due to non-zero accumulatedCost
+    tx.statefulValidity(from, IndexedSeq(), sc, accumulatedCost = 1)(ErgoInterpreter(sc.currentParameters)) shouldBe 'failure
+  }
 
   property("cost accumulated correctly across inputs") {
     val accInitCost = 100000

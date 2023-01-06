@@ -80,6 +80,7 @@ class ErgoInterpreter(params: ErgoLikeParameters)
 }
 
 object ErgoInterpreter {
+  val interpreterInitCost = 10000
 
   /** Creates an interpreter with the given parameters. */
   def apply(params: ErgoLikeParameters): ErgoInterpreter =

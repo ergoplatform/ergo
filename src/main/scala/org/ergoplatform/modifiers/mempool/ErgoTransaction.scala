@@ -363,7 +363,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
     val initialCost: Long = addExact(
-      10000, //CostTable.interpreterInitCost,
+      ErgoInterpreter.interpreterInitCost,
       multiplyExact(boxesToSpend.size, stateContext.currentParameters.inputCost),
       multiplyExact(dataBoxes.size, stateContext.currentParameters.dataInputCost),
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),

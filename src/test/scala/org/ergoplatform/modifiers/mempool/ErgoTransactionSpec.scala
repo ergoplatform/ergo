@@ -458,7 +458,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
         tx.inputs.size * parameters.inputCost +
           tx.dataInputs.size * parameters.dataInputCost +
           tx.outputs.size * parameters.outputCost +
-          10000 +
+          ErgoInterpreter.interpreterInitCost +
           assetsCost
 
       txCost shouldBe (accInitCost + initialCost + inputCost(tx, from) * inputsNum)

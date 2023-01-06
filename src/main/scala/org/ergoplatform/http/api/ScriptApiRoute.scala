@@ -1,16 +1,16 @@
 package org.ergoplatform.http.api
 
-import akka.actor.{ActorRefFactory, ActorRef}
+import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
-import org.ergoplatform.nodeView.ErgoReadersHolder.{Readers, GetReaders}
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
-import org.ergoplatform.http.api.requests.{ExecuteRequest, CryptoResult}
+import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -25,7 +25,7 @@ import sigmastate.serialization.ValueSerializer
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)

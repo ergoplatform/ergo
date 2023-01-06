@@ -80,6 +80,9 @@ class ErgoInterpreter(params: ErgoLikeParameters)
 }
 
 object ErgoInterpreter {
+  /** Initial cost of instantiating an interpreter and creating ErgoLikeContext.
+    * Added once per transaction.
+    */
   val interpreterInitCost = 10000
 
   /** Creates an interpreter with the given parameters. */

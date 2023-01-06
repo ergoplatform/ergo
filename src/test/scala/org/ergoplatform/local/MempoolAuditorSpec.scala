@@ -1,27 +1,27 @@
 package org.ergoplatform.local
 
-import akka.actor.{ActorSystem, ActorRef}
-import akka.testkit.{TestProbe, TestActorRef}
-import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+import akka.actor.{ActorRef, ActorSystem}
+import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, ErgoSettings, Constants}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
-import org.ergoplatform.utils.{NodeViewTestOps, MempoolTestHelpers, RandomWrapper, ErgoTestHelpers}
+import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction, RecheckMempool}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
 import sigmastate.lang.SigmaCompiler
-
-import scala.concurrent.duration._
 import sigmastate.lang.Terms.ValueOps
 import sigmastate.serialization.ErgoTreeSerializer
+
+import scala.concurrent.duration._
 
 class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers with MempoolTestHelpers {
   implicit lazy val context: IRContext = new RuntimeIRContext

@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionVal
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
-import scorex.core.serialization.{ScorexSerializer, BytesSerializable}
+import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
@@ -19,9 +19,9 @@ import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.eval.SigmaDsl
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import special.collection.{Coll}
+import special.collection.Coll
 
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 /**
   * State context with predicted header.

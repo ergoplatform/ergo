@@ -13,17 +13,18 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.utils.{ErgoPropertyTest, MempoolTestHelpers, WalletTestOps}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
 import org.ergoplatform.wallet.crypto.ErgoSignature
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
+import sigmastate.ErgoTreeBenchmarks.traversableColl
 import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
 import sigmastate.helpers.TestingHelpers.testBox
 import sigmastate.{SType, Values}
@@ -147,7 +148,7 @@ class ErgoWalletServiceSpec
             ErgoBox.R5 -> ByteArrayConstant("test-description".getBytes("UTF-8")),
             ErgoBox.R6 -> ByteArrayConstant("4".getBytes("UTF-8")),
           )
-//        validCandidate.additionalTokens.toMap shouldBe Map(ergoBox.id -> 1)
+        validCandidate.additionalTokens.toMap shouldBe Map(ergoBox.id -> 1)
         validCandidate.creationHeight shouldBe startHeight
         validCandidate.ergoTree shouldBe pks.head.script
     }

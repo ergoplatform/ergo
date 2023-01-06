@@ -5,12 +5,12 @@ import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
+import org.ergoplatform._
+import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform._
-import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -19,8 +19,8 @@ import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.CompiletimeIRContext
-import sigmastate.lang.{SigmaCompiler, CompilerResult}
 import sigmastate.interpreter.Interpreter
+import sigmastate.lang.{CompilerResult, SigmaCompiler}
 import sigmastate.serialization.ValueSerializer
 
 import scala.concurrent.Future

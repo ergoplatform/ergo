@@ -7,7 +7,7 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.ModifierId
 import sigmastate.AvlTreeData
 import sigmastate.TrivialProp.TrueProp
-import sigmastate.eval.{Colls, Digest32RType, IRContext}
+import sigmastate.eval.{Colls, Digest32RType}
 import sigmastate.helpers.TestingHelpers.testBox
 import sigmastate.helpers.{ContextEnrichingTestProvingInterpreter, ErgoLikeContextTesting, ErgoLikeTestInterpreter}
 import sigmastate.interpreter.Interpreter.emptyEnv
@@ -59,9 +59,6 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
       case _ =>
     }
   }
-
-  class TestingIRContext extends IRContext //with RuntimeCosting
-
 
   ignore("reemission rules test vectors") {
 

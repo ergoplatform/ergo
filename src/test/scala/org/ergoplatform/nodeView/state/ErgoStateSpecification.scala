@@ -160,16 +160,16 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     val txs = generateTxs
     val boxes = bh.boxes
     val stateContext = emptyStateContext
-    val expectedCost = 535995
+    val expectedCost = 185160
 
     // successful validation
     ErgoState.execTransactions(txs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe Valid(expectedCost)
 
     // cost limit exception expected when crossing MaxBlockCost
-    val tooManyTxs = txs ++ generateTxs
+    val tooManyTxs = (1 to 10).flatMap(_ => generateTxs)
     assert(
       ErgoState.execTransactions(tooManyTxs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))).errors.head.message.contains(
-        "Estimated execution cost 23533 exceeds the limit 23009"
+        "Accumulated cost of block transactions should not exceed <maxBlockCost>"
       )
     )
 

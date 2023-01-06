@@ -101,7 +101,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       compileSource(req.script, req.env).fold(
         e => BadRequest(e.getMessage),
         tree => {
-//          implicit val irc: IRContext = new RuntimeIRContext()
           val interpreter: ErgoLikeInterpreter = new ErgoLikeInterpreter()
           val res = Try(interpreter.fullReduction(tree, req.ctx.asInstanceOf[interpreter.CTX], Interpreter.emptyEnv))
           res.fold(

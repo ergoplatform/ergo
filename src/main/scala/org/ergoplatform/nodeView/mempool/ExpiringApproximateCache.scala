@@ -43,7 +43,7 @@ case class ExpiringApproximateCache(
     BloomFilter.create[String](
       Funnels.stringFunnel(Charset.forName("UTF-8")),
       frontCacheMaxSize,
-      0.001d   // 0.1 % false positive rate
+      0.001d   // 0.1 % false positive rate, per filter, as we use multiple filters, total FPR also to be multiplied
     )
 
   /**
@@ -105,8 +105,12 @@ case class ExpiringApproximateCache(
 }
 
 object ExpiringApproximateCache {
-
-  private val BloomFiltersNumber = 4 // hard-coded Bloom filters number for all the cache instances
+  /**
+   * Hard-coded Bloom filters number for all the cache instances.
+    * 4 filters is enough to store up to 5x elements of front cache in total,
+    * with small FPR still
+   */
+  private val BloomFiltersNumber = 4
 
   /**
     * @param frontCacheSize Maximum number of elements to store in front-cache

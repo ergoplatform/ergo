@@ -31,7 +31,7 @@ sealed trait ApproximateCacheLike[T] {
   */
 case class ExpiringApproximateCache(
   bloomFilterQueueSize: Int,
-  bloomFilterQueue: Vector[(Long, BloomFilter[String])],
+  bloomFilterQueue: Vector[BloomFilter[String]],
   frontCacheMaxSize: Int,
   frontCacheElemExpirationMs: Long,
   frontCache: TreeMap[String, Long]
@@ -69,14 +69,14 @@ case class ExpiringApproximateCache(
 
         bloomFilterQueue.headOption match {
           case None =>
-            updatedFilters = Vector(0L -> bf)
-          case Some((idx, _)) =>
+            updatedFilters = Vector(bf)
+          case Some(_) =>
             val normalizedFilters = if (bloomFilterQueue.size >= bloomFilterQueueSize) {
               bloomFilterQueue.dropRight(1)
             } else {
               bloomFilterQueue
             }
-            updatedFilters = ((idx + 1) -> bf) +: normalizedFilters
+            updatedFilters = bf +: normalizedFilters
         }
       } else {
         log.debug(s"Cleared expiring front cache, old size ${updatedCache.size}, new size ${filteredCache.size}")
@@ -92,7 +92,7 @@ case class ExpiringApproximateCache(
     * Returns True if the element might have been put in this Cache, False if this is definitely not the case.
     */
   override def mightContain(elem: String): Boolean =
-    frontCache.contains(elem) || bloomFilterQueue.exists(_._2.mightContain(elem))
+    frontCache.contains(elem) || bloomFilterQueue.exists(_.mightContain(elem))
 
   /**
     * Returns an estimate for the total number of distinct elements that have been added to this
@@ -100,7 +100,7 @@ case class ExpiringApproximateCache(
     */
   override def approximateElementCount: Long =
     frontCache.size + bloomFilterQueue.foldLeft(0L) {
-      case (acc, bf) => acc + bf._2.approximateElementCount()
+      case (acc, bf) => acc + bf.approximateElementCount()
     }
 }
 

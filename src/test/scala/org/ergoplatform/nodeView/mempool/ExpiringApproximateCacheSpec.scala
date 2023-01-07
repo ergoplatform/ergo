@@ -29,10 +29,6 @@ class ExpiringApproximateCacheSpec
 
     fullCache.bloomFilterQueue.size shouldBe 4
     assert(
-      fullCache.bloomFilterQueue.map(_._1) == Vector(3, 2, 1, 0),
-      "BF indexes must be 3-0"
-    )
-    assert(
       fullCache.approximateElementCount > 430,
       "At least 430 elements must be present"
     )
@@ -41,10 +37,6 @@ class ExpiringApproximateCacheSpec
     val newCache =
       (501 to 1000).map(_.toString).foldLeft(fullCache) { case (acc, n) => acc.put(n) }
     newCache.bloomFilterQueue.size shouldBe 4
-    assert(
-      newCache.bloomFilterQueue.map(_._1) == Vector(8, 7, 6, 5),
-      "BF indexes must be 9-5"
-    )
     assert(newCache.approximateElementCount < 570, "Max 600 elements must be present")
 
     (601 to 800).foreach { n =>

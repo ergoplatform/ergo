@@ -23,6 +23,9 @@ trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
 
   protected lazy val votingSettings: VotingSettings = chainSettings.voting
 
+  /**
+    * If the state is in its genesis version (before genesis block)
+    */
   def isGenesis: Boolean = {
     rootHash.sameElements(constants.settings.chainSettings.genesisStateDigest)
   }

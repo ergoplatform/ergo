@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
-import org.ergoplatform.settings.{Algos, ErgoAlgos, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{Algos, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
@@ -18,7 +18,7 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
@@ -313,44 +313,6 @@ object UtxoState extends ScorexLogging {
     ).get
 
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
-  }
-
-  def fromSnapshot(prover: BatchAVLProver[Digest32, HF],
-                   settings: ErgoSettings) = {
-    val stateDir = ErgoState.stateDir(settings)
-    stateDir.mkdirs()
-    val constants = StateConstants(settings)
-
-    val store = new LDBVersionedStore(stateDir, initialKeepVersions = constants.keepVersions)
-    val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
-      .getOrElse(ErgoState.genesisStateVersion)
-    val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
-      val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-      val storage: VersionedLDBAVLStorage[Digest32, HF] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
-      PersistentBatchAVLProver.create(prover, storage).get
-    }
-    new UtxoState(persistentProver, version, store, constants)
-  }
-
-  // todo: do we need to restore from disk?
-  def fromLatestSnapshot(settings: ErgoSettings): Try[UtxoState] = {
-    val snapshotsDb = SnapshotsDb.create(settings)
-    fromLatestSnapshot(settings, snapshotsDb)
-  }
-
-  // todo: do we need to restore from disk?
-  def fromLatestSnapshot(settings: ErgoSettings,
-                         snapshotDb: SnapshotsDb): Try[UtxoState] = Try {
-    val snapshotsInfo = snapshotDb.readSnapshotsInfo
-    val (h, manifestId) = snapshotsInfo.availableManifests.maxBy(_._1)
-    log.info(s"Reading snapshot from height $h")
-    val manifest = snapshotDb.readManifest(manifestId).get
-    val subtreeIds = manifest.subtreesIds
-    val subtrees = subtreeIds.map(sid => snapshotDb.readSubtree(sid).get)
-    val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
-    val prover = serializer.combine(manifest -> subtrees, Algos.hash.DigestSize, None).get
-
-    fromSnapshot(prover, settings)
   }
 
 }

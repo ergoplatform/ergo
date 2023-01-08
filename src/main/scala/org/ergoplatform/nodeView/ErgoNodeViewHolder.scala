@@ -152,36 +152,36 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   /**
+
+  Assume that history knows the following blocktree:
+
+           G
+          / \
+         *   G
+        /     \
+       *       G
+
+    where path with G-s is about canonical chain (G means semantically valid modifier), path with * is sidechain (* means
+    that semantic validity is unknown). New modifier is coming to the sidechain, it sends rollback to the root +
+    application of the sidechain to the state. Assume that state is finding that some modifier in the sidechain is
+    incorrect:
+
+           G
+          / \
+         G   G
+        /     \
+       B       G
+      /
     *
-    * Assume that history knows the following blocktree:
-    *
-    * G
-    * / \
-    * G
-    * /     \
-    * G
-    *
-    * where path with G-s is about canonical chain (G means semantically valid modifier), path with * is sidechain (* means
-    * that semantic validity is unknown). New modifier is coming to the sidechain, it sends rollback to the root +
-    * application of the sidechain to the state. Assume that state is finding that some modifier in the sidechain is
-    * incorrect:
-    *
-    * G
-    * / \
-    * G   G
-    * /     \
-    * B       G
-    * /
-    *
-    *
-    * In this case history should be informed about the bad modifier and it should retarget state
-    *
-    * //todo: improve the comment below
-    *
-    * We assume that we apply modifiers sequentially (on a single modifier coming from the network or generated locally),
-    * and in case of failed application of some modifier in a progressInfo, rollback point in an alternative should be not
-    * earlier than a rollback point of an initial progressInfo.
-    * */
+
+  In this case history should be informed about the bad modifier and it should retarget state
+
+    //todo: improve the comment below
+
+    We assume that we apply modifiers sequentially (on a single modifier coming from the network or generated locally),
+    and in case of failed application of some modifier in a progressInfo, rollback point in an alternative should be not
+    earlier than a rollback point of an initial progressInfo.
+    **/
 
   @tailrec
   protected final def updateState(history: ErgoHistory,
@@ -423,24 +423,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
     val constants = StateConstants(settings)
-    val stateRead = ErgoState.readOrGenerate(settings, constants).asInstanceOf[State]
-    val stateRestored: State = stateRead /* match {
-       case us: UtxoState =>
-        // todo: check if wallet is initialized
-        if (us.isGenesis && us.snapshotsAvailable().nonEmpty) {
-          // start from UTXO set snapshot available
-          UtxoState.fromLatestSnapshot(settings) match {
-            case Success(s) => s.asInstanceOf[State]
-            case Failure(e) =>
-              log.error("Can't restore UTXO set from snapshot ", e)
-              stateRead
-          }
-        } else {
-          stateRead
-        }
-      case _ => stateRead
-    } */
-    restoreConsistentState(stateRestored, history) match {
+    restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[State], history) match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
@@ -703,8 +686,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       getNodeViewChanges orElse
       processStateSnapshot orElse
       handleHealthCheck orElse {
-      case a: Any => log.error("Strange input: " + a)
-    }
+        case a: Any => log.error("Strange input: " + a)
+      }
 
 }
 

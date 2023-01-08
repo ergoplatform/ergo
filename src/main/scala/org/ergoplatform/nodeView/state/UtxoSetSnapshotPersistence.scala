@@ -11,6 +11,8 @@ import scorex.util.ScorexLogging
 
 trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
+  val MakeSnapshotEvery = 1024 // test value, switch to 51200 after testing
+
   def constants: StateConstants
   protected def persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
@@ -27,16 +29,14 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
   protected def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
 
-    val SnapshotEvery = 1024 // test value, switch to 51200 after testing
-
     if (estimatedTip.nonEmpty &&
-      (height % SnapshotEvery == SnapshotEvery - 1) &&
-      estimatedTip.get - height <= SnapshotEvery) {
+      (height % MakeSnapshotEvery == MakeSnapshotEvery - 1) &&
+      estimatedTip.get - height <= MakeSnapshotEvery) {
 
       val (manifest, subtrees) = slicedTree()
 
       val ms0 = System.currentTimeMillis()
-      snapshotsDb.pruneSnapshots(height - SnapshotEvery * 2)
+      snapshotsDb.pruneSnapshots(height - MakeSnapshotEvery * 2)
       snapshotsDb.writeSnapshot(height, manifest, subtrees)
       val ms = System.currentTimeMillis()
       log.info("Time to dump utxo set snapshot: " + (ms - ms0))
@@ -47,7 +47,6 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
     snapshotsDb.readSnapshotsInfo
   }
 
-
   def getSnapshotInfo(): SnapshotsInfo = {
     snapshotsDb.readSnapshotsInfo
   }
@@ -56,7 +55,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
     snapshotsDb.readManifestBytes(id)
   }
 
-  def getUtxoSnapshotChunk(id: SubtreeId): Option[Array[Byte]] = {
+  def getUtxoSnapshotChunkBytes(id: SubtreeId): Option[Array[Byte]] = {
     snapshotsDb.readSubtreeBytes(id)
   }
 

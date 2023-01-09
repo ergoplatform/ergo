@@ -73,16 +73,6 @@ case class Header(override val version: Header.Version,
   override def minerPk: EcPointType = powSolution.pk
 
   /**
-    * Expected identifiers of the block sections corresponding to this header,
-    * except of state transformations proof section id
-    */
-  lazy val sectionIdsWithNoProof: Seq[(ModifierTypeId, ModifierId)] =
-    Array(
-      (BlockTransactions.modifierTypeId, transactionsId),
-      (Extension.modifierTypeId, extensionId)
-    )
-
-  /**
     * Expected identifiers of the block sections corresponding to this header
     */
   lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] =
@@ -91,6 +81,12 @@ case class Header(override val version: Header.Version,
       (BlockTransactions.modifierTypeId, transactionsId),
       (Extension.modifierTypeId, extensionId)
     )
+
+  /**
+    * Expected identifiers of the block sections corresponding to this header,
+    * except of state transformations proof section id
+    */
+  lazy val sectionIdsWithNoProof: Seq[(ModifierTypeId, ModifierId)] = sectionIds.tail
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 

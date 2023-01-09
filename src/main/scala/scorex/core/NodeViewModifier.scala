@@ -4,7 +4,6 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.BytesSerializable
 import scorex.core.utils.ScorexEncoding
 
-
 sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {self =>
 
   val modifierTypeId: ModifierTypeId
@@ -12,12 +11,12 @@ sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {sel
   //todo: check statically or dynamically output size
   def id: scorex.util.ModifierId
 
-  def encodedId: String = encoder.encodeId(id)
-
   override def equals(obj: scala.Any): Boolean = obj match {
     case that: NodeViewModifier => (that.id == id) && (that.modifierTypeId == modifierTypeId)
     case _ => false
   }
+
+  def encodedId: String = id
 
 }
 

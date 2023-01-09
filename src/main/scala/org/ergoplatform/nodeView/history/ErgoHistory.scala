@@ -6,7 +6,6 @@ import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
@@ -81,8 +80,6 @@ trait ErgoHistory
           process(section)
         case poPoWProof: NipopowProofModifier =>
           process(poPoWProof)
-        case chunk: UTXOSnapshotChunk =>
-          process(chunk)
       }
     }.map(this -> _).recoverWith { case e =>
       if (!e.isInstanceOf[RecoverableModifierError]) {

@@ -8,8 +8,6 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
-import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
@@ -23,7 +21,6 @@ import scorex.core.{ModifierTypeId, NodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoSetSnapshotPersistence, UtxoStateReader}
-import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import scorex.core.network.message._
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.settings.Algos.HF
@@ -50,6 +47,9 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success}
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
+import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 
 /**
   * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the

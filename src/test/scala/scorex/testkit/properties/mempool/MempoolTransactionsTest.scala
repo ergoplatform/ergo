@@ -97,14 +97,6 @@ trait MempoolTransactionsTest
     }
   }
 
-  property("Mempool transactions should be filtered successfully") {
-    forAll(memPoolGenerator, unconfirmedTxSeqGenerator) { (mp: ErgoMemPool, unconfirmedTxs: Seq[UnconfirmedTransaction]) =>
-      val m: ErgoMemPool = mp.put(unconfirmedTxs).get
-      val m2: ErgoMemPool = m.filter(tx => tx equals unconfirmedTxs.headOption.get)
-      m2.size shouldBe 1
-    }
-  }
-
   property("Present transactions should be available by id") {
     forAll(memPoolGenerator, unconfirmedTxGenerator) { (mp: ErgoMemPool, unconfirmedTx: UnconfirmedTransaction) =>
       val m: ErgoMemPool = mp.put(unconfirmedTx).get

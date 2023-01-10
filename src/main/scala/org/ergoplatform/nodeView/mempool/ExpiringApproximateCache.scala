@@ -1,6 +1,8 @@
 package org.ergoplatform.nodeView.mempool
 
 import com.google.common.hash.{BloomFilter, Funnels}
+import scorex.util.ScorexLogging
+
 import java.nio.charset.Charset
 import scala.collection.immutable.TreeMap
 import scala.concurrent.duration.FiniteDuration
@@ -22,7 +24,6 @@ sealed trait ApproximateCacheLike[T] {
   * Ie. we expire whole bloom filters instead of expiring elements and we check all bloom filters for element presence
   *
   * @param bloomFilterQueueSize how many bloom filters at maximum to keep in FIFO queue
-  * @param bloomFilterApproxElemCount approximate element size of a single bloom filter
   * @param bloomFilterQueue fifo collection of bloom filters with tracking index
   * @param frontCacheMaxSize maximum number of elements to keep in cache, following elems are kept in bloom filters
   * @param frontCacheElemExpirationMs for how long to keep elems in cache
@@ -30,18 +31,19 @@ sealed trait ApproximateCacheLike[T] {
   */
 case class ExpiringApproximateCache(
   bloomFilterQueueSize: Int,
-  bloomFilterApproxElemCount: Int,
-  bloomFilterQueue: Vector[(Long, BloomFilter[String])],
+  bloomFilterQueue: Vector[BloomFilter[String]],
   frontCacheMaxSize: Int,
   frontCacheElemExpirationMs: Long,
   frontCache: TreeMap[String, Long]
-) extends ApproximateCacheLike[String] {
+) extends ApproximateCacheLike[String] with ScorexLogging {
 
-  private def createNewFilter =
+  require(frontCacheMaxSize > 0)
+
+  private def createNewFilter: BloomFilter[String] =
     BloomFilter.create[String](
       Funnels.stringFunnel(Charset.forName("UTF-8")),
-      bloomFilterApproxElemCount,
-      0.05d
+      frontCacheMaxSize,
+      0.001d   // 0.1 % false positive rate, per filter, as we use multiple filters, total FPR also to be multiplied
     )
 
   /**
@@ -51,43 +53,46 @@ case class ExpiringApproximateCache(
     */
   override def put(elem: String): ExpiringApproximateCache = {
     val now = System.currentTimeMillis()
-    val updatedCache = frontCache.dropWhile {
-      case (_, timestamp) =>
-        now - timestamp > frontCacheElemExpirationMs
-    }
+    var updatedCache = frontCache
+    var updatedFilters = bloomFilterQueue
 
-    if (updatedCache.size < frontCacheMaxSize) {
-      this.copy(frontCache = updatedCache + (elem -> now))
-    } else {
-      bloomFilterQueue.headOption match {
-        case None =>
-          val bf = createNewFilter
-          bf.put(elem)
-          this.copy(bloomFilterQueue = Vector(0L -> bf))
-        case Some((_, headBf))
-            if headBf.approximateElementCount() < bloomFilterApproxElemCount =>
-          headBf.put(elem)
-          this
-        case Some((idx, _)) =>
-          val newIdx = idx + 1
-          val bf     = createNewFilter
-          bf.put(elem)
-          val newFilters =
-            if (bloomFilterQueue.size >= bloomFilterQueueSize) {
+    if (frontCache.size == frontCacheMaxSize) {
+      // if the cache is full, we clear expired records
+      val filteredCache = frontCache.filter(kv => now - kv._2 < frontCacheElemExpirationMs)
+
+      // if cache more than half-full still, move all the elements to a Bloom filter
+      if (filteredCache.size > frontCacheMaxSize / 2) {
+        log.debug(s"Reset front cache, ${filteredCache.size} elements will be put into Bloom filter")
+        val bf = createNewFilter
+        filteredCache.keysIterator.foreach(bf.put)
+        updatedCache = TreeMap.empty
+
+        bloomFilterQueue.headOption match {
+          case None =>
+            updatedFilters = Vector(bf)
+          case Some(_) =>
+            val normalizedFilters = if (bloomFilterQueue.size >= bloomFilterQueueSize) {
               bloomFilterQueue.dropRight(1)
             } else {
               bloomFilterQueue
             }
-          this.copy(bloomFilterQueue = (newIdx -> bf) +: newFilters)
+            updatedFilters = bf +: normalizedFilters
+        }
+      } else {
+        log.debug(s"Cleared expiring front cache, old size ${updatedCache.size}, new size ${filteredCache.size}")
+        updatedCache = filteredCache
       }
     }
+
+    log.debug(s"Adding $elem to front cache, its size after operation ${updatedCache.size + 1} ")
+    this.copy(frontCache = updatedCache + (elem -> now), bloomFilterQueue = updatedFilters)
   }
 
   /**
     * Returns True if the element might have been put in this Cache, False if this is definitely not the case.
     */
   override def mightContain(elem: String): Boolean =
-    frontCache.contains(elem) || bloomFilterQueue.exists(_._2.mightContain(elem))
+    frontCache.contains(elem) || bloomFilterQueue.exists(_.mightContain(elem))
 
   /**
     * Returns an estimate for the total number of distinct elements that have been added to this
@@ -95,38 +100,30 @@ case class ExpiringApproximateCache(
     */
   override def approximateElementCount: Long =
     frontCache.size + bloomFilterQueue.foldLeft(0L) {
-      case (acc, bf) => acc + bf._2.approximateElementCount()
+      case (acc, bf) => acc + bf.approximateElementCount()
     }
 }
 
 object ExpiringApproximateCache {
+  /**
+   * Hard-coded Bloom filters number for all the cache instances.
+    * 4 filters is enough to store up to 5x elements of front cache in total,
+    * with small FPR still
+   */
+  private val BloomFiltersNumber = 4
 
   /**
-    * @param bloomFilterCapacity Maximum number of elements to store in bloom filters
-    * @param bloomFilterExpirationRate Non-zero fraction of 1 as a rate of element expiration when capacity is full,
-    *                                  the lower the more gradual expiration.
-    *                                  example : 0.1 is represented as 10 bloom filters expiring one by one
     * @param frontCacheSize Maximum number of elements to store in front-cache
     * @param frontCacheExpiration Maximum period to keep cached elements before expiration
     */
-  def empty(
-             bloomFilterCapacity: Int,
-             bloomFilterExpirationRate: Double,
-             frontCacheSize: Int,
-             frontCacheExpiration: FiniteDuration
-  ): ExpiringApproximateCache = {
-    require(
-      bloomFilterExpirationRate > 0 && bloomFilterExpirationRate < 1,
-      "expirationRate must be (0 - 1) exclusive"
-    )
+  def empty(frontCacheSize: Int, frontCacheExpiration: FiniteDuration): ExpiringApproximateCache = {
     ExpiringApproximateCache(
-      bloomFilterQueueSize = Math.round(1 / bloomFilterExpirationRate).toInt,
-      bloomFilterApproxElemCount =
-        Math.round(bloomFilterCapacity * bloomFilterExpirationRate).toInt,
+      bloomFilterQueueSize       = BloomFiltersNumber,
       bloomFilterQueue           = Vector.empty,
       frontCacheMaxSize          = frontCacheSize,
       frontCacheElemExpirationMs = frontCacheExpiration.toMillis,
       frontCache                 = TreeMap.empty[String, Long]
     )
   }
+
 }

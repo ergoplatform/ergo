@@ -98,7 +98,7 @@ object FixedSizeApproximateCacheQueue {
       BloomFilter.create[String](
         Funnels.stringFunnel(Charset.forName("UTF-8")),
         approxElemCount,
-        0.05d
+        0.001d   // 0.01% false positive rate
       )
   }
 

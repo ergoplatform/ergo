@@ -8,6 +8,7 @@ import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.nodeView.state.StateType.Digest
 import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, P2PKAddress}
+import org.slf4j.MDC
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
@@ -64,6 +65,9 @@ object ErgoSettings extends ScorexLogging
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
     val votingTargets = VotingTargets.fromConfig(config)
+
+    overrideLogLevel(scorexSettings.logging.level)
+
     if (nodeSettings.stateType == Digest && nodeSettings.mining) {
       log.error("Malformed configuration file was provided! Mining is not possible with digest state. Aborting!")
       ErgoApp.forceStopApplication()
@@ -216,4 +220,14 @@ object ErgoSettings extends ScorexLogging
     ErgoApp.forceStopApplication()
   }
 
+  /**
+    * Override the log level at runtime with values provided in config/user provided config.
+    */
+  private def overrideLogLevel(level: String) = level match {
+      case "TRACE" | "ERROR" | "INFO" | "WARN" | "DEBUG" =>
+        MDC.clear()
+        MDC.put("set-log-level", level)
+        log.info(s"Log level set to $level")
+      case _ => log.warn("No log level configuration provided")
+  }
 }

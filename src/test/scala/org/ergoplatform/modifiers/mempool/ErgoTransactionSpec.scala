@@ -351,7 +351,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
     //check that spam transaction validation with no cost limit is indeed taking too much time
     import Parameters._
-    val ps = Parameters(0, DefaultParameters.updated(MaxBlockCostIncrease, Int.MaxValue), emptyVSUpdate)
+    val maxCost = (Int.MaxValue - 10) / 10 // cannot use Int.MaxValue directly due to overflow when it is converted to block cost
+    val ps = Parameters(0, DefaultParameters.updated(MaxBlockCostIncrease, maxCost), emptyVSUpdate)
     val sc = new ErgoStateContext(Seq.empty, None, genesisStateDigest, ps, ErgoValidationSettings.initial,
       VotingData.empty)(settings)
       .upcoming(org.ergoplatform.mining.group.generator,

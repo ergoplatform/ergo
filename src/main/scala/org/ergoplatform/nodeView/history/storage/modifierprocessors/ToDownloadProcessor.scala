@@ -1,12 +1,10 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{ErgoFullBlock, ModifierTypeId, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
-import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.{ModifierId, ScorexLogging}
 
@@ -45,7 +43,7 @@ trait ToDownloadProcessor
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
   def nextModifiersToDownload(howManyPerType: Int,
-                              condition: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
+                              condition: (ModifierTypeId.Value, ModifierId) => Boolean): Map[ModifierTypeId.Value, Seq[ModifierId]] = {
 
     val FullBlocksToDownloadAhead = 192 // how many full blocks to download forwards during active sync
 
@@ -53,8 +51,8 @@ trait ToDownloadProcessor
 
     @tailrec
     def continuation(height: Int,
-                     acc: Map[ModifierTypeId, Vector[ModifierId]],
-                     maxHeight: Int): Map[ModifierTypeId, Vector[ModifierId]] = {
+                     acc: Map[ModifierTypeId.Value, Vector[ModifierId]],
+                     maxHeight: Int): Map[ModifierTypeId.Value, Vector[ModifierId]] = {
       if (height > maxHeight) {
         acc
       } else {
@@ -91,7 +89,7 @@ trait ToDownloadProcessor
       case None if (nodeSettings.utxoBootstrap && !_utxoSnapshotApplied) =>
         // todo: can be requested multiple times, prevent it
         if (getUtxoSetSnapshotDownloadPlan().isEmpty) {
-          Map(SnapshotsInfo.modifierTypeId -> Seq.empty)
+          Map(SnapshotsInfoTypeId.value -> Seq.empty)
         } else {
           Map.empty
         }
@@ -106,7 +104,7 @@ trait ToDownloadProcessor
   /**
     * Checks whether it's time to download full chain, and returns toDownload modifiers
     */
-  protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
+  protected def toDownload(header: Header): Seq[(ModifierTypeId.Value, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
       Nil
@@ -123,7 +121,7 @@ trait ToDownloadProcessor
     }
   }
 
-  def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
+  def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId.Value, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
       Nil
     } else if (nodeSettings.stateType.requireProofs) {

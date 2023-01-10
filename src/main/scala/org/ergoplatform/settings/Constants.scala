@@ -1,14 +1,14 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.modifiers.ModifierTypeId
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.transaction.Transaction
-import scorex.core.{ModifierTypeId, NodeViewModifier}
+import scorex.core.NodeViewModifier
 import sigmastate.Values
 import sigmastate.Values.ErgoTree
 
@@ -44,12 +44,12 @@ object Constants {
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
 
-  val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: NodeViewModifier]] =
+  val modifierSerializers: Map[ModifierTypeId.Value, ScorexSerializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       Extension.modifierTypeId -> ExtensionSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofsSerializer,
-      Transaction.ModifierTypeId -> ErgoTransactionSerializer)
+      ErgoTransaction.modifierTypeId -> ErgoTransactionSerializer)
 
   val SoftForkEpochs = 32 //about 45.5 days
 

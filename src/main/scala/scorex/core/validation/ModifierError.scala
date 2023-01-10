@@ -1,11 +1,11 @@
 package scorex.core.validation
 
-import scorex.core.ModifierTypeId
+import org.ergoplatform.modifiers.ModifierTypeId
 import scorex.util.ModifierId
 
 import scala.util.control.NoStackTrace
 
-case class InvalidModifier(error: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId)
+case class InvalidModifier(error: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId.Value)
 
 /** Base trait for errors that were occurred during NodeView Modifier validation
   */
@@ -13,7 +13,7 @@ trait ModifierError {
   def message: String
   def isFatal: Boolean
   def modifierId: ModifierId
-  def modifierTypeId: ModifierTypeId
+  def modifierTypeId: ModifierTypeId.Value
   def toThrowable: Throwable
 
   def info: String = {
@@ -25,7 +25,7 @@ trait ModifierError {
 /** Permanent modifier error that could not be recovered in future even after any history updates
   */
 @SuppressWarnings(Array("org.wartremover.warts.Null"))
-class MalformedModifierError(val message: String, val modifierId: ModifierId, val modifierTypeId: ModifierTypeId, cause: Option[Throwable] = None)
+class MalformedModifierError(val message: String, val modifierId: ModifierId, val modifierTypeId: ModifierTypeId.Value, cause: Option[Throwable] = None)
     extends Exception(message, cause.orNull) with ModifierError {
   def isFatal: Boolean = true
   def toThrowable: Throwable = this
@@ -35,7 +35,7 @@ class MalformedModifierError(val message: String, val modifierId: ModifierId, va
   * When an instance is created, the stack trace is not collected which makes this exception lightweight.
   */
 @SuppressWarnings(Array("org.wartremover.warts.Null"))
-class RecoverableModifierError(val message: String, val modifierId: ModifierId, val modifierTypeId: ModifierTypeId, cause: Option[Throwable] = None)
+class RecoverableModifierError(val message: String, val modifierId: ModifierId, val modifierTypeId: ModifierTypeId.Value, cause: Option[Throwable] = None)
     extends Exception(message, cause.orNull) with ModifierError with NoStackTrace {
   def isFatal: Boolean = false
   def toThrowable: Throwable = this

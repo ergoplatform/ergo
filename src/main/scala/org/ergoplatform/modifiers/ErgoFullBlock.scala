@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.{ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
+import scorex.core.TransactionsCarryingPersistentNodeViewModifier
 import scorex.util.ModifierId
 
 case class ErgoFullBlock(header: Header,
@@ -20,7 +20,7 @@ case class ErgoFullBlock(header: Header,
 
   override type M = ErgoFullBlock
 
-  override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
+  override val modifierTypeId: ModifierTypeId.Value = ErgoFullBlock.modifierTypeId
 
   override def serializedId: Array[Byte] = header.serializedId
 
@@ -49,7 +49,7 @@ case class ErgoFullBlock(header: Header,
 
 object ErgoFullBlock extends ApiCodecs {
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (-127: Byte)
+  val modifierTypeId: ModifierTypeId.Value = FullBlockTypeId.value
 
   implicit val jsonEncoder: Encoder[ErgoFullBlock] = { b: ErgoFullBlock =>
     Json.obj(

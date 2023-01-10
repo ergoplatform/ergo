@@ -6,14 +6,13 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, TransactionTypeId}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
 import org.ergoplatform.settings.{Algos, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
-import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
@@ -103,7 +102,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         opsResult
       }
       ModifierValidator(stateContext.validationSettings)
-        .validateNoFailure(fbOperationFailed, blockOpsTry, Transaction.ModifierTypeId)
+        .validateNoFailure(fbOperationFailed, blockOpsTry, TransactionTypeId.value)
         .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry

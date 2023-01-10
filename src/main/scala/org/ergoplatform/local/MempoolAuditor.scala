@@ -12,7 +12,6 @@ import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.RecheckMempool
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import scorex.core.network.message.{InvData, InvSpec, Message}
-import scorex.core.transaction.Transaction
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
@@ -87,7 +86,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def broadcastTx(unconfirmedTx: UnconfirmedTransaction): Unit = {
     val msg = Message(
       InvSpec,
-      Right(InvData(Transaction.ModifierTypeId, Seq(unconfirmedTx.id))),
+      Right(InvData(unconfirmedTx.transaction.modifierTypeId, Seq(unconfirmedTx.id))),
       None
     )
     networkControllerRef ! SendToNetwork(msg, Broadcast)

@@ -7,14 +7,13 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, PreHeader}
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, HeaderTypeId, ModifierTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.ModifierTypeId
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
@@ -60,7 +59,7 @@ case class Header(override val version: Header.Version,
 
   override type M = Header
 
-  override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
+  override val modifierTypeId: ModifierTypeId.Value = Header.modifierTypeId
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
@@ -75,7 +74,7 @@ case class Header(override val version: Header.Version,
   /**
     * Expected identifiers of the block sections corresponding to this header
     */
-  lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] =
+  lazy val sectionIds: Seq[(ModifierTypeId.Value, ModifierId)] =
     Array(
       (ADProofs.modifierTypeId, ADProofsId),
       (BlockTransactions.modifierTypeId, transactionsId),
@@ -86,7 +85,7 @@ case class Header(override val version: Header.Version,
     * Expected identifiers of the block sections corresponding to this header,
     * except of state transformations proof section id
     */
-  lazy val sectionIdsWithNoProof: Seq[(ModifierTypeId, ModifierId)] = sectionIds.tail
+  lazy val sectionIdsWithNoProof: Seq[(ModifierTypeId.Value, ModifierId)] = sectionIds.tail
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
@@ -157,7 +156,7 @@ object Header extends ApiCodecs {
       votes = header.votes.toColl
     )
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
+  val modifierTypeId: ModifierTypeId.Value = HeaderTypeId.value
 
   lazy val GenesisParentId: ModifierId = bytesToId(Array.fill(Constants.HashLength)(0: Byte))
 

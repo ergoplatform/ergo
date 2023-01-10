@@ -1,5 +1,6 @@
 package scorex
 
+import org.ergoplatform.modifiers.ModifierTypeId
 import scorex.core.network.message.InvData
 import scorex.core.utils.ScorexEncoder
 import scorex.util.encode.Base16
@@ -7,23 +8,18 @@ import supertagged.TaggedType
 
 package object core {
 
-  //TODO implement ModifierTypeId as a trait
-  object ModifierTypeId extends TaggedType[Byte]
-
   object VersionTag extends TaggedType[String]
-
-  type ModifierTypeId = ModifierTypeId.Type
 
   type VersionTag = VersionTag.Type
 
-  def idsToString(ids: Seq[(ModifierTypeId, util.ModifierId)])(implicit enc: ScorexEncoder): String = {
+  def idsToString(ids: Seq[(ModifierTypeId.Value, util.ModifierId)])(implicit enc: ScorexEncoder): String = {
     List(ids.headOption, ids.lastOption)
       .flatten
       .map { case (typeId, id) => s"($typeId,${enc.encodeId(id)})" }
       .mkString("[", "..", "]")
   }
 
-  def idsToString(modifierType: ModifierTypeId, ids: Seq[util.ModifierId])(implicit encoder: ScorexEncoder): String = {
+  def idsToString(modifierType: ModifierTypeId.Value, ids: Seq[util.ModifierId])(implicit encoder: ScorexEncoder): String = {
     idsToString(ids.map(id => (modifierType, id)))
   }
 

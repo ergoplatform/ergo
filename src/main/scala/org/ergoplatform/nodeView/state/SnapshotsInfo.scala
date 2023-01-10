@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
-import scorex.core.ModifierTypeId
 
 /**
   * Container for available UTXO set snapshots
@@ -17,7 +16,6 @@ case class SnapshotsInfo(availableManifests: Map[Height, ManifestId]) {
 }
 
 object SnapshotsInfo {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (127: Byte)
 
   def makeEmpty(): SnapshotsInfo = SnapshotsInfo(Map.empty)
 

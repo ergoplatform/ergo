@@ -4,9 +4,8 @@ import com.google.common.primitives.Bytes
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.NonHeaderBlockSection
+import org.ergoplatform.modifiers.{ExtensionTypeId, ModifierTypeId, NonHeaderBlockSection}
 import org.ergoplatform.settings.Algos
-import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
@@ -25,7 +24,7 @@ case class Extension(headerId: ModifierId,
                      override val sizeOpt: Option[Int] = None)
   extends ExtensionCandidate(fields) with NonHeaderBlockSection {
 
-  override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
+  override val modifierTypeId: ModifierTypeId.Value = Extension.modifierTypeId
 
   override type M = Extension
 
@@ -55,7 +54,7 @@ object Extension extends ApiCodecs {
     Algos.merkleTree(LeafData @@ fields.map(kvToLeaf))
   }
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
+  val modifierTypeId: ModifierTypeId.Value = ExtensionTypeId.value
 
   implicit val jsonEncoder: Encoder[Extension] = { e: Extension =>
     Map(

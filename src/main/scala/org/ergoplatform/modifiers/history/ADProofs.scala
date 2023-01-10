@@ -3,11 +3,10 @@ package org.ergoplatform.modifiers.history
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.NonHeaderBlockSection
+import org.ergoplatform.modifiers.{ModifierTypeId, NonHeaderBlockSection, ProofsTypeId}
 import org.ergoplatform.modifiers.state._
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.avltree.batch.{Lookup => _, _}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
@@ -24,7 +23,7 @@ case class ADProofs(headerId: ModifierId,
 
   override def digest: Digest32 = ADProofs.proofDigest(proofBytes)
 
-  override val modifierTypeId: ModifierTypeId = ADProofs.modifierTypeId
+  override val modifierTypeId: ModifierTypeId.Value = ADProofs.modifierTypeId
 
   override type M = ADProofs
 
@@ -69,7 +68,8 @@ case class ADProofs(headerId: ModifierId,
 }
 
 object ADProofs extends ApiCodecs {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (104: Byte)
+
+  val modifierTypeId: ModifierTypeId.Value = ProofsTypeId.value
 
   val KL = 32
 

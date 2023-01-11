@@ -119,8 +119,6 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     new ErgoMemPool(pool.remove(tx), updateStatsOnRemoval(tx), sortingOption)
   }
 
-  def remove(utx: UnconfirmedTransaction): ErgoMemPool = remove(utx.transaction)
-
   def remove(txs: TraversableOnce[ErgoTransaction]): ErgoMemPool = {
     txs.foldLeft(this) { case (acc, tx) => acc.remove(tx) }
   }

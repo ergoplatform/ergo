@@ -294,7 +294,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
     pool.size shouldBe (family_depth + 1) * txs.size
     allTxs.foreach { tx =>
-      pool = pool.remove(tx)
+      pool = pool.remove(tx.transaction)
     }
     pool.size shouldBe 0
   }
@@ -373,7 +373,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.stats.snapTakenTxns shouldBe MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis()).snapTakenTxns
 
     allTxs.foreach { tx =>
-      pool = pool.remove(tx)
+      pool = pool.remove(tx.transaction)
     }
     pool.size shouldBe 0
     pool.stats.takenTxns shouldBe (family_depth + 1) * txs.size

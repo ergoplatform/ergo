@@ -84,7 +84,7 @@ trait MempoolTransactionsTest
   property("Size of mempool should decrease when removing a present transaction") {
     forAll(memPoolGenerator, unconfirmedTxSeqGenerator) { (mp: ErgoMemPool, unconfirmedTxs: Seq[UnconfirmedTransaction]) =>
       val m: ErgoMemPool = mp.put(unconfirmedTxs)
-      val m2: ErgoMemPool = m.remove(unconfirmedTxs.headOption.get)
+      val m2: ErgoMemPool = m.remove(unconfirmedTxs.headOption.get.transaction)
       m2.size shouldBe unconfirmedTxs.size - 1
     }
   }
@@ -92,7 +92,7 @@ trait MempoolTransactionsTest
   property("Size of mempool should not decrease when removing a non-present transaction") {
     forAll(memPoolGenerator, unconfirmedTxSeqGenerator, unconfirmedTxGenerator) { (mp: ErgoMemPool, unconfirmedTxs: Seq[UnconfirmedTransaction], unconfirmedTx: UnconfirmedTransaction) =>
       val m: ErgoMemPool = mp.put(unconfirmedTxs)
-      val m2: ErgoMemPool = m.remove(unconfirmedTx)
+      val m2: ErgoMemPool = m.remove(unconfirmedTx.transaction)
       m2.size shouldBe unconfirmedTxs.size
     }
   }

@@ -44,7 +44,12 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
   def size: Int = orderedTransactions.size
 
   def get(id: ModifierId): Option[UnconfirmedTransaction] = {
-    transactionsRegistry.get(id).flatMap(orderedTransactions.get(_))
+    transactionsRegistry.get(id).flatMap { wtx =>
+      orderedTransactions.get(wtx) match {
+        case s@Some(_) => s
+        case None => log.warn(s"Found $id in registry but not ordered transactions"); None
+      }
+    }
   }
 
 

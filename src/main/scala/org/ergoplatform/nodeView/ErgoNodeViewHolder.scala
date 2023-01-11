@@ -375,7 +375,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       .flatMap(extractTransactions)
       .filter(tx => !appliedTxs.exists(_.id == tx.id))
       .map(tx => UnconfirmedTransaction(tx, None))
-    memPool.putWithoutCheck(rolledBackTxs)
+    memPool.remove(appliedTxs).put(rolledBackTxs)
   }
 
   /**
@@ -622,9 +622,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     case LocallyGeneratedTransaction(unconfirmedTx) =>
       sender() ! txModify(unconfirmedTx)
     case RecheckedTransactions(unconfirmedTxs) =>
-      val updatedPool = unconfirmedTxs.foldRight(memoryPool()) { case (utx, mp) =>
-        mp.remove(utx).putWithoutCheck(utx)
-      }
+      val updatedPool = memoryPool().put(unconfirmedTxs)
       updateNodeView(updatedMempool = Some(updatedPool))
     case EliminateTransactions(ids) =>
       val updatedPool = ids.foldLeft(memoryPool()) { case (pool, txId) => pool.invalidate(txId) }

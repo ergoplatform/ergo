@@ -47,7 +47,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     log.debug(s"${validated.size} re-checked mempool transactions were ok, " +
               s"${toEliminate.size} transactions were invalidated")
 
-    if(validated.nonEmpty) {
+    if (validated.nonEmpty) {
       nodeViewHolderRef ! RecheckedTransactions(validated)
     }
     if (toEliminate.nonEmpty) {

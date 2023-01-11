@@ -108,15 +108,6 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 object CleanupWorker {
 
   /**
-    * Constant which shows on how many cleanup operations (called when a new block arrives) a transaction
-    * re-check happens.
-    *
-    * If transactions set is large and stable, then about (1/RevisionInterval)-th of the pool is checked
-    *
-    */
-  val RevisionInterval: Int = 4
-
-  /**
     *
     * A command to run (partial) memory pool cleanup
     *

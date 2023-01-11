@@ -84,7 +84,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
   /**
     * Removes transaction from the pool
     *
-    * @param unconfirmedTx - Transaction to remove
+    * @param tx - Transaction to remove
     */
   def remove(tx: ErgoTransaction): OrderedTxPool = {
     transactionsRegistry.get(tx.id) match {
@@ -155,7 +155,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     * To achieve this goal we recursively add weight of new transaction to all transactions which
     * outputs it directly or indirectly spending.
     *
-    * @param unconfirmedTx
+    * @param tx
     * @param weight
     * @return
     */

@@ -108,29 +108,42 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     new ErgoMemPool(updatedPool, stats, sortingOption)
   }
 
-  def remove(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
-    log.debug(s"Removing transaction ${unconfirmedTransaction.id} from the mempool")
+  private def updateStatsOnRemoval(unconfirmedTransaction: UnconfirmedTransaction): MemPoolStatistics = {
     val tx = unconfirmedTransaction.transaction
     val wtx = pool.transactionsRegistry.get(tx.id)
-    val updStats = wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
-      .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
-    new ErgoMemPool(pool.remove(unconfirmedTransaction), updStats, sortingOption)
+    wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
+       .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
   }
 
-  def filter(condition: UnconfirmedTransaction => Boolean): ErgoMemPool = {
-    new ErgoMemPool(pool.filter(condition), stats, sortingOption)
+  /**
+    * Remove transaction from the pool
+    */
+  def remove(unconfirmedTx: UnconfirmedTransaction): ErgoMemPool = {
+    log.debug(s"Removing transaction ${unconfirmedTx.id} from the mempool")
+    new ErgoMemPool(pool.remove(unconfirmedTx), updateStatsOnRemoval(unconfirmedTx), sortingOption)
   }
-
-  def filter(txs: Seq[UnconfirmedTransaction]): ErgoMemPool = filter(t => !txs.exists(_.transaction.id == t.transaction.id))
 
   /**
     * Invalidate transaction and delete it from pool
     *
-    * @param unconfirmedTransaction - Transaction to invalidate
+    * @param unconfirmedTx - Transaction to invalidate
     */
-  def invalidate(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
-    new ErgoMemPool(pool.invalidate(unconfirmedTransaction), stats, sortingOption)
+  def invalidate(unconfirmedTx: UnconfirmedTransaction): ErgoMemPool = {
+    log.debug(s"Invalidating mempool transaction ${unconfirmedTx.id}")
+    new ErgoMemPool(pool.invalidate(unconfirmedTx), updateStatsOnRemoval(unconfirmedTx), sortingOption)
   }
+
+  def invalidate(unconfirmedTransactionId: ModifierId): ErgoMemPool = {
+    pool.get(unconfirmedTransactionId) match {
+      case Some(utx) => invalidate(utx)
+      case None => this
+    }
+  }
+
+  /**
+    * Check if transaction was invalidated earlier
+    */
+  def isInvalidated(id: ModifierId): Boolean = pool.isInvalidated(id)
 
   /**
     * @return inputs spent by the mempool transactions
@@ -236,10 +249,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime)
           }
         } else {
-          val contains = this.contains(tx.id)
-          val msg = if(contains) {
+          val msg = if (this.contains(tx.id)) {
             s"Pool can not accept transaction ${tx.id}, it is already in the mempool"
-          } else if(pool.size == settings.nodeSettings.mempoolCapacity) {
+          } else if (pool.size == settings.nodeSettings.mempoolCapacity) {
             s"Pool can not accept transaction ${tx.id}, the mempool is full"
           } else {
             s"Pool can not accept transaction ${tx.id}"

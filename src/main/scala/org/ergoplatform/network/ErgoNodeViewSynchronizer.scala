@@ -955,10 +955,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case ErgoTransaction.modifierTypeId =>
 
         if (txAcceptanceFilter) {
-          val unknownMods =
-            // todo: filter out transactions invalidated in the mempool,
-            // todo: see https://github.com/ergoplatform/ergo/issues/1863
-            invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown)
+          val unknownMods = {
+            // check that transaction is not in the mempool already or invalidated earlier
+            invData.ids.filter{mid =>
+              deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown &&
+                !mp.isInvalidated(mid)
+            }
+          }
           // filter out transactions that were already applied to history
           val notApplied = unknownMods.filterNot(blockAppliedTxsCache.mightContain)
           // filter out transactions previously declined

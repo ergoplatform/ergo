@@ -50,14 +50,10 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
         12, 100, 1000
       ),
       NetworkCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       ),
       MempoolCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       )
@@ -103,14 +99,10 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
         12, 100, 1000
       ),
       NetworkCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       ),
       MempoolCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       )
@@ -149,14 +141,10 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
         12, 100, 1000
       ),
       NetworkCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       ),
       MempoolCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       )

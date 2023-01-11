@@ -56,11 +56,9 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
   private var invalidModifierCache = emptyExpiringApproximateCache
 
   private def emptyExpiringApproximateCache = {
-    val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
-    val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
     val frontCacheSize = cacheSettings.invalidModifiersCacheSize
     val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
-    ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration)
+    ExpiringApproximateCache.empty(frontCacheSize, frontCacheExpiration)
   }
 
   def fullInfo: FullInfo = DeliveryTracker.FullInfo(invalidModifierCache.approximateElementCount, requested.toSeq, received.toSeq)

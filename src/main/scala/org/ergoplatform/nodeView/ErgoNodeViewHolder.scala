@@ -369,11 +369,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def updateMemPool(blocksRemoved: Seq[BlockSection],
                               blocksApplied: Seq[BlockSection],
                               memPool: ErgoMemPool): ErgoMemPool = {
-    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions).map(tx => UnconfirmedTransaction(tx, None))
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
+    val rolledBackTxs = blocksRemoved
+      .flatMap(extractTransactions)
+      .filter(tx => !appliedTxs.exists(_.id == tx.id))
+      .map(tx => UnconfirmedTransaction(tx, None))
     memPool.putWithoutCheck(rolledBackTxs)
-      .filter(unconfirmedTx => !appliedTxs.exists(_.id == unconfirmedTx.transaction.id))
   }
 
   /**
@@ -625,7 +627,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       }
       updateNodeView(updatedMempool = Some(updatedPool))
     case EliminateTransactions(ids) =>
-      val updatedPool = memoryPool().filter(unconfirmedTx => !ids.contains(unconfirmedTx.transaction.id))
+      val updatedPool = ids.foldLeft(memoryPool()) { case (pool, txId) => pool.invalidate(txId) }
       updateNodeView(updatedMempool = Some(updatedPool))
       val e = new Exception("Became invalid")
       ids.foreach { id =>

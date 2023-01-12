@@ -1,12 +1,14 @@
 package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.ValidationRules._
@@ -407,8 +409,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         txBoxesToSpend,
         boxesToSpend.size == inputs.size,
         InvalidModifier(
-          s"$id: ${boxesToSpend.size} == ${inputs.size}. Missing inputs: ${inputs
-            .zipWithIndex.filterNot(i => boxesToSpend.exists(bx => util.Arrays.equals(bx.id, i._1.boxId))).map(_._2).mkString(", ")}",
+          s"$id: ${boxesToSpend.size} == ${inputs.size}. Missing inputs: ${unresolvedIndices(inputs.map(_.boxId), boxesToSpend).mkString(", ")}",
           id,
           modifierTypeId
         )
@@ -417,8 +418,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         txDataBoxes,
         dataBoxes.size == dataInputs.size,
         InvalidModifier(
-          s"$id: ${dataBoxes.size} == ${dataInputs.size}. Missing data inputs: ${dataInputs
-            .zipWithIndex.filterNot(i => dataBoxes.exists(bx => util.Arrays.equals(bx.id, i._1.boxId))).map(_._2).mkString(", ")}",
+          s"$id: ${dataBoxes.size} == ${dataInputs.size}. Missing data inputs: ${unresolvedIndices(dataInputs.map(_.boxId), dataBoxes).mkString(", ")}",
           id,
           modifierTypeId
         )
@@ -480,6 +480,8 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
   def apply(tx: ErgoLikeTransaction): ErgoTransaction =
     ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
 
+  private def unresolvedIndices(inputs: IndexedSeq[BoxId], resolvedInputs: IndexedSeq[ErgoBox]): IndexedSeq[Int] =
+    inputs.zipWithIndex.filterNot(i => resolvedInputs.exists(bx => util.Arrays.equals(bx.id, i._1))).map(_._2)
 }
 
 object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {

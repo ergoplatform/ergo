@@ -26,24 +26,26 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
                                                                      (implicit val hf: HF)
   extends VersionedAVLStorage[D] with ScorexLogging {
 
-  private lazy val labelSize = nodeParameters.labelSize
+  private def labelSize: Int = nodeParameters.labelSize
+  private val fixedSizeValueMode = nodeParameters.valueSize.isDefined
 
   private val TopNodeKey: Array[Byte] = Array.fill(labelSize)(123: Byte)
   private val TopNodeHeight: Array[Byte] = Array.fill(labelSize)(124: Byte)
-
-  private val fixedSizeValueMode = nodeParameters.valueSize.isDefined
-
-  def restorePrunedProver(): Try[BatchAVLProver[D, HF]] = {
-    restorePrunedTopNode().map { recoveredTop =>
-      new BatchAVLProver(nodeParameters.keySize, nodeParameters.valueSize, Some(recoveredTop))(hf)
-    }
-  }
 
   private def restorePrunedTopNode(): Try[(ProverNodes[D], Int)] = Try {
     val top = VersionedLDBAVLStorage.fetch[D](ADKey @@ store.get(TopNodeKey).get)(hf, store, nodeParameters)
     val topHeight = Ints.fromByteArray(store.get(TopNodeHeight).get)
 
     top -> topHeight
+  }
+
+  /**
+   * Restore prover's tree with just pruned top node
+   */
+  def restorePrunedProver(): Try[BatchAVLProver[D, HF]] = {
+    restorePrunedTopNode().map { recoveredTop =>
+      new BatchAVLProver(nodeParameters.keySize, nodeParameters.valueSize, Some(recoveredTop))(hf)
+    }
   }
 
   override def rollback(version: ADDigest): Try[(ProverNodes[D], Int)] = Try {
@@ -59,9 +61,6 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
   override def version: Option[ADDigest] = store.lastVersionID.map(d => ADDigest @@ d)
 
   def rollbackVersions: Iterable[ADDigest] = store.rollbackVersions().map(d => ADDigest @@ d)
-
-  def leafsIterator(): Iterator[(Array[Byte], Array[Byte])] =
-    store.getWithFilter{ case (_, v) => v.head == LeafPrefix }
 
   override def update[K <: Array[Byte], V <: Array[Byte]](prover: BatchAVLProver[D, _],
                                                           additionalData: Seq[(K, V)]): Try[Unit] = {
@@ -129,6 +128,9 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
     */
   private def nodeLabel(node: ProverNodes[D]): Array[Byte] = node.label
 
+  /**
+    * Serialize tree node (only, without possible children)
+    */
   private def toBytes(node: ProverNodes[D]): Array[Byte] = {
     val builder = new mutable.ArrayBuilder.ofByte;
     node match {
@@ -157,7 +159,7 @@ object VersionedLDBAVLStorage {
   private[batch] val LeafPrefix: Byte = 1: Byte
 
   /**
-    * Fetch tree node from database
+    * Fetch tree node from database by its database id (hash of node contents)
     *
     * @param dbKey - database key node of interest is stored under (hash of the node)
     * @param hf - hash function instance
@@ -203,8 +205,10 @@ object VersionedLDBAVLStorage {
     }
   }
 
-  //todo: move to more appropriate place
-  def digest[D <: hash.Digest](rootNodeLabel:D, rootNodeHeight: Int): ADDigest = {
+  /**
+    * Calculate tree digest, given root node label(hash) and root node height, by appending height to the hash
+    */
+  def digest[D <: hash.Digest](rootNodeLabel: D, rootNodeHeight: Int): ADDigest = {
     assert(rootNodeHeight >= 0 && rootNodeHeight < 256)
     // rootNodeHeight should never be more than 255, so the toByte conversion is safe (though it may cause an incorrect
     // sign on the signed byte if rootHeight>127, but we handle that case correctly on decoding the byte back to int in the
@@ -214,6 +218,8 @@ object VersionedLDBAVLStorage {
     ADDigest @@ (rootNodeLabel :+ rootNodeHeight.toByte)
   }
 
-  def digest[D <: hash.Digest](rootNode: Node[D], rootNodeHeight: Int): ADDigest = digest(rootNode.label, rootNodeHeight)
-}
+  def digest[D <: hash.Digest](rootNode: Node[D], rootNodeHeight: Int): ADDigest = {
+    digest(rootNode.label, rootNodeHeight)
+  }
 
+}

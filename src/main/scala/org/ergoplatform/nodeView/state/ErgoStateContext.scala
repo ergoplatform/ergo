@@ -17,8 +17,9 @@ import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationSta
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.eval.SigmaDsl
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import special.collection.{Coll, CollOverArray}
+import special.collection.Coll
 
 import scala.util.{Failure, Success, Try}
 
@@ -38,7 +39,9 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
 
   override def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
-  override def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.map(h => Header.toSigma(h)).toArray)
+  override def sigmaLastHeaders: Coll[special.sigma.Header] = {
+    SigmaDsl.Colls.fromArray(lastHeaders.map(h => Header.toSigma(h)).toArray)
+  }
 
   override def toString: String = s"UpcomingStateContext($predictedHeader, $lastHeaders)"
 
@@ -76,7 +79,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   override def sigmaPreHeader: special.sigma.PreHeader =
     PreHeader.toSigma(lastHeaders.headOption.getOrElse(PreHeader.fake))
 
-  override def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.drop(1).map(h => Header.toSigma(h)).toArray)
+  override def sigmaLastHeaders: Coll[special.sigma.Header] =
+    SigmaDsl.Colls.fromArray(lastHeaders.drop(1).map(h => Header.toSigma(h)).toArray)
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block

@@ -5,12 +5,12 @@ import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
+import org.ergoplatform._
+import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform._
-import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -18,9 +18,9 @@ import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
-import sigmastate.lang.SigmaCompiler
+import sigmastate.eval.CompiletimeIRContext
 import sigmastate.interpreter.Interpreter
+import sigmastate.lang.{CompilerResult, SigmaCompiler}
 import sigmastate.serialization.ValueSerializer
 
 import scala.concurrent.Future
@@ -64,12 +64,12 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     import sigmastate.Values._
     val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
     Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
-      case script: Value[SSigmaProp.type@unchecked] if script.tpe == SSigmaProp =>
+      case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
         Success(script)
-      case script: Value[SBoolean.type@unchecked] if script.tpe == SBoolean =>
+      case CompilerResult(_, _, _, script: Value[SBoolean.type@unchecked]) if script.tpe == SBoolean =>
         Success(script.toSigmaProp)
       case other =>
-        Failure(new Exception(s"Source compilation result is of type ${other.tpe}, but `SBoolean` expected"))
+        Failure(new Exception(s"Source compilation result is of type ${other.buildTree.tpe}, but `SBoolean` expected"))
     }
   }
 
@@ -101,7 +101,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       compileSource(req.script, req.env).fold(
         e => BadRequest(e.getMessage),
         tree => {
-          implicit val irc: IRContext = new RuntimeIRContext()
           val interpreter: ErgoLikeInterpreter = new ErgoLikeInterpreter()
           val res = Try(interpreter.fullReduction(tree, req.ctx.asInstanceOf[interpreter.CTX], Interpreter.emptyEnv))
           res.fold(

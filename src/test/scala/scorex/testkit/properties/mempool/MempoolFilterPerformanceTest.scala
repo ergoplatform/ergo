@@ -33,7 +33,7 @@ trait MempoolFilterPerformanceTest
     var m: ErgoMemPool = memPool
     (0 until 1000) foreach { _ =>
       forAll(transactionGenerator) { tx: ErgoTransaction =>
-        m = m.put(UnconfirmedTransaction(tx, None)).get
+        m = m.put(UnconfirmedTransaction(tx, None))
       }
     }
     m.size should be > 1000

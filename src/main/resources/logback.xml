@@ -31,34 +31,9 @@
     </appender>
 
     <!-- default level should be lowest here, since DynamicThresholdFilter cannot change it *down* otherwise -->
-    <root level="TRACE">
+    <root level="INFO">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="FILE"/>
     </root>
-
-    <turboFilter class="ch.qos.logback.classic.turbo.DynamicThresholdFilter">
-        <Key>set-log-level</Key>
-        <DefaultThreshold>TRACE</DefaultThreshold>
-        <MDCValueLevelPair>
-            <value>ERROR</value>
-            <level>ERROR</level>
-        </MDCValueLevelPair>
-        <MDCValueLevelPair>
-            <value>WARN</value>
-            <level>WARN</level>
-        </MDCValueLevelPair>
-        <MDCValueLevelPair>
-            <value>INFO</value>
-            <level>INFO</level>
-        </MDCValueLevelPair>
-        <MDCValueLevelPair>
-            <value>DEBUG</value>
-            <level>DEBUG</level>
-        </MDCValueLevelPair>
-        <MDCValueLevelPair>
-            <value>TRACE</value>
-            <level>TRACE</level>
-        </MDCValueLevelPair>
-    </turboFilter>
 
 </configuration>

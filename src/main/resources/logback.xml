@@ -30,7 +30,6 @@
         </encoder>
     </appender>
 
-    <!-- default level should be lowest here, since DynamicThresholdFilter cannot change it *down* otherwise -->
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="FILE"/>

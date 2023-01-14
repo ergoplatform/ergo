@@ -5,10 +5,9 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateConstants, UtxoState}
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core.VersionTag
 import scorex.core.network.ConnectedPeer
-import scorex.crypto.authds.avltree.batch.NodeParameters
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
@@ -218,23 +217,21 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
   def createPersistentProver(stateStore: LDBVersionedStore,
-                             blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = Try {
+                             blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = {
     val manifest = _manifest.get //todo: .get
-    val np = NodeParameters(32, None, 32) // todo: use constants
-    // todo: recreate database?
-    val ldbStorage = new VersionedLDBAVLStorage[Digest32, HF](stateStore, np)
     log.info("Starting UTXO set snapshot transfer into state database")
-    //todo: form state context correctly?
     val esc = ErgoStateReader.storageStateContext(stateStore, StateConstants(settings))
     val metadata = UtxoState.metadata(VersionTag @@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
-    ldbStorage.update(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator)
-    log.info("Finished UTXO set snapshot transfer into state database")
-    ldbStorage.restorePrunedProver().map { prunedAvlProver =>
-      new PersistentBatchAVLProver[Digest32, HF] {
-        override var avlProver = prunedAvlProver
-        override val storage = ldbStorage
-      }
-    }.get   //todo: .get
+    VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore, Constants.ErgoNodeParameters).flatMap {
+      ldbStorage =>
+        log.info("Finished UTXO set snapshot transfer into state database")
+        ldbStorage.restorePrunedProver().map { prunedAvlProver =>
+          new PersistentBatchAVLProver[Digest32, HF] {
+            override var avlProver = prunedAvlProver
+            override val storage = ldbStorage
+          }
+        }
+    }
   }
 }
 

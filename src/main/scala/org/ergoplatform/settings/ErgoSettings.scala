@@ -226,10 +226,10 @@ object ErgoSettings extends ScorexLogging
     */
   private def overrideLogLevel(level: String) = level match {
       case "TRACE" | "ERROR" | "INFO" | "WARN" | "DEBUG" =>
+        log.info(s"Log level set to $level")
         val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
         val root          = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
         root.setLevel(Level.toLevel(level))
-        log.info(s"Log level set to $level")
       case _ => log.warn("No log level configuration provided")
   }
 }

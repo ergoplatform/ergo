@@ -92,45 +92,60 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     * @param unconfirmedTx
     * @return Success(updatedPool), if transaction successfully added to the pool, Failure(_) otherwise
     */
-  def put(unconfirmedTx: UnconfirmedTransaction): Try[ErgoMemPool] = put(Seq(unconfirmedTx))
-
-  def put(unconfirmedTxs: Iterable[UnconfirmedTransaction]): Try[ErgoMemPool] = Try {
-    putWithoutCheck(unconfirmedTxs.filterNot(unconfirmedTx => pool.contains(unconfirmedTx.transaction.id)))
+  def put(unconfirmedTx: UnconfirmedTransaction): ErgoMemPool = {
+    if (!pool.contains(unconfirmedTx.id)) {
+      val updatedPool = pool.put(unconfirmedTx, feeFactor(unconfirmedTx))
+      new ErgoMemPool(updatedPool, stats, sortingOption)
+    } else {
+      this
+    }
   }
 
-  def putWithoutCheck(tx: UnconfirmedTransaction): ErgoMemPool = {
-    val updatedPool = pool.put(tx, feeFactor(tx))
-    new ErgoMemPool(updatedPool, stats, sortingOption)
+  def put(txs: TraversableOnce[UnconfirmedTransaction]): ErgoMemPool = {
+    txs.foldLeft(this) { case (acc, tx) => acc.put(tx) }
   }
 
-  def putWithoutCheck(txs: Iterable[UnconfirmedTransaction]): ErgoMemPool = {
-    val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx, feeFactor(tx)) }
-    new ErgoMemPool(updatedPool, stats, sortingOption)
-  }
-
-  def remove(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
-    log.debug(s"Removing transaction ${unconfirmedTransaction.id} from the mempool")
-    val tx = unconfirmedTransaction.transaction
+  private def updateStatsOnRemoval(tx: ErgoTransaction): MemPoolStatistics = {
     val wtx = pool.transactionsRegistry.get(tx.id)
-    val updStats = wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
-      .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
-    new ErgoMemPool(pool.remove(unconfirmedTransaction), updStats, sortingOption)
+    wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
+       .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
   }
 
-  def filter(condition: UnconfirmedTransaction => Boolean): ErgoMemPool = {
-    new ErgoMemPool(pool.filter(condition), stats, sortingOption)
+  /**
+    * Remove transaction from the pool
+    */
+  def remove(tx: ErgoTransaction): ErgoMemPool = {
+    log.debug(s"Removing transaction ${tx.id} from the mempool")
+    new ErgoMemPool(pool.remove(tx), updateStatsOnRemoval(tx), sortingOption)
   }
 
-  def filter(txs: Seq[UnconfirmedTransaction]): ErgoMemPool = filter(t => !txs.exists(_.transaction.id == t.transaction.id))
+  def remove(txs: TraversableOnce[ErgoTransaction]): ErgoMemPool = {
+    txs.foldLeft(this) { case (acc, tx) => acc.remove(tx) }
+  }
 
   /**
     * Invalidate transaction and delete it from pool
     *
-    * @param unconfirmedTransaction - Transaction to invalidate
+    * @param unconfirmedTx - Transaction to invalidate
     */
-  def invalidate(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
-    new ErgoMemPool(pool.invalidate(unconfirmedTransaction), stats, sortingOption)
+  def invalidate(unconfirmedTx: UnconfirmedTransaction): ErgoMemPool = {
+    log.debug(s"Invalidating mempool transaction ${unconfirmedTx.id}")
+    new ErgoMemPool(pool.invalidate(unconfirmedTx), updateStatsOnRemoval(unconfirmedTx.transaction), sortingOption)
   }
+
+  def invalidate(unconfirmedTransactionId: ModifierId): ErgoMemPool = {
+    pool.get(unconfirmedTransactionId) match {
+      case Some(utx) => invalidate(utx)
+      case None =>
+        log.warn(s"Can't invalidate transaction $unconfirmedTransactionId as it is not in the pool")
+        this
+    }
+  }
+
+  /**
+    * Check if transaction was invalidated earlier
+    */
+  def isInvalidated(id: ModifierId): Boolean = pool.isInvalidated(id)
 
   /**
     * @return inputs spent by the mempool transactions
@@ -236,10 +251,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime)
           }
         } else {
-          val contains = this.contains(tx.id)
-          val msg = if(contains) {
+          val msg = if (this.contains(tx.id)) {
             s"Pool can not accept transaction ${tx.id}, it is already in the mempool"
-          } else if(pool.size == settings.nodeSettings.mempoolCapacity) {
+          } else if (pool.size == settings.nodeSettings.mempoolCapacity) {
             s"Pool can not accept transaction ${tx.id}, the mempool is full"
           } else {
             s"Pool can not accept transaction ${tx.id}"

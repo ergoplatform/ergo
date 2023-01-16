@@ -2,25 +2,26 @@ package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
+import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
-import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
-
-import scala.concurrent.duration._
+import sigmastate.lang.SigmaCompiler
 import sigmastate.lang.Terms.ValueOps
 import sigmastate.serialization.ErgoTreeSerializer
+
+import scala.concurrent.duration._
 
 class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers with MempoolTestHelpers {
   implicit lazy val context: IRContext = new RuntimeIRContext
@@ -54,7 +55,8 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     boxes.nonEmpty shouldBe true
 
     val script = s"{sigmaProp(HEIGHT == ${genesis.height})}"
-    val prop = ErgoScriptPredef.compileWithCosting(emptyEnv, script, ErgoAddressEncoder.MainnetNetworkPrefix)
+    val compiler = new SigmaCompiler(ErgoAddressEncoder.MainnetNetworkPrefix)
+    val prop = compiler.compile(emptyEnv, script).buildTree
     val tree = ErgoTree.fromProposition(prop.asSigmaProp)
 
     val bs = ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(tree)
@@ -84,12 +86,11 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     applyBlock(block) shouldBe 'success
 
-    getPoolSize shouldBe 1 // first tx removed from pool during node view update
-
     scorex.core.utils.untilTimeout(cleanupDuration * 4, 100.millis) {
-      getPoolSize shouldBe 0 // another tx invalidated by `MempoolAuditor`
+      // first tx removed from pool during node view update
+      // another tx invalidated by `MempoolAuditor`
+      getPoolSize shouldBe 0
     }
-
   }
 
   it should "rebroadcast transactions correctly" in {

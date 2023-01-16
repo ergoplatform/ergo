@@ -443,7 +443,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       .select(inputBoxes.iterator, state.walletFilter, targetBalance, assetsMap)
       .leftMap(m => new Exception(m.message))
       .map { res =>
-        val ergoBoxes = res.boxes.map(_.box)
+        val ergoBoxes = res.inputBoxes.map(_.box)
         val changeBoxes = res.changeBoxes.map(b => ChangeBox(b.value, b.tokens))
         CollectedBoxes(ergoBoxes, changeBoxes)
       }.toTry

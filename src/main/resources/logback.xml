@@ -5,13 +5,7 @@
     <property name="default.pattern" value="%d{HH:mm:ss.SSS} %-5level [%.25thread] %logger{26} - %msg%n"/>
     <!--<property name="logback.file.final-directory" value="${logback.file.directory:-${ergo.directory}}"/>-->
 
-    <define name="loglevel" class="scorex.core.utils.TypesafeConfigPropertyDefiner"/>
-
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <target>System.out</target>
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>${logback.stdout.level:-INFO}</level>
-        </filter>
         <encoder>
             <pattern>${logback.pattern:-${default.pattern}}</pattern>
         </encoder>
@@ -36,8 +30,9 @@
         </encoder>
     </appender>
 
-    <root level="${loglevel}">
+    <root level="INFO">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="FILE"/>
     </root>
+
 </configuration>

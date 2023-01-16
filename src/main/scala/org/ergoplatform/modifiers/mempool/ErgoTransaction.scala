@@ -380,7 +380,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     // Before 5.0 soft-fork (v3 block version), we are checking only that
     // creation height in outputs is not negative
     // After, we are checking that it is not less that max creation height in inputs
-    val maxCreationHeightInInputs = if (blockVersion <= Header.HardeningVersion) {
+    def maxCreationHeightInInputs: Int = if (blockVersion <= Header.HardeningVersion) {
       0
     } else {
       boxesToSpend.map(_.creationHeight).max
@@ -398,10 +398,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txPositiveAssets,
         outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)),
         InvalidModifier(s"$id: ${outputCandidates.map(_.additionalTokens)}", id, modifierTypeId))
-      // Check that outputs are not dust, and not created in future
-      .validateSeq(outputs) { case (validationState, out) =>
-        verifyOutput(validationState, out, stateContext, maxCreationHeightInInputs)
-      }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
       // Normally, this check should always pass, if the client is implemented properly
       // so it is not part of the protocol really.
@@ -423,6 +419,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           modifierTypeId
         )
       )
+      // Check that outputs are not dust, and not created in future
+      .validateSeq(outputs) { case (validationState, out) =>
+        verifyOutput(validationState, out, stateContext, maxCreationHeightInInputs)
+      }
       // Check that there are no overflow in input and output values
       .validate(txInputsSum, inputSumTry.isSuccess, InvalidModifier(s"$id as invalid Inputs Sum", id, modifierTypeId))
       // Check that transaction is not creating money out of thin air.

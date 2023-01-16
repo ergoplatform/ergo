@@ -123,7 +123,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     } else if (nodeSettings.stateType.requireProofs) {
       h.sectionIds
     } else {
-      h.sectionIds.tail // do not download UTXO set transformation proofs if UTXO set is stored
+      h.sectionIdsWithNoProof // do not download UTXO set transformation proofs if UTXO set is stored
     }
   }
 

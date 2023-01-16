@@ -4,13 +4,11 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.{ModifierTypeId, NodeViewComponent}
 import scorex.core.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
@@ -29,8 +27,6 @@ trait ErgoHistoryReader
   extends NodeViewComponent
     with ContainsModifiers[BlockSection]
     with HeadersProcessor
-    with PoPoWProofsProcessor
-    with UTXOSnapshotChunkProcessor
     with BlockSectionProcessor
     with ScorexLogging
     with ScorexEncoding {
@@ -437,10 +433,6 @@ trait ErgoHistoryReader
         validate(header)
       case m: NonHeaderBlockSection =>
         validate(m)
-      case m: NipopowProofModifier =>
-        validate(m)
-      case chunk: UTXOSnapshotChunk =>
-        validate(chunk)
       case m: Any =>
         Failure(new MalformedModifierError(s"Modifier $m has incorrect type", modifier.id, modifier.modifierTypeId))
     }

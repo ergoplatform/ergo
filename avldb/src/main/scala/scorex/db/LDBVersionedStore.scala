@@ -1,16 +1,13 @@
 package scorex.db
 
 import java.io.File
-
 import scorex.db.LDBFactory.factory
 import org.iq80.leveldb._
-import java.nio.ByteBuffer
 
+import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import java.util.concurrent.locks.ReentrantReadWriteLock
-
 import scorex.crypto.hash.Blake2b256
-
 import scala.util.Try
 
 

@@ -6,12 +6,10 @@ import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRefHolder
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.consensus.ProgressInfo
@@ -80,10 +78,6 @@ trait ErgoHistory
           process(header)
         case section: NonHeaderBlockSection =>
           process(section)
-        case poPoWProof: NipopowProofModifier =>
-          process(poPoWProof)
-        case chunk: UTXOSnapshotChunk =>
-          process(chunk)
       }
     }.map(this -> _).recoverWith { case e =>
       if (!e.isInstanceOf[RecoverableModifierError]) {
@@ -282,8 +276,7 @@ object ErgoHistory extends ScorexLogging {
 
     val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {
       case (true, true) =>
-        new ErgoHistory with FullBlockSectionProcessor
-          with FullPoPoWProofsProcessor {
+        new ErgoHistory with FullBlockSectionProcessor {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
@@ -291,8 +284,7 @@ object ErgoHistory extends ScorexLogging {
         }
 
       case (false, true) =>
-        new ErgoHistory with EmptyBlockSectionProcessor
-          with FullPoPoWProofsProcessor {
+        new ErgoHistory with EmptyBlockSectionProcessor {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
@@ -300,8 +292,7 @@ object ErgoHistory extends ScorexLogging {
         }
 
       case (true, false) =>
-        new ErgoHistory with FullBlockSectionProcessor
-          with EmptyPoPoWProofsProcessor {
+        new ErgoHistory with FullBlockSectionProcessor {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
@@ -309,8 +300,7 @@ object ErgoHistory extends ScorexLogging {
         }
 
       case (false, false) =>
-        new ErgoHistory with EmptyBlockSectionProcessor
-          with EmptyPoPoWProofsProcessor {
+        new ErgoHistory with EmptyBlockSectionProcessor {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme

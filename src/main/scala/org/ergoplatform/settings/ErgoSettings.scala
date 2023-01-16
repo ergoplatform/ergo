@@ -2,13 +2,14 @@ package org.ergoplatform.settings
 
 import java.io.{File, FileOutputStream}
 import java.nio.channels.Channels
+import ch.qos.logback.classic.{LoggerContext, Level}
+import org.slf4j.{Logger, LoggerFactory}
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.nodeView.state.StateType.Digest
 import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, P2PKAddress}
-import org.slf4j.MDC
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
@@ -225,9 +226,10 @@ object ErgoSettings extends ScorexLogging
     */
   private def overrideLogLevel(level: String) = level match {
       case "TRACE" | "ERROR" | "INFO" | "WARN" | "DEBUG" =>
-        MDC.clear()
-        MDC.put("set-log-level", level)
         log.info(s"Log level set to $level")
+        val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
+        val root          = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
+        root.setLevel(Level.toLevel(level))
       case _ => log.warn("No log level configuration provided")
   }
 }

@@ -83,7 +83,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val txs = validTransactionsFromUtxoState(wus)
     var pool = ErgoMemPool.empty(settings)
     txs.foreach { tx =>
-      pool = pool.putWithoutCheck(Seq(UnconfirmedTransaction(tx, None)))
+      pool = pool.put(UnconfirmedTransaction(tx, None))
     }
     txs.foreach { tx =>
       pool.process(UnconfirmedTransaction(tx, None), us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
@@ -189,7 +189,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "accept only unique transactions" in {
     val pool = ErgoMemPool.empty(settings)
     val tx = UnconfirmedTransaction(invalidErgoTransactionGen.sample.get, None)
-    pool.putWithoutCheck(Seq(tx, tx, tx)).size shouldBe 1
+    pool.put(Seq(tx, tx, tx)).size shouldBe 1
   }
 
   it should "drop less prioritized transaction in case of pool overflow" in {
@@ -204,11 +204,11 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
     val lessPrioritizedTxs = txsWithAscendingPriority.init.map(tx => UnconfirmedTransaction(tx, None))
     val mostPrioritizedTx = UnconfirmedTransaction(txsWithAscendingPriority.last, None)
-    pool = pool.putWithoutCheck(lessPrioritizedTxs)
+    pool = pool.put(lessPrioritizedTxs)
 
     pool.size shouldBe 4
     pool.getAll should contain only (lessPrioritizedTxs: _*)
-    pool = pool.putWithoutCheck(Seq(mostPrioritizedTx))
+    pool = pool.put(Seq(mostPrioritizedTx))
     pool.size shouldBe 4
     pool.getAll should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)
   }
@@ -220,7 +220,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
     var pool = ErgoMemPool.empty(settings)
     txs.foreach { tx =>
-      pool = pool.putWithoutCheck(Seq(tx))
+      pool = pool.put(tx)
     }
     txs.foreach { tx =>
       val spendingBox = tx.transaction.outputs.head
@@ -242,7 +242,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
     txs.foreach { tx =>
-      pool = pool.putWithoutCheck(Seq(tx))
+      pool = pool.put(tx)
     }
     for (_ <- 1 to family_depth) {
       txs = txs.map(tx => {
@@ -278,7 +278,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
     txs.foreach { tx =>
-      pool = pool.putWithoutCheck(Seq(tx))
+      pool = pool.put(tx)
     }
     for (_ <- 1 to family_depth) {
       txs = txs.map(tx => {
@@ -294,7 +294,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
     pool.size shouldBe (family_depth + 1) * txs.size
     allTxs.foreach { tx =>
-      pool = pool.remove(tx)
+      pool = pool.remove(tx.transaction)
     }
     pool.size shouldBe 0
   }
@@ -310,7 +310,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
     txs.foreach { tx =>
-      pool = pool.putWithoutCheck(Seq(tx))
+      pool = pool.put(tx)
     }
     for (_ <- 1 to family_depth) {
       txs = txs.map(tx => {
@@ -353,7 +353,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
     var pool = ErgoMemPool.empty(limitedPoolSettings)
     txs.foreach { tx =>
-      pool = pool.putWithoutCheck(Seq(tx))
+      pool = pool.put(tx)
     }
     for (_ <- 1 to family_depth) {
       txs = txs.map(tx => {
@@ -373,7 +373,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.stats.snapTakenTxns shouldBe MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis()).snapTakenTxns
 
     allTxs.foreach { tx =>
-      pool = pool.remove(tx)
+      pool = pool.remove(tx.transaction)
     }
     pool.size shouldBe 0
     pool.stats.takenTxns shouldBe (family_depth + 1) * txs.size

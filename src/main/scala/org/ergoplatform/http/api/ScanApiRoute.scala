@@ -5,7 +5,7 @@ import akka.http.scaladsl.server.Route
 import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -104,7 +104,7 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       case Success(p2sAddr) =>
         val scriptBytes = ByteArrayConstant(ValueSerializer.serialize(p2sAddr.script.toProposition(replaceConstants = true).propBytes))
         val trackingRule = EqualsScanningPredicate(R1, scriptBytes)
-        val request = ScanRequest(p2s, trackingRule, None, None)
+        val request = ScanRequest(p2s, trackingRule, Some(ScanWalletInteraction.Off), Some(true))
         withWalletOp(_.addScan(request).map(_.response)) {
           case Failure(e) => BadRequest(s"Bad request $request. ${Option(e.getMessage).getOrElse(e.toString)}")
           case Success(app) => ApiResponse(ScanIdWrapper(app.scanId))

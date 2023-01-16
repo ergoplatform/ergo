@@ -70,7 +70,7 @@ case class Header(override val version: Header.Version,
 
   lazy val extensionId: ModifierId = NonHeaderBlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
 
-  override def minerPk: EcPointType = powSolution.pk00
+  override def minerPk: EcPointType = powSolution.pk
 
   /**
     * Expected identifiers of the block sections corresponding to this header

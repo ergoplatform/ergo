@@ -855,7 +855,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           }
         }
       case None =>
-      // todo: log
+        log.warn("No download plan found in requestMoreChunksIfNeeded")
     }
   }
 
@@ -878,9 +878,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.error(s"No height found for manifest ${Algos.encode(manifest.id)}")
         }
       case Failure(e) =>
-        //todo:
-        log.info("Cant' restore manifest from bytes ", e)
-        ???
+        log.info(s"Cant' restore manifest (got from $remote) from bytes ", e)
+        penalizeMisbehavingPeer(remote)
     }
   }
 
@@ -908,9 +907,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           requestMoreChunksIfNeeded(hr)
         }
       case Failure(e) =>
-        //todo:
-        log.info("Cant' restore manifest from bytes ", e)
-        ???
+        log.info(s"Cant' restore snapshot chunk (got from $remote) from bytes ", e)
+        penalizeMisbehavingPeer(remote)
     }
   }
 

@@ -96,6 +96,9 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
+  /**
+    * API method to get tracking rule corresponding to p2s address
+    */
   def p2sRuleR: Route = (path("p2sRule") & post & entity(as[String])) { p2s =>
     addressEncoder.fromString(p2s) match {
       case Success(p2sAddr) =>

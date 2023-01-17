@@ -34,7 +34,7 @@ object ModePeerFeature {
   import io.circe.syntax._
 
   def apply(nodeSettings: NodeConfigurationSettings): ModePeerFeature = {
-    val popowSuffix = if (nodeSettings.poPoWBootstrap) Some(nodeSettings.minimalSuffix) else None
+    val popowSuffix = if (nodeSettings.popowBootstrap) Some(nodeSettings.popowSuffix) else None
 
     new ModePeerFeature(
       nodeSettings.stateType,

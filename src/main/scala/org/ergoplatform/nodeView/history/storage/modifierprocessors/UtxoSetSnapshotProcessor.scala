@@ -14,8 +14,8 @@ import scorex.db.LDBVersionedStore
 import scorex.util.{ByteArrayBuilder, ModifierId, ScorexLogging}
 import scorex.util.serialization.VLQByteBufferWriter
 import spire.syntax.all.cfor
-
-import scala.util.Random
+import scala.util.{Try, Random}
+import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
 /**
   * Stores:
@@ -61,11 +61,10 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight)
     _manifest = Some(manifest)
     _peersToDownload = peersToDownload
-    println(_manifest.get.id)
     updateUtxoSetSnashotDownloadPlan(plan)
   }
 
-  def getUtxoSetSnapshotDownloadPlan(): Option[UtxoSetSnapshotDownloadPlan] = {
+  def utxoSetSnapshotDownloadPlan(): Option[UtxoSetSnapshotDownloadPlan] = {
     _cachedDownloadPlan match {
       case s@Some(_) => s
       case None => None
@@ -79,7 +78,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
-  def getRandomPeerToDownloadChunks(): Option[ConnectedPeer] = {
+  def randomPeerToDownloadChunks(): Option[ConnectedPeer] = {
     if (_peersToDownload.nonEmpty) {
       Some(_peersToDownload(Random.nextInt(_peersToDownload.size)))
     } else {
@@ -88,7 +87,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   }
 
   def getChunkIdsToDownload(howMany: Int): Seq[SubtreeId] = {
-    getUtxoSetSnapshotDownloadPlan() match {
+    utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
         val expected = plan.expectedChunkIds
         val downloadIndex = plan.downloadedChunkIds.size
@@ -111,7 +110,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   }
 
   def registerDownloadedChunk(chunkId: Array[Byte], chunkSerialized: Array[Byte]): Unit = {
-    getUtxoSetSnapshotDownloadPlan() match {
+    utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
         cfor(0)(_ < plan.downloadedChunkIds.size, _ + 1) { idx =>
           if (!plan.downloadedChunkIds(idx) && plan.expectedChunkIds(idx).sameElements(chunkId)) {
@@ -130,7 +129,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   }
 
   def downloadedChunksIterator(): Iterator[BatchAVLProverSubtree[Digest32]] = {
-    getUtxoSetSnapshotDownloadPlan() match {
+    utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
         Iterator.range(0, plan.totalChunks).flatMap{idx =>
           val idxBytes = Ints.toByteArray(idx)
@@ -211,10 +210,6 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
       )
     }
   }*/
-
-
-  import scala.util.Try
-  import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
   def createPersistentProver(stateStore: LDBVersionedStore,
                              blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = {

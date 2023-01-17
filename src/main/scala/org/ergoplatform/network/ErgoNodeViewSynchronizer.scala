@@ -839,12 +839,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def requestMoreChunksIfNeeded(hr: ErgoHistory): Unit = {
-    hr.getUtxoSetSnapshotDownloadPlan() match {
+    hr.utxoSetSnapshotDownloadPlan() match {
       case Some(downloadPlan) =>
         if (downloadPlan.downloadingChunks < 16) {
           (1 to 4).foreach { _ =>
             val toRequest = hr.getChunkIdsToDownload(4)
-            hr.getRandomPeerToDownloadChunks() match {
+            hr.randomPeerToDownloadChunks() match {
               case Some(remote) => toRequest.foreach {
                 subtreeId =>
                   requestUtxoSetChunk(subtreeId, remote)
@@ -859,7 +859,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  protected def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer) = {
+  protected def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer): Unit = {
     //todo : check that manifestBytes were requested
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.manifestFromBytes(manifestBytes, keyLength = 32) match {
@@ -894,7 +894,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.info(s"Got utxo snapshot chunk, id: ${Algos.encode(subtree.id)}, size: ${serializedChunk.length}")  //todo: change to debug on release?
         hr.registerDownloadedChunk(subtree.id, serializedChunk)
 
-        val downloadPlanOpt = hr.getUtxoSetSnapshotDownloadPlan() // todo: match for optional result
+        val downloadPlanOpt = hr.utxoSetSnapshotDownloadPlan() // todo: match for optional result
         if (downloadPlanOpt.map(_.fullyDownloaded).getOrElse(false)) {
           if (!hr.isUtxoSnapshotApplied) {
             val h = downloadPlanOpt.get.snapshotHeight // todo: .get
@@ -1101,7 +1101,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
           if (checksDone < maxDeliveryChecks) {
             if (modifierTypeId == UtxoSnapshotChunkTypeId.value) {
-              val newPeerOpt = hr.getRandomPeerToDownloadChunks()
+              val newPeerOpt = hr.randomPeerToDownloadChunks()
               log.info(s"Rescheduling request for UTXO set chunk $modifierId , new peer $newPeerOpt")
               deliveryTracker.setUnknown(modifierId, modifierTypeId)
               newPeerOpt match {
@@ -1186,12 +1186,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def checkUtxoSetManifests(historyReader: ErgoHistory): Unit = {
-    val MinSnapshots = 2 //todo: set to 3 after testing
+    val MinSnapshots = 2 //todo: set to 3 after testing, or move to settings?
 
     if (settings.nodeSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&
           availableManifests.nonEmpty &&
-          historyReader.getUtxoSetSnapshotDownloadPlan().isEmpty) {
+          historyReader.utxoSetSnapshotDownloadPlan().isEmpty) {
       val res = availableManifests.filter { case (h, records) =>
         if (records.length >= MinSnapshots) {
           val idsSet = records.map(_._2).map(Base16.encode).toSet

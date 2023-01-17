@@ -88,7 +88,7 @@ trait ToDownloadProcessor
         continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
       case None if (nodeSettings.utxoBootstrap && !_utxoSnapshotApplied) =>
         // todo: can be requested multiple times, prevent it
-        if (getUtxoSetSnapshotDownloadPlan().isEmpty) {
+        if (utxoSetSnapshotDownloadPlan().isEmpty) {
           Map(SnapshotsInfoTypeId.value -> Seq.empty)
         } else {
           Map.empty

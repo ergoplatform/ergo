@@ -63,7 +63,8 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
   override def update[K <: Array[Byte], V <: Array[Byte]](prover: BatchAVLProver[D, _],
                                                           additionalData: Seq[(K, V)]): Try[Unit] = {
     val digestWrapper = prover.digest
-    val indexes = Seq(topNodeKey -> nodeLabel(prover.topNode), topNodeHeight -> Ints.toByteArray(prover.rootNodeHeight))
+    val indexes = Seq(topNodeKey -> nodeLabel(prover.topNode),
+                      topNodeHeight -> Ints.toByteArray(prover.rootNodeHeight))
     val toInsert = serializedVisitedNodes(prover.topNode, isTop = true)
     val toRemove = prover.removedNodes().map(rn => rn.label)
     val toUpdate = indexes ++ toInsert

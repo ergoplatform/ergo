@@ -32,7 +32,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
     val snapshotHeight = 1
     val blockId = ModifierId @@ Algos.encode(Array.fill(32)(Random.nextInt(100).toByte))
     utxoSetSnapshotProcessor.registerManifestToDownload(manifest, snapshotHeight, Seq.empty)
-    val dp = utxoSetSnapshotProcessor.getUtxoSetSnapshotDownloadPlan().get
+    val dp = utxoSetSnapshotProcessor.utxoSetSnapshotDownloadPlan().get
     dp.snapshotHeight shouldBe snapshotHeight
     val subtreeIds = subtrees.map(s => ModifierId @@ Algos.encode(s.id))
     val expected = dp.expectedChunkIds.map(id => ModifierId @@ Algos.encode(id))

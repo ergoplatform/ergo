@@ -148,6 +148,8 @@ trait ExtraIndexerBase extends ScorexLogging {
     */
   private def saveProgress(writeLog: Boolean = true): Unit = {
 
+    if(modCount == 0) return
+
     val start: Long = System.nanoTime()
 
     // perform segmentation on big modifiers
@@ -192,7 +194,9 @@ trait ExtraIndexerBase extends ScorexLogging {
     */
   protected def index(bt: BlockTransactions, height: Int): Unit = {
 
-    if (caughtUp && height <= indexedHeight) return // do not process older blocks again after caught up (due to actor message queue)
+    if (rollback || // rollback in progress
+       (caughtUp && height <= indexedHeight)) // do not process older blocks again after caught up (due to actor message queue)
+      return
 
     var boxCount: Int = 0
 
@@ -245,7 +249,7 @@ trait ExtraIndexerBase extends ScorexLogging {
 
     }
 
-    log.info(s"Buffered block #$height / $chainHeight [txs: ${bt.txs.length}, boxes: $boxCount] (buffer: $modCount / $saveLimit)")
+    log.info(s"Buffered block $height / $chainHeight [txs: ${bt.txs.length}, boxes: $boxCount] (buffer: $modCount / $saveLimit)")
 
     if (caughtUp) {
 
@@ -278,15 +282,17 @@ trait ExtraIndexerBase extends ScorexLogging {
 
     saveProgress(false) // flush any remaining data
 
-    if (rollback) {
-      caughtUp = true
+    if (rollback)
       log.info("Stopping indexer to perform rollback")
-    } else
+    else {
+      caughtUp = true
       log.info("Indexer caught up with chain")
+    }
+
   }
 
   /**
-    * Remove all indexes after given height.
+    * Remove all indexes after a given height and revert address balances.
     *
     * @param height - starting height
     */

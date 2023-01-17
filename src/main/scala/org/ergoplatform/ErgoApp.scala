@@ -9,6 +9,7 @@ import org.ergoplatform.http.api._
 import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProofSerializer}
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -43,11 +44,11 @@ class ErgoApp(args: Args) extends ScorexLogging {
   log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")
 
   implicit private def scorexSettings: ScorexSettings = ergoSettings.scorexSettings
-  
+
   implicit private val actorSystem: ActorSystem = ActorSystem(
     scorexSettings.network.agentName
   )
-  
+
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
 
   private val timeProvider = new NetworkTimeProvider(scorexSettings.ntp)
@@ -65,6 +66,9 @@ class ErgoApp(args: Args) extends ScorexLogging {
     )
   }
 
+  private val nipopowProofSpec =
+    new NipopowProofSpec(new NipopowProofSerializer(new NipopowAlgos(ergoSettings.chainSettings.powScheme)))
+
   private val basicSpecs = {
     Seq(
       GetPeersSpec,
@@ -78,7 +82,9 @@ class ErgoApp(args: Args) extends ScorexLogging {
       GetManifestSpec,
       ManifestSpec,
       GetUtxoSnapshotChunkSpec,
-      UtxoSnapshotChunkSpec
+      UtxoSnapshotChunkSpec,
+      GetNipopowProofSpec,
+      nipopowProofSpec
     )
   }
 
@@ -133,7 +139,9 @@ class ErgoApp(args: Args) extends ScorexLogging {
         GetManifestSpec.messageCode         -> ergoNodeViewSynchronizerRef,
         ManifestSpec.messageCode            -> ergoNodeViewSynchronizerRef,
         GetUtxoSnapshotChunkSpec.messageCode-> ergoNodeViewSynchronizerRef,
-        UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef
+        UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef,
+        GetNipopowProofSpec.messageCode     -> ergoNodeViewSynchronizerRef,
+        nipopowProofSpec.messageCode        -> ergoNodeViewSynchronizerRef
       )
       // Launching PeerSynchronizer actor which is then registering itself at network controller
       if (ergoSettings.scorexSettings.network.peerDiscovery) {

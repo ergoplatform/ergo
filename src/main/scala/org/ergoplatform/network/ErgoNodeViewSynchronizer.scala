@@ -5,6 +5,7 @@ import akka.actor.{Actor, ActorInitializationException, ActorKilledException, Ac
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ModifierTypeId, SnapshotsInfoTypeId, TransactionTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProofSerializer}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
@@ -923,6 +924,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  private val nipopowProofSpec =
+    new NipopowProofSpec(new NipopowProofSerializer(new NipopowAlgos(settings.chainSettings.powScheme)))
+
+  protected def sendNipopowProof(data: NipopowProofData, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+    hr.popowProof(data.m, data.k, data.headerId) match {
+      case Success(proof) => {
+        val msg = Message(nipopowProofSpec, Right(proof), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      }
+      case _ => log.warn(s"No Nipopow Proof available")
+    }
+  }
+
   /**
     * Object ids coming from other node.
     * Filter out modifier ids that are already in process (requested, received or applied),
@@ -1378,7 +1392,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Some(_) => processUtxoSnapshotChunk(serializedChunk, hr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
-
+    case (_: MessageSpec[_], data: NipopowProofData, remote) =>
+      sendNipopowProof(data, hr, remote)
   }
 
   def initialized(hr: ErgoHistory,

@@ -17,6 +17,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.nodeView.state.{ErgoState, SnapshotsDb, SnapshotsInfo, UtxoState, UtxoStateReader}
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.utils.generators.ChainGenerator
 import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
@@ -38,7 +39,8 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   with Matchers
   with ScorexLogging
   with SyntacticallyTargetedModifierProducer
-  with TotallyValidModifierProducer[ST] {
+  with TotallyValidModifierProducer[ST]
+  with ChainGenerator {
 
   val historyGen: Gen[ErgoHistory]
   val memPool: ErgoMemPool
@@ -135,6 +137,38 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
 
       node ! Message(dummySyncInfoMessageSpec, Left(msgBytes), Some(peer))
       //    vhProbe.fishForMessage(3 seconds) { case m => m == OtherNodeSyncingInfo(peer, dummySyncInfo) }
+    }
+  }
+
+  property("NodeViewSynchronizer: GetNipopowProof") {
+    withFixture { ctx =>
+      import ctx._
+
+      // Generate history chain
+      val emptyHistory = historyGen.sample.get
+      val prefix = blockStream(None).take(10)
+      val prefixHistory = applyChain(emptyHistory, prefix)
+      val suffix = blockStream(Some(prefix.last)).take(10)
+      val fullHistory = applyChain(prefixHistory, suffix)
+      val headerId = suffix.head.header.id
+
+      // Broadcast updated history
+      node ! ChangedHistory(fullHistory)
+
+      // Build and send GetNipopowProofSpec request
+      val spec = GetNipopowProofSpec
+      val msgBytes = spec.toBytes(NipopowProofData(headerId = Some(headerId)))
+      node ! Message[NipopowProofData](spec, Left(msgBytes), Option(peer))
+
+      // Listen for NipopowProofSpec response
+      ncProbe.fishForMessage(5 seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec match {
+            case _: NipopowProofSpec => true
+            case _ => false
+          }
+        case _: Any => false
+      }
     }
   }
 

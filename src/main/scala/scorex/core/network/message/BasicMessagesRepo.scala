@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.ModifierTypeId
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.modifiers.history.popow.NipopowProof
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
@@ -20,6 +21,8 @@ import scala.collection.immutable
 case class ModifiersData(typeId: ModifierTypeId.Value, modifiers: Map[ModifierId, Array[Byte]])
 
 case class InvData(typeId: ModifierTypeId.Value, ids: Seq[ModifierId])
+
+case class NipopowProofData(m: Int = 6, k: Int = 6, headerId: Option[ModifierId])
 
 /**
   * The `SyncInfo` message requests an `Inv` message that provides modifier ids
@@ -384,4 +387,46 @@ object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
   }
 }
 
+/**
+  * The `GetNipopowProof` message requests a `NipopowProof` message from the receiving node
+  */
+object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
+
+  val messageCode: MessageCode = 10: Byte
+  val messageName: String = "GetNipopowProof"
+
+  override def serialize(data: NipopowProofData, w: Writer): Unit = {
+    w.putInt(data.m)
+    w.putInt(data.k)
+    data.headerId.foreach(id => w.putShortString(id))
+  }
+
+  override def parse(r: Reader): NipopowProofData = {
+    val m = r.getInt()
+    val k = r.getInt()
+    val headerId = if (r.remaining > 0) Some(ModifierId @@ r.getShortString()) else None
+    NipopowProofData(m, k, headerId)
+  }
+}
+
+object NipopowProofSpec {
+  val MessageCode: Byte = 11
+  val MessageName: String = "NipopowProof"
+}
+
+/**
+  * The `NipopowProof` message is a reply to a `GetNipopowProof` message.
+  */
+class NipopowProofSpec(serializer: ScorexSerializer[NipopowProof]) extends MessageSpecV1[NipopowProof] {
+
+  import NipopowProofSpec._
+
+  override val messageCode: MessageCode = MessageCode
+  override val messageName: String = MessageName
+
+  override def serialize(proof: NipopowProof, w: Writer): Unit =
+    serializer.serialize(proof, w)
+
+  override def parse(r: Reader): NipopowProof = serializer.parse(r)
+}
 

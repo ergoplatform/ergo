@@ -49,6 +49,9 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
     */
   def tokenRegistersSet(box: ErgoBox): Boolean = {
 
+    // box has tokens
+    if(box.additionalTokens.length == 0) return false
+
     // registers exist
     if(!box.additionalRegisters.contains(R4) ||
        !box.additionalRegisters.contains(R5) ||
@@ -74,7 +77,7 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
     * @param reg - register to extract decimals from
     * @return number of decimals places
     */
-  def getDecimals(reg: EvaluatedValue[_ <: SType]): Int = {
+  private def getDecimals(reg: EvaluatedValue[_ <: SType]): Int = {
     try {
       new String(reg.asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8").toInt
     }catch {

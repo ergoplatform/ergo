@@ -9,16 +9,19 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.ModifierTypeId
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
+import spire.implicits.cfor
 
 /**
   * Index of a transaction.
   * @param txid        - id of this transaction
   * @param height      - height of the block which includes this transaction
   * @param globalIndex - numeric index of this transaction
+  * @param inputNums   - list of transaction inputs (needed for rollback)
   */
 case class IndexedErgoTransaction(txid: ModifierId,
                                   height: Int,
-                                  globalIndex: Long) extends ExtraIndex {
+                                  globalIndex: Long,
+                                  inputNums: Array[Long]) extends ExtraIndex {
 
   override def id: ModifierId = txid
   override def serializedId: Array[Byte] = fastIdToBytes(txid)
@@ -74,6 +77,8 @@ object IndexedErgoTransactionSerializer extends ScorexSerializer[IndexedErgoTran
     w.putBytes(iTx.serializedId)
     w.putInt(iTx.height)
     w.putLong(iTx.globalIndex)
+    w.putUShort(iTx.inputNums.length)
+    cfor(0)(_ < iTx.inputs.length, _ + 1) { i => w.putLong(iTx.inputNums(i)) }
   }
 
   override def parse(r: Reader): IndexedErgoTransaction = {
@@ -81,7 +86,10 @@ object IndexedErgoTransactionSerializer extends ScorexSerializer[IndexedErgoTran
     val id = bytesToId(r.getBytes(idLen))
     val height = r.getInt()
     val globalIndex = r.getLong()
-    IndexedErgoTransaction(id, height, globalIndex)
+    val inputCount: Int = r.getUShort()
+    val inputNums: Array[Long] = Array.ofDim[Long](inputCount)
+    cfor(0)(_ < inputCount, _ + 1) { i => inputNums(i) = r.getLong() }
+    IndexedErgoTransaction(id, height, globalIndex, inputNums)
   }
 }
 

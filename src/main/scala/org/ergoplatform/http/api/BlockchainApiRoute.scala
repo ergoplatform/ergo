@@ -26,13 +26,13 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 5)
+  private val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 5)
 
   private val MaxItems = 16384
 
   implicit val ae: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
 
-  val ergoAddress: Directive1[ErgoAddress] = entity(as[String]).flatMap(handleErgoAddress)
+  private val ergoAddress: Directive1[ErgoAddress] = entity(as[String]).flatMap(handleErgoAddress)
 
   private def handleErgoAddress(value: String): Directive1[ErgoAddress] = {
     ae.fromString(value) match {

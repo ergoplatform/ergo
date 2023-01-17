@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.ReceivableMessages.Start
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.segmentTreshold
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
+import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.tokenRegistersSet
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -199,10 +200,7 @@ trait ExtraIndexerBase extends ScorexLogging {
     cfor(0)(_ < bt.txs.length, _ + 1) { n =>
 
       val tx: ErgoTransaction = bt.txs(n)
-
-      //process transaction
-      general += IndexedErgoTransaction(tx.id, height, globalTxIndex)
-      general += NumericTxIndex(globalTxIndex, tx.id)
+      val inputs: Array[Long] = Array.ofDim[Long](tx.inputs.length)
 
       tokens.clear()
 
@@ -210,7 +208,10 @@ trait ExtraIndexerBase extends ScorexLogging {
       if (height != 1) { //only after 1st block (skip genesis box)
         cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
           val boxIndex: Int = findAndSpendBox(tx.inputs(i).boxId, tx.id, height)
-          if (boxIndex >= 0) findAndUpdateTree(bytesToId(hashErgoTree(boxes(boxIndex).box.ergoTree)), Left(boxes(boxIndex).box)) // spend box and add tx
+          if (boxIndex >= 0) { // spend box and add tx
+            findAndUpdateTree(bytesToId(hashErgoTree(boxes(boxIndex).box.ergoTree)), Left(boxes(boxIndex).box))
+            inputs(i) = boxes(boxIndex).globalIndex
+          }
         }
       }
 
@@ -224,7 +225,7 @@ trait ExtraIndexerBase extends ScorexLogging {
         findAndUpdateTree(bytesToId(hashErgoTree(box.ergoTree)), Right(boxes(findBox(box.id).get)))
 
         // check if box is creating a new token, if yes record it
-        if (box.additionalTokens.length > 0 && IndexedTokenSerializer.tokenRegistersSet(box))
+        if (tokenRegistersSet(box))
           cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
             if (!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1))) {
               general += IndexedTokenSerializer.fromBox(box)
@@ -235,6 +236,10 @@ trait ExtraIndexerBase extends ScorexLogging {
         boxCount += 1
 
       }
+
+      //process transaction
+      general += IndexedErgoTransaction(tx.id, height, globalTxIndex, inputs)
+      general += NumericTxIndex(globalTxIndex, tx.id)
 
       globalTxIndex += 1
 
@@ -271,9 +276,13 @@ trait ExtraIndexerBase extends ScorexLogging {
       index(history.bestBlockTransactionsAt(indexedHeight).get, indexedHeight)
     }
 
-    if (rollback)
+    saveProgress(false) // flush any remaining data
+
+    if (rollback) {
       caughtUp = true
-    log.info("Indexer caught up with chain")
+      log.info("Stopping indexer to perform rollback")
+    } else
+      log.info("Indexer caught up with chain")
   }
 
   /**
@@ -284,47 +293,48 @@ trait ExtraIndexerBase extends ScorexLogging {
   protected def removeAfter(height: Int): Unit = {
 
     saveProgress(false)
-
     log.info(s"Rolling back indexes from $indexedHeight to $height")
 
-    cfor(indexedHeight)(_ > height, _ - 1) { block => // remove all block parts down to "height"
+    val lastTxToKeep: ErgoTransaction = history.bestBlockTransactionsAt(height).get.txs.last
 
-      val bt: Array[ErgoTransaction] = history.bestBlockTransactionsAt(block).get.txs.toArray
-      cfor(bt.length - 1)(_ >= 0, _ - 1) { tx =>
-
-        val outputs: Array[ErgoBox] = bt(tx).outputs.toArray
-        cfor(outputs.length - 1)(_ >= 0, _ - 1) { n => // revert outputs from addresses
-
-          val i: Int = findAndUpdateTree(bytesToId(hashErgoTree(outputs(n).ergoTree)), Left(outputs(n))) // remove this boxes ergs/tokens
-          trees(i).txs.remove(trees(i).txs.length - 1) // remove tx number duplicate
-          trees(i).boxes.remove(trees(i).boxes.length - 1) // remove box number
-
+    // remove all tx indexes
+    val txTarget: Long = history.typedExtraIndexById[IndexedErgoTransaction](lastTxToKeep.id).get.globalIndex
+    val txs: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]
+    while(globalTxIndex > txTarget) {
+      val tx: IndexedErgoTransaction = NumericTxIndex.getTxByNumber(history, globalTxIndex).get
+      tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach(iEb => {
+        if(iEb.box.creationHeight <= height) { // if spending box before branchpoint, undo
+          iEb.spendingHeightOpt = None
+          iEb.spendingTxIdOpt = None
+          val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(iEb.box.ergoTree))).get.addBox(iEb, false)
+          historyStorage.insertExtra(Array.empty, Array(iEb, address))
         }
-
-        boxes ++= bt(tx).inputs.map(x => history.typedExtraIndexById[IndexedErgoBox](bytesToId(x.boxId)).get)
-        cfor(boxes.length - 1)(_ >= 0, _ - 1) { n => // revert inputs from addresses
-
-          boxes(n).spendingTxIdOpt = None
-          boxes(n).spendingHeightOpt = None
-          val i: Int = findAndUpdateTree(bytesToId(hashErgoTree(boxes(n).box.ergoTree)), Right(boxes(n))) // add this boxes ergs/tokens
-          trees(i).txs.remove(trees(i).txs.length - 1) // remove tx number duplicate
-          trees(i).boxes.remove(trees(i).boxes.length - 1) // remove box number duplicate
-
-        }
-
-        historyStorage.removeExtra(outputs.map(x => bytesToId(x.id))) // remove all boxes in tx
-
-      }
-
-      // save updated height and indexes
-
-      indexedHeight = block
-      globalTxIndex = history.typedExtraIndexById[IndexedErgoTransaction](bt.last.id).get.globalIndex
-      globalBoxIndex = history.typedExtraIndexById[IndexedErgoBox](bytesToId(bt.last.outputs.last.id)).get.globalIndex
-      saveProgress(false)
-
-      historyStorage.removeExtra(bt.map(_.id)) // remove all txs in block
+      })
+      txs += tx.id // tx by id
+      txs += bytesToId(NumericTxIndex.indexToBytes(globalTxIndex)) // tx id by number
+      globalTxIndex -= 1
     }
+    historyStorage.removeExtra(txs.toArray)
+
+    // remove all box indexes, tokens and address balances
+    val boxTarget: Long = history.typedExtraIndexById[IndexedErgoBox](bytesToId(lastTxToKeep.outputs.last.id)).get.globalIndex
+    val toRemove: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]
+    while(globalBoxIndex > boxTarget) {
+      val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, globalBoxIndex).get
+      val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(iEb.box.ergoTree))).get
+      if(!iEb.trackedBox.isSpent) // remove unspent assests from address
+        address.spendBox(iEb.box)
+      if(tokenRegistersSet(iEb.box))
+        history.typedExtraIndexById[IndexedToken](IndexedTokenSerializer.fromBox(iEb.box).id) match {
+          case Some(token) => toRemove += token.id // token created, delete
+          case None => // no token created
+        }
+      address.rollback(txTarget, boxTarget)(_history)
+      toRemove += iEb.id // box by id
+      toRemove += bytesToId(NumericBoxIndex.indexToBytes(globalBoxIndex)) // box id by number
+      globalBoxIndex -= 1
+    }
+    historyStorage.removeExtra(toRemove.toArray)
 
     log.info(s"Successfully rolled back indexes to $height")
 

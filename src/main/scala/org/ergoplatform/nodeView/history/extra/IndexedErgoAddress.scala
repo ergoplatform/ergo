@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getSegmentsForRange, getTxs, segmentTreshold, slice}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, txSegmentId}
@@ -12,7 +12,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import spire.syntax.all.cfor
 
 /**
@@ -113,10 +113,11 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   /**
     * Associate box with this address and update BalanceInfo
     * @param iEb - box to use
+    * @param record - whether to add box to boxes list, used in rollbacks (true by default)
     * @return this address
     */
-  private[extra] def addBox(iEb: IndexedErgoBox): IndexedErgoAddress = {
-    boxes += iEb.globalIndex
+  private[extra] def addBox(iEb: IndexedErgoBox, record: Boolean = true): IndexedErgoAddress = {
+    if(record) boxes += iEb.globalIndex
     balanceInfo.get.add(iEb.box)
     this
   }
@@ -129,6 +130,55 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   private[extra] def spendBox(box: ErgoBox): IndexedErgoAddress = {
     balanceInfo.get.subtract(box)
     this
+  }
+
+  /**
+    * Rollback the state of this address and of boxes associted with it
+    * @param txTarget  - remove transaction numbers above this number
+    * @param boxTarget - remove box numbers above this number and revert the balance
+    * @param _history  - history handle to update address in database
+    */
+  private[extra] def rollback(txTarget: Long, boxTarget: Long)(_history: ErgoHistory): Unit = {
+
+    def history: ErgoHistoryReader = _history.getReader
+
+    val toSave: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
+    val toRemove: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]
+
+    // filter tx numbers
+    do {
+      val tmp = txs.takeWhile(_ <= txTarget)
+      txs.clear()
+      txs ++= tmp
+      if(txs.isEmpty && txSegmentCount > 0) { // entire current tx set removed, retrieving more from database if possible
+        val id = txSegmentId(treeHash, txSegmentCount - 1)
+        txs ++= history.typedExtraIndexById[IndexedErgoAddress](id).get.txs
+        toRemove += id
+        txSegmentCount -= 1
+      }
+    }while(txCount() > 0 && txs.last > txTarget)
+
+    // filter box numbers
+    do {
+      val tmp = boxes.takeWhile(_ <= boxTarget)
+      boxes.clear()
+      boxes ++= tmp
+      if(boxes.isEmpty && boxSegmentCount > 0) { // entire current box set removed, retrieving more from database if possible
+        val id = boxSegmentId(treeHash, boxSegmentCount - 1)
+        boxes ++= history.typedExtraIndexById[IndexedErgoAddress](id).get.boxes
+        toRemove += id
+        boxSegmentCount -= 1
+      }
+    }while(boxCount() > 0 && boxes.last > boxTarget)
+
+    if(txCount() == 0 && boxCount() == 0)
+      toRemove += this.id // address is empty after rollback, delete
+    else
+      toSave += this // save the changes made to this address
+
+    _history.historyStorage.insertExtra(Array.empty, toSave.toArray)
+    _history.historyStorage.removeExtra(toRemove.toArray)
+
   }
 
   /**

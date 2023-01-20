@@ -28,7 +28,7 @@ case class ErgoSettings(directory: String,
                         cacheSettings: CacheSettings,
                         votingTargets: VotingTargets = VotingTargets.empty) {
 
-  val addressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
+  val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
 
   val miningRewardDelay: Int = chainSettings.monetary.minerRewardDelay
 
@@ -197,20 +197,24 @@ object ErgoSettings extends ScorexLogging
 
   private def consistentSettings(settings: ErgoSettings,
                                  desiredNetworkTypeOpt: Option[NetworkType]): ErgoSettings = {
-    if (settings.nodeSettings.keepVersions < 0) {
+    val nodeSettings = settings.nodeSettings
+    if (nodeSettings.keepVersions < 0) {
       failWithError("nodeSettings.keepVersions should not be negative")
-    } else if (!settings.nodeSettings.verifyTransactions && !settings.nodeSettings.stateType.requireProofs) {
+    } else if (!nodeSettings.verifyTransactions && !nodeSettings.stateType.requireProofs) {
       failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
     } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {
       failWithError(s"Malformed network config. Desired networkType is `${desiredNetworkTypeOpt.get}`, " +
         s"but one declared in config is `${settings.networkType}`")
     } else if(settings.networkType.isMainNet &&
-                settings.nodeSettings.mining &&
+                nodeSettings.mining &&
                 !settings.chainSettings.reemission.checkReemissionRules) {
       failWithError(s"Mining is enabled, but ergo.chain.reemission.checkReemissionRules = false , set it to true")
     } else if (settings.scorexSettings.restApi.publicUrl.exists(invalidRestApiUrl)) {
       failWithError(s"scorex.restApi.publicUrl should not contain query, path or fragment and should not " +
         s"be local or loopback address : ${settings.scorexSettings.restApi.publicUrl.get}")
+    } else if (nodeSettings.popowBootstrap && !(nodeSettings.utxoBootstrap || nodeSettings.blocksToKeep >= 0)) {
+      failWithError("nodeSettings.popowBootstrap can be set only if " +
+                    "nodeSettings.utxoBootstrap is set or nodeSettings.blocksToKeep >=0")
     } else {
       settings
     }
@@ -224,7 +228,7 @@ object ErgoSettings extends ScorexLogging
   /**
     * Override the log level at runtime with values provided in config/user provided config.
     */
-  private def overrideLogLevel(level: String) = level match {
+  private def overrideLogLevel(level: String): Unit = level match {
       case "TRACE" | "ERROR" | "INFO" | "WARN" | "DEBUG" =>
         log.info(s"Log level set to $level")
         val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]

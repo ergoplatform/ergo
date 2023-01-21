@@ -140,6 +140,8 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     */
   private[extra] def rollback(txTarget: Long, boxTarget: Long)(_history: ErgoHistory): Unit = {
 
+    if(txs.last <= txTarget && boxes.last <= boxTarget) return
+
     def history: ErgoHistoryReader = _history.getReader
 
     val toSave: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]

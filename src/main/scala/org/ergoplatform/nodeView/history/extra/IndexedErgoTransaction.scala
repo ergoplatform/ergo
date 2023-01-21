@@ -78,7 +78,7 @@ object IndexedErgoTransactionSerializer extends ScorexSerializer[IndexedErgoTran
     w.putInt(iTx.height)
     w.putLong(iTx.globalIndex)
     w.putUShort(iTx.inputNums.length)
-    cfor(0)(_ < iTx.inputs.length, _ + 1) { i => w.putLong(iTx.inputNums(i)) }
+    cfor(0)(_ < iTx.inputNums.length, _ + 1) { i => w.putLong(iTx.inputNums(i)) }
   }
 
   override def parse(r: Reader): IndexedErgoTransaction = {

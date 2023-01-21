@@ -158,7 +158,7 @@ trait ExtraIndexerBase extends ScorexLogging {
       if (trees(i).txs.length > segmentTreshold || trees(i).boxes.length > segmentTreshold) trees ++= trees(i).splitToSegments()
     }
 
-    // merge all modifiers to an Array, avoids reallocations durin concatenation (++)
+    // merge all modifiers to an Array, avoids reallocations during concatenation (++)
     val all: Array[ExtraIndex] = new Array[ExtraIndex](modCount)
     val offset: Array[Int] = Array(0, general.length, general.length + boxes.length)
     cfor(0)(_ < general.length, _ + 1) { i => all(i + offset(0)) = general(i) }
@@ -306,30 +306,30 @@ trait ExtraIndexerBase extends ScorexLogging {
     // remove all tx indexes
     val txTarget: Long = history.typedExtraIndexById[IndexedErgoTransaction](lastTxToKeep.id).get.globalIndex
     val txs: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]
+    globalTxIndex -= 1
     while(globalTxIndex > txTarget) {
       val tx: IndexedErgoTransaction = NumericTxIndex.getTxByNumber(history, globalTxIndex).get
-      tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach(iEb => {
-        if(iEb.box.creationHeight <= height) { // if spending box before branchpoint, undo
+      tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach(iEb => { // undo all spendings
           iEb.spendingHeightOpt = None
           iEb.spendingTxIdOpt = None
           val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(iEb.box.ergoTree))).get.addBox(iEb, false)
           historyStorage.insertExtra(Array.empty, Array(iEb, address))
-        }
       })
       txs += tx.id // tx by id
       txs += bytesToId(NumericTxIndex.indexToBytes(globalTxIndex)) // tx id by number
       globalTxIndex -= 1
     }
+    globalTxIndex += 1
     historyStorage.removeExtra(txs.toArray)
 
     // remove all box indexes, tokens and address balances
     val boxTarget: Long = history.typedExtraIndexById[IndexedErgoBox](bytesToId(lastTxToKeep.outputs.last.id)).get.globalIndex
     val toRemove: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]
+    globalBoxIndex -= 1
     while(globalBoxIndex > boxTarget) {
       val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, globalBoxIndex).get
       val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(iEb.box.ergoTree))).get
-      if(!iEb.trackedBox.isSpent) // remove unspent assests from address
-        address.spendBox(iEb.box)
+      address.spendBox(iEb.box)
       if(tokenRegistersSet(iEb.box))
         history.typedExtraIndexById[IndexedToken](IndexedTokenSerializer.fromBox(iEb.box).id) match {
           case Some(token) => toRemove += token.id // token created, delete
@@ -340,13 +340,14 @@ trait ExtraIndexerBase extends ScorexLogging {
       toRemove += bytesToId(NumericBoxIndex.indexToBytes(globalBoxIndex)) // box id by number
       globalBoxIndex -= 1
     }
+    globalBoxIndex += 1
     historyStorage.removeExtra(toRemove.toArray)
+
+    saveProgress(false)
 
     log.info(s"Successfully rolled back indexes to $height")
 
-    // restart indexer
     rollback = false
-    run()
 
   }
 
@@ -378,7 +379,10 @@ class ExtraIndexer(cacheSettings: CacheSettings)
     case Rollback(branchPoint: ModifierId) =>
       val branchHeight: Int = history.heightOf(branchPoint).get
       rollback = branchHeight < indexedHeight
-      if(rollback) removeAfter(branchHeight)
+      if(rollback) {
+        removeAfter(branchHeight)
+        run() // restart indexer
+      }
 
     case Start(history: ErgoHistory) =>
       _history = history

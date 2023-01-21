@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.local.NipopowVerifier
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.BlockSection
@@ -39,10 +40,16 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
 
+  lazy val nipopowVerifier = new NipopowVerifier(chainSettings.genesisId.get) // todo: get
+
   // Maximum time in future block header may have
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
   lazy val difficultyCalculator = new DifficultyAdjustment(chainSettings)
+
+  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
+
+  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
@@ -157,10 +164,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return Success() if header is valid, Failure(error) otherwise
     */
   protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
-
-  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
-
-  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 
   /**
     * @param id - header id

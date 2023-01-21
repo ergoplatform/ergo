@@ -9,7 +9,7 @@ import scorex.util.Extensions.LongOps
 /**
   * A structure representing NiPoPow proof as a persistent modifier.
   *
-  * For details, see the foundational paper:
+  * For details, see the paper:
   *
   * [KMZ17] Non-Interactive Proofs of Proof-of-Work https://eprint.iacr.org/2017/963.pdf
   *

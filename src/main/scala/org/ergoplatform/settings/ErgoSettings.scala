@@ -215,6 +215,8 @@ object ErgoSettings extends ScorexLogging
     } else if (nodeSettings.popowBootstrap && !(nodeSettings.utxoBootstrap || nodeSettings.blocksToKeep >= 0)) {
       failWithError("nodeSettings.popowBootstrap can be set only if " +
                     "nodeSettings.utxoBootstrap is set or nodeSettings.blocksToKeep >=0")
+    } else if (nodeSettings.popowBootstrap && settings.chainSettings.genesisId.isEmpty) {
+      failWithError("nodeSettings.popowBootstrap is set but genesisId is not")
     } else {
       settings
     }

@@ -17,7 +17,7 @@ class NipopowVerifier(genesisId: ModifierId) {
     bestProof.map(_.headersChain).getOrElse(Seq())
   }
 
-  def process(newProof: NipopowProof) {
+  def process(newProof: NipopowProof): Unit = {
     if (newProof.headersChain.head.id == genesisId &&
       !bestProof.exists(_.isBetterThan(newProof))) {
       bestProof = Some(newProof)

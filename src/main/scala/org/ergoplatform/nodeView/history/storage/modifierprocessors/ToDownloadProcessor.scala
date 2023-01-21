@@ -47,7 +47,7 @@ trait ToDownloadProcessor
 
     val FullBlocksToDownloadAhead = 192 // how many full blocks to download forwards during active sync
 
-    def farAwayFromBeingSynced(fb: ErgoFullBlock) = fb.height < (estimatedTip().getOrElse(0) - 128)
+    def farAwayFromBeingSynced(fb: ErgoFullBlock): Boolean = fb.height < (estimatedTip().getOrElse(0) - 128)
 
     @tailrec
     def continuation(height: Int,

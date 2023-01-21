@@ -502,7 +502,7 @@ trait ErgoHistoryReader
       }
     }
 
-    loop(2, HeaderChain(Seq(header2)))
+    loop(numberBack = 2, otherChain = HeaderChain(Seq(header2)))
   }
 
   protected[history] def commonBlockThenSuffixes(otherChain: HeaderChain,

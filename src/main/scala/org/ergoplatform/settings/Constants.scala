@@ -70,4 +70,6 @@ object Constants {
     * Keys and hashes are 256-bits long, values are boxes, so value size is dynamic.
     */
   object ErgoNodeParameters extends NodeParameters(HashLength, None, HashLength)
+
+  val MakeSnapshotEvery = 1024 // test value, switch to 51200 after testing
 }

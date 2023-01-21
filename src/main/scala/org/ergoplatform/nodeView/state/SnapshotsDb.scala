@@ -42,7 +42,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
   }
 
   def readSnapshotsInfo: SnapshotsInfo = {
-    store.get(snapshotInfoKey).map(snapshotsInfoFromBytes).getOrElse(SnapshotsInfo.makeEmpty)
+    store.get(snapshotInfoKey).map(snapshotsInfoFromBytes).getOrElse(SnapshotsInfo.makeEmpty())
   }
 
   def notEmpty(): Boolean = {

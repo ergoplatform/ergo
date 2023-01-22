@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FullBlockApplied, Rollback}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey, getIndex}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.ReceivableMessages.Start
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.segmentTreshold
@@ -269,9 +269,9 @@ trait ExtraIndexerBase extends ScorexLogging {
     */
   protected def run(): Unit = {
 
-    indexedHeight  = ByteBuffer.wrap(history.modifierBytesById(bytesToId(IndexedHeightKey)).getOrElse(Array.fill[Byte](4){0})).getInt
-    globalTxIndex  = ByteBuffer.wrap(history.modifierBytesById(bytesToId(GlobalTxIndexKey)).getOrElse(Array.fill[Byte](8){0})).getLong
-    globalBoxIndex = ByteBuffer.wrap(history.modifierBytesById(bytesToId(GlobalBoxIndexKey)).getOrElse(Array.fill[Byte](8){0})).getLong
+    indexedHeight  = getIndex(IndexedHeightKey)(history).getInt
+    globalTxIndex  = getIndex(GlobalTxIndexKey)(history).getLong
+    globalBoxIndex = getIndex(GlobalBoxIndexKey)(history).getLong
 
     log.info(s"Started extra indexer at height $indexedHeight")
 
@@ -432,6 +432,9 @@ object ExtraIndexerRef {
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")
   val GlobalTxIndexKey: Array[Byte] = Algos.hash("txns height")
   val GlobalBoxIndexKey: Array[Byte] = Algos.hash("boxes height")
+
+  def getIndex(key: Array[Byte])(history: ErgoHistoryReader): ByteBuffer =
+    ByteBuffer.wrap(history.modifierBytesById(bytesToId(key)).getOrElse(Array.fill[Byte](8){0}))
 
   def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {
     val actor = system.actorOf(Props.create(classOf[ExtraIndexer], cacheSettings))

@@ -3,6 +3,8 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
 import akka.pattern.ask
+import io.circe.Json
+import io.circe.syntax.EncoderOps
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -42,7 +44,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   override val route: Route = pathPrefix("blockchain") {
-    getTxByIdR ~
+    getIndexedHeightR ~
+      getTxByIdR ~
       getTxByIndexR ~
       getTxsByAddressR ~
       getTxRangeR ~
@@ -75,10 +78,22 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       case None     => None
     }
 
-  private def getTxByIdF(id: ModifierId) : Future[Option[IndexedErgoTransaction]] =
+  private def getTxByIdF(id: ModifierId): Future[Option[IndexedErgoTransaction]] =
     getHistory.map { history =>
       getTxById(id)(history)
     }
+
+  private def getIndexedHeightF: Future[Json] =
+    getHistory.map { history =>
+      Json.obj(
+        "indexedHeight" -> ExtraIndexerRef.getIndex(ExtraIndexerRef.IndexedHeightKey)(history).getInt().asJson,
+        "fullHeight" -> history.fullBlockHeight.asJson
+      )
+    }
+
+  private def getIndexedHeightR: Route = (pathPrefix("indexedHeight") & get) {
+    ApiResponse(getIndexedHeightF)
+  }
 
   private def getTxByIdR: Route = (get & pathPrefix("transaction" / "byId") & modifierId) { id =>
     ApiResponse(getTxByIdF(id))

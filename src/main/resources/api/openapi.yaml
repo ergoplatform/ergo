@@ -5648,6 +5648,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blockchain/indexedHeight:
+    get:
+      summary: Get current block height the indexer is at
+      operationId: getIndexedHeight
+      tags:
+        - blockchain
+      responses:
+        '200':
+          description: height of the indexer and full height
+          content:
+            application/json:
+              schema:
+                properties:
+                  indexedHeight:
+                    type: integer
+                    default: 0
+                    description: number of blocks indexed
+                  fullHeight:
+                    type: integer
+                    description: number of all known blocks
+
   /blockchain/transaction/byId/{txId}:
     get:
       summary: Retrieve a transaction by its id
@@ -5806,12 +5827,12 @@ paths:
                 description: Array of transaction ids
                 items:
                   $ref: '#/components/schemas/ModifierId'
-          default:
-            description: Error
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 
   /blockchain/box/byId/{boxId}:
     get:
@@ -6024,12 +6045,12 @@ paths:
                 description: Array of box ids
                 items:
                   $ref: '#/components/schemas/ModifierId'
-          default:
-            description: Error
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 
   /blockchain/box/byErgoTree:
     post:

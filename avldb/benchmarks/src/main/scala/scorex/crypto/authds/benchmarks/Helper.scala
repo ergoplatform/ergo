@@ -12,7 +12,7 @@ object Helper {
   type HF = Blake2b256.type
   type Prover = PersistentBatchAVLProver[Digest32, HF]
 
-  implicit val hf = Blake2b256
+  implicit val hf: HF = Blake2b256
 
   val kl = 32
   val vl = 8

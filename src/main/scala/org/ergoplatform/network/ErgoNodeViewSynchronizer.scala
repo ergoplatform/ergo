@@ -239,7 +239,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Register periodic events
     */
   override def preStart(): Unit = {
-    // subscribe for history and mempool changes
+    // subscribe for history, state and mempool changes
     viewHolderRef ! GetNodeViewChanges(history = true, state = true, vault = false, mempool = true)
 
     val toDownloadCheckInterval = networkSettings.syncInterval
@@ -325,6 +325,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     *
     */
   protected def sendSync(history: ErgoHistory): Unit = {
+    if (history.bestHeaderOpt.isEmpty && settings.nodeSettings.popowBootstrap) {
+      requireNipopowProof(history)
+    }
+
     val peers = syncTracker.peersToSyncWith()
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
@@ -935,6 +939,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
       case _ => log.warn(s"No Nipopow Proof available")
     }
+  }
+
+  private def requireNipopowProof(hr: ErgoHistory): Unit = {
+    val m = hr.P2PNipopowProofM
+    val k = hr.P2PNipopowProofK
+    val msg = Message(GetNipopowProofSpec, Right(NipopowProofData(m, k, None)), None)
+    networkControllerRef ! SendToNetwork(msg, Broadcast) //todo: send to most developed peers only ?
   }
 
   /**

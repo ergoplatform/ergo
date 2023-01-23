@@ -6,6 +6,7 @@ import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.modifiers.history.popow.NipopowProof
+import org.ergoplatform.settings.Algos
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
@@ -22,7 +23,9 @@ case class ModifiersData(typeId: ModifierTypeId.Value, modifiers: Map[ModifierId
 
 case class InvData(typeId: ModifierTypeId.Value, ids: Seq[ModifierId])
 
-case class NipopowProofData(m: Int = 6, k: Int = 6, headerId: Option[ModifierId])
+case class NipopowProofData(m: Int = 6, k: Int = 6, headerId: Option[ModifierId]) {
+  def headerIdBytesOpt: Option[Array[Byte]] = headerId.map(Algos.decode).flatMap(_.toOption)
+}
 
 /**
   * The `SyncInfo` message requests an `Inv` message that provides modifier ids
@@ -392,19 +395,29 @@ object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
   */
 object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
 
+  val SizeLimit = 1000
+
   val messageCode: MessageCode = 10: Byte
   val messageName: String = "GetNipopowProof"
 
   override def serialize(data: NipopowProofData, w: Writer): Unit = {
     w.putInt(data.m)
     w.putInt(data.k)
-    data.headerId.foreach(id => w.putShortString(id))
+    val headerIdBytesOpt = data.headerIdBytesOpt
+    if (headerIdBytesOpt.isDefined) {
+      val bytes = headerIdBytesOpt.get
+      w.putUShort(bytes.length)
+      w.putBytes(bytes)
+    }
   }
 
   override def parse(r: Reader): NipopowProofData = {
+    require(r.remaining <= SizeLimit, s"Too big GetNipopowProofSpec message(size: ${r.remaining})")
+
     val m = r.getInt()
     val k = r.getInt()
-    val headerId = if (r.remaining > 0) Some(ModifierId @@ r.getShortString()) else None
+    val remainingBytes = r.getUShort()
+    val headerId = if(remainingBytes >= 32) Some(ModifierId @@ Algos.encode(r.getBytes(32))) else None
     NipopowProofData(m, k, headerId)
   }
 }

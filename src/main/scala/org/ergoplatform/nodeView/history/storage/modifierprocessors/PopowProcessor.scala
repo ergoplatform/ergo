@@ -11,6 +11,9 @@ import scorex.util.ModifierId
 
 trait PopowProcessor extends BasicReaders {
 
+  val P2PNipopowProofM = 6
+  val P2PNipopowProofK = 6
+
   protected def chainSettings: ChainSettings
 
   val powScheme: AutolykosPowScheme

@@ -11,6 +11,7 @@ import scorex.util.ModifierId
   * @param genesisId    - the block id of the genesis block
   */
 class NipopowVerifier(genesisId: ModifierId) {
+
   var bestProof: Option[NipopowProof] = None
 
   def bestChain: Seq[Header] = {
@@ -18,8 +19,7 @@ class NipopowVerifier(genesisId: ModifierId) {
   }
 
   def process(newProof: NipopowProof): Unit = {
-    if (newProof.headersChain.head.id == genesisId &&
-      !bestProof.exists(_.isBetterThan(newProof))) {
+    if (newProof.headersChain.head.id == genesisId && !bestProof.exists(_.isBetterThan(newProof))) {
       bestProof = Some(newProof)
     }
   }

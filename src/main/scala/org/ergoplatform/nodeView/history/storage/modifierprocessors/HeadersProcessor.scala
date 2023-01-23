@@ -109,6 +109,8 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     * Data to add to and remove from the storage to process this modifier
     */
   private def toInsert(h: Header): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = {
+    //todo: construct resulting Array without ++
+
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
     val bestRow: Seq[(ByteArrayWrapper, Array[Byte])] =
@@ -122,7 +124,14 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
       orphanedBlockHeaderIdsRow(h, score)
     }
 
-    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Seq(h))
+    val nipopowsRow = if (Constants.timeToTakeSnapshot(h.height)) {
+      val pbs = popowProofBytes().get // todo: .get
+      Seq(NipopowSnapshotHeightKey -> pbs)
+    } else {
+      Seq.empty
+    }
+
+    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow ++ nipopowsRow, Seq(h))
   }
 
   /**

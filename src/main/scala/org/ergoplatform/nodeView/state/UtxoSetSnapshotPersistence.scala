@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.settings.Algos.HF
 import scorex.crypto.authds.avltree.batch.PersistentBatchAVLProver
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
@@ -27,10 +27,9 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
   }
 
   protected def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
-
-    if (estimatedTip.nonEmpty &&
-      (height % MakeSnapshotEvery == MakeSnapshotEvery - 1) &&
-      estimatedTip.get - height <= MakeSnapshotEvery) {
+    if (Constants.timeToTakeSnapshot(height) &&
+        estimatedTip.nonEmpty &&
+        estimatedTip.get - height <= MakeSnapshotEvery) {
 
       val (manifest, subtrees) = slicedTree()
 

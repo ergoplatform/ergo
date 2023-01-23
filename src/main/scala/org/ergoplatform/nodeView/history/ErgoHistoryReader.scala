@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowParams}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ModifierTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage._
@@ -38,6 +37,8 @@ trait ErgoHistoryReader
 
   private val Valid = 1.toByte
   private val Invalid = 0.toByte
+
+  override val historyReader = this
 
   /**
     * True if there's no history, even genesis block
@@ -568,21 +569,6 @@ trait ErgoHistoryReader
         None
       }
     }.getOrElse(None)
-  }
-
-
-  /**
-    * Constructs PoPoW proof for given m and k according to KMZ17 (FC20 version).
-    * See PoPowAlgos.prove for construction details.
-    * @param m - min superchain length
-    * @param k - suffix length
-    * @param headerIdOpt - optional header to start suffix from (so to construct proof for the header).
-    *                    Please note that k-1 headers will be provided after the header.
-    * @return PoPow proof if success, Failure instance otherwise
-    */
-  def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
-    val proofParams = PoPowParams(m, k)
-    nipopowAlgos.prove(histReader = this, headerIdOpt = headerIdOpt)(proofParams)
   }
 
 }

@@ -72,4 +72,8 @@ object Constants {
   object ErgoNodeParameters extends NodeParameters(HashLength, None, HashLength)
 
   val MakeSnapshotEvery = 1024 // test value, switch to 51200 after testing
+
+  def timeToTakeSnapshot(height: Int): Boolean = {
+    height % MakeSnapshotEvery == MakeSnapshotEvery - 1
+  }
 }

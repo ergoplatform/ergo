@@ -10,6 +10,8 @@ trait BasicReaders {
 
   def headerIdsAtHeight(height: Int): Seq[ModifierId]
 
+  def bestHeaderIdAtHeight(height: Int): Option[ModifierId]
+
   def typedModifierById[T <: BlockSection : ClassTag](id: ModifierId): Option[T]
 
   def contains(id: ModifierId): Boolean

@@ -3,13 +3,11 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.local.NipopowVerifier
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -30,17 +28,13 @@ import scala.util.{Failure, Success, Try}
 /**
   * Contains all functions required by History to process Headers.
   */
-trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
+trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with ScorexLogging with ScorexEncoding {
 
   protected val historyStorage: HistoryStorage
 
   protected val settings: ErgoSettings
 
   val powScheme: AutolykosPowScheme
-
-  val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
-
-  lazy val nipopowVerifier = new NipopowVerifier(chainSettings.genesisId.get) // todo: get
 
   // Maximum time in future block header may have
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis

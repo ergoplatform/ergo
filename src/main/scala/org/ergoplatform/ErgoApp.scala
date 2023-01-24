@@ -9,7 +9,6 @@ import org.ergoplatform.http.api._
 import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
-import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProofSerializer}
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -66,8 +65,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     )
   }
 
-  private val nipopowProofSpec =
-    new NipopowProofSpec(new NipopowProofSerializer(new NipopowAlgos(ergoSettings.chainSettings.powScheme)))
+  private val nipopowProofSpec = NipopowProofSpec(ergoSettings)
 
   private val basicSpecs = {
     Seq(

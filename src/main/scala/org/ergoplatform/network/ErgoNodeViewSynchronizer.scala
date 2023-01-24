@@ -928,8 +928,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  private val nipopowProofSpec =
-    new NipopowProofSpec(new NipopowProofSerializer(new NipopowAlgos(settings.chainSettings.powScheme)))
+  private val nipopowProofSpec = NipopowProofSpec(settings)
 
   protected def sendNipopowProof(data: NipopowProofData, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
     hr.popowProof(data.m, data.k, data.headerId) match {

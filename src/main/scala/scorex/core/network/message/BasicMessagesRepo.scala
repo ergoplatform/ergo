@@ -5,8 +5,8 @@ import org.ergoplatform.modifiers.ModifierTypeId
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.wallet.Constants
-import org.ergoplatform.modifiers.history.popow.NipopowProof
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, NipopowProofSerializer}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
@@ -397,7 +397,7 @@ object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
 
   val SizeLimit = 1000
 
-  val messageCode: MessageCode = 10: Byte
+  val messageCode: MessageCode = 90: Byte
   val messageName: String = "GetNipopowProof"
 
   override def serialize(data: NipopowProofData, w: Writer): Unit = {
@@ -414,17 +414,19 @@ object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
   override def parse(r: Reader): NipopowProofData = {
     require(r.remaining <= SizeLimit, s"Too big GetNipopowProofSpec message(size: ${r.remaining})")
 
+    val modifierIdLength = Constants.ModifierIdLength
+
     val m = r.getInt()
     val k = r.getInt()
     val remainingBytes = r.getUShort()
-    val headerId = if(remainingBytes >= 32) Some(ModifierId @@ Algos.encode(r.getBytes(32))) else None
+    val headerId = if (remainingBytes >= modifierIdLength) {
+      Some(ModifierId @@ Algos.encode(r.getBytes(modifierIdLength)))
+    } else {
+      None
+    }
     NipopowProofData(m, k, headerId)
   }
-}
 
-object NipopowProofSpec {
-  val MessageCode: Byte = 11
-  val MessageName: String = "NipopowProof"
 }
 
 /**
@@ -437,9 +439,22 @@ class NipopowProofSpec(serializer: ScorexSerializer[NipopowProof]) extends Messa
   override val messageCode: MessageCode = MessageCode
   override val messageName: String = MessageName
 
-  override def serialize(proof: NipopowProof, w: Writer): Unit =
+  override def serialize(proof: NipopowProof, w: Writer): Unit = {
     serializer.serialize(proof, w)
+  }
 
-  override def parse(r: Reader): NipopowProof = serializer.parse(r)
+  override def parse(r: Reader): NipopowProof = {
+    serializer.parse(r)
+  }
+
 }
 
+object NipopowProofSpec {
+  val MessageCode: Byte = 91
+  val MessageName: String = "NipopowProof"
+
+  def apply(ergoSettings: ErgoSettings): NipopowProofSpec = {
+    new NipopowProofSpec(new NipopowProofSerializer(new NipopowAlgos(ergoSettings.chainSettings.powScheme)))
+  }
+
+}

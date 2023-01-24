@@ -5,7 +5,7 @@ import akka.actor.{Actor, ActorInitializationException, ActorKilledException, Ac
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ModifierTypeId, SnapshotsInfoTypeId, TransactionTypeId, UtxoSnapshotChunkTypeId}
-import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProofSerializer}
+import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
@@ -931,14 +931,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val nipopowProofSpec = NipopowProofSpec(settings)
 
   protected def sendNipopowProof(data: NipopowProofData, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+    //todo: ignoring data, check it ?
+    hr.readPopowFromDb() match {
+      case Some(proof) =>
+        val msg = Message(nipopowProofSpec, Right(proof), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      case None =>
+        log.warn("") //todo: msg
+    }
+
+    /*
     hr.popowProof(data.m, data.k, data.headerId) match {
       case Success(proof) => {
         val msg = Message(nipopowProofSpec, Right(proof), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
       }
       case _ => log.warn(s"No Nipopow Proof available")
-    }
+    } */
   }
+
+  protected def processNipopowProof(proof: NipopowProof, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+    ???
+  }
+
 
   private def requireNipopowProof(hr: ErgoHistory): Unit = {
     val m = hr.P2PNipopowProofM
@@ -1392,7 +1407,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
     case (_: ManifestSpec.type, manifestBytes: Array[Byte], remote) =>
       processManifest(hr, manifestBytes, remote)
-    case (_: GetUtxoSnapshotChunkSpec.type,  subtreeId: Array[Byte], remote) =>
+    case (_: GetUtxoSnapshotChunkSpec.type, subtreeId: Array[Byte], remote) =>
       usrOpt match {
         case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ subtreeId, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
@@ -1402,8 +1417,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Some(_) => processUtxoSnapshotChunk(serializedChunk, hr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
-    case (_: MessageSpec[_], data: NipopowProofData, remote) =>
+    case (_: GetNipopowProofSpec.type, data: NipopowProofData, remote) =>
       sendNipopowProof(data, hr, remote)
+    case (_: NipopowProofSpec, data: NipopowProof, remote) =>
+      processNipopowProof(data, hr, remote)
   }
 
   def initialized(hr: ErgoHistory,

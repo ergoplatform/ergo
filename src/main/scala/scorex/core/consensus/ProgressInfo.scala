@@ -1,6 +1,6 @@
 package scorex.core.consensus
 
-import org.ergoplatform.modifiers.ModifierTypeId
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import scorex.core.utils.ScorexEncoder
 import scorex.core.PersistentNodeViewModifier
 import scorex.util.ModifierId
@@ -17,7 +17,7 @@ import scorex.util.ModifierId
 case class ProgressInfo[PM <: PersistentNodeViewModifier](branchPoint: Option[ModifierId],
                                                           toRemove: Seq[PM],
                                                           toApply: Seq[PM],
-                                                          toDownload: Seq[(ModifierTypeId.Value, ModifierId)])
+                                                          toDownload: Seq[(NetworkObjectTypeId.Value, ModifierId)])
                                                          (implicit encoder: ScorexEncoder) {
 
   if (toRemove.nonEmpty)

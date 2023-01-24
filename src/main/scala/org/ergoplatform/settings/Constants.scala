@@ -1,7 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.ModifierTypeId
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
@@ -45,7 +45,7 @@ object Constants {
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
 
-  val modifierSerializers: Map[ModifierTypeId.Value, ScorexSerializer[_ <: NodeViewModifier]] =
+  val modifierSerializers: Map[NetworkObjectTypeId.Value, ScorexSerializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       Extension.modifierTypeId -> ExtensionSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,

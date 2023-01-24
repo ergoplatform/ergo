@@ -1,6 +1,6 @@
 package scorex
 
-import org.ergoplatform.modifiers.ModifierTypeId
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import scorex.core.network.message.InvData
 import scorex.core.utils.ScorexEncoder
 import scorex.util.encode.Base16
@@ -12,14 +12,14 @@ package object core {
 
   type VersionTag = VersionTag.Type
 
-  def idsToString(ids: Seq[(ModifierTypeId.Value, util.ModifierId)])(implicit enc: ScorexEncoder): String = {
+  def idsToString(ids: Seq[(NetworkObjectTypeId.Value, util.ModifierId)])(implicit enc: ScorexEncoder): String = {
     List(ids.headOption, ids.lastOption)
       .flatten
       .map { case (typeId, id) => s"($typeId,${enc.encodeId(id)})" }
       .mkString("[", "..", "]")
   }
 
-  def idsToString(modifierType: ModifierTypeId.Value, ids: Seq[util.ModifierId])(implicit encoder: ScorexEncoder): String = {
+  def idsToString(modifierType: NetworkObjectTypeId.Value, ids: Seq[util.ModifierId])(implicit encoder: ScorexEncoder): String = {
     idsToString(ids.map(id => (modifierType, id)))
   }
 

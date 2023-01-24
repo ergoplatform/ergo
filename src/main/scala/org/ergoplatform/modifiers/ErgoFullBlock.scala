@@ -20,7 +20,7 @@ case class ErgoFullBlock(header: Header,
 
   override type M = ErgoFullBlock
 
-  override val modifierTypeId: ModifierTypeId.Value = ErgoFullBlock.modifierTypeId
+  override val modifierTypeId: NetworkObjectTypeId.Value = ErgoFullBlock.modifierTypeId
 
   override def serializedId: Array[Byte] = header.serializedId
 
@@ -49,7 +49,7 @@ case class ErgoFullBlock(header: Header,
 
 object ErgoFullBlock extends ApiCodecs {
 
-  val modifierTypeId: ModifierTypeId.Value = FullBlockTypeId.value
+  val modifierTypeId: NetworkObjectTypeId.Value = FullBlockTypeId.value
 
   implicit val jsonEncoder: Encoder[ErgoFullBlock] = { b: ErgoFullBlock =>
     Json.obj(

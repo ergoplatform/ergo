@@ -3,7 +3,7 @@ package scorex.core.network
 import akka.actor.{ActorRef, Cancellable}
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.modifiers.ModifierTypeId
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.network.ModifiersStatus.Received
 import scorex.testkit.generators.ObjectGenerators
@@ -15,7 +15,7 @@ class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {
     forAll(connectedPeerGen(ActorRef.noSender)) { peer =>
       val tracker = DeliveryTracker.empty(settings)
       val mid: ModifierId = ModifierId @@ "foo"
-      val mTypeId: ModifierTypeId.Value = ModifierTypeId.fromByte(104)
+      val mTypeId: NetworkObjectTypeId.Value = NetworkObjectTypeId.fromByte(104)
       tracker.setRequested(mTypeId, mid, peer) { _ => Cancellable.alreadyCancelled}
       val infoFields =
         Seq(

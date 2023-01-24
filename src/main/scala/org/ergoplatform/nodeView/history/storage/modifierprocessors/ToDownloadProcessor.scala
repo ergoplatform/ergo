@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.modifiers.{ErgoFullBlock, ModifierTypeId, SnapshotsInfoTypeId}
+import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
@@ -43,7 +43,7 @@ trait ToDownloadProcessor
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
   def nextModifiersToDownload(howManyPerType: Int,
-                              condition: (ModifierTypeId.Value, ModifierId) => Boolean): Map[ModifierTypeId.Value, Seq[ModifierId]] = {
+                              condition: (NetworkObjectTypeId.Value, ModifierId) => Boolean): Map[NetworkObjectTypeId.Value, Seq[ModifierId]] = {
 
     val FullBlocksToDownloadAhead = 192 // how many full blocks to download forwards during active sync
 
@@ -51,8 +51,8 @@ trait ToDownloadProcessor
 
     @tailrec
     def continuation(height: Int,
-                     acc: Map[ModifierTypeId.Value, Vector[ModifierId]],
-                     maxHeight: Int): Map[ModifierTypeId.Value, Vector[ModifierId]] = {
+                     acc: Map[NetworkObjectTypeId.Value, Vector[ModifierId]],
+                     maxHeight: Int): Map[NetworkObjectTypeId.Value, Vector[ModifierId]] = {
       if (height > maxHeight) {
         acc
       } else {
@@ -104,7 +104,7 @@ trait ToDownloadProcessor
   /**
     * Checks whether it's time to download full chain, and returns toDownload modifiers
     */
-  protected def toDownload(header: Header): Seq[(ModifierTypeId.Value, ModifierId)] = {
+  protected def toDownload(header: Header): Seq[(NetworkObjectTypeId.Value, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
       Nil
@@ -121,7 +121,7 @@ trait ToDownloadProcessor
     }
   }
 
-  def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId.Value, ModifierId)] = {
+  def requiredModifiersForHeader(h: Header): Seq[(NetworkObjectTypeId.Value, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
       Nil
     } else if (nodeSettings.stateType.requireProofs) {

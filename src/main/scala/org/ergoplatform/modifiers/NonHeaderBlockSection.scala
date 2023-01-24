@@ -22,9 +22,9 @@ trait NonHeaderBlockSection extends BlockSection {
 }
 
 object NonHeaderBlockSection {
-  def computeId(modifierType: ModifierTypeId.Value, headerId: ModifierId, digest: Array[Byte]): ModifierId =
+  def computeId(modifierType: NetworkObjectTypeId.Value, headerId: ModifierId, digest: Array[Byte]): ModifierId =
     bytesToId(computeIdBytes(modifierType, headerId, digest))
 
-  def computeIdBytes(modifierType: ModifierTypeId.Value, headerId: ModifierId, digest: Array[Byte]): Array[Byte] =
+  def computeIdBytes(modifierType: NetworkObjectTypeId.Value, headerId: ModifierId, digest: Array[Byte]): Array[Byte] =
       Algos.hash.prefixedHash(modifierType, idToBytes(headerId), digest)
 }

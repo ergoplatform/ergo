@@ -1,7 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
-import org.ergoplatform.modifiers.{ErgoFullBlock, ModifierTypeId}
+import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
@@ -305,7 +305,7 @@ object ValidationRules {
   val fbDigestIncorrect: Short = 501
 
 
-  def errorMessage(id: Short, details: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId.Value): String = {
+  def errorMessage(id: Short, details: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): String = {
     ValidationRules.rulesSpec(id)
       .invalidMod(InvalidModifier(details, modifierId, modifierTypeId))
       .errors
@@ -313,10 +313,10 @@ object ValidationRules {
       .message
   }
 
-  private def recoverable(errorMessage: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId.Value): Invalid =
+  private def recoverable(errorMessage: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Invalid =
     ModifierValidator.error(errorMessage, modifierId, modifierTypeId)
 
-  private def fatal(error: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId.Value): Invalid =
+  private def fatal(error: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Invalid =
     ModifierValidator.fatal(error, modifierId, modifierTypeId)
 }
 

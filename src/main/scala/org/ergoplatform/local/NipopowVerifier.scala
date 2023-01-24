@@ -12,15 +12,35 @@ import scorex.util.ModifierId
   */
 class NipopowVerifier(genesisId: ModifierId) {
 
-  var bestProof: Option[NipopowProof] = None
+  var bestProofOpt: Option[NipopowProof] = None
 
   def bestChain: Seq[Header] = {
-    bestProof.map(_.headersChain).getOrElse(Seq())
+    bestProofOpt.map(_.headersChain).getOrElse(Seq())
   }
 
-  def process(newProof: NipopowProof): Unit = {
-    if (newProof.headersChain.head.id == genesisId && !bestProof.exists(_.isBetterThan(newProof))) {
-      bestProof = Some(newProof)
+  /**
+    * @return - if newProof is replacing older ones
+    */
+  def process(newProof: NipopowProof): Boolean = {
+    if (newProof.headersChain.head.id == genesisId) {
+      bestProofOpt match {
+        case Some(bestProof) =>
+          if (newProof.isBetterThan(bestProof)) {
+            bestProofOpt = Some(newProof)
+            true
+          } else {
+            false
+          }
+        case None =>
+          if (newProof.isValid) {
+            bestProofOpt = Some(newProof)
+            true
+          } else {
+            false
+          }
+      }
+    } else {
+      false
     }
   }
 

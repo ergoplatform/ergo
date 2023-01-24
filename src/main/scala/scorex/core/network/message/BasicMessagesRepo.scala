@@ -1,20 +1,21 @@
 package scorex.core.network.message
 
 
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.{ModifierTypeId, NodeViewModifier}
+import scorex.core.NodeViewModifier
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
 import scala.collection.immutable
 
-case class ModifiersData(typeId: ModifierTypeId, modifiers: Map[ModifierId, Array[Byte]])
+case class ModifiersData(typeId: NetworkObjectTypeId.Value, modifiers: Map[ModifierId, Array[Byte]])
 
-case class InvData(typeId: ModifierTypeId, ids: Seq[ModifierId])
+case class InvData(typeId: NetworkObjectTypeId.Value, ids: Seq[ModifierId])
 
 /**
   * The `SyncInfo` message requests an `Inv` message that provides modifier ids
@@ -63,7 +64,7 @@ object InvSpec extends MessageSpecV1[InvData] {
   }
 
   override def parse(r: Reader): InvData = {
-    val typeId = ModifierTypeId @@ r.getByte()
+    val typeId = NetworkObjectTypeId.fromByte(r.getByte())
     val count = r.getUInt().toIntExact
     require(count > 0, "empty inv list")
     require(count <= maxInvObjects, s"$count elements in a message while limit is $maxInvObjects")
@@ -142,7 +143,7 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
   }
 
   override def parse(r: Reader): ModifiersData = {
-    val typeId = ModifierTypeId @@ r.getByte() // 1 byte
+    val typeId = NetworkObjectTypeId.fromByte(r.getByte()) // 1 byte
     val count = r.getUInt().toIntExact // 8 bytes
     require(count > 0, s"Illegal message with 0 modifiers of type $typeId")
     val resMap = immutable.Map.newBuilder[ModifierId, Array[Byte]]

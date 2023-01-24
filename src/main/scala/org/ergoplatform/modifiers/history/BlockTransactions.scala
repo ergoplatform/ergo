@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.NonHeaderBlockSection
+import org.ergoplatform.modifiers.{BlockTransactionsTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
@@ -37,7 +37,7 @@ case class BlockTransactions(headerId: ModifierId,
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 
-  override val modifierTypeId: ModifierTypeId = BlockTransactions.modifierTypeId
+  override val modifierTypeId: NetworkObjectTypeId.Value = BlockTransactions.modifierTypeId
 
   /**
     * Ids of block transactions
@@ -94,7 +94,7 @@ case class BlockTransactions(headerId: ModifierId,
 
 object BlockTransactions extends ApiCodecs {
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
+  val modifierTypeId: NetworkObjectTypeId.Value = BlockTransactionsTypeId.value
 
   // Used in the miner when a BlockTransaction instance is not generated yet (because a header is not known)
   def transactionsRoot(txs: Seq[ErgoTransaction], blockVersion: Version): Digest32 = {

@@ -4,10 +4,9 @@ import akka.actor.SupervisorStrategy.Escalate
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.CriticalSystemException
-import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
@@ -26,7 +25,9 @@ import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
+
 import java.io.File
+import org.ergoplatform.modifiers.history.extension.Extension
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -35,8 +36,9 @@ import scala.util.{Failure, Success, Try}
 /**
   * Composite local view of the node
   *
-  * Contains instances for History, ErgoState, Wallet, MemoryPool.
-  * Updates them atomically.
+  * Contains instances for History, ErgoState, Vault, MemoryPool.
+  * The instances are read-only for external world.
+  * Updates of the composite view instances are to be performed atomically.
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
@@ -135,13 +137,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     //TODO: actually, pi.toDownload contains only 1 modifierid per type,
     //TODO: see the only case where toDownload is not empty during ProgressInfo construction
     //TODO: so the code below can be optimized
-    val toDownload = mutable.Map[ModifierTypeId, Seq[ModifierId]]()
+    val toDownload = mutable.Map[NetworkObjectTypeId.Value, Seq[ModifierId]]()
     pi.toDownload.foreach { case (tid, mid) =>
       toDownload.put(tid, toDownload.getOrElse(tid, Seq()) :+ mid)
     }
     context.system.eventStream.publish(DownloadRequest(toDownload.toMap))
   }
-
 
 
   private def trimChainSuffix(suffix: IndexedSeq[BlockSection],
@@ -235,7 +236,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
-                if(modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
+                if (modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
                   context.system.eventStream.publish(FullBlockApplied(modToApply.asInstanceOf[ErgoFullBlock].header))
                 }
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
@@ -342,7 +343,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           val at0 = System.currentTimeMillis()
           applyFromCacheLoop(modifiersCache)
           val at = System.currentTimeMillis()
-          log.debug(s"Application time: ${at-at0}")
+          log.debug(s"Application time: ${at - at0}")
 
           val cleared = modifiersCache.cleanOverfull()
 
@@ -424,10 +425,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   //todo: update state in async way?
+
   /**
     * Remote and local persistent modifiers need to be appended to history, applied to state
     * which also needs to be git propagated to mempool and wallet
-    * @param pmod Remote or local persistent modifier
+    *
+    * @param pmod  Remote or local persistent modifier
     * @param local whether the modifier was generated locally or not
     */
   protected def pmodModify(pmod: BlockSection, local: Boolean): Unit = {
@@ -462,7 +465,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   val fullBlockHeight = newHistory.fullBlockHeight
                   val almostSynced = (headersHeight - fullBlockHeight) < almostSyncedGap
 
-                  val newMemPool = if(almostSynced) {
+                  val newMemPool = if (almostSynced) {
                     updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool())
                   } else {
                     memoryPool()
@@ -717,12 +720,13 @@ object ErgoNodeViewHolder {
 
   case class BlockAppliedTransactions(txs: Seq[ModifierId]) extends NodeViewHolderEvent
 
-  case class DownloadRequest(modifiersToFetch: Map[ModifierTypeId, Seq[ModifierId]]) extends NodeViewHolderEvent
+  case class DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) extends NodeViewHolderEvent
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
 
   /**
     * Checks whether chain got stuck by comparing timestamp of bestFullBlock or last time a modifier was applied to history.
+    *
     * @param progress metadata of last chain update
     * @return ChainIsHealthy if chain is healthy and ChainIsStuck(error) with details if it got stuck
     */

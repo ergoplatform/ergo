@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.local.NipopowVerifier
 import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, NipopowProofSerializer, PoPowHeader, PoPowParams}
@@ -9,6 +10,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.ChainSettings
 import org.ergoplatform.settings.Constants.HashLength
+import scorex.core.consensus.ProgressInfo
 import scorex.db.ByteArrayWrapper
 import scorex.util.ModifierId
 
@@ -21,7 +23,7 @@ trait PopowProcessor extends BasicReaders {
 
   val NipopowSnapshotHeightKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(50: Byte))
 
-  val P2PNipopowProofM = 6
+  val P2PNipopowProofM = 10
   val P2PNipopowProofK = 6
 
   protected def chainSettings: ChainSettings
@@ -31,9 +33,12 @@ trait PopowProcessor extends BasicReaders {
   val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
   val nipopowSerializer = new NipopowProofSerializer(nipopowAlgos)
 
+  // todo: NipopowVerifier holds nipopow proof in memory without releasing, fix
   lazy val nipopowVerifier = new NipopowVerifier(chainSettings.genesisId.get) // todo: get
 
   def historyReader: ErgoHistoryReader
+
+  protected def process(h: Header): Try[ProgressInfo[BlockSection]]
 
   /**
     * Constructs popow header against given header identifier
@@ -91,6 +96,17 @@ trait PopowProcessor extends BasicReaders {
   def readPopowFromDb(): Option[NipopowProof] = {
     historyStorage.getIndex(NipopowSnapshotHeightKey).map{bs =>
       nipopowSerializer.parseBytes(bs)
+    }
+  }
+
+  def applyPopowProof(proof: NipopowProof): Unit = {
+    if (nipopowVerifier.process(proof)) {
+      val headersToApply = nipopowVerifier.bestChain
+      headersToApply.foreach { h =>
+        if (!historyStorage.contains(h.id)) {
+          process(h)
+        }
+      }
     }
   }
 

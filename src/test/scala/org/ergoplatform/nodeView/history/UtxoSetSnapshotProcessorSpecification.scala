@@ -18,7 +18,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
 
   private val s = settings
 
-  val utxoSetSnapshotProcessor = new UtxoSetSnapshotProcessor {
+  private val utxoSetSnapshotProcessor = new UtxoSetSnapshotProcessor {
     override protected val settings: ErgoSettings = s
     override protected val historyStorage: HistoryStorage = HistoryStorage(settings)
     override private[history] var minimalFullBlockHeightVar = ErgoHistory.GenesisHeight
@@ -28,7 +28,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
     val bh     = boxesHolderGenOfSize(32 * 1024).sample.get
     val us     = createUtxoState(bh, parameters)
     val (manifest, subtrees) = us.slicedTree()
-    println("Subtrees: " + subtrees.size)
+
     val snapshotHeight = 1
     val blockId = ModifierId @@ Algos.encode(Array.fill(32)(Random.nextInt(100).toByte))
     utxoSetSnapshotProcessor.registerManifestToDownload(manifest, snapshotHeight, Seq.empty)

@@ -85,6 +85,10 @@ trait PopowProcessor extends BasicReaders {
     nipopowAlgos.prove(historyReader, headerIdOpt = headerIdOpt)(proofParams)
   }
 
+  def popowProof(): Try[NipopowProof] = {
+    popowProof(P2PNipopowProofM, P2PNipopowProofK, None)
+  }
+
   def popowProofBytes(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[Array[Byte]] = {
     popowProof(m, k, headerIdOpt).map(p => nipopowSerializer.toBytes(p))
   }
@@ -102,11 +106,14 @@ trait PopowProcessor extends BasicReaders {
   def applyPopowProof(proof: NipopowProof): Unit = {
     if (nipopowVerifier.process(proof)) {
       val headersToApply = nipopowVerifier.bestChain
+      println("to apply: " + headersToApply.length)
       headersToApply.foreach { h =>
         if (!historyStorage.contains(h.id)) {
-          process(h)
+          println(process(h))
         }
       }
+    } else {
+      println("!!!") // todo: fix log msg
     }
   }
 

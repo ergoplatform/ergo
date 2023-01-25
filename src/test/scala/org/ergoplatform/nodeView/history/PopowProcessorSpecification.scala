@@ -18,7 +18,12 @@ class PopowProcessorSpecification extends HistoryTestHelpers {
 
     val popowProofBytes = senderHistory.popowProofBytes().get
     println("proof size: " + popowProofBytes.length)
-    val popowProof = senderHistory.nipopowSerializer.parseBytes(popowProofBytes)
+    val popowProof = senderHistory.popowProof().get // nipopowSerializer.parseBytes(popowProofBytes)
+
+    println("valid: " + popowProof.isValid)
+    println(popowProof.hasValidConnections)
+    println(popowProof.hasValidHeights)
+    println(popowProof.hasValidProofs)
 
     val receiverHistory = genHistory(senderHistory.bestHeaderAtHeight(1).map(_.id))
     receiverHistory.headersHeight shouldBe 0

@@ -74,6 +74,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
 
+  private var syncInfoV3CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV3)] = Option.empty
+
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   protected val deliveryTimeout: FiniteDuration = networkSettings.deliveryTimeout
@@ -299,10 +301,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
+  private def getV3SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV3 = {
+    val headersHeight = history.headersHeight
+    syncInfoV3CacheByHeadersHeight
+      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+      .getOrElse {
+        val v3SyncInfo = history.syncInfoV3(full)
+        syncInfoV3CacheByHeadersHeight = Some(headersHeight -> v3SyncInfo)
+        v3SyncInfo
+      }
+  }
+
   /**
     * Whether neighbour peer `remote` supports sync protocol V2.
     */
   def syncV2Supported(remote: ConnectedPeer): Boolean = SyncV2Filter.condition(remote)
+
+  def syncV3Supported(remote: ConnectedPeer): Boolean = SyncV3Filter.condition(remote)
 
   /**
     * Send synchronization statuses to neighbour peers
@@ -316,7 +331,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def sendSync(history: ErgoHistory): Unit = {
     val peers = syncTracker.peersToSyncWith()
-    val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
+    val peersV1 = mutable.Buffer[ConnectedPeer]()
+    val peersV2 = mutable.Buffer[ConnectedPeer]()
+    val peersV3 = mutable.Buffer[ConnectedPeer]()
+
+    peers.foreach{peer =>
+      if(syncV3Supported(peer)) {
+        peersV3 += peer
+      } else if(syncV2Supported(peer)) {
+        peersV2 += peer
+      } else {
+        peersV1 += peer
+      }
+    }
+
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
     if (peersV1.nonEmpty) {
       val msg = Message(syncInfoSpec, Right(getV1SyncInfo(history)), None)
@@ -326,6 +354,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       //todo: send only last header to peers which are equal or younger
       val v2SyncInfo = getV2SyncInfo(history, full = true)
       networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
+    }
+    if (peersV3.nonEmpty) {
+      //todo: send only last header to peers which are equal or younger
+      val v3SyncInfo = getV3SyncInfo(history, full = true)
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v3SyncInfo), None), SendToPeers(peersV3))
     }
   }
 
@@ -358,7 +391,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.debug(s"Processing sync from $remote")
       syncInfo match {
         case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
-        case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
+        case otherVersion: HeadersBasedSyncInfo => processSyncV2(hr, otherVersion, remote)
       }
     } else {
       log.debug(s"Spammy sync detected from $remote")
@@ -419,7 +452,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Processing sync V2 message `syncInfo` got from neighbour peer `remote` (supporting sync v2)
     */
-  protected def processSyncV2(hr: ErgoHistory, syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
+  protected def processSyncV2(hr: ErgoHistory, syncInfo: HeadersBasedSyncInfo, remote: ConnectedPeer): Unit = {
     val (status, syncSendNeeded) = syncTracker.updateStatus(remote, syncInfo, hr)
 
     status match {
@@ -469,7 +502,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     *
     * @param syncInfo other's node sync info
     */
-  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2,
+  private def applyValidContinuationHeaderV2(syncInfo: HeadersBasedSyncInfo,
                                              history: ErgoHistory,
                                              peer: ConnectedPeer): Unit = {
     history.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
@@ -987,7 +1020,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>
-      syncTracker.updateStatus(remote, status = Unknown, height = None)
+      syncTracker.updateStatus(remote, status = Unknown, height = None, peerHeaders = Seq(0 -> 0), peerFullblocks = Seq(0 -> 0))
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
@@ -1031,8 +1064,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           minModifiersPerBucket,
           maxModifiersPerBucket
         )(getPeersForDownloadingBlocks) { howManyPerType =>
-          val tip = historyReader.estimatedTip()
-          historyReader.nextModifiersToDownload(howManyPerType, tip, downloadRequired(historyReader))
+          historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
         }
       }
 

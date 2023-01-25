@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
@@ -35,9 +36,17 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   def isInBestChain(id: ModifierId): Boolean
 
+  def estimatedTip(): Option[Height]
+
   /** Returns true if we estimate that our chain is synced with the network. Start downloading full blocks after that
     */
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
+
+  /**
+    * @return min full block height the node has
+    * // todo: improve scaladoc
+    */
+  def minFullBlockAvailable: Int = pruningProcessor.minimalFullBlockHeight
 
   /**
     * Get modifier ids to download to synchronize full blocks
@@ -46,18 +55,16 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
   def nextModifiersToDownload(howManyPerType: Int,
-                              estimatedTip: Option[Int],
                               condition: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
 
     val FullBlocksToDownloadAhead = 192 // how many full blocks to download forwards during active sync
 
-    
-    def farAwayFromBeingSynced(fb: ErgoFullBlock) = fb.height < (estimatedTip.getOrElse(0) - 128)
+    def farAwayFromBeingSynced(fb: ErgoFullBlock) = fb.height < (estimatedTip().getOrElse(0) - 128)
 
     @tailrec
     def continuation(height: Int,
                      acc: Map[ModifierTypeId, Vector[ModifierId]],
-                     maxHeight: Int = Int.MaxValue): Map[ModifierTypeId, Vector[ModifierId]] = {
+                     maxHeight: Int): Map[ModifierTypeId, Vector[ModifierId]] = {
       if (height > maxHeight) {
         acc
       } else {
@@ -90,10 +97,10 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         // when blockchain is about to be synced,
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
         val minHeight = Math.max(1, fb.header.height - 100)
-        continuation(minHeight, Map.empty)
+        continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
       case _ =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
-        continuation(pruningProcessor.minimalFullBlockHeight, Map.empty)
+        continuation(pruningProcessor.minimalFullBlockHeight, Map.empty, maxHeight = Int.MaxValue)
     }
   }
 

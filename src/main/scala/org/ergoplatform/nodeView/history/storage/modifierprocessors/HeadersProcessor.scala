@@ -126,6 +126,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
 
     val nipopowsRow = if (Constants.timeToTakeSnapshot(h.height) && settings.nodeSettings.popowBootstrap == false) { //todo: fix condition
       val pbs = popowProofBytes().get // todo: .get
+      log.info(s"Dumping nipopow proof (size: ${pbs.length}) @ ${h.height}")
       Seq(NipopowSnapshotHeightKey -> pbs)
     } else {
       Seq.empty

@@ -124,7 +124,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
       orphanedBlockHeaderIdsRow(h, score)
     }
 
-    val nipopowsRow = if (Constants.timeToTakeSnapshot(h.height)) {
+    val nipopowsRow = if (Constants.timeToTakeSnapshot(h.height) && settings.nodeSettings.popowBootstrap == false) { //todo: fix condition
       val pbs = popowProofBytes().get // todo: .get
       Seq(NipopowSnapshotHeightKey -> pbs)
     } else {

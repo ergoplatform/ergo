@@ -28,10 +28,10 @@ trait PopowProcessor extends BasicReaders {
 
   protected def chainSettings: ChainSettings
 
-  val powScheme: AutolykosPowScheme
+  def powScheme: AutolykosPowScheme
 
-  val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
-  val nipopowSerializer = new NipopowProofSerializer(nipopowAlgos)
+  lazy val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
+  lazy val nipopowSerializer = new NipopowProofSerializer(nipopowAlgos)
 
   // todo: NipopowVerifier holds nipopow proof in memory without releasing, fix
   lazy val nipopowVerifier = new NipopowVerifier(chainSettings.genesisId.get) // todo: get
@@ -106,10 +106,9 @@ trait PopowProcessor extends BasicReaders {
   def applyPopowProof(proof: NipopowProof): Unit = {
     if (nipopowVerifier.process(proof)) {
       val headersToApply = nipopowVerifier.bestChain
-      println("to apply: " + headersToApply.length)
       headersToApply.foreach { h =>
         if (!historyStorage.contains(h.id)) {
-          println(process(h))
+          process(h)
         }
       }
     } else {

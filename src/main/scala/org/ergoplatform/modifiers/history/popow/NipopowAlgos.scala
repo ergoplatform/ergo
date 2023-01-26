@@ -233,9 +233,9 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
         histReader.popowHeader(suffix.head.id).get -> suffix.tail // .get to be caught in outer (prove's) Try
     }
 
-    val genesisPopowHeader = histReader.popowHeader(1).get // to be caught in outer (prove's) Try
     val genesisHeight = 1
-    val prefix = genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)
+    val genesisPopowHeader = histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
+    val prefix = (genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)).distinct.sortBy(_.height)
 
     NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
   }

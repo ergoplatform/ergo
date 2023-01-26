@@ -4,13 +4,13 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.{ModifierTypeId, NodeViewComponent}
+import scorex.core.NodeViewComponent
 import scorex.core.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
@@ -31,7 +31,7 @@ trait ErgoHistoryReader
     with ScorexLogging
     with ScorexEncoding {
 
-  type ModifierIds = Seq[(ModifierTypeId, ModifierId)]
+  type ModifierIds = Seq[(NetworkObjectTypeId.Value, ModifierId)]
 
   protected[history] val historyStorage: HistoryStorage
 
@@ -74,7 +74,7 @@ trait ErgoHistoryReader
     * @param id - modifier id
     * @return type and raw bytes of semantically valid ErgoPersistentModifier with the given id it is in history
     */
-   def modifierTypeAndBytesById(id: ModifierId): Option[(ModifierTypeId, Array[Byte])] =
+   def modifierTypeAndBytesById(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] =
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
       historyStorage.modifierTypeAndBytesById(id)
     } else {

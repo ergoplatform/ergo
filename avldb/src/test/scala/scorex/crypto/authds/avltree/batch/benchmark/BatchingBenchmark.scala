@@ -15,7 +15,7 @@ object BatchingBenchmark extends App with FileHelper {
   val NumMods = 200000
 
 
-  implicit val hf = Blake2b256
+  implicit val hf: HF = Blake2b256
   type HF = Blake2b256.type
 
   val store = new LDBVersionedStore(getRandomTempDir, initialKeepVersions = 10)

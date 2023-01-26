@@ -19,6 +19,7 @@ import scala.util.{Failure, Try}
   * @param nodeParameters - parameters of the tree node (key size, optional value size, label size)
   * @param hf - hash function used to construct the tree
   * @tparam D - type of hash function digest
+  * @tparam HF - type of hash function used in AVL+ tree
   */
 class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDBVersionedStore,
                                                                       nodeParameters: NodeParameters)

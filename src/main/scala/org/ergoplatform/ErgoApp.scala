@@ -11,7 +11,7 @@ import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
@@ -99,11 +99,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
       None
     }
 
-  // Create an instance of ExtraIndexer actor if "extraIndex = true" in config
-  if(ergoSettings.nodeSettings.extraIndex)
-    ExtraIndexerRef(ergoSettings.chainSettings, ergoSettings.cacheSettings)
-
-  ExtraIndexerRef.setAddressEncoder(ergoSettings.addressEncoder) // initialize an accessible address encoder regardless of extra indexing being enabled
+  // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
+  ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings)
 
   private val syncTracker = ErgoSyncTracker(scorexSettings.network, timeProvider)
 

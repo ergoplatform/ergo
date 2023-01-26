@@ -8,7 +8,7 @@ import io.circe.syntax.EncoderOps
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{GlobalBoxIndexKey, GlobalTxIndexKey}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey}
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
@@ -32,12 +32,12 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private val MaxItems = 16384
 
-  implicit val ae: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
+  override implicit val ergoAddressEncoder: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
 
   private val ergoAddress: Directive1[ErgoAddress] = entity(as[String]).flatMap(handleErgoAddress)
 
   private def handleErgoAddress(value: String): Directive1[ErgoAddress] = {
-    ae.fromString(value) match {
+    ergoAddressEncoder.fromString(value) match {
       case Success(addr) => provide(addr)
       case _ => reject(ValidationRejection("Wrong address format"))
     }
@@ -86,7 +86,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getIndexedHeightF: Future[Json] =
     getHistory.map { history =>
       Json.obj(
-        "indexedHeight" -> ExtraIndexerRef.getIndex(ExtraIndexerRef.IndexedHeightKey)(history).getInt().asJson,
+        "indexedHeight" -> ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey)(history).getInt().asJson,
         "fullHeight" -> history.fullBlockHeight.asJson
       )
     }
@@ -271,7 +271,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     val bal: BalanceInfo = new BalanceInfo
     mempool.getAll.map(_.transaction).foreach(tx => {
       tx.outputs.foreach(box => {
-        if(IndexedErgoBoxSerializer.getAddress(box.ergoTree).equals(address)) bal.add(box)
+        if(address.equals(ExtraIndexer.getAddress(box.ergoTree))) bal.add(box)
       })
     })
     bal

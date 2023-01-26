@@ -254,7 +254,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
 
       // we generate and apply existing base chain
-      val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
+      val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)(null)
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -290,7 +290,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       }
       eventually {
         // test whether applied header was actually persisted to history
-        val hist = ErgoHistory.readOrGenerate(settings, timeProvider)
+        val hist = ErgoHistory.readOrGenerate(settings, timeProvider)(null)
         hist.bestHeaderIdOpt.get shouldBe appliedHeader.id
       }
     }
@@ -313,7 +313,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // we generate fork of two headers, starting from the parent of the best header
       // so the depth of the rollback is 1, and the fork bypasses the best chain by 1 header
-      val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
+      val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)(null)
       val newHeaders = genHeaderChain(2, hhistory, diffBitsOpt = None, useRealTs = false).headers
       val newHistory = newHeaders.foldLeft(hhistory) { case (hist, header) => hist.append(header).get._1 }
       val parentOpt = newHistory.lastHeaders(2).headOption
@@ -354,7 +354,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       deliveryTracker.reset()
 
-      val hist = ErgoHistory.readOrGenerate(settings, timeProvider)
+      val hist = ErgoHistory.readOrGenerate(settings, timeProvider)(null)
       // generate smaller fork that is going to be reverted after applying a bigger fork
       val smallFork = genChain(4, hist)
 

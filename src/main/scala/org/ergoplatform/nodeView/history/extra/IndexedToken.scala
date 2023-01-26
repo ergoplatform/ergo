@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{ExtraIndexTypeId, fastIdToBytes}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.ScorexSerializer

@@ -46,11 +46,11 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, initSettings.chainSettings,
       nodeSettings, settings.scorexSettings, settings.walletSettings, settings.cacheSettings)
 
-    _history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+    _history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)(null)
 
     ChainGenerator.generate(HEIGHT, dir)(_history)
 
-    ExtraIndexerRef.setAddressEncoder(initSettings.chainSettings.addressEncoder)
+    ExtraIndexer.setAddressEncoder(initSettings.chainSettings.addressEncoder)
 
     run()
 
@@ -72,7 +72,7 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
           })
         }
         tx.outputs.foreach(output => { boxesIndexed += 1
-          val address: ErgoAddress = IndexedErgoBoxSerializer.getAddress(output.ergoTree)
+          val address: ErgoAddress =  initSettings.chainSettings.addressEncoder.fromProposition(output.ergoTree).get
           addresses.put(address, addresses.getOrElse[Long](address, 0) + output.value)
         })
       })

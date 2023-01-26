@@ -3,7 +3,7 @@ package org.ergoplatform.http.api
 import java.math.BigInteger
 import io.circe._
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
@@ -28,7 +28,8 @@ import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
-import org.ergoplatform.nodeView.history.extra.{BalanceInfo, ExtraIndexerRef, IndexedErgoBox, IndexedErgoTransaction, IndexedToken}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.getAddress
+import org.ergoplatform.nodeView.history.extra.{BalanceInfo, IndexedErgoBox, IndexedErgoTransaction, IndexedToken}
 import org.ergoplatform.wallet.interface4j.SecretString
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.authds.merkle.MerkleProof
@@ -51,6 +52,8 @@ trait ApiCodecs extends JsonCodecs {
   implicit val digestEncoder: Encoder[Digest] = x => Base16.encode(x).asJson
 
   implicit val sideEncoder: Encoder[Side] = _.toByte.asJson
+
+  implicit val ergoAddressEncoder: ErgoAddressEncoder = null
 
   protected implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = { proof =>
     Json.obj(
@@ -474,7 +477,7 @@ trait ApiCodecs extends JsonCodecs {
     iEb.box.asJson.deepMerge(Json.obj(
       "globalIndex" -> iEb.globalIndex.asJson,
       "inclusionHeight" -> iEb.inclusionHeight.asJson,
-      "address" -> ExtraIndexerRef.getAddressEncoder.toString(iEb.getAddress).asJson,
+      "address" -> ergoAddressEncoder.toString(getAddress(iEb.box.ergoTree)).asJson,
       "spentTransactionId" -> iEb.spendingTxIdOpt.asJson
     ))
   }

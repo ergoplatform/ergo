@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{ExtraIndexTypeId, fastIdToBytes}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getSegmentsForRange, getTxs, segmentTreshold, slice}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.settings.Algos
@@ -126,7 +126,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @param box - box to spend
     * @return this address
     */
-  private[extra] def spendBox(box: ErgoBox): IndexedErgoAddress = {
+  private[extra] def spendBox(box: ErgoBox)(implicit ae: ErgoAddressEncoder): IndexedErgoAddress = {
     balanceInfo.get.subtract(box)
     this
   }

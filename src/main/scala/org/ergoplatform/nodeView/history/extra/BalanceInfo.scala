@@ -1,9 +1,8 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
-import org.ergoplatform.nodeView.history.extra.IndexedErgoBoxSerializer.getAddress
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.fastIdToBytes
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -44,7 +43,7 @@ class BalanceInfo(var nanoErgs: Long = 0L,
     }
   }
 
-  def subtract(box: ErgoBox): Unit = {
+  def subtract(box: ErgoBox)(implicit ae: ErgoAddressEncoder): Unit = {
     nanoErgs = math.max(nanoErgs - box.value, 0)
     cfor(0)(_ < box.additionalTokens.length, _ + 1) { i =>
       val id: ModifierId = bytesToId(box.additionalTokens(i)._1)
@@ -55,7 +54,7 @@ class BalanceInfo(var nanoErgs: Long = 0L,
             tokens.remove(n)
           else
             tokens(n) = (id, newVal)
-        case None => log.warn(s"Failed to subtract token $id from address ${getAddress(box.ergoTree)}")
+        case None => log.warn(s"Failed to subtract token $id from address ${ae.fromProposition(box.ergoTree).map(ae.toString).getOrElse(box.ergoTree.bytesHex)}")
       }
 
     }

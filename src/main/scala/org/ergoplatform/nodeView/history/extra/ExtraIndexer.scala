@@ -2,20 +2,21 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoBox.{BoxId, TokenId}
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox, Pay2SAddress}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FullBlockApplied, Rollback}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey, getIndex}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey, getIndex}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.ReceivableMessages.Start
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.segmentTreshold
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.tokenRegistersSet
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import sigmastate.Values.ErgoTree
 
 import java.nio.ByteBuffer
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -43,6 +44,9 @@ trait ExtraIndexerBase extends ScorexLogging {
 
   // Max buffer size (determined by config)
   protected val saveLimit: Int
+
+  // Address encoder instance
+  protected implicit val addressEncoder: ErgoAddressEncoder
 
   // Flag to signal when indexer has reached current block height
   protected var caughtUp: Boolean = false
@@ -358,14 +362,18 @@ trait ExtraIndexerBase extends ScorexLogging {
   * Actor that constructs an index of database elements.
   * @param cacheSettings - cacheSettings to use for saveLimit size
   */
-class ExtraIndexer(cacheSettings: CacheSettings)
+class ExtraIndexer(cacheSettings: CacheSettings,
+                   ae: ErgoAddressEncoder)
   extends Actor with ExtraIndexerBase {
 
   override val saveLimit: Int = cacheSettings.history.extraCacheSize * 10
 
+  override implicit val addressEncoder: ErgoAddressEncoder = ae
+
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
     context.system.eventStream.subscribe(self, classOf[Rollback])
+    context.system.eventStream.subscribe(self, classOf[StartExtraIndexer])
   }
 
   override def postStop(): Unit =
@@ -384,14 +392,14 @@ class ExtraIndexer(cacheSettings: CacheSettings)
         run() // restart indexer
       }
 
-    case Start(history: ErgoHistory) =>
+    case StartExtraIndexer(history: ErgoHistory) =>
       _history = history
       run()
 
   }
 }
 
-object ExtraIndexerRef {
+object ExtraIndexer {
 
   type ExtraIndexTypeId = Byte
 
@@ -400,14 +408,17 @@ object ExtraIndexerRef {
       * Initialize ExtraIndexer and start indexing.
       * @param history - handle to database
       */
-    case class Start(history: ErgoHistory)
+    case class StartExtraIndexer(history: ErgoHistory)
   }
 
-  private var _ae: ErgoAddressEncoder = _
-
-  def getAddressEncoder: ErgoAddressEncoder = _ae
-
-  def setAddressEncoder(encoder: ErgoAddressEncoder): Unit = if(_ae == null) _ae = encoder
+  /**
+    * @return address constructed from the ErgoTree of this box
+    */
+  def getAddress(tree: ErgoTree)(implicit ae: ErgoAddressEncoder): ErgoAddress =
+    tree.root match {
+      case Right(_) => ae.fromProposition(tree).get // default most of the time
+      case Left(_) => new Pay2SAddress(tree, tree.bytes) // needed for burn address 4MQyMKvMbnCJG3aJ
+    }
 
   private val hexIndex: Array[Byte] = {
     val index = Array.fill[Byte](128)(0xff.toByte)
@@ -438,34 +449,10 @@ object ExtraIndexerRef {
   def getIndex(key: Array[Byte])(history: ErgoHistoryReader): ByteBuffer =
     ByteBuffer.wrap(history.modifierBytesById(bytesToId(key)).getOrElse(Array.fill[Byte](8){0}))
 
-  def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {
-    val actor = system.actorOf(Props.create(classOf[ExtraIndexer], cacheSettings))
-    _ae = chainSettings.addressEncoder
-    ExtraIndexerRefHolder.init(actor)
-    actor
-  }
+  def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(Props.create(classOf[ExtraIndexer], cacheSettings, chainSettings.addressEncoder))
 }
 
-object ExtraIndexerRefHolder {
-
-  private var _actor: Option[ActorRef] = None
-  private var running: Boolean = false
-
-  /**
-    * Start stored ExtraIndexer actor with history handle.
-    * @param history - initialized history handle
-    */
-  private[history] def start(history: ErgoHistory): Unit = if(_actor.isDefined && !running) {
-    _actor.get ! Start(history)
-    running = true
-  }
-
-  /**
-    * Store a Ref to an ExtraIndexer actor.
-    * @param actor - Ref to ExtraIndexer
-    */
-  private[extra] def init(actor: ActorRef): Unit = _actor = Some(actor)
-}
 /**
   * Base trait for all additional indexes made by ExtraIndexer
   */

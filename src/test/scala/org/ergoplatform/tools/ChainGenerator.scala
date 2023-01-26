@@ -76,7 +76,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val votingEpochLength = votingSettings.votingLength
   val protocolVersion = fullHistorySettings.chainSettings.protocolVersion
 
-  val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+  val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)(null)
   HistoryTestHelpers.allowToApplyOldBlocks(history)
   val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(fullHistorySettings))
   log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")

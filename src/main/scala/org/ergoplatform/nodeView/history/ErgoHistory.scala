@@ -1,13 +1,14 @@
 package org.ergoplatform.nodeView.history
 
-import java.io.File
+import akka.actor.ActorContext
 
+import java.io.File
 import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRefHolder
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings._
@@ -270,7 +271,7 @@ object ErgoHistory extends ScorexLogging {
     }
   }
 
-  def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
+  def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider)(implicit context: ActorContext): ErgoHistory = {
     val db = HistoryStorage(ergoSettings)
     val nodeSettings = ergoSettings.nodeSettings
 
@@ -311,7 +312,8 @@ object ErgoHistory extends ScorexLogging {
     repairIfNeeded(history)
 
     log.info("History database read")
-    ExtraIndexerRefHolder.start(history) //start extra indexer, if enabled
+    if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled
+      context.system.eventStream.publish(StartExtraIndexer(history))
     history
   }
 

@@ -1,14 +1,13 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.{ErgoAddress, ErgoBox, Pay2SAddress}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{ExtraIndexTypeId, fastIdToBytes}
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.wallet.WalletBox
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, TrackedBox}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.Values.ErgoTree
 
 /**
   * Index of a box.
@@ -34,10 +33,6 @@ class IndexedErgoBox(val inclusionHeight: Int,
 
   override def serializedId: Array[Byte] = box.id
 
-  /**
-    * @return address constructed from the ErgoTree of this box
-    */
-  def getAddress: ErgoAddress = IndexedErgoBoxSerializer.getAddress(box.ergoTree)
 
   /**
     * Fill in spending parameters.
@@ -52,12 +47,6 @@ class IndexedErgoBox(val inclusionHeight: Int,
   }
 }
 object IndexedErgoBoxSerializer extends ScorexSerializer[IndexedErgoBox] {
-
-  def getAddress(tree: ErgoTree): ErgoAddress =
-    tree.root match {
-      case Right(_) => ExtraIndexerRef.getAddressEncoder.fromProposition(tree).get // default most of the time
-      case Left(_) => new Pay2SAddress(tree, tree.bytes)(ExtraIndexerRef.getAddressEncoder) // needed for burn address 4MQyMKvMbnCJG3aJ
-    }
 
   override def serialize(iEb: IndexedErgoBox, w: Writer): Unit = {
     w.putInt(iEb.inclusionHeight)

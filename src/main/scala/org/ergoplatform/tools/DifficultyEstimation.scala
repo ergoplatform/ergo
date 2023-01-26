@@ -20,7 +20,7 @@ object v2testing extends App {
 
   val ldc = new DifficultyAdjustment(ergoSettings.chainSettings)
 
-  val eh = ErgoHistory.readOrGenerate(ergoSettings, ntp)
+  val eh = ErgoHistory.readOrGenerate(ergoSettings, ntp)(null)
 
   val epochLength = ergoSettings.chainSettings.epochLength
 
@@ -103,7 +103,7 @@ object AltDiff extends App {
   println(currentSettings.chainSettings.epochLength)
   println(altSettings.chainSettings.epochLength)
 
-  val eh = ErgoHistory.readOrGenerate(altSettings, ntp)
+  val eh = ErgoHistory.readOrGenerate(altSettings, ntp)(null)
 
   println("best: " + eh.bestHeaderOpt.map(_.height))
 

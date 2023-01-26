@@ -383,7 +383,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
       nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 
-    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)(null)
   }
 
   def syntacticallyValidModifier(history: HT): Header = {

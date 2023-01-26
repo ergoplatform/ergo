@@ -253,6 +253,9 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
       case _ => false
     }
 
+  /**
+    * Clear old known status `oldStatus` from tracked block section `modifierId` of type `modifierTypeId`
+    */
   def clearStatusForModifier(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value, oldStatus: ModifiersStatus): Unit =
     oldStatus match {
       case Requested =>

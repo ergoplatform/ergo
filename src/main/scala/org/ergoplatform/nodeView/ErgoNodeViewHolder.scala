@@ -133,7 +133,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
 
-  protected def requestDownloads(pi: ProgressInfo[BlockSection]): Unit = {
+  private def requestDownloads(pi: ProgressInfo[BlockSection]): Unit = {
     //TODO: actually, pi.toDownload contains only 1 modifierid per type,
     //TODO: see the only case where toDownload is not empty during ProgressInfo construction
     //TODO: so the code below can be optimized
@@ -720,6 +720,10 @@ object ErgoNodeViewHolder {
 
   case class BlockAppliedTransactions(txs: Seq[ModifierId]) extends NodeViewHolderEvent
 
+  /**
+    * When node view holder is realizing it knows IDs of block sections not downloaded yte, it sends this signal
+    * to download them
+    */
   case class DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) extends NodeViewHolderEvent
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)

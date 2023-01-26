@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, P2PKAddress, UnsignedInput}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, P2PKAddress, UnsignedInput}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
@@ -28,6 +28,7 @@ import scala.util.Try
 class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase with HistoryTestHelpers {
 
   override protected val saveLimit: Int = 1 // save every block
+  override protected implicit val addressEncoder: ErgoAddressEncoder = initSettings.chainSettings.addressEncoder
 
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, poPoWBootstrap = false, ChainGenerator.minimalSuffix, mining = false, ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, useExternalMiner = false,
@@ -50,8 +51,6 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
 
     ChainGenerator.generate(HEIGHT, dir)(_history)
 
-    ExtraIndexer.setAddressEncoder(initSettings.chainSettings.addressEncoder)
-
     run()
 
     val txIndexBefore = globalTxIndex
@@ -67,12 +66,12 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
         if(i != 1) {
           tx.inputs.foreach(input => {
             val iEb: IndexedErgoBox = _history.getReader.typedExtraIndexById[IndexedErgoBox](bytesToId(input.boxId)).get
-            val address: ErgoAddress = iEb.getAddress
+            val address: ErgoAddress = ExtraIndexer.getAddress(iEb.box.ergoTree)
             addresses.put(address, addresses(address) - iEb.box.value)
           })
         }
         tx.outputs.foreach(output => { boxesIndexed += 1
-          val address: ErgoAddress =  initSettings.chainSettings.addressEncoder.fromProposition(output.ergoTree).get
+          val address: ErgoAddress =  addressEncoder.fromProposition(output.ergoTree).get
           addresses.put(address, addresses.getOrElse[Long](address, 0) + output.value)
         })
       })

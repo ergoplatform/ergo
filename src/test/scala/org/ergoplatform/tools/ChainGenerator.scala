@@ -62,7 +62,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
     -1, poPoWBootstrap = false, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
     internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
     200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
-    1000000, 100, adProofsSuffixLength = 112*1024)
+    1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false)
   val ms = settings.chainSettings.monetary.copy(
     minerRewardDelay = RewardDelay
   )
@@ -76,7 +76,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val votingEpochLength = votingSettings.votingLength
   val protocolVersion = fullHistorySettings.chainSettings.protocolVersion
 
-  val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+  val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)(null)
   HistoryTestHelpers.allowToApplyOldBlocks(history)
   val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(fullHistorySettings))
   log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")

@@ -46,15 +46,15 @@ class WalletApiRouteSpec extends AnyFlatSpec
   implicit val requestsHolderEncoder: RequestsHolderEncoder = new RequestsHolderEncoder(ergoSettings)
   implicit val addressJsonDecoder: Decoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).decoder
 
-  val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf), 100L, Seq.empty, Map.empty)
-  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), None, 100L, "TEST", "Test", 8)
+  val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf)(addressEncoder), 100L, Seq.empty, Map.empty)
+  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf)(addressEncoder), None, 100L, "TEST", "Test", 8)
   val requestsHolder = RequestsHolder(
     (0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)),
     Some(10000L),
     Seq.empty,
     Seq.empty,
     minerRewardDelay = 720
-  )
+  )(addressEncoder)
 
 
   it should "generate arbitrary transaction" in {

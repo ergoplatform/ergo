@@ -1,12 +1,14 @@
 package org.ergoplatform.nodeView.history
 
-import java.io.File
+import akka.actor.ActorContext
 
+import java.io.File
 import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings._
@@ -95,19 +97,19 @@ trait ErgoHistory
     modifier match {
       case fb: ErgoFullBlock =>
         val nonMarkedIds = (fb.header.id +: fb.header.sectionIds.map(_._2))
-          .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty)
+          .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty).toArray
 
         if (nonMarkedIds.nonEmpty) {
           historyStorage.insert(
             nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
-            Nil).map(_ => this)
+            Array.empty[BlockSection]).map(_ => this)
         } else {
           Success(this)
         }
       case _ =>
         historyStorage.insert(
           Array(validityKey(modifier.id) -> Array(1.toByte)),
-          Nil).map(_ => this)
+          Array.empty[BlockSection]).map(_ => this)
     }
   }
 
@@ -124,17 +126,17 @@ trait ErgoHistory
     log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
-        val invalidatedHeaders = continuationHeaderChains(invalidatedHeader, _ => true).flatten.distinct
+        val invalidatedHeaders = continuationHeaderChains(invalidatedHeader, _ => true).flatten.distinct.toArray
         val invalidatedIds = invalidatedHeaders.map(_.id).toSet
         val validityRow = invalidatedHeaders.flatMap(h => Seq(h.id, h.transactionsId, h.ADProofsId)
           .map(id => validityKey(id) -> Array(0.toByte)))
-        log.info(s"Going to invalidate ${invalidatedHeader.encodedId} and ${invalidatedHeaders.map(_.encodedId)}")
+        log.info(s"Going to invalidate ${invalidatedHeader.encodedId} and ${invalidatedHeaders.map(_.encodedId).mkString("Array(", ", ", ")")}")
         val bestHeaderIsInvalidated = bestHeaderIdOpt.exists(id => invalidatedIds.contains(id))
         val bestFullIsInvalidated = bestFullBlockIdOpt.exists(id => invalidatedIds.contains(id))
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
-            historyStorage.insert(validityRow, Nil).map { _ =>
+            historyStorage.insert(validityRow, Array.empty[BlockSection]).map { _ =>
               this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
             }
           case _ =>
@@ -144,8 +146,8 @@ trait ErgoHistory
             if (!bestFullIsInvalidated) {
               //Only headers chain involved
               historyStorage.insert(
-                newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq,
-                Seq.empty
+                newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toArray,
+                Array.empty[BlockSection]
               ).map { _ =>
                 this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
               }
@@ -173,7 +175,7 @@ trait ErgoHistory
               val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
-              historyStorage.insert(toInsert, Seq.empty).map { _ =>
+              historyStorage.insert(toInsert, Array.empty[BlockSection]).map { _ =>
                 val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
                 this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
               }
@@ -182,7 +184,7 @@ trait ErgoHistory
       case None =>
         //No headers become invalid. Just mark this modifier as invalid
         log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
-        historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), Nil).map { _ =>
+        historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), Array.empty[BlockSection]).map { _ =>
           this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
         }
     }
@@ -262,14 +264,14 @@ object ErgoHistory extends ScorexLogging {
       afterHeaders.map { hId =>
         history.forgetHeader(hId)
       }
-      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Nil)
+      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId])
       true
     } else {
       false
     }
   }
 
-  def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
+  def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider)(implicit context: ActorContext): ErgoHistory = {
     val db = HistoryStorage(ergoSettings)
     val nodeSettings = ergoSettings.nodeSettings
 
@@ -310,6 +312,8 @@ object ErgoHistory extends ScorexLogging {
     repairIfNeeded(history)
 
     log.info("History database read")
+    if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled
+      context.system.eventStream.publish(StartExtraIndexer(history))
     history
   }
 

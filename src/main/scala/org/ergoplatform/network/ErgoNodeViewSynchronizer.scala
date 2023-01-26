@@ -1258,7 +1258,7 @@ object ErgoNodeViewSynchronizer {
 
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
 
-    //todo: consider sending info on the rollback
+    case class Rollback(branchPoint: ModifierId) extends NodeViewHolderEvent
 
     case object RollbackFailed extends NodeViewHolderEvent
 

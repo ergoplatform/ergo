@@ -22,7 +22,7 @@ object HistoryExtractor extends ScorexLogging {
 
     val timeProvider = new NetworkTimeProvider(settings.ntp)
     val os = new FileOutputStream(outputFile)
-    val h = ErgoHistory.readOrGenerate(ergoSettings, timeProvider)
+    val h = ErgoHistory.readOrGenerate(ergoSettings, timeProvider)(null)
     val wholeChain = h.chainToHeader(None, h.bestHeaderOpt.get)
 
     var counter = 0

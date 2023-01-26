@@ -11,6 +11,7 @@ import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
@@ -26,7 +27,7 @@ import scorex.util.ScorexLogging
 
 import java.net.InetSocketAddress
 import scala.concurrent.{ExecutionContext, Future}
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 class ErgoApp(args: Args) extends ScorexLogging {
 
@@ -98,6 +99,9 @@ class ErgoApp(args: Args) extends ScorexLogging {
       None
     }
 
+  // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
+  ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings)
+
   private val syncTracker = ErgoSyncTracker(scorexSettings.network, timeProvider)
 
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
@@ -157,25 +161,26 @@ class ErgoApp(args: Args) extends ScorexLogging {
   )
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
-      EmissionApiRoute(ergoSettings),
-      ErgoUtilsApiRoute(ergoSettings),
-      ErgoPeersApiRoute(
-        peerManagerRef,
-        networkControllerRef,
-        syncTracker,
-        deliveryTracker,
-        scorexSettings.restApi
-      ),
-      InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
-      BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-      NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-      TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-      WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-      UtxoApiRoute(readersHolderRef, scorexSettings.restApi),
-      ScriptApiRoute(readersHolderRef, ergoSettings),
-      ScanApiRoute(readersHolderRef, ergoSettings),
-      NodeApiRoute(ergoSettings)
-    ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
+    EmissionApiRoute(ergoSettings),
+    ErgoUtilsApiRoute(ergoSettings),
+    BlockchainApiRoute(readersHolderRef, ergoSettings),
+    ErgoPeersApiRoute(
+      peerManagerRef,
+      networkControllerRef,
+      syncTracker,
+      deliveryTracker,
+      scorexSettings.restApi
+    ),
+    InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
+    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
+    NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
+    WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
+    UtxoApiRoute(readersHolderRef, scorexSettings.restApi),
+    ScriptApiRoute(readersHolderRef, ergoSettings),
+    ScanApiRoute(readersHolderRef, ergoSettings),
+    NodeApiRoute(ergoSettings)
+  ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
 
   private val swaggerRoute = SwaggerRoute(scorexSettings.restApi, swaggerConfig)
   private val panelRoute   = NodePanelRoute()
@@ -211,7 +216,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   }
 
   private def swaggerConfig: String =
-    Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
+    Source.fromResource("api/openapi.yaml")(Codec.UTF8).getLines.mkString("\n")
 
   private def run(): Future[ServerBinding] = {
     require(scorexSettings.network.agentName.length <= ErgoApp.ApplicationNameLimit)

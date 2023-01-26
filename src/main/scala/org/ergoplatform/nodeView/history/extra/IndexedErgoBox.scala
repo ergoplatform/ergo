@@ -1,11 +1,10 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.{ErgoAddress, ErgoBox, Pay2SAddress}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.wallet.WalletBox
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, TrackedBox}
-import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
@@ -79,5 +78,5 @@ object IndexedErgoBoxSerializer extends ScorexSerializer[IndexedErgoBox] {
 }
 
 object IndexedErgoBox {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ 5.toByte
+  val extraIndexTypeId: ExtraIndexTypeId = 5.toByte
 }

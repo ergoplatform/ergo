@@ -8,22 +8,22 @@ object ExtraIndexSerializer  extends ScorexSerializer[ExtraIndex]{
     override def serialize(obj: ExtraIndex, w: Writer): Unit = {
       obj match {
         case m: IndexedErgoAddress =>
-          w.put(IndexedErgoAddress.modifierTypeId)
+          w.put(IndexedErgoAddress.extraIndexTypeId)
           IndexedErgoAddressSerializer.serialize(m, w)
         case m: IndexedErgoTransaction =>
-          w.put(IndexedErgoTransaction.modifierTypeId)
+          w.put(IndexedErgoTransaction.extraIndexTypeId)
           IndexedErgoTransactionSerializer.serialize(m, w)
         case m: IndexedErgoBox =>
-          w.put(IndexedErgoBox.modifierTypeId)
+          w.put(IndexedErgoBox.extraIndexTypeId)
           IndexedErgoBoxSerializer.serialize(m, w)
         case m: NumericTxIndex =>
-          w.put(NumericTxIndex.modifierTypeId)
+          w.put(NumericTxIndex.extraIndexTypeId)
           NumericTxIndexSerializer.serialize(m, w)
         case m: NumericBoxIndex =>
-          w.put(NumericBoxIndex.modifierTypeId)
+          w.put(NumericBoxIndex.extraIndexTypeId)
           NumericBoxIndexSerializer.serialize(m, w)
         case m: IndexedToken =>
-          w.put(IndexedToken.modifierTypeId)
+          w.put(IndexedToken.extraIndexTypeId)
           IndexedTokenSerializer.serialize(m, w)
         case m =>
           throw new Error(s"Serialization for unknown index: $m")
@@ -32,17 +32,17 @@ object ExtraIndexSerializer  extends ScorexSerializer[ExtraIndex]{
 
     override def parse(r: Reader): ExtraIndex = {
       r.getByte() match {
-        case IndexedErgoAddress.`modifierTypeId` =>
+        case IndexedErgoAddress.`extraIndexTypeId` =>
           IndexedErgoAddressSerializer.parse(r)
-        case IndexedErgoTransaction.`modifierTypeId` =>
+        case IndexedErgoTransaction.`extraIndexTypeId` =>
           IndexedErgoTransactionSerializer.parse(r)
-        case IndexedErgoBox.`modifierTypeId` =>
+        case IndexedErgoBox.`extraIndexTypeId` =>
           IndexedErgoBoxSerializer.parse(r)
-        case NumericTxIndex.`modifierTypeId` =>
+        case NumericTxIndex.`extraIndexTypeId` =>
           NumericTxIndexSerializer.parse(r)
-        case NumericBoxIndex.`modifierTypeId` =>
+        case NumericBoxIndex.`extraIndexTypeId` =>
           NumericBoxIndexSerializer.parse(r)
-        case IndexedToken.`modifierTypeId` =>
+        case IndexedToken.`extraIndexTypeId` =>
           IndexedTokenSerializer.parse(r)
         case m =>
           throw new Error(s"Deserialization for unknown type byte: $m")

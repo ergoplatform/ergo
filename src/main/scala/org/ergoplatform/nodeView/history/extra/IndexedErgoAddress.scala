@@ -2,11 +2,10 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getSegmentsForRange, getTxs, segmentTreshold, slice}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.settings.Algos
-import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
@@ -256,7 +255,7 @@ object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress]
 
 object IndexedErgoAddress {
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ 15.toByte
+  val extraIndexTypeId: ExtraIndexTypeId = 15.toByte
 
   val segmentTreshold: Int = 512
 

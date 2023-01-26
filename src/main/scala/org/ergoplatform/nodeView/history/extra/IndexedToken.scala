@@ -2,10 +2,9 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.settings.Algos
-import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
@@ -125,5 +124,5 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
 }
 
 object IndexedToken {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ 35.toByte
+  val extraIndexTypeId: ExtraIndexTypeId = 35.toByte
 }

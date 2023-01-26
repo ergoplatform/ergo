@@ -1,9 +1,8 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.settings.Algos
-import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
@@ -32,7 +31,7 @@ object NumericTxIndexSerializer extends ScorexSerializer[NumericTxIndex] {
 }
 
 object NumericTxIndex {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ 25.toByte
+  val extraIndexTypeId: ExtraIndexTypeId = 25.toByte
 
   /**
     * Convert the index number of a transaction to an id for database retreival.
@@ -75,7 +74,7 @@ object NumericBoxIndexSerializer extends ScorexSerializer[NumericBoxIndex] {
 }
 
 object NumericBoxIndex {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ 30.toByte
+  val extraIndexTypeId: ExtraIndexTypeId = 30.toByte
 
   /**
     * Convert the index number of a box to an id for database retreival.

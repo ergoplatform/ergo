@@ -393,6 +393,8 @@ class ExtraIndexer(cacheSettings: CacheSettings)
 
 object ExtraIndexerRef {
 
+  type ExtraIndexTypeId = Byte
+
   object ReceivableMessages {
     /**
       * Initialize ExtraIndexer and start indexing.

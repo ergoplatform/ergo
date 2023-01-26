@@ -4,9 +4,8 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.DataInput
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.fastIdToBytes
+import org.ergoplatform.nodeView.history.extra.ExtraIndexerRef.{ExtraIndexTypeId, fastIdToBytes}
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.ModifierTypeId
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
 import spire.implicits.cfor
@@ -94,5 +93,5 @@ object IndexedErgoTransactionSerializer extends ScorexSerializer[IndexedErgoTran
 }
 
 object IndexedErgoTransaction {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ 10.toByte
+  val extraIndexTypeId: ExtraIndexTypeId = 10.toByte
 }

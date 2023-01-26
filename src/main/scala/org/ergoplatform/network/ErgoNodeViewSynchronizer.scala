@@ -1227,8 +1227,6 @@ object ErgoNodeViewSynchronizer {
     // getLocalSyncInfo messages
     case object SendLocalSyncInfo
 
-    case class ResponseFromLocal(source: ConnectedPeer, modifierTypeId: NetworkObjectTypeId, localObjects: Seq[(ModifierId, Array[Byte])])
-
     /**
       * Check delivery of modifier with type `modifierTypeId` and id `modifierId`.
       * `source` may be defined if we expect modifier from concrete peer or None if
@@ -1283,8 +1281,14 @@ object ErgoNodeViewSynchronizer {
       */
     case class FailedOnRecheckTransaction(id : ModifierId, error: Throwable) extends ModificationOutcome
 
+    /**
+      * A signal that block section with id `modifierId` was invalidated due to `error`, but it may be valid in future
+      */
     case class RecoverableFailedModification(typeId: NetworkObjectTypeId.Value, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
 
+    /**
+      * A signal that block section with id `modifierId` was permanently invalidated during stateless checks
+      */
     case class SyntacticallyFailedModification(typeId: NetworkObjectTypeId.Value, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
 
     /**

@@ -17,6 +17,9 @@ sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {sel
     case _ => false
   }
 
+  /**
+    * @return readable representation of `id`, as `id` is a hex-encoded string now, just identity functions is used
+    */
   def encodedId: String = id
 
 }

@@ -55,6 +55,9 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
     objectsStore.get(idToBytes(id)).map(_.tail) // removing modifier type byte with .tail
   }
 
+  /**
+    * @return bytes and type of a network object stored in the database with identifier `id`
+    */
   def modifierTypeAndBytesById(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] = {
     objectsStore.get(idToBytes(id)).map(bs => (NetworkObjectTypeId.fromByte(bs.head), bs.tail)) // first byte is type id, tail is modifier bytes
   }

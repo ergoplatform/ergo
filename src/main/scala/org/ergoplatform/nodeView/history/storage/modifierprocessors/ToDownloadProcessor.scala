@@ -116,11 +116,14 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     }
   }
 
+  /**
+    * @return block sections needed to be downloaded after header `h` , and defined by the header
+    */
   def requiredModifiersForHeader(h: Header): Seq[(NetworkObjectTypeId.Value, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
-      Nil
+      Nil // no block sections to be downloaded in SPV mode
     } else if (nodeSettings.stateType.requireProofs) {
-      h.sectionIds
+      h.sectionIds // download block transactions, extension and UTXO set transformations proofs in "digest" mode
     } else {
       h.sectionIdsWithNoProof // do not download UTXO set transformation proofs if UTXO set is stored
     }

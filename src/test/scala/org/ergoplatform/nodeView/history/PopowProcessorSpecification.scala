@@ -1,13 +1,12 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams}
+import org.ergoplatform.modifiers.history.popow.PoPowHeader
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.util.ModifierId
 
 class PopowProcessorSpecification extends HistoryTestHelpers {
-  private val poPowParams = PoPowParams(30, 30)
 
   private def genHistory(genesisIdOpt: Option[ModifierId], popowBootstrap: Boolean) =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = popowBootstrap, blocksToKeep = -1,

@@ -951,7 +951,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def processNipopowProof(proof: NipopowProof, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
-    ???
+    //todo: consider proofs after first one applied, there could be different options here
+    //e.g.  collect few proofs first and then apply, or apply again if better proof appeared
+    if (hr.bestHeaderOpt.isEmpty) {
+      hr.applyPopowProof(proof)
+    } else {
+      log.warn("Got nipopow proof, but it is already applied")
+    }
   }
 
 

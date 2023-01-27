@@ -138,7 +138,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   private def requiredDifficultyAfter(parent: Header, blockchain: mutable.Map[Int, Header]): Difficulty = {
     val parentHeight = parent.height
-    val heights = difficultyControl.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
+    val heights = difficultyControl.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
       .ensuring(_.last == parentHeight)
     if (heights.lengthCompare(1) == 0) {
       difficultyControl.calculate(Seq(parent), epochLength)

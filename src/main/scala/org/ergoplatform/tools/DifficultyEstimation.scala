@@ -30,7 +30,7 @@ object v2testing extends App {
 
   println("best: " + eh.bestHeaderOpt.map(_.height))
 
-  val heights = ldc.previousHeadersRequiredForRecalculation(843776 + 1 + 1024, epochLength)
+  val heights = ldc.previousHeightsRequiredForRecalculation(843776 + 1 + 1024, epochLength)
 
   println("hs: " + heights)
 
@@ -111,7 +111,7 @@ object AltDiff extends App {
 
   (1 to 843207).foreach{h =>
     if(h % 1024 == 1 && h > 1) {
-      val heights = ldc.previousHeadersRequiredForRecalculation(h, epochLength)
+      val heights = ldc.previousHeightsRequiredForRecalculation(h, epochLength)
       val headers = heights.map(eh.bestHeaderIdAtHeight).map(idOpt => idOpt.flatMap(id => eh.typedModifierById[Header](id))).flatten
       val calcDiff = ldc.eip37Calculate(headers, epochLength)
       val chainDiff = eh.bestHeaderAtHeight(h).get.requiredDifficulty
@@ -211,7 +211,7 @@ object AdaptiveSimulator extends App {
       val blockBefore = h1.copy(height = h - 1, timestamp = blocks(h - 128).timestamp + 127 * newBlockDelay, nBits = blocks(h - 128).nBits)
       blocks.put(h - 1, blockBefore)
 
-      val heights = ldc.previousHeadersRequiredForRecalculation(h, epochLength)
+      val heights = ldc.previousHeightsRequiredForRecalculation(h, epochLength)
       val hs = heights.map(blocks.apply)
 
       val newDiff = ldc.eip37Calculate(hs, epochLength)

@@ -278,7 +278,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     if (settings.networkType.isMainNet && parentHeight + 1 >= eip37ActivationHeight) {
       val epochLength = 128 // epoch length after EIP-37 activation
       if (parentHeight % epochLength == 0) {
-        val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
+        val heights = difficultyCalculator.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
         // todo: if parent is on best chain, read headers directly, not via headerChainBack
         val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
         val headers = chain.headers.filter(p => heights.contains(p.height))
@@ -298,7 +298,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
           //todo: it is slow to read thousands headers from database for each header
           //todo; consider caching here
           //todo: https://github.com/ergoplatform/ergo/issues/872
-          val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
+          val heights = difficultyCalculator.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
             .ensuring(_.last == parentHeight)
           if (heights.lengthCompare(1) == 0) {
             difficultyCalculator.calculate(Array(parent), epochLength)

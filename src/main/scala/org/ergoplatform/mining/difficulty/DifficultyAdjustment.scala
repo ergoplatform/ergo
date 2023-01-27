@@ -19,10 +19,20 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
   require(chainSettings.epochLength > 0, "diff epoch length should always be > 0")
   require(chainSettings.epochLength < Int.MaxValue / useLastEpochs, s"diff epoch length is too high for $useLastEpochs epochs")
 
+  def nextRecalculationHeight(height: Height, epochLength: Int): Height = {
+    if ((height - 1) % epochLength == 0) {
+      height
+    } else if (height % epochLength == 0) {
+      height + 1
+    } else {
+      (height / epochLength + 1) * epochLength + 1
+    }
+  }
+
   /**
     * @return heights of previous headers required for block recalculation
     */
-  def previousHeadersRequiredForRecalculation(height: Height, epochLength: Int): Seq[Int] = {
+  def previousHeightsRequiredForRecalculation(height: Height, epochLength: Int): Seq[Height] = {
     if ((height - 1) % epochLength == 0 && epochLength > 1) {
       (0 to useLastEpochs).map(i => (height - 1) - i * epochLength).filter(_ >= 0).reverse
     } else if ((height - 1) % epochLength == 0 && height > epochLength * useLastEpochs) {
@@ -72,7 +82,6 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     } else {
       avg.max(lastDiff / 2)
     }
-    //todo: downgrade log level after testing
     log.debug(s"Difficulty for ${previousHeaders.last.height + 1}: predictive $predictiveDiff, limited predictive: $limitedPredictiveDiff, classic: $classicDiff, " +
              s"resulting uncompressed: $uncompressedDiff")
     // perform serialization cycle in order to normalize resulted difficulty

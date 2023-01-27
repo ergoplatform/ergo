@@ -403,12 +403,14 @@ object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
   override def serialize(data: NipopowProofData, w: Writer): Unit = {
     w.putInt(data.m)
     w.putInt(data.k)
-    val headerIdBytesOpt = data.headerIdBytesOpt
-    if (headerIdBytesOpt.isDefined) {
-      val bytes = headerIdBytesOpt.get
-      w.putUShort(bytes.length)
-      w.putBytes(bytes)
+    data.headerIdBytesOpt match {
+      case Some(idBytes) =>
+        w.put(1)
+        w.putBytes(idBytes)
+      case None =>
+        w.put(0)
     }
+    w.putUShort(0) // to allow adding new data in future, we are adding possible pad length
   }
 
   override def parse(r: Reader): NipopowProofData = {
@@ -418,13 +420,18 @@ object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
 
     val m = r.getInt()
     val k = r.getInt()
-    val remainingBytes = r.getUShort()
-    val headerId = if (remainingBytes >= modifierIdLength) {
+
+    val headerIdPresents = r.getByte() == 1
+    val headerIdOpt = if (headerIdPresents) {
       Some(ModifierId @@ Algos.encode(r.getBytes(modifierIdLength)))
     } else {
       None
     }
-    NipopowProofData(m, k, headerId)
+    val remainingBytes = r.getUShort()
+    if (remainingBytes > 0 && remainingBytes < SizeLimit) {
+      r.getBytes(remainingBytes) // current version of reader just skips possible additional bytes
+    }
+    NipopowProofData(m, k, headerIdOpt)
   }
 
 }
@@ -436,20 +443,30 @@ class NipopowProofSpec(serializer: ScorexSerializer[NipopowProof]) extends Messa
 
   import NipopowProofSpec._
 
+  val SizeLimit = 2000000
+
   override val messageCode: MessageCode = MessageCode
   override val messageName: String = MessageName
 
   override def serialize(proof: NipopowProof, w: Writer): Unit = {
     serializer.serialize(proof, w)
+    w.putUShort(0) // to allow adding new data in future, we are adding possible pad length
   }
 
   override def parse(r: Reader): NipopowProof = {
-    serializer.parse(r)
+    require(r.remaining <= SizeLimit, s"Too big NipopowProofSpec message(size: ${r.remaining})")
+    val proof = serializer.parse(r)
+    val remainingBytes = r.getUShort()
+    if (remainingBytes > 0 && remainingBytes < SizeLimit) {
+      r.getBytes(remainingBytes) // current version of reader just skips possible additional bytes
+    }
+    proof
   }
 
 }
 
 object NipopowProofSpec {
+
   val MessageCode: Byte = 91
   val MessageName: String = "NipopowProof"
 

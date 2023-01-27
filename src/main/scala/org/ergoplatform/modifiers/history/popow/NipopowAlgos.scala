@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandida
 import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, ChainSettings, Constants}
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -36,8 +36,10 @@ case class PoPowParams(m: Int, k: Int)
   * Please note that for [KMZ17] we're using the version published @ Financial Cryptography 2020, which is different
   * from previously published versions on IACR eprint.
   */
-class NipopowAlgos(powScheme: AutolykosPowScheme) {
+class NipopowAlgos(chainSettings: ChainSettings) {
   import NipopowAlgos._
+
+  private val powScheme: AutolykosPowScheme = chainSettings.powScheme
 
   /**
     * Computes interlinks vector for a header next to `prevHeader`.

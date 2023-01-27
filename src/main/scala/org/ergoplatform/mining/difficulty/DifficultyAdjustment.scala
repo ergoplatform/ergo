@@ -20,9 +20,7 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
   require(chainSettings.epochLength < Int.MaxValue / useLastEpochs, s"diff epoch length is too high for $useLastEpochs epochs")
 
   def nextRecalculationHeight(height: Height, epochLength: Int): Height = {
-    if ((height - 1) % epochLength == 0) {
-      height
-    } else if (height % epochLength == 0) {
+    if (height % epochLength == 0) {
       height + 1
     } else {
       (height / epochLength + 1) * epochLength + 1
@@ -40,6 +38,10 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     } else {
       Seq(height - 1)
     }
+  }
+
+  def heightsForNextRecalculation(height: Height, epochLength: Int): Seq[Height] = {
+    previousHeightsRequiredForRecalculation(nextRecalculationHeight(height, epochLength), epochLength)
   }
 
   /** @param previousHeaders  should be last headers of the previous epochs */

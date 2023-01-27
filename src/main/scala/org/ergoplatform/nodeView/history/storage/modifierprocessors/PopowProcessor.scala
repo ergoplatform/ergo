@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.local.NipopowVerifier
-import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -28,9 +27,7 @@ trait PopowProcessor extends BasicReaders {
 
   protected def chainSettings: ChainSettings
 
-  def powScheme: AutolykosPowScheme
-
-  lazy val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
+  lazy val nipopowAlgos: NipopowAlgos = new NipopowAlgos(chainSettings)
   lazy val nipopowSerializer = new NipopowProofSerializer(nipopowAlgos)
 
   // todo: NipopowVerifier holds nipopow proof in memory without releasing, fix

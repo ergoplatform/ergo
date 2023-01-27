@@ -52,7 +52,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   implicit val settings: ErgoSettings = initSettings
 
-  val nipopowAlgos = new NipopowAlgos(powScheme)
+  val nipopowAlgos = new NipopowAlgos(settings.chainSettings)
 
   val lightModeSettings: ErgoSettings = initSettings.copy(
     nodeSettings = initSettings.nodeSettings.copy(stateType = StateType.Digest)

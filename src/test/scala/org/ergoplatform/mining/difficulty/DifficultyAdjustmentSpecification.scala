@@ -27,7 +27,7 @@ class DifficultyAdjustmentSpecification extends ErgoPropertyTest {
   property("nextRecalculationHeight vectors") {
     val epochLength = 128
     control.nextRecalculationHeight(926976, epochLength) shouldBe 926977
-    control.nextRecalculationHeight(926977, epochLength) shouldBe 926977
+    control.nextRecalculationHeight(926977, epochLength) shouldBe 927105
     control.nextRecalculationHeight(926975, epochLength) shouldBe 926977
     control.nextRecalculationHeight(926950, epochLength) shouldBe 926977
   }

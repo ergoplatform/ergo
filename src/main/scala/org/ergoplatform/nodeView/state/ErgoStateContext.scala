@@ -73,8 +73,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   override type M = ErgoStateContext
 
   private val votingSettings = ergoSettings.chainSettings.voting
-  private val powScheme = ergoSettings.chainSettings.powScheme
-  private val popowAlgos = new NipopowAlgos(powScheme)
+  private val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
 
   override def sigmaPreHeader: special.sigma.PreHeader =
     PreHeader.toSigma(lastHeaders.headOption.getOrElse(PreHeader.fake))

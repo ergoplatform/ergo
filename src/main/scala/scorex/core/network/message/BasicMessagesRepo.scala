@@ -471,7 +471,7 @@ object NipopowProofSpec {
   val MessageName: String = "NipopowProof"
 
   def apply(ergoSettings: ErgoSettings): NipopowProofSpec = {
-    new NipopowProofSpec(new NipopowProofSerializer(new NipopowAlgos(ergoSettings.chainSettings.powScheme)))
+    new NipopowProofSpec(new NipopowProofSerializer(new NipopowAlgos(ergoSettings.chainSettings)))
   }
 
 }

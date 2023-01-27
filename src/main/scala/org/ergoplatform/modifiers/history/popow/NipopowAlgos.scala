@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.history.popow
 
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, RequiredDifficulty}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.header.Header
@@ -40,6 +40,8 @@ class NipopowAlgos(chainSettings: ChainSettings) {
   import NipopowAlgos._
 
   private val powScheme: AutolykosPowScheme = chainSettings.powScheme
+
+  private val diffAdjustment = new DifficultyAdjustment(chainSettings)
 
   /**
     * Computes interlinks vector for a header next to `prevHeader`.
@@ -235,10 +237,16 @@ class NipopowAlgos(chainSettings: ChainSettings) {
         histReader.popowHeader(suffix.head.id).get -> suffix.tail // .get to be caught in outer (prove's) Try
     }
 
+    //todo: epoch length fix
+    val diffHeaders = diffAdjustment.heightsForNextRecalculation(suffixHead.height, 128).flatMap{height =>
+      histReader.popowHeader(height)
+    }
+
     val genesisHeight = 1
     val genesisPopowHeader = histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
-    val prefix = (genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)).distinct.sortBy(_.height)
+    val prefix = (genesisPopowHeader +: (provePrefix(genesisHeight, suffixHead) ++ diffHeaders)).distinct.sortBy(_.height)
 
+    //todo: write proof diff headers into dedicated section?
     NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
   }
 

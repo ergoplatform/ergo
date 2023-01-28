@@ -13,7 +13,6 @@ import org.ergoplatform.settings.{Algos, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
-import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator}
@@ -101,7 +100,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         opsResult
       }
       ModifierValidator(stateContext.validationSettings)
-        .validateNoFailure(fbOperationFailed, blockOpsTry, Transaction.ModifierTypeId)
+        .validateNoFailure(fbOperationFailed, blockOpsTry, ErgoTransaction.modifierTypeId)
         .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry

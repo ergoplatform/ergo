@@ -48,7 +48,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   /**
     * Remove pre-3.3.0 derivation paths
     */
-  def removePaths(): Try[Unit] = store.remove(Seq(SecretPathsKey))
+  def removePaths(): Try[Unit] = store.remove(Array(SecretPathsKey))
 
   /**
     * Store wallet-related public key in the database
@@ -59,7 +59,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     store.insert {
       publicKeys.map { publicKey =>
         pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)
-      }
+      }.toArray
     }
   }
 
@@ -99,7 +99,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @param ctx - state context
     */
   def updateStateContext(ctx: ErgoStateContext): Try[Unit] = store
-    .insert(Seq(StateContextKey -> ctx.bytes))
+    .insert(Array(StateContextKey -> ctx.bytes))
 
   /**
     * Read state context from the database
@@ -116,7 +116,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     */
   def updateChangeAddress(address: P2PKAddress): Try[Unit] = {
     val bytes = settings.chainSettings.addressEncoder.toString(address).getBytes(Constants.StringEncoding)
-    store.insert(Seq(ChangeAddressKey -> bytes))
+    store.insert(Array(ChangeAddressKey -> bytes))
   }
 
   /**
@@ -139,7 +139,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   def addScan(scanReq: ScanRequest): Try[Scan] = {
     val id = ScanId @@ (lastUsedScanId + 1).toShort
     scanReq.toScan(id).flatMap { app =>
-      store.insert(Seq(
+      store.insert(Array(
         scanPrefixKey(id) -> ScanSerializer.toBytes(app),
         lastUsedScanIdKey -> Shorts.toByteArray(id)
       )).map(_ => app)
@@ -151,7 +151,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @param id scan identifier
     */
   def removeScan(id: Short): Try[Unit] =
-    store.remove(Seq(scanPrefixKey(id)))
+    store.remove(Array(scanPrefixKey(id)))
 
   /**
     * Get scan by its identifier

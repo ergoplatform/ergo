@@ -64,7 +64,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None,
     LaunchParameters,
     eip27Supported = true,
-    settings.scorexSettings.restApi.publicUrl)
+    settings.scorexSettings.restApi.publicUrl,
+    settings.nodeSettings.extraIndex)
 
   override def receive: Receive =
     onConnectedPeers orElse
@@ -166,12 +167,14 @@ object ErgoStatsCollector {
     * @param headersScore - cumulative difficulty of best headers-chain
     * @param bestFullBlockOpt - best full-block id (header id of such block)
     * @param fullBlocksScore - cumulative difficulty of best full blocks chain
+    * @param maxPeerHeight - maximum block height of connected peers
     * @param launchTime - when the node was launched (in Java time format, basically, UNIX time * 1000)
     * @param lastIncomingMessageTime - when the node received last p2p message (in Java time)
     * @param genesisBlockIdOpt - header id of genesis block
     * @param parameters - array with network parameters at the moment
     * @param eip27Supported - whether EIP-27 locked in
-    * @param restApiUrl publicly accessible url of node which exposes restApi in firewall
+    * @param restApiUrl - publicly accessible url of node which exposes restApi in firewall
+    * @param extraIndex - whether the node has additional indexing enabled
     */
   case class NodeInfo(nodeName: String,
                       appVersion: String,
@@ -186,13 +189,14 @@ object ErgoStatsCollector {
                       headersScore: Option[BigInt],
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       fullBlocksScore: Option[BigInt],
-                      maxPeerHeight : Option[Int], // Maximum block height of connected peers
+                      maxPeerHeight : Option[Int],
                       launchTime: Long,
                       lastIncomingMessageTime: Long,
                       genesisBlockIdOpt: Option[String],
                       parameters: Parameters,
                       eip27Supported: Boolean,
-                      restApiUrl: Option[URL])
+                      restApiUrl: Option[URL],
+                      extraIndex: Boolean)
 
   object NodeInfo extends ApiCodecs {
     implicit val paramsEncoder: Encoder[Parameters] = org.ergoplatform.settings.ParametersSerializer.jsonEncoder
@@ -218,6 +222,7 @@ object ErgoStatsCollector {
         "stateType" -> ni.stateType.stateTypeName.asJson,
         "stateVersion" -> ni.stateVersion.asJson,
         "isMining" -> ni.isMining.asJson,
+        "isExplorer" -> ni.extraIndex.asJson,
         "peersCount" -> ni.peersCount.asJson,
         "launchTime" -> ni.launchTime.asJson,
         "lastSeenMessageTime" -> ni.lastIncomingMessageTime.asJson,

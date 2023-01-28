@@ -47,6 +47,7 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      minimalFeeAmount: Long,
                                      headerChainDiff: Int,
                                      adProofsSuffixLength: Int,
+                                     extraIndex: Boolean,
                                      blacklistedTransactions: Seq[String] = Seq.empty,
                                      checkpoint: Option[CheckpointSettings] = None) {
   /**
@@ -84,6 +85,7 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       cfg.as[Long](s"$path.minimalFeeAmount"),
       cfg.as[Int](s"$path.headerChainDiff"),
       cfg.as[Int](s"$path.adProofsSuffixLength"),
+      cfg.as[Boolean](s"$path.extraIndex"),
       cfg.as[Seq[String]](s"$path.blacklistedTransactions"),
       cfg.as[Option[CheckpointSettings]](s"$path.checkpoint")
     )

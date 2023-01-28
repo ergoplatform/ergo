@@ -89,7 +89,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return ProgressInfo - info required for State to be consistent with History
     */
   protected def process(h: Header): Try[ProgressInfo[BlockSection]] = synchronized {
-    val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = toInsert(h)
+    val dataToInsert: (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = toInsert(h)
 
     historyStorage.insert(dataToInsert._1, dataToInsert._2).flatMap { _ =>
       bestHeaderIdOpt match {
@@ -107,7 +107,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   /**
     * Data to add to and remove from the storage to process this modifier
     */
-  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = {
+  private def toInsert(h: Header): (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
     val bestRow: Seq[(ByteArrayWrapper, Array[Byte])] =
@@ -121,7 +121,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       orphanedBlockHeaderIdsRow(h, score)
     }
 
-    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Seq(h))
+    (Array(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Array(h))
   }
 
   /**

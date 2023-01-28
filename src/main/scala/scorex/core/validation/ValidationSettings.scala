@@ -1,6 +1,6 @@
 package scorex.core.validation
 
-import scorex.core.ModifierTypeId
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import scorex.core.validation.ValidationResult.Invalid
 import scorex.util.ModifierId
 
@@ -11,7 +11,10 @@ import scorex.util.ModifierId
 abstract class ValidationSettings {
   val isFailFast: Boolean
 
-  def getError(id: Short, e: Throwable, modifierId: ModifierId, modifierTypeId: ModifierTypeId): Invalid =
+  /**
+    * @return validation error of type `id` for block section `modifierId` of type `modifierTypeId`, error details in `e`
+    */
+  def getError(id: Short, e: Throwable, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Invalid =
     getError(id, InvalidModifier(e.getMessage, modifierId, modifierTypeId))
 
   def getError(id: Short, invalidMod: InvalidModifier): ValidationResult.Invalid

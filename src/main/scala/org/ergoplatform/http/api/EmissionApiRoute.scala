@@ -22,7 +22,7 @@ case class EmissionApiRoute(ergoSettings: ErgoSettings)
 
   private val reemissionSettings = chainSettings.reemission
 
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(chainSettings.addressPrefix)
+  override implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(chainSettings.addressPrefix)
 
   override def route: Route = pathPrefix("emission") {
     emissionAt ~ scripts

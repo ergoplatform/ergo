@@ -17,7 +17,7 @@ object HistoryExtractor extends ScorexLogging {
     lazy val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
 
     val os = new FileOutputStream(outputFile)
-    val h = ErgoHistory.readOrGenerate(ergoSettings)
+    val h = ErgoHistory.readOrGenerate(ergoSettings)(null)
     val wholeChain = h.chainToHeader(None, h.bestHeaderOpt.get)
 
     var counter = 0

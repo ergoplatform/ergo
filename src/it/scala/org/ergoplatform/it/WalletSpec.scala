@@ -79,8 +79,8 @@ class WalletSpec extends AsyncWordSpec with IntegrationSuite with WalletTestOps 
 
     val encodedBox = Base16.encode(ErgoBoxSerializer.toBytes(input))
 
-    val paymentRequest = PaymentRequest(P2PKAddress(pk), 50000000, Seq.empty, Map.empty)
-    val requestsHolder = RequestsHolder(Seq(paymentRequest), feeOpt = Some(100000L), Seq(encodedBox), dataInputsRaw = Seq.empty, minerRewardDelay = 720)
+    val paymentRequest = PaymentRequest(P2PKAddress(pk)(addressEncoder), 50000000, Seq.empty, Map.empty)
+    val requestsHolder = RequestsHolder(Seq(paymentRequest), feeOpt = Some(100000L), Seq(encodedBox), dataInputsRaw = Seq.empty, minerRewardDelay = 720)(addressEncoder)
 
     node.waitForStartup.flatMap { node: Node =>
       for {

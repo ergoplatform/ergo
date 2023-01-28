@@ -47,7 +47,7 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, initSettings.chainSettings,
       nodeSettings, settings.scorexSettings, settings.walletSettings, settings.cacheSettings)
 
-    _history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)(null)
+    _history = ErgoHistory.readOrGenerate(fullHistorySettings)(null)
 
     ChainGenerator.generate(HEIGHT, dir)(_history)
 
@@ -149,7 +149,7 @@ object ChainGenerator extends ErgoTestHelpers {
     stateDir.mkdirs()
     val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(initSettings))
     System.out.println(s"Going to generate a chain at ${dir.getAbsolutePath} starting from ${history.bestFullBlockOpt}")
-    startTime = timeProvider.time - (blockInterval * (length - 1)).toMillis
+    startTime = System.currentTimeMillis() - (blockInterval * (length - 1)).toMillis
     val chain = loop(state, None, None, Seq())(history)
     System.out.println(s"Chain of length ${chain.length} generated")
     history.bestHeaderOpt shouldBe history.bestFullBlockOpt.map(_.header)
@@ -163,7 +163,7 @@ object ChainGenerator extends ErgoTestHelpers {
                    last: Option[Header],
                    acc: Seq[ModifierId])(history: ErgoHistory): Seq[ModifierId] = {
     val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
-    if (time < timeProvider.time) {
+    if (time < System.currentTimeMillis()) {
       val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
         initBox, state.stateContext)
 

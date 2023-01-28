@@ -65,7 +65,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
       nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 
-    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+    ErgoHistory.readOrGenerate(fullHistorySettings)
   }
 
 }

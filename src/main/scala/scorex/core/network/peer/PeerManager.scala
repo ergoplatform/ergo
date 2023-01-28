@@ -19,7 +19,7 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
 
   import PeerManager.ReceivableMessages._
 
-  private val peerDatabase = new PeerDatabase(settings, scorexContext.timeProvider)
+  private val peerDatabase = new PeerDatabase(settings)
 
   if (peerDatabase.isEmpty) {
     // fill database with peers from config file if empty

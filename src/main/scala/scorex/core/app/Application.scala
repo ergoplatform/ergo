@@ -17,7 +17,6 @@ import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 
 import java.net.InetSocketAddress
@@ -68,8 +67,6 @@ trait Application extends ScorexLogging {
   /** API description in openapi format in YAML or JSON */
   val swaggerConfig: String
 
-  val timeProvider = new NetworkTimeProvider(scorexSettings.ntp)
-
   //an address to send to peers
   lazy val externalSocketAddress: Option[InetSocketAddress] = {
     scorexSettings.network.declaredAddress orElse {
@@ -86,7 +83,6 @@ trait Application extends ScorexLogging {
   val scorexContext = ScorexContext(
     messageSpecs        = basicSpecs ++ additionalMessageSpecs,
     upnpGateway         = upnpGateway,
-    timeProvider        = timeProvider,
     externalNodeAddress = externalSocketAddress
   )
 

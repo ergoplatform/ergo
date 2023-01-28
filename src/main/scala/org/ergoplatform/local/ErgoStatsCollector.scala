@@ -16,8 +16,6 @@ import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.network.ErgoSyncTracker
-import scorex.core.utils.NetworkTimeProvider
-import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
 import scorex.core.network.peer.PeersStatus
 
@@ -31,8 +29,7 @@ import scala.concurrent.duration._
 class ErgoStatsCollector(readersHolder: ActorRef,
                          networkController: ActorRef,
                          syncTracker: ErgoSyncTracker,
-                         settings: ErgoSettings,
-                         timeProvider: NetworkTimeProvider)
+                         settings: ErgoSettings)
   extends Actor with ScorexLogging {
 
   override def preStart(): Unit = {
@@ -46,8 +43,6 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
   }
-
-  private def networkTime(): Time = timeProvider.time()
 
   private var nodeInfo = NodeInfo(
     settings.scorexSettings.network.nodeName,
@@ -64,8 +59,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None,
     None,
     None,
-    launchTime = networkTime(),
-    lastIncomingMessageTime = networkTime(),
+    launchTime = System.currentTimeMillis(),
+    lastIncomingMessageTime = System.currentTimeMillis(),
     None,
     LaunchParameters,
     eip27Supported = true,
@@ -241,16 +236,14 @@ object ErgoStatsCollectorRef {
   def props(readersHolder: ActorRef,
             networkController: ActorRef,
             syncTracker : ErgoSyncTracker,
-            settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider): Props =
-    Props(new ErgoStatsCollector(readersHolder, networkController, syncTracker, settings, timeProvider))
+            settings: ErgoSettings): Props =
+    Props(new ErgoStatsCollector(readersHolder, networkController, syncTracker, settings))
 
 
   def apply(readersHolder: ActorRef,
             networkController: ActorRef,
             syncTracker : ErgoSyncTracker,
-            settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(readersHolder, networkController, syncTracker, settings, timeProvider))
+            settings: ErgoSettings)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(readersHolder, networkController, syncTracker, settings))
 
 }

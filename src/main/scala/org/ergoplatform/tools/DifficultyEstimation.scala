@@ -4,7 +4,6 @@ import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, RequiredDifficu
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
-import scorex.core.utils.NetworkTimeProvider
 
 import java.util.concurrent.TimeUnit
 import scala.collection.mutable
@@ -16,11 +15,9 @@ object v2testing extends App {
 
   private val ergoSettings: ErgoSettings = ErgoSettings.read(Args(Some("/home/kushti/ergo/mainnet/mainnet.conf"), Some(NetworkType.MainNet)))
 
-  val ntp = new NetworkTimeProvider(ergoSettings.scorexSettings.ntp)
-
   val ldc = new DifficultyAdjustment(ergoSettings.chainSettings)
 
-  val eh = ErgoHistory.readOrGenerate(ergoSettings, ntp)
+  val eh = ErgoHistory.readOrGenerate(ergoSettings)
 
   val epochLength = ergoSettings.chainSettings.epochLength
 
@@ -95,15 +92,13 @@ object AltDiff extends App {
   private val altSettings: ErgoSettings =
     ErgoSettings.read(Args(Some("/home/kushti/ergo/mainnet/alt.conf"), Some(NetworkType.MainNet)))
 
-  val ntp = new NetworkTimeProvider(altSettings.scorexSettings.ntp)
-
   val epochLength = altSettings.chainSettings.epochLength
 
 
   println(currentSettings.chainSettings.epochLength)
   println(altSettings.chainSettings.epochLength)
 
-  val eh = ErgoHistory.readOrGenerate(altSettings, ntp)
+  val eh = ErgoHistory.readOrGenerate(altSettings)
 
   println("best: " + eh.bestHeaderOpt.map(_.height))
 
@@ -130,7 +125,6 @@ object AdaptiveSimulator extends App {
 
   private val altSettings: ErgoSettings =
     ErgoSettings.read(Args(Some("/home/kushti/ergo/mainnet/alt.conf"), Some(NetworkType.MainNet)))
-  val ntp = new NetworkTimeProvider(altSettings.scorexSettings.ntp)
 
   val ldc = new DifficultyAdjustment(altSettings.chainSettings)
 

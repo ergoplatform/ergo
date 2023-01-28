@@ -10,12 +10,8 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, NVBenchmark}
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
-import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings}
 import scorex.util.ScorexLogging
-
 import scala.concurrent.ExecutionContextExecutor
-import scala.concurrent.duration._
-import scala.language.postfixOps
 
 object BenchRunner extends ScorexLogging with NVBenchmark {
 
@@ -41,10 +37,7 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
     log.info(s"Setting that being used:")
     log.info(s"$ergoSettings")
 
-    val ntpSettings = NetworkTimeProviderSettings("pool.ntp.org", 30 minutes, 30 seconds)
-    val timeProvider = new NetworkTimeProvider(ntpSettings)
-
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
 
     /**
       * It's a hack to set minimalFullBlockHeightVar to 0 and to avoid "Header Is Not Synced" error, cause

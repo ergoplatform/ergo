@@ -21,7 +21,6 @@ import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 
 import java.net.InetSocketAddress
@@ -49,8 +48,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
   )
   
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
-
-  private val timeProvider = new NetworkTimeProvider(scorexSettings.ntp)
 
   private val upnpGateway: Option[UPnPGateway] =
     if (scorexSettings.network.upnpEnabled) UPnP.getValidGateway(scorexSettings.network)
@@ -80,25 +77,24 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val scorexContext = ScorexContext(
     messageSpecs        = basicSpecs ++ additionalMessageSpecs,
     upnpGateway         = upnpGateway,
-    timeProvider        = timeProvider,
     externalNodeAddress = externalSocketAddress
   )
 
   private val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
-  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
   // Create an instance of ErgoMiner actor if "mining = true" in config
   private val minerRefOpt: Option[ActorRef] =
     if (ergoSettings.nodeSettings.mining) {
-      Some(ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider))
+      Some(ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef))
     } else {
       None
     }
 
-  private val syncTracker = ErgoSyncTracker(scorexSettings.network, timeProvider)
+  private val syncTracker = ErgoSyncTracker(scorexSettings.network)
 
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 
@@ -107,7 +103,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
     nodeViewHolderRef,
     ErgoSyncInfoMessageSpec,
     ergoSettings,
-    timeProvider,
     syncTracker,
     deliveryTracker
   )
@@ -152,8 +147,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     readersHolderRef,
     networkControllerRef,
     syncTracker,
-    ergoSettings,
-    timeProvider
+    ergoSettings
   )
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
@@ -166,7 +160,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
         deliveryTracker,
         scorexSettings.restApi
       ),
-      InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
+      InfoApiRoute(statsCollectorRef, scorexSettings.restApi),
       BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
       NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
       TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),

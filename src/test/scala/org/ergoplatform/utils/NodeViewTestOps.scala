@@ -96,7 +96,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
   def makeNextBlock(utxoState: UtxoState,
                     txs: Seq[ErgoTransaction])
                    (implicit ctx: Ctx): ErgoFullBlock = {
-    val time = timeProvider.time()
+    val time = System.currentTimeMillis()
     val parent = getHistory.bestFullBlockOpt
     validFullBlock(parent, utxoState, txs, Some(time))
   }

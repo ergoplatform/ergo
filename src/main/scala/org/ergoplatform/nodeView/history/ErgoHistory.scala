@@ -12,7 +12,6 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.consensus.ProgressInfo
-import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
@@ -232,6 +231,8 @@ trait ErgoHistory
 
 object ErgoHistory extends ScorexLogging {
 
+  type Time = Long
+
   type Height = ErgoLikeContext.Height // Int
   type Score = BigInt
   type Difficulty = BigInt
@@ -269,7 +270,7 @@ object ErgoHistory extends ScorexLogging {
     }
   }
 
-  def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
+  def readOrGenerate(ergoSettings: ErgoSettings): ErgoHistory = {
     val db = HistoryStorage(ergoSettings)
     val nodeSettings = ergoSettings.nodeSettings
 
@@ -279,7 +280,6 @@ object ErgoHistory extends ScorexLogging {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
         }
 
       case (false, true) =>
@@ -287,7 +287,6 @@ object ErgoHistory extends ScorexLogging {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
         }
 
       case (true, false) =>
@@ -295,7 +294,6 @@ object ErgoHistory extends ScorexLogging {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
         }
 
       case (false, false) =>
@@ -303,7 +301,6 @@ object ErgoHistory extends ScorexLogging {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
         }
     }
 

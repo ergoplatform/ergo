@@ -311,6 +311,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
     private def validationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
 
+    private def time() = System.currentTimeMillis()
+
     def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {
         validateGenesisBlockHeader(header)
@@ -333,7 +335,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty, header.id, header.modifierTypeId)
         .validateNot(alreadyApplied, historyStorage.contains(header.id), InvalidModifier(header.toString, header.id, header.modifierTypeId))
         .validate(hdrTooOld, fullBlockHeight < nodeSettings.keepVersions, InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${timeProvider.time()}", header.id, header.modifierTypeId))
+        .validate(hdrFutureTimestamp, header.timestamp - time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${time()}", header.id, header.modifierTypeId))
         .result
     }
 
@@ -348,7 +350,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent), header.id, header.modifierTypeId)
         .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId), InvalidModifier(s"Parent semantics broken", header.id, header.modifierTypeId))
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${timeProvider.time()}", header.id, header.modifierTypeId))
+        .validate(hdrFutureTimestamp, header.timestamp - time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${time()}", header.id, header.modifierTypeId))
         .validateNot(alreadyApplied, historyStorage.contains(header.id), InvalidModifier(s"${header.id} already applied", header.id, header.modifierTypeId))
         .validate(hdrCheckpoint, checkpointCondition(header), InvalidModifier(s"${header.id} wrong checkpoint", header.id, header.modifierTypeId))
         .result

@@ -13,7 +13,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.utils.NetworkTimeProvider
 import scorex.core.ModifierTypeId
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -102,8 +101,8 @@ case class Header(override val version: Header.Version,
   /**
     * Estimate that this header is recent enough to possibly be the best header
     */
-  def isNew(timeProvider: NetworkTimeProvider, timeDiff: FiniteDuration): Boolean = {
-    timeProvider.time() - timestamp < timeDiff.toMillis
+  def isNew(timeDiff: FiniteDuration): Boolean = {
+    System.currentTimeMillis() - timestamp < timeDiff.toMillis
   }
 
   /**

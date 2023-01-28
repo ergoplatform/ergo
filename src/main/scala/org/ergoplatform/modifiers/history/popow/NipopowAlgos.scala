@@ -167,7 +167,7 @@ class NipopowAlgos(chainSettings: ChainSettings) {
     val suffixTail = suffix.tail.map(_.header)
     val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, Seq.empty)
   }
 
   /**
@@ -238,16 +238,15 @@ class NipopowAlgos(chainSettings: ChainSettings) {
     }
 
     //todo: epoch length fix
-    val diffHeaders = diffAdjustment.heightsForNextRecalculation(suffixHead.height, 128).flatMap{height =>
-      histReader.popowHeader(height)
+    val diffHeaders = diffAdjustment.heightsForNextRecalculation(suffixHead.height, 128).flatMap { height =>
+      histReader.bestHeaderAtHeight(height)
     }
 
     val genesisHeight = 1
     val genesisPopowHeader = histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
-    val prefix = (genesisPopowHeader +: (provePrefix(genesisHeight, suffixHead) ++ diffHeaders)).distinct.sortBy(_.height)
+    val prefix = (genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)).distinct.sortBy(_.height)
 
-    //todo: write proof diff headers into dedicated section?
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, diffHeaders)
   }
 
 }

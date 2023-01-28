@@ -18,13 +18,15 @@ import scorex.util.Extensions.LongOps
   * @param prefix     - proof prefix headers
   * @param suffixHead - first header of the suffix
   * @param suffixTail - tail of the proof suffix headers
+  * @param difficultyCheckHeaders - headers needed for checking blocks difficulty after suffix
   */
 case class NipopowProof(popowAlgos: NipopowAlgos,
                         m: Int,
                         k: Int,
                         prefix: Seq[PoPowHeader],
                         suffixHead: PoPowHeader,
-                        suffixTail: Seq[Header]) {
+                        suffixTail: Seq[Header],
+                        difficultyCheckHeaders: Seq[Header]) {
 
   def serializer: ScorexSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
 
@@ -108,7 +110,8 @@ object NipopowProof {
       "k" -> proof.k.asJson,
       "prefix" -> proof.prefix.asJson,
       "suffixHead" -> proof.suffixHead.asJson,
-      "suffixTail" -> proof.suffixTail.asJson
+      "suffixTail" -> proof.suffixTail.asJson,
+      "difficultyHeaders" -> proof.difficultyCheckHeaders.asJson
     ).asJson
   }
 
@@ -119,7 +122,8 @@ object NipopowProof {
       prefix <- c.downField("prefix").as[Seq[PoPowHeader]]
       suffixHead <- c.downField("suffixHead").as[PoPowHeader]
       suffixTail <- c.downField("suffixTail").as[Seq[Header]]
-    } yield NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
+      diffHeaders <- c.downField("difficultyHeaders").as[Seq[Header]]
+    } yield NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail, diffHeaders)
   }
 
 }
@@ -144,6 +148,12 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ScorexSerializer[
       w.putUInt(hBytes.length)
       w.putBytes(hBytes)
     }
+    w.putUInt(obj.difficultyCheckHeaders.size)
+    obj.difficultyCheckHeaders.foreach { h =>
+      val hBytes = h.bytes
+      w.putUInt(hBytes.length)
+      w.putBytes(hBytes)
+    }
   }
 
   override def parse(r: Reader): NipopowProof = {
@@ -161,7 +171,12 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ScorexSerializer[
       val size = r.getUInt().toIntExact
       HeaderSerializer.parseBytes(r.getBytes(size))
     }
-    NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
+    val diffHeadersCount = r.getUInt().toIntExact
+    val diffHeaders = (0 until diffHeadersCount).map { _ =>
+      val size = r.getUInt().toIntExact
+      HeaderSerializer.parseBytes(r.getBytes(size))
+    }
+    NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail, diffHeaders)
   }
 
 }

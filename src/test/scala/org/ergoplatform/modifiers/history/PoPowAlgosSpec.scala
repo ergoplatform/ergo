@@ -12,7 +12,7 @@ import org.ergoplatform.utils.HistoryTestHelpers
 
 class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers with ChainGenerator {
 
-  private val poPowParams = PoPowParams(30, 30)
+  private val poPowParams = PoPowParams(30, 30, continuous = false)
   private val ChainLength = 10
 
   property("updateInterlinks") {
@@ -117,7 +117,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   }
 
   property("proof(chain) is equivalent to proof(histReader)") {
-    val poPowParams = PoPowParams(5, 6)
+    val poPowParams = PoPowParams(5, 6, continuous = false)
     val blocksChain = genChain(3000)
     val pchain = blocksChain.map(b => PoPowHeader.fromBlock(b).get)
     val proof0 = nipopowAlgos.prove(pchain)(poPowParams).get
@@ -135,7 +135,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   }
 
   property("proof(histReader) for a header in the past") {
-    val poPowParams = PoPowParams(5, 6)
+    val poPowParams = PoPowParams(5, 6, continuous = false)
     val blocksChain = genChain(300)
 
     val at = 200
@@ -174,7 +174,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   }
 
   property("isBetterThan - a disconnected prefix chain should not win") {
-    val smallPoPowParams = PoPowParams(50, 1)
+    val smallPoPowParams = PoPowParams(50, 1, continuous = false)
     val size = 100
     val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     val chain = toPoPoWChain(genChain(size))
@@ -189,7 +189,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   }
 
   property("hasValidConnections - ensures a connected prefix chain") {
-    val smallPoPowParams = PoPowParams(5, 5)
+    val smallPoPowParams = PoPowParams(5, 5, continuous = false)
     val sizes = Seq(100, 200)
     val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     sizes.foreach { size =>
@@ -204,7 +204,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   }
 
   property("hasValidConnections - ensures a connected suffix chain") {
-    val smallPoPowParams = PoPowParams(5, 5)
+    val smallPoPowParams = PoPowParams(5, 5, continuous = false)
     val sizes = Seq(100, 200)
     val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     sizes.foreach { size =>

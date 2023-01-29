@@ -30,7 +30,9 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
 
   def serializer: ScorexSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
 
-  def headersChain: Seq[Header] = prefixHeaders ++ suffixHeaders
+  def headersChain: Seq[Header] = {
+    prefixHeaders ++ suffixHeaders // todo: add difficulty headers?
+  }
 
   def prefixHeaders: Seq[Header] = prefix.map(_.header)
 
@@ -60,7 +62,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return true if the proof is valid
     */
   def isValid: Boolean = {
-    this.hasValidConnections && this.hasValidHeights && this.hasValidProofs
+    this.hasValidConnections && this.hasValidHeights && this.hasValidProofs //todo: check diff headers
   }
 
   /**

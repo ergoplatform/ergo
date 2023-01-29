@@ -15,15 +15,6 @@ import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
-  * NiPoPoW proof params from the KMZ17 paper
-  *
-  * @param m - minimal superchain length
-  * @param k - suffix length
-  */
-case class PoPowParams(m: Int, k: Int)
-
-
-/**
   * A set of utilities for working with NiPoPoW protocol.
   *
   * Based on papers:
@@ -238,8 +229,13 @@ class NipopowAlgos(chainSettings: ChainSettings) {
     }
 
     //todo: epoch length fix
-    val diffHeaders = diffAdjustment.heightsForNextRecalculation(suffixHead.height, 128).flatMap { height =>
-      histReader.bestHeaderAtHeight(height)
+    //todo: filter out headers already in prefix ?
+    val diffHeaders = if(params.continuous) {
+      diffAdjustment.heightsForNextRecalculation(suffixHead.height, 128).flatMap { height =>
+        histReader.bestHeaderAtHeight(height)
+      }
+    } else {
+      Seq.empty
     }
 
     val genesisHeight = 1

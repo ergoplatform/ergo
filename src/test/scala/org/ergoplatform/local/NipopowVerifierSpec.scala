@@ -9,7 +9,7 @@ import org.scalatest.propspec.AnyPropSpec
 
 class NipopowVerifierSpec extends AnyPropSpec with Matchers with ChainGenerator with ErgoGenerators {
 
-  private val poPowParams = PoPowParams(30, 30)
+  private val poPowParams = PoPowParams(30, 30, continuous = false)
   val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
 
   property("processes new proofs") {

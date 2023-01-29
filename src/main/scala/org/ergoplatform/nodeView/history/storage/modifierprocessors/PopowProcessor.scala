@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.local.NipopowVerifier
+import org.ergoplatform.local.{BetterChain, NipopowProofVerificationResult, NipopowVerifier}
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -78,7 +78,7 @@ trait PopowProcessor extends BasicReaders {
     * @return PoPow proof if success, Failure instance otherwise
     */
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
-    val proofParams = PoPowParams(m, k)
+    val proofParams = PoPowParams(m, k, continuous = true)
     nipopowAlgos.prove(historyReader, headerIdOpt = headerIdOpt)(proofParams)
   }
 
@@ -101,15 +101,17 @@ trait PopowProcessor extends BasicReaders {
   }
 
   def applyPopowProof(proof: NipopowProof): Unit = {
-    if (nipopowVerifier.process(proof)) {
-      val headersToApply = nipopowVerifier.bestChain
+    nipopowVerifier.process(proof) match {
+      case BetterChain =>
+      val headersToApply = (nipopowVerifier.bestChain ++ nipopowVerifier.bestProofOpt.get.difficultyCheckHeaders).distinct.sortBy(_.height)
       headersToApply.foreach { h =>
         if (!historyStorage.contains(h.id)) {
           process(h)
         }
       }
-    } else {
-      println("!!!") // todo: fix log msg
+      case r: NipopowProofVerificationResult =>
+        println("!!!") // todo: fix log msg
+        println(r)
     }
   }
 

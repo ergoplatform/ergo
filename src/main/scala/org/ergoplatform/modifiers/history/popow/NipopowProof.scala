@@ -28,8 +28,6 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
                         suffixTail: Seq[Header],
                         difficultyCheckHeaders: Seq[Header]) {
 
-  def serializer: ScorexSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
-
   def headersChain: Seq[Header] = {
     prefixHeaders ++ suffixHeaders // todo: add difficulty headers?
   }
@@ -100,6 +98,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     prefix.forall(_.checkInterlinksProof()) &&
       suffixHead.checkInterlinksProof()
   }
+
 }
 
 object NipopowProof {

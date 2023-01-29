@@ -11,12 +11,12 @@ import org.ergoplatform.settings.ChainSettings
 import org.ergoplatform.settings.Constants.HashLength
 import scorex.core.consensus.ProgressInfo
 import scorex.db.ByteArrayWrapper
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.util.Try
 
 
-trait PopowProcessor extends BasicReaders {
+trait PopowProcessor extends BasicReaders with ScorexLogging {
 
   protected val historyStorage: HistoryStorage
 
@@ -103,12 +103,13 @@ trait PopowProcessor extends BasicReaders {
   def applyPopowProof(proof: NipopowProof): Unit = {
     nipopowVerifier.process(proof) match {
       case BetterChain =>
-      val headersToApply = (nipopowVerifier.bestChain ++ nipopowVerifier.bestProofOpt.get.difficultyCheckHeaders).distinct.sortBy(_.height)
-      headersToApply.foreach { h =>
-        if (!historyStorage.contains(h.id)) {
-          process(h)
+        val headersToApply = (nipopowVerifier.bestChain ++ nipopowVerifier.bestProofOpt.get.difficultyCheckHeaders).distinct.sortBy(_.height)
+        headersToApply.foreach { h =>
+          if (!historyStorage.contains(h.id)) {
+            process(h)
+          }
         }
-      }
+        log.info(s"Nipopow proof applied, best header now is ${historyReader.bestHeaderOpt}")
       case r: NipopowProofVerificationResult =>
         println("!!!") // todo: fix log msg
         println(r)

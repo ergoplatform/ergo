@@ -68,7 +68,7 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     * @param epochLength - epoch length
     */
   def eip37Calculate(previousHeaders: Seq[Header], epochLength: Int): Difficulty = {
-    require(previousHeaders.size >= 2, "at least two headers needed for diff recalc")
+    require(previousHeaders.size >= 2, s"at least two headers needed for diff recalc, have $previousHeaders")
     val lastDiff = previousHeaders.last.requiredDifficulty
 
     val predictiveDiff = calculate(previousHeaders, epochLength)

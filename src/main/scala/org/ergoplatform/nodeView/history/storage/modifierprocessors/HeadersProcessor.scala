@@ -285,9 +285,12 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
       val epochLength = 128 // epoch length after EIP-37 activation
       if (parentHeight % epochLength == 0) {
         val heights = difficultyCalculator.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
-        // todo: if parent is on best chain, read headers directly, not via headerChainBack
-        val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
-        val headers = chain.headers.filter(p => heights.contains(p.height))
+        val headers = if (historyReader.isInBestChain(parent)) {
+          heights.flatMap(height => historyReader.bestHeaderAtHeight(height))
+        } else {
+          val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+          chain.headers.filter(p => heights.contains(p.height))
+        }
         difficultyCalculator.eip37Calculate(headers, epochLength)
       } else {
         parent.requiredDifficulty

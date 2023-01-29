@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
-import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ModifierTypeId, SnapshotsInfoTypeId, TransactionTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.popow.NipopowProof
@@ -1231,7 +1231,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def checkUtxoSetManifests(historyReader: ErgoHistory): Unit = {
-    val MinSnapshots = 2 //todo: set to 3 after testing, or move to settings?
+    val MinSnapshots = 1 //todo: set to 3 after testing, or move to settings?
 
     if (settings.nodeSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&

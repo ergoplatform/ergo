@@ -89,8 +89,8 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     * @param h - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(h: Header): Try[ProgressInfo[BlockSection]] = synchronized {
-    val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = toInsert(h)
+  protected def process(h: Header, nipopowMode: Boolean = false): Try[ProgressInfo[BlockSection]] = synchronized {
+    val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = toInsert(h, nipopowMode)
 
     historyStorage.insert(dataToInsert._1, dataToInsert._2).flatMap { _ =>
       bestHeaderIdOpt match {
@@ -108,7 +108,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   /**
     * Data to add to and remove from the storage to process this modifier
     */
-  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = {
+  private def toInsert(h: Header, nipopowMode: Boolean): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = {
     //todo: construct resulting Array without ++
 
     val requiredDifficulty: Difficulty = h.requiredDifficulty
@@ -117,7 +117,13 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
       if (score > bestHeadersChainScore) Seq(BestHeaderKey -> idToBytes(h.id)) else Seq.empty
     val scoreRow = headerScoreKey(h.id) -> score.toByteArray
     val heightRow = headerHeightKey(h.id) -> Ints.toByteArray(h.height)
-    val headerIdsRow = if (score > bestHeadersChainScore) {
+    // todo: comment
+    val bestHeader = if(nipopowMode) {
+      true
+    } else {
+      score > bestHeadersChainScore
+    }
+    val headerIdsRow = if (bestHeader) {
       if (h.isGenesis) log.info(s"Processing genesis header ${h.encodedId}")
       bestBlockHeaderIdsRow(h, score)
     } else {
@@ -125,7 +131,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     }
 
     val nipopowsRow = if (Constants.timeToTakeSnapshot(h.height) && settings.nodeSettings.popowBootstrap == false) { //todo: fix condition
-      val pbs = popowProofBytes().get // todo: .get
+      val pbs = popowProofBytes().get // todo: .get  , measure time
       log.info(s"Dumping nipopow proof (size: ${pbs.length}) @ ${h.height}")
       Seq(NipopowSnapshotHeightKey -> pbs)
     } else {

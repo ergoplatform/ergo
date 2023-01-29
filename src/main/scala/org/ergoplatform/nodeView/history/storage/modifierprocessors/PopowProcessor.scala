@@ -35,7 +35,7 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
 
   def historyReader: ErgoHistoryReader
 
-  protected def process(h: Header): Try[ProgressInfo[BlockSection]]
+  protected def process(h: Header, nipopowMode: Boolean): Try[ProgressInfo[BlockSection]]
 
   /**
     * Constructs popow header against given header identifier
@@ -106,7 +106,7 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
         val headersToApply = (nipopowVerifier.bestChain ++ nipopowVerifier.bestProofOpt.get.difficultyCheckHeaders).distinct.sortBy(_.height)
         headersToApply.foreach { h =>
           if (!historyStorage.contains(h.id)) {
-            process(h)
+            process(h, nipopowMode = true)
           }
         }
         log.info(s"Nipopow proof applied, best header now is ${historyReader.bestHeaderOpt}")

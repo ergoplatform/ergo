@@ -937,24 +937,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val msg = Message(nipopowProofSpec, Right(proof), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
       case None =>
-        log.warn("") //todo: msg
+        log.warn("No Nipopow Proof available") //todo: msg
     }
-
-    /*
-    hr.popowProof(data.m, data.k, data.headerId) match {
-      case Success(proof) => {
-        val msg = Message(nipopowProofSpec, Right(proof), None)
-        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
-      }
-      case _ => log.warn(s"No Nipopow Proof available")
-    } */
   }
 
   protected def processNipopowProof(proof: NipopowProof, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
     //todo: consider proofs after first one applied, there could be different options here
     //e.g.  collect few proofs first and then apply, or apply again if better proof appeared
     if (hr.bestHeaderOpt.isEmpty) {
-      hr.applyPopowProof(proof)
+      viewHolderRef ! InitHistoryFromNipopow(proof)
     } else {
       log.warn("Got nipopow proof, but it is already applied")
     }
@@ -1618,6 +1609,8 @@ object ErgoNodeViewSynchronizer {
     case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
 
     case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
+
+    case class InitHistoryFromNipopow(nipopowProof: NipopowProof)
   }
 
 }

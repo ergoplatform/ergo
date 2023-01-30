@@ -292,7 +292,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           case Failure(_) => ???
         }
       }
-
+    case InitHistoryFromNipopow(proof) =>
+      history().applyPopowProof(proof)
+      updateNodeView(updatedHistory = Some(history()))
   }
 
   /**

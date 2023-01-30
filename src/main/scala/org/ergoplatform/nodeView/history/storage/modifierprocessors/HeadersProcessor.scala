@@ -156,7 +156,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     *
     * @return Success() if header is valid, Failure(error) otherwise
     */
-  protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
+  protected def validate(header: Header): Try[Unit] = HeaderValidator.validate(header).toTry
 
   protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
 
@@ -307,7 +307,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
   }
 
-  class HeaderValidator extends ScorexEncoding {
+  private object HeaderValidator extends ScorexEncoding {
 
     private def validationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
 

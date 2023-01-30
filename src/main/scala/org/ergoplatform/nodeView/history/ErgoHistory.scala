@@ -233,6 +233,11 @@ trait ErgoHistory
 
 object ErgoHistory extends ScorexLogging {
 
+  /**
+    * Type for time, represents machine-specific timestamp of a transaction
+    * or block section, as miliseconds passed since beginning of UNIX
+    * epoch on the machine
+    */
   type Time = Long
 
   type Height = ErgoLikeContext.Height // Int
@@ -272,6 +277,9 @@ object ErgoHistory extends ScorexLogging {
     }
   }
 
+  /**
+    * @return ErgoHistory instance with new database or database read from existing folder
+    */
   def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
     val db = HistoryStorage(ergoSettings)
     val nodeSettings = ergoSettings.nodeSettings

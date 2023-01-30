@@ -28,6 +28,10 @@ import java.net.InetSocketAddress
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.{Codec, Source}
 
+/**
+  * Ergo reference protocol client application runnable from command line
+  * @param args parsed command line arguments
+  */
 class ErgoApp(args: Args) extends ScorexLogging {
 
   log.info(s"Running with args: $args")

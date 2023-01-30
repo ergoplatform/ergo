@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.history.ErgoHistory.{Height, Time}
 import scorex.core.consensus.{Fork, Older, PeerChainStatus, Unknown}
 import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings
@@ -12,6 +12,9 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scorex.core.utils.MapPimp
 
+/**
+  * Data structures and methods to keep status of peers, find ones with expired status to send sync message etc
+  */
 final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends ScorexLogging {
 
   private val MinSyncInterval: FiniteDuration = 20.seconds
@@ -24,9 +27,12 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
 
   private[network] val statuses = mutable.Map[ConnectedPeer, ErgoPeerStatus]()
 
+  /**
+    * @return get all the current statuses
+    */
   def fullInfo(): Iterable[ErgoPeerStatus] = statuses.values
 
-  private def currentTime() = System.currentTimeMillis()
+  private def currentTime(): Time = System.currentTimeMillis()
 
   // returns diff
   def updateLastSyncGetTime(peer: ConnectedPeer): Long = {
@@ -38,6 +44,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
     currentTime - prevSyncGetTime
   }
 
+  /**
+    * @return true if sync message was sent long time ago to `peer`, or not sent at all yet
+    */
   def notSyncedOrOutdated(peer: ConnectedPeer): Boolean = {
     val peerOpt = statuses.get(peer)
     val notSyncedOrMissing = peerOpt.forall(_.lastSyncSentTime.isEmpty)
@@ -108,6 +117,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
     }
   }
 
+  /**
+    * Update timestamp of last sync message sent to `peer`
+    */
   def updateLastSyncSentTime(peer: ConnectedPeer): Unit = {
     statuses.get(peer).foreach { status =>
       statuses.update(peer, status.copy(lastSyncSentTime = Option(currentTime())))

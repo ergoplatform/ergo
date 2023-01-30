@@ -27,7 +27,7 @@ This client relies on some assumptions in regards with its environment:
 
 * execution environment is trusted. While seed is stored in encrypted files, and the client's 
   wallet tries to remove secret key from memory as soon as possible when it is not needed, the
-  client has no any protection from side-channel attacks, memory scans etc.
+  client has no protection from side-channel attacks, memory scans etc.
 * clocks should be more or less synchronized. If timestamp of a block is more than 20 minutes
   in future, the block will be temporarily rejected. The client does not use NTP or other time
   syncing protocols.

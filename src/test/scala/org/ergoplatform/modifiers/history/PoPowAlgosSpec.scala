@@ -117,7 +117,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   }
 
   property("proof(chain) is equivalent to proof(histReader)") {
-    val poPowParams = PoPowParams(5, 6, continuous = false)
+    val poPowParams = PoPowParams(m = 5, k = 6, continuous = false)
     val blocksChain = genChain(3000)
     val pchain = blocksChain.map(b => PoPowHeader.fromBlock(b).get)
     val proof0 = nipopowAlgos.prove(pchain)(poPowParams).get

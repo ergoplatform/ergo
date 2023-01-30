@@ -22,8 +22,8 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
 
   val NipopowSnapshotHeightKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(50: Byte))
 
-  val P2PNipopowProofM = 10
-  val P2PNipopowProofK = 6
+  val P2PNipopowProofM = 6
+  val P2PNipopowProofK = 10
 
   protected def chainSettings: ChainSettings
 

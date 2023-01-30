@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
-import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ModifierTypeId, SnapshotsInfoTypeId, TransactionTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.popow.NipopowProof

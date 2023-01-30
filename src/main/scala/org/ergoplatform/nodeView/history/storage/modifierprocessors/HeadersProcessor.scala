@@ -304,16 +304,17 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
         val epochLength = settings.chainSettings.epochLength
 
         if (parentHeight % epochLength == 0) {
-          //todo: it is slow to read thousands headers from database for each header
-          //todo; consider caching here
-          //todo: https://github.com/ergoplatform/ergo/issues/872
           val heights = difficultyCalculator.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
             .ensuring(_.last == parentHeight)
           if (heights.lengthCompare(1) == 0) {
             difficultyCalculator.calculate(Array(parent), epochLength)
           } else {
-            val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
-            val headers = chain.headers.filter(p => heights.contains(p.height))
+            val headers = if (historyReader.isInBestChain(parent)) {
+              heights.flatMap(height => historyReader.bestHeaderAtHeight(height))
+            } else {
+              val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+              chain.headers.filter(p => heights.contains(p.height))
+            }
             difficultyCalculator.calculate(headers, epochLength)
           }
         } else {

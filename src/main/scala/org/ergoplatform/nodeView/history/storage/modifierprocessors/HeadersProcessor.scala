@@ -311,7 +311,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
     private def validationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
 
-    private def time() = System.currentTimeMillis()
+    private def time(): ErgoHistory.Time = System.currentTimeMillis()
 
     def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {

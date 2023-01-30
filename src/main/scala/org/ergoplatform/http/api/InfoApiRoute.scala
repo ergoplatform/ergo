@@ -9,6 +9,9 @@ import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
 
+/**
+  * API methods corresponding to /info path
+  */
 case class InfoApiRoute(statsCollector: ActorRef,
                         settings: RESTApiSettings)
                        (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {

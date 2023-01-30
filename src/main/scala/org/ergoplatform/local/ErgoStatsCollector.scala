@@ -238,7 +238,7 @@ object ErgoStatsCollector {
 
 object ErgoStatsCollectorRef {
 
-  def props(readersHolder: ActorRef,
+  private def props(readersHolder: ActorRef,
             networkController: ActorRef,
             syncTracker : ErgoSyncTracker,
             settings: ErgoSettings): Props =

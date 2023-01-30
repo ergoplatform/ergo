@@ -658,7 +658,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (mempool) sender() ! ChangedMempool(nodeView._4.getReader)
   }
 
-  protected def handleHealthCheck: Receive = {
+  private def handleHealthCheck: Receive = {
     case IsChainHealthy =>
       log.info(s"Check that chain is healthy, progress is $chainProgress")
       val healthCheckReply = chainProgress.map { progress =>
@@ -780,7 +780,7 @@ object ErgoNodeViewRef {
   private def utxoProps(settings: ErgoSettings): Props =
     Props.create(classOf[UtxoNodeViewHolder], settings)
 
-  def props(settings: ErgoSettings): Props =
+  private def props(settings: ErgoSettings): Props =
     (settings.nodeSettings.stateType match {
       case StateType.Digest => digestProps(settings)
       case StateType.Utxo => utxoProps(settings)

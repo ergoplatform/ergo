@@ -26,7 +26,7 @@ import scorex.core.network._
 import scorex.core.network.message.{InvData, Message, ModifiersData}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
-import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
+import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
@@ -48,7 +48,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                settings: ErgoSettings,
-                               timeProvider: NetworkTimeProvider,
                                syncTracker: ErgoSyncTracker,
                                deliveryTracker: DeliveryTracker
                               )(implicit ex: ExecutionContext)
@@ -1016,7 +1015,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  protected def viewHolderEvents(historyReader: ErgoHistory,
+  private def viewHolderEvents(historyReader: ErgoHistory,
                                  mempoolReader: ErgoMemPool,
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
@@ -1037,7 +1036,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
     case FullBlockApplied(header) =>
-      if (header.isNew(timeProvider, 2.hours)) {
+      if (header.isNew(2.hours)) {
         broadcastModifierInv(Header.modifierTypeId, header.id)
         header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id) }
       }
@@ -1183,25 +1182,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
 object ErgoNodeViewSynchronizer {
 
-  def props(networkControllerRef: ActorRef,
+  private def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
             syncTracker: ErgoSyncTracker,
             deliveryTracker: DeliveryTracker)
            (implicit ex: ExecutionContext): Props =
-    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
-      timeProvider, syncTracker, deliveryTracker))
+    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec,
+      settings, syncTracker, deliveryTracker))
 
   def make(viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
             syncTracker: ErgoSyncTracker,
             deliveryTracker: DeliveryTracker)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef => ActorRef =
-    networkControllerRef => context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker, deliveryTracker))
+    networkControllerRef => context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, syncTracker, deliveryTracker))
 
   /**
     * Container for aggregated costs of accepted, declined or invalidated transactions. Can be used to track global

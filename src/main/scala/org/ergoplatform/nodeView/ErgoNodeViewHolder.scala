@@ -21,7 +21,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import scorex.core.consensus.ProgressInfo
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
+import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
@@ -41,8 +41,7 @@ import scala.util.{Failure, Success, Try}
   * Updates of the composite view instances are to be performed atomically.
   *
   */
-abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
-                                                             timeProvider: NetworkTimeProvider)
+abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings)
   extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
@@ -386,7 +385,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val state = recreatedState()
 
-    val history = ErgoHistory.readOrGenerate(settings, timeProvider)
+    val history = ErgoHistory.readOrGenerate(settings)
 
     val wallet = ErgoWallet.readOrGenerate(
       history.getReader, settings, LaunchParameters)
@@ -404,7 +403,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   def restoreState(): Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
     None
   } else {
-    val history = ErgoHistory.readOrGenerate(settings, timeProvider)
+    val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
     val constants = StateConstants(settings)
@@ -499,7 +498,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
                   updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
                   chainProgress =
-                    Some(ChainProgress(pmod, headersHeight, fullBlockHeight, timeProvider.time()))
+                    Some(ChainProgress(pmod, headersHeight, fullBlockHeight, System.currentTimeMillis()))
 
                   if (progressInfo.chainSwitchingNeeded) {
                     context.system.eventStream.publish(Rollback(progressInfo.branchPoint.get))
@@ -659,11 +658,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (mempool) sender() ! ChangedMempool(nodeView._4.getReader)
   }
 
-  protected def handleHealthCheck: Receive = {
+  private def handleHealthCheck: Receive = {
     case IsChainHealthy =>
       log.info(s"Check that chain is healthy, progress is $chainProgress")
       val healthCheckReply = chainProgress.map { progress =>
-        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), timeProvider, settings)
+        ErgoNodeViewHolder.checkChainIsHealthy(progress, history(), settings)
       }.getOrElse(ChainIsStuck("Node already stuck when started"))
       sender() ! healthCheckReply
   }
@@ -741,10 +740,9 @@ object ErgoNodeViewHolder {
   def checkChainIsHealthy(
       progress: ChainProgress,
       history: ErgoHistory,
-      timeProvider: NetworkTimeProvider,
       settings: ErgoSettings): HealthCheckResult = {
     val ChainProgress(lastMod, headersHeight, blockHeight, lastUpdate) = progress
-    val chainUpdateDelay = timeProvider.time() - lastUpdate
+    val chainUpdateDelay = System.currentTimeMillis() - lastUpdate
     val acceptableChainUpdateDelay = settings.nodeSettings.acceptableChainUpdateDelay
     def chainUpdateDelayed = chainUpdateDelay > acceptableChainUpdateDelay.toMillis
     def chainSynced =
@@ -766,34 +764,29 @@ object ErgoNodeViewHolder {
   }
 }
 
-private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings,
-                                             timeProvider: NetworkTimeProvider)
-  extends ErgoNodeViewHolder[DigestState](settings, timeProvider)
+private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings)
+  extends ErgoNodeViewHolder[DigestState](settings)
 
-private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
-                                           timeProvider: NetworkTimeProvider)
-  extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
+private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings)
+  extends ErgoNodeViewHolder[UtxoState](settings)
 
 
 
 object ErgoNodeViewRef {
 
-  private def digestProps(settings: ErgoSettings,
-                          timeProvider: NetworkTimeProvider): Props =
-    Props.create(classOf[DigestNodeViewHolder], settings, timeProvider)
+  private def digestProps(settings: ErgoSettings): Props =
+    Props.create(classOf[DigestNodeViewHolder], settings)
 
-  private def utxoProps(settings: ErgoSettings,
-                        timeProvider: NetworkTimeProvider): Props =
-    Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider)
+  private def utxoProps(settings: ErgoSettings): Props =
+    Props.create(classOf[UtxoNodeViewHolder], settings)
 
-  def props(settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider): Props =
+  private def props(settings: ErgoSettings): Props =
     (settings.nodeSettings.stateType match {
-      case StateType.Digest => digestProps(settings, timeProvider)
-      case StateType.Utxo => utxoProps(settings, timeProvider)
+      case StateType.Digest => digestProps(settings)
+      case StateType.Utxo => utxoProps(settings)
     }).withDispatcher("critical-dispatcher")
 
-  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(settings, timeProvider))
+  def apply(settings: ErgoSettings)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(settings))
   
 }

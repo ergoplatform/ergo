@@ -865,6 +865,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer): Unit = {
+    //todo: check manifest height
     //todo : check that manifestBytes were requested
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
     serializer.manifestFromBytes(manifestBytes, keyLength = 32) match {
@@ -942,6 +943,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def processNipopowProof(proof: NipopowProof, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+    //todo: check proof's height
     //todo: consider proofs after first one applied, there could be different options here
     //e.g.  collect few proofs first and then apply, or apply again if better proof appeared
     if (hr.bestHeaderOpt.isEmpty) {

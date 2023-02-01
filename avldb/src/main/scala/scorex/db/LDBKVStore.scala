@@ -4,6 +4,7 @@ import org.iq80.leveldb.DB
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
+import spire.syntax.all.cfor
 
 
 /**
@@ -13,11 +14,11 @@ import scala.util.{Failure, Success, Try}
   */
 class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging {
 
-  def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Try[Unit] = {
+  def update(toInsert: Array[(K, V)], toRemove: Array[K]): Try[Unit] = {
     val batch = db.createWriteBatch()
     try {
-      toInsert.foreach { case (k, v) => batch.put(k, v) }
-      toRemove.foreach(batch.delete)
+      cfor(0)(_ < toInsert.length, _ + 1) { i => batch.put(toInsert(i)._1, toInsert(i)._2)}
+      cfor(0)(_ < toRemove.length, _ + 1) { i => batch.delete(toRemove(i))}
       db.write(batch)
       Success(())
     } catch {
@@ -42,9 +43,9 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
     }
   }
 
-  def insert(values: Seq[(K, V)]): Try[Unit] = update(values, Seq.empty)
+  def insert(values: Array[(K, V)]): Try[Unit] = update(values, Array.empty)
 
-  def remove(keys: Seq[K]): Try[Unit] = update(Seq.empty, keys)
+  def remove(keys: Array[K]): Try[Unit] = update(Array.empty, keys)
 
   /**
     * Get last key within some range (inclusive) by used comparator.

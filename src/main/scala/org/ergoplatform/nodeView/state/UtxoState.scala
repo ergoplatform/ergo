@@ -6,7 +6,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, TransactionTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
 import org.ergoplatform.settings.{Algos, Parameters}
@@ -102,7 +102,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         opsResult
       }
       ModifierValidator(stateContext.validationSettings)
-        .validateNoFailure(fbOperationFailed, blockOpsTry, TransactionTypeId.value)
+        .validateNoFailure(fbOperationFailed, blockOpsTry, ErgoTransaction.modifierTypeId)
         .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry
@@ -232,8 +232,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       bytesToVersion(store.get(Algos.hash(v)).get)
     }
   }
-
-
 
 }
 

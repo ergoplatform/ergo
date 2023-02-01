@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId, Snapshots
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
-import scorex.core.utils.NetworkTimeProvider
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -17,8 +16,6 @@ trait ToDownloadProcessor
   extends FullBlockPruningProcessor with UtxoSetSnapshotProcessor with BasicReaders with ScorexLogging {
 
   import scorex.core.utils.MapPimp
-
-  protected val timeProvider: NetworkTimeProvider
 
   protected val settings: ErgoSettings
 
@@ -111,7 +108,7 @@ trait ToDownloadProcessor
     } else if (shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
-    } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * headerChainDiff)) {
+    } else if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
       // Headers chain is synced after this header. Start downloading full blocks
       updateBestFullBlock(header)
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
@@ -121,11 +118,14 @@ trait ToDownloadProcessor
     }
   }
 
+  /**
+    * @return block sections needed to be downloaded after header `h` , and defined by the header
+    */
   def requiredModifiersForHeader(h: Header): Seq[(NetworkObjectTypeId.Value, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
-      Nil
+      Nil // no block sections to be downloaded in SPV mode
     } else if (nodeSettings.stateType.requireProofs) {
-      h.sectionIds
+      h.sectionIds // download block transactions, extension and UTXO set transformations proofs in "digest" mode
     } else {
       h.sectionIdsWithNoProof // do not download UTXO set transformation proofs if UTXO set is stored
     }

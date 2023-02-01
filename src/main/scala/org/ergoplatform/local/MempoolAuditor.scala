@@ -4,7 +4,7 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
-import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.network.Broadcast
@@ -86,7 +86,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def broadcastTx(unconfirmedTx: UnconfirmedTransaction): Unit = {
     val msg = Message(
       InvSpec,
-      Right(InvData(unconfirmedTx.transaction.modifierTypeId, Seq(unconfirmedTx.id))),
+      Right(InvData(ErgoTransaction.modifierTypeId, Seq(unconfirmedTx.id))),
       None
     )
     networkControllerRef ! SendToNetwork(msg, Broadcast)

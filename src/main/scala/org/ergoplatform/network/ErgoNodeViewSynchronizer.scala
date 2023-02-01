@@ -4,7 +4,7 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId, SnapshotsInfoTypeId, TransactionTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
@@ -30,7 +30,7 @@ import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPe
 import scorex.core.network.message.{InvData, Message, ModifiersData}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
-import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
+import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
@@ -57,7 +57,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                settings: ErgoSettings,
-                               timeProvider: NetworkTimeProvider,
                                syncTracker: ErgoSyncTracker,
                                deliveryTracker: DeliveryTracker
                               )(implicit ex: ExecutionContext)
@@ -712,7 +711,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // filter out non-requested modifiers
     val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
 
-    if (typeId == TransactionTypeId.value) {
+    if (typeId == ErgoTransaction.modifierTypeId) {
       transactionsFromRemote(requestedModifiers, mp, remote)
     } else {
       blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
@@ -725,7 +724,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
     if (bytes.length > settings.nodeSettings.maxTransactionSize) {
-      deliveryTracker.setInvalid(id, TransactionTypeId.value)
+      deliveryTracker.setInvalid(id, ErgoTransaction.modifierTypeId)
       penalizeMisbehavingPeer(remote)
       log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
@@ -785,7 +784,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val spam = modifiersByStatus.filterKeys(_ != Requested)
 
     if (spam.nonEmpty) {
-      if (typeId == TransactionTypeId.value) {
+      if (typeId == ErgoTransaction.modifierTypeId) {
         // penalize a peer for sending TXs that have been already applied to a block
         val spammyTxs = modifiers.filterKeys(blockAppliedTxsCache.mightContain)
         if (spammyTxs.nonEmpty) {
@@ -1005,11 +1004,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   //other node asking for objects by their ids
   protected def modifiersReq(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, remote: ConnectedPeer): Unit = {
       val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
-        case typeId: NetworkObjectTypeId if typeId == ErgoTransaction.modifierTypeId =>
+        case typeId: NetworkObjectTypeId.Value if typeId == ErgoTransaction.modifierTypeId =>
           mp.getAll(invData.ids).map { unconfirmedTx =>
             unconfirmedTx.transaction.id -> unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes)
           }
-        case expectedTypeId: NetworkObjectTypeId =>
+        case expectedTypeId: NetworkObjectTypeId.Value =>
           invData.ids.flatMap { id =>
             hr.modifierTypeAndBytesById(id).flatMap { case (mTypeId, bytes) =>
               if (mTypeId == expectedTypeId) {
@@ -1078,7 +1077,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
         // If transaction not delivered on time, we just forget about it.
         // It could be removed from other peer's mempool, so no reason to penalize the peer.
-        if (modifierTypeId == TransactionTypeId.value) {
+        if (modifierTypeId == ErgoTransaction.modifierTypeId) {
           deliveryTracker.clearStatusForModifier(modifierId, modifierTypeId, ModifiersStatus.Requested)
         } else {
           // A block section is not delivered on time.
@@ -1219,7 +1218,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
 
-  protected def viewHolderEvents(historyReader: ErgoHistory,
+  private def viewHolderEvents(historyReader: ErgoHistory,
                                  mempoolReader: ErgoMemPool,
                                  utxoStateReaderOpt: Option[UtxoStateReader],
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
@@ -1240,7 +1239,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
     case FullBlockApplied(header) =>
-      if (header.isNew(timeProvider, 2.hours)) {
+      if (header.isNew(2.hours)) {
         broadcastModifierInv(Header.modifierTypeId, header.id)
         header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id) }
       }
@@ -1251,7 +1250,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case st@SuccessfulTransaction(utx) =>
       val tx = utx.transaction
-      deliveryTracker.setHeld(tx.id, TransactionTypeId.value)
+      deliveryTracker.setHeld(tx.id, ErgoTransaction.modifierTypeId)
       processMempoolResult(st)
       broadcastModifierInv(tx)
 
@@ -1432,25 +1431,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
 object ErgoNodeViewSynchronizer {
 
-  def props(networkControllerRef: ActorRef,
+  private def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
             syncTracker: ErgoSyncTracker,
             deliveryTracker: DeliveryTracker)
            (implicit ex: ExecutionContext): Props =
-    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
-      timeProvider, syncTracker, deliveryTracker))
+    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec,
+      settings, syncTracker, deliveryTracker))
 
   def make(viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
             syncTracker: ErgoSyncTracker,
             deliveryTracker: DeliveryTracker)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef => ActorRef =
-    networkControllerRef => context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker, deliveryTracker))
+    networkControllerRef => context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, syncTracker, deliveryTracker))
 
   /**
     * Container for aggregated costs of accepted, declined or invalidated transactions. Can be used to track global
@@ -1475,8 +1472,6 @@ object ErgoNodeViewSynchronizer {
 
     // getLocalSyncInfo messages
     case object SendLocalSyncInfo
-
-    case class ResponseFromLocal(source: ConnectedPeer, modifierTypeId: NetworkObjectTypeId, localObjects: Seq[(ModifierId, Array[Byte])])
 
     /**
       * Check delivery of modifier with type `modifierTypeId` and id `modifierId`.
@@ -1506,7 +1501,7 @@ object ErgoNodeViewSynchronizer {
 
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
 
-    //todo: consider sending info on the rollback
+    case class Rollback(branchPoint: ModifierId) extends NodeViewHolderEvent
 
     case object RollbackFailed extends NodeViewHolderEvent
 
@@ -1532,8 +1527,14 @@ object ErgoNodeViewSynchronizer {
       */
     case class FailedOnRecheckTransaction(id : ModifierId, error: Throwable) extends ModificationOutcome
 
+    /**
+      * A signal that block section with id `modifierId` was invalidated due to `error`, but it may be valid in future
+      */
     case class RecoverableFailedModification(typeId: NetworkObjectTypeId.Value, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
 
+    /**
+      * A signal that block section with id `modifierId` was permanently invalidated during stateless checks
+      */
     case class SyntacticallyFailedModification(typeId: NetworkObjectTypeId.Value, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
 
     /**

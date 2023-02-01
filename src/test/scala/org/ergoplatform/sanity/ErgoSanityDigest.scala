@@ -18,7 +18,6 @@ import scorex.core.idToBytes
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.network.peer.PeerInfo
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -64,12 +63,11 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val v = h.bestFullBlockIdOpt.orElse(h.bestHeaderIdOpt).get
     s.store.update(idToBytes(v), Seq(), Seq()).get
     implicit val ec: ExecutionContextExecutor = system.dispatcher
-    val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")
     val vhProbe = TestProbe("ViewHolderProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
-    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
     val ref = system.actorOf(Props(
       new SyncronizerMock(
@@ -77,7 +75,6 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
         vhProbe.ref,
         ErgoSyncInfoMessageSpec,
         settings,
-        tp,
         syncTracker,
         deliveryTracker
       )

@@ -38,7 +38,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
   }
 
   def writeSnapshotsInfo(snapshotsInfo: SnapshotsInfo): Try[Unit] = {
-    store.insert(Seq(snapshotInfoKey -> snapshotsInfoToBytes(snapshotsInfo)))
+    store.insert(Array(snapshotInfoKey -> snapshotsInfoToBytes(snapshotsInfo)))
   }
 
   def readSnapshotsInfo: SnapshotsInfo = {
@@ -57,18 +57,18 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
     toPrune.foreach { case (h, manifestId) =>
       log.info(s"Pruning snapshot at height $h")
-      val keysToRemove = store.get(manifestId) match {
+      val keysToRemove: Array[Array[Byte]] = store.get(manifestId) match {
         case Some(manifestBytes) =>
           serializer.manifestFromBytes(manifestBytes, Constants.ModifierIdLength) match {
             case Success(m) =>
-              m.subtreesIds += manifestId
+              (m.subtreesIds += manifestId).toArray // todo: more efficient construction
             case Failure(e) =>
               log.error(s"Can't parse manifest ${Base16.encode(manifestId)} :", e)
-              Seq.empty
+              Array.empty
           }
         case None =>
           log.error(s"Manifest ${Base16.encode(manifestId)} not found:")
-          Seq.empty
+          Array.empty
       }
       store.remove(keysToRemove)
     }
@@ -85,8 +85,8 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     val manifestBytes = serializer.manifestToBytes(manifest)
     val manifestId = manifest.id
     //todo: RAM consumption doubles here, avoid it
-    val subTreesToWrite = subtrees.map(s => s.id -> serializer.subtreeToBytes(s))
-    store.insert(Seq(manifestId -> manifestBytes) ++ subTreesToWrite)
+    val subTreesToWrite = subtrees.map(s => (s.id: Array[Byte]) -> serializer.subtreeToBytes(s)).toArray //todo: eliminate .toArray
+    store.insert(Array((manifestId: Array[Byte]) -> manifestBytes) ++ subTreesToWrite)
     val si = readSnapshotsInfo.withNewManifest(height, manifestId)
     writeSnapshotsInfo(si)
   }

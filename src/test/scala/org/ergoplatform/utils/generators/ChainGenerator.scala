@@ -108,7 +108,7 @@ trait ChainGenerator extends ErgoTestConstants {
       EmptyDigest32,
       EmptyDigest32,
       tsOpt.getOrElse(prev.map(_.timestamp + control.desiredInterval.toMillis)
-        .getOrElse(if (useRealTs) timeProvider.time() else 0)),
+        .getOrElse(if (useRealTs) System.currentTimeMillis() else 0)),
       extensionHash,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
@@ -163,7 +163,7 @@ trait ChainGenerator extends ErgoTestConstants {
       EmptyStateRoot,
       emptyProofs,
       txs,
-      Math.max(timeProvider.time(), prev.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
+      Math.max(System.currentTimeMillis(), prev.map(_.header.timestamp + 1).getOrElse(System.currentTimeMillis())),
       validExtension,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber

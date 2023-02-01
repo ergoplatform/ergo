@@ -373,7 +373,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       utxoBootstrap = false, poPoWBootstrap = PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
       offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
-      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024
+      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false
 )
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
@@ -383,11 +383,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
       nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 
-    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+    ErgoHistory.readOrGenerate(fullHistorySettings)(null)
   }
 
   def syntacticallyValidModifier(history: HT): Header = {
-    val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(timeProvider.time())
+    val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
 
     powScheme.prove(
       history.bestHeaderOpt,
@@ -396,7 +396,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
-      Math.max(timeProvider.time(), bestTimestamp),
+      Math.max(System.currentTimeMillis(), bestTimestamp),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber

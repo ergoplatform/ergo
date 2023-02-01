@@ -18,7 +18,6 @@ import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.{DataInput, ErgoBox, ErgoScriptPredef}
 import scorex.core.app.Version
 import scorex.core.network.PeerSpec
-import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
@@ -47,7 +46,6 @@ trait ErgoTestConstants extends ScorexLogging {
     Parameters(0, Parameters.DefaultParameters ++ extension, ErgoValidationSettingsUpdate.empty)
   }
 
-  val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(Args(Some("src/test/resources/application.conf"), None))
 
   implicit val settings: ErgoSettings = initSettings

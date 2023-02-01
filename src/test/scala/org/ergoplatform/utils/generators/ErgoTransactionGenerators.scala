@@ -35,7 +35,7 @@ import scala.util.Random
 
 trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
 
-  protected implicit val ergoAddressEncoder: ErgoAddressEncoder =
+  protected implicit val addressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue / 2)

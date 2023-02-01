@@ -61,7 +61,6 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-parsing" % akkaHttpVersion,
   "com.typesafe.akka" %% "akka-stream" % akkaVersion,
   "org.bitlet" % "weupnp" % "0.1.4",
-  "commons-net" % "commons-net" % "3.6",
   
   // api dependencies 
   "io.circe" %% "circe-core" % circeVersion,

@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.BytesSerializable
 import scorex.core.utils.ScorexEncoding
 
+
 sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {self =>
 
   val modifierTypeId: NetworkObjectTypeId.Value
@@ -17,6 +18,9 @@ sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {sel
     case _ => false
   }
 
+  /**
+    * @return readable representation of `id`, as `id` is a hex-encoded string now, just identity functions is used
+    */
   def encodedId: String = id
 
 }

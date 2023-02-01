@@ -6,7 +6,7 @@ import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ModifierTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
@@ -137,7 +137,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     //TODO: actually, pi.toDownload contains only 1 modifierid per type,
     //TODO: see the only case where toDownload is not empty during ProgressInfo construction
     //TODO: so the code below can be optimized
-    val toDownload = mutable.Map[ModifierTypeId.Value, Seq[ModifierId]]()
+    val toDownload = mutable.Map[NetworkObjectTypeId.Value, Seq[ModifierId]]()
     pi.toDownload.foreach { case (tid, mid) =>
       toDownload.put(tid, toDownload.getOrElse(tid, Seq()) :+ mid)
     }
@@ -742,7 +742,7 @@ object ErgoNodeViewHolder {
 
   case class BlockAppliedTransactions(txs: Seq[ModifierId]) extends NodeViewHolderEvent
 
-  case class DownloadRequest(modifiersToFetch: Map[ModifierTypeId.Value, Seq[ModifierId]]) extends NodeViewHolderEvent
+  case class DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) extends NodeViewHolderEvent
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
 

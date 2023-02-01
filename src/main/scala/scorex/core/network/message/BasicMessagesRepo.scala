@@ -1,7 +1,7 @@
 package scorex.core.network.message
 
 
-import org.ergoplatform.modifiers.ModifierTypeId
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.wallet.Constants
@@ -19,9 +19,9 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
 import scala.collection.immutable
 
-case class ModifiersData(typeId: ModifierTypeId.Value, modifiers: Map[ModifierId, Array[Byte]])
+case class ModifiersData(typeId: NetworkObjectTypeId.Value, modifiers: Map[ModifierId, Array[Byte]])
 
-case class InvData(typeId: ModifierTypeId.Value, ids: Seq[ModifierId])
+case class InvData(typeId: NetworkObjectTypeId.Value, ids: Seq[ModifierId])
 
 case class NipopowProofData(m: Int = 6, k: Int = 6, headerId: Option[ModifierId]) {
   def headerIdBytesOpt: Option[Array[Byte]] = headerId.map(Algos.decode).flatMap(_.toOption)
@@ -74,7 +74,7 @@ object InvSpec extends MessageSpecV1[InvData] {
   }
 
   override def parse(r: Reader): InvData = {
-    val typeId = ModifierTypeId.fromByte(r.getByte())
+    val typeId = NetworkObjectTypeId.fromByte(r.getByte())
     val count = r.getUInt().toIntExact
     require(count > 0, "empty inv list")
     require(count <= maxInvObjects, s"$count elements in a message while limit is $maxInvObjects")
@@ -153,7 +153,7 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
   }
 
   override def parse(r: Reader): ModifiersData = {
-    val typeId = ModifierTypeId.fromByte(r.getByte()) // 1 byte
+    val typeId = NetworkObjectTypeId.fromByte(r.getByte()) // 1 byte
     val count = r.getUInt().toIntExact // 8 bytes
     require(count > 0, s"Illegal message with 0 modifiers of type $typeId")
     val resMap = immutable.Map.newBuilder[ModifierId, Array[Byte]]

@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage
 
 import com.github.benmanes.caffeine.cache.Caffeine
-import org.ergoplatform.modifiers.{BlockSection, ModifierTypeId}
+import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
@@ -55,8 +55,8 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, c
     objectsStore.get(idToBytes(id)).map(_.tail) // removing modifier type byte with .tail
   }
 
-  def modifierTypeAndBytesById(id: ModifierId): Option[(ModifierTypeId.Value, Array[Byte])] = {
-    objectsStore.get(idToBytes(id)).map(bs => (ModifierTypeId.fromByte(bs.head), bs.tail)) // first byte is type id, tail is modifier bytes
+  def modifierTypeAndBytesById(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] = {
+    objectsStore.get(idToBytes(id)).map(bs => (NetworkObjectTypeId.fromByte(bs.head), bs.tail)) // first byte is type id, tail is modifier bytes
   }
 
   def modifierById(id: ModifierId): Option[BlockSection] =

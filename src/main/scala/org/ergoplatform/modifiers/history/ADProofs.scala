@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.{ModifierTypeId, NonHeaderBlockSection, ProofsTypeId}
+import org.ergoplatform.modifiers.{NetworkObjectTypeId, NonHeaderBlockSection, ProofsTypeId}
 import org.ergoplatform.modifiers.state._
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
@@ -23,7 +23,7 @@ case class ADProofs(headerId: ModifierId,
 
   override def digest: Digest32 = ADProofs.proofDigest(proofBytes)
 
-  override val modifierTypeId: ModifierTypeId.Value = ADProofs.modifierTypeId
+  override val modifierTypeId: NetworkObjectTypeId.Value = ADProofs.modifierTypeId
 
   override type M = ADProofs
 
@@ -69,7 +69,7 @@ case class ADProofs(headerId: ModifierId,
 
 object ADProofs extends ApiCodecs {
 
-  val modifierTypeId: ModifierTypeId.Value = ProofsTypeId.value
+  val modifierTypeId: NetworkObjectTypeId.Value = ProofsTypeId.value
 
   val KL = 32
 

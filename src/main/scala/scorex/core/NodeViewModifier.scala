@@ -1,13 +1,13 @@
 package scorex.core
 
-import org.ergoplatform.modifiers.ModifierTypeId
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.BytesSerializable
 import scorex.core.utils.ScorexEncoding
 
 sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {self =>
 
-  val modifierTypeId: ModifierTypeId.Value
+  val modifierTypeId: NetworkObjectTypeId.Value
 
   //todo: check statically or dynamically output size
   def id: scorex.util.ModifierId

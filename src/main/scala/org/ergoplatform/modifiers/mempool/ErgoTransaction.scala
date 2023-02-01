@@ -6,7 +6,7 @@ import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.{ErgoNodeViewModifier, ModifierTypeId, TransactionTypeId}
+import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
 import org.ergoplatform.nodeView.ErgoContext
@@ -474,7 +474,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
 
-  val modifierTypeId: ModifierTypeId.Value = TransactionTypeId.value
+  val modifierTypeId: NetworkObjectTypeId.Value = TransactionTypeId.value
 
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction =
     ErgoTransaction(inputs, IndexedSeq.empty, outputCandidates, None)

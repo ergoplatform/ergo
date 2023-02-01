@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.{ErgoFullBlock, ModifierTypeId}
+import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.HeaderSerializer
@@ -117,7 +117,7 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     val missedChain = chain.tail.toList
     val missedBS = missedChain.flatMap { fb =>
       Seq((BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId), (Extension.modifierTypeId, fb.extension.encodedId))
-    }.foldLeft(Map.empty[ModifierTypeId.Value, Seq[String]]) { case (newAcc, (mType, mId)) =>
+    }.foldLeft(Map.empty[NetworkObjectTypeId.Value, Seq[String]]) { case (newAcc, (mType, mId)) =>
       newAcc.adjust(mType)(_.fold(Seq(mId))(_ :+ mId))
     }
 

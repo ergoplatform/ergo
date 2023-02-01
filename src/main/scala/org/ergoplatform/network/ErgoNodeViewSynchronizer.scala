@@ -5,7 +5,6 @@ import akka.actor.{Actor, ActorInitializationException, ActorKilledException, Ac
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId, SnapshotsInfoTypeId, TransactionTypeId, UtxoSnapshotChunkTypeId}
-import org.ergoplatform.modifiers.{BlockSection, ModifierTypeId, SnapshotsInfoTypeId, TransactionTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._

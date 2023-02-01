@@ -40,6 +40,13 @@ object Version {
   val v4022: Version = Version(4, 0, 22)
 
   val v4043: Version = Version(4, 0, 43)
+
+  val Eip37ForkVersion: Version = Version(4, 0, 100)
+  val JitSoftForkVersion: Version = Version(5, 0, 0)
+
+  val UtxoSnapsnotActivationVersion: Version = Version(5, 0, 6) // todo: set proper version around release
+
+  val NipopowActivationVersion: Version = Version(5, 0, 6) // todo: set proper version around release
 }
 
 object ApplicationVersionSerializer extends ScorexSerializer[Version] {

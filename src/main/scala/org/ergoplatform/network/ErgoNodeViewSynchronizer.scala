@@ -327,19 +327,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def sendSync(history: ErgoHistory): Unit = {
     if (history.bestHeaderOpt.isEmpty && settings.nodeSettings.popowBootstrap) {
       requireNipopowProof(history)
-    }
-
-    val peers = syncTracker.peersToSyncWith()
-    val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
-    log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
-    if (peersV1.nonEmpty) {
-      val msg = Message(syncInfoSpec, Right(getV1SyncInfo(history)), None)
-      networkControllerRef ! SendToNetwork(msg, SendToPeers(peersV1))
-    }
-    if (peersV2.nonEmpty) {
-      //todo: send only last header to peers which are equal or younger
-      val v2SyncInfo = getV2SyncInfo(history, full = true)
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
+    } else {
+      val peers = syncTracker.peersToSyncWith()
+      val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
+      log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
+      if (peersV1.nonEmpty) {
+        val msg = Message(syncInfoSpec, Right(getV1SyncInfo(history)), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeers(peersV1))
+      }
+      if (peersV2.nonEmpty) {
+        //todo: send only last header to peers which are equal or younger
+        val v2SyncInfo = getV2SyncInfo(history, full = true)
+        networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
+      }
     }
   }
 

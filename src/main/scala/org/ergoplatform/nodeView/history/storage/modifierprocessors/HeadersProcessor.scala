@@ -113,18 +113,22 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
 
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
-    val bestRow: Seq[(ByteArrayWrapper, Array[Byte])] =
-      if (score > bestHeadersChainScore) Seq(BestHeaderKey -> idToBytes(h.id)) else Seq.empty
-    val scoreRow = headerScoreKey(h.id) -> score.toByteArray
-    val heightRow = headerHeightKey(h.id) -> Ints.toByteArray(h.height)
+
     // todo: comment
     val bestHeader = if(nipopowMode) {
       true
     } else {
       score > bestHeadersChainScore
     }
+
+    val bestRow: Seq[(ByteArrayWrapper, Array[Byte])] =
+      if (bestHeader) Seq(BestHeaderKey -> idToBytes(h.id)) else Seq.empty
+    val scoreRow = headerScoreKey(h.id) -> score.toByteArray
+    val heightRow = headerHeightKey(h.id) -> Ints.toByteArray(h.height)
+
     val headerIdsRow = if (bestHeader) {
       if (h.isGenesis) log.info(s"Processing genesis header ${h.encodedId}")
+      if(nipopowMode) log.info(s"Processing nipopow header ${h.encodedId}")
       bestBlockHeaderIdsRow(h, score)
     } else {
       orphanedBlockHeaderIdsRow(h, score)

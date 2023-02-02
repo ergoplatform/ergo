@@ -70,4 +70,10 @@ object Constants {
     * Keys and hashes are 256-bits long, values are boxes, so value size is dynamic.
     */
   object StateTreeParameters extends AvlTreeParameters(keySize = HashLength, valueSize = None, labelSize = HashLength)
+
+  val MakeSnapshotEvery = 1024 // test value, switch to 51200 after testing
+
+  def timeToTakeSnapshot(height: Int): Boolean = {
+    height % MakeSnapshotEvery == MakeSnapshotEvery - 1
+  }
 }

@@ -8,10 +8,9 @@ import scorex.crypto.authds.avltree.batch.PersistentBatchAVLProver
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
+import org.ergoplatform.settings.Constants.{MakeSnapshotEvery, timeToTakeSnapshot}
 
 trait UtxoSetSnapshotPersistence extends ScorexLogging {
-
-  val MakeSnapshotEvery = 1024 // test value, switch to 51200 after testing
 
   def constants: StateConstants
   protected def persistentProver: PersistentBatchAVLProver[Digest32, HF]
@@ -28,10 +27,9 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
   }
 
   protected def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
-
-    if (estimatedTip.nonEmpty &&
-      (height % MakeSnapshotEvery == MakeSnapshotEvery - 1) &&
-      estimatedTip.get - height <= MakeSnapshotEvery) {
+    if (timeToTakeSnapshot(height) &&
+        estimatedTip.nonEmpty &&
+        estimatedTip.get - height <= MakeSnapshotEvery) {
 
       val (manifest, subtrees) = slicedTree()
 

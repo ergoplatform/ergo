@@ -21,8 +21,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scorex.core.utils.TimeProvider.Time
-import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -33,14 +31,10 @@ class InfoApiRoutesSpec extends AnyFlatSpec
   with FailFastCirceSupport
   with Stubs {
 
-  val fakeTimeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.scorexSettings.ntp) {
-    override def time(): Time = 123
-  }
-
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
-  val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, networkControllerRef, null, settings, fakeTimeProvider)
-  val route: Route = InfoApiRoute(statsCollector, settings.scorexSettings.restApi, fakeTimeProvider).route
+  val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, networkControllerRef, null, settings)
+  val route: Route = InfoApiRoute(statsCollector, settings.scorexSettings.restApi).route
   val requiredDifficulty = BigInt(1)
 
   override def beforeAll: Unit = {
@@ -57,7 +51,7 @@ class InfoApiRoutesSpec extends AnyFlatSpec
       c.downField("appVersion").as[String] shouldEqual Right(Version.VersionString)
       c.downField("stateType").as[String] shouldEqual Right(settings.nodeSettings.stateType.stateTypeName)
       c.downField("isMining").as[Boolean] shouldEqual Right(settings.nodeSettings.mining)
-      c.downField("launchTime").as[Long] shouldEqual Right(fakeTimeProvider.time())
+      (System.currentTimeMillis() - c.downField("launchTime").as[Long].toOption.getOrElse(0L)) < 2000 shouldBe true
       c.downField("eip27Supported").as[Boolean] shouldEqual Right(true)
       c.downField("restApiUrl").as[String] shouldEqual Right("https://example.com:80")
     }

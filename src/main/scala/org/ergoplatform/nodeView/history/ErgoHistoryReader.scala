@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection, NetworkObjectTypeId}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings.ErgoSettings
@@ -96,12 +97,23 @@ trait ErgoHistoryReader
     *
     * @param id - modifier id
     * @tparam T - expected Type
-    * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
+    * @return semantically valid ErgoPersistentModifier of type T with the given id if it is in history
     */
   def typedModifierById[T <: BlockSection : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
     case Some(m: T) => Some(m)
     case _ => None
   }
+
+  /** Get index of expected type by its identifier
+    * @param id - index id
+    * @tparam T - expected Type
+    * @return index of type T with the given id if it is in history
+    */
+  def typedExtraIndexById[T <: ExtraIndex : ClassTag](id: ModifierId): Option[T] =
+    historyStorage.getExtraIndex(id) match {
+      case Some(m: T) => Some(m)
+      case _ => None
+    }
 
   override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
 

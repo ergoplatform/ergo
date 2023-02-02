@@ -19,9 +19,10 @@ import scala.util.{Failure, Try}
   * @param nodeParameters - parameters of the tree node (key size, optional value size, label size)
   * @param hf - hash function used to construct the tree
   * @tparam D - type of hash function digest
+  * @tparam HF - type of hash function used in AVL+ tree
   */
 class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDBVersionedStore,
-                                                                      nodeParameters: NodeParameters)
+                                                                      nodeParameters: AvlTreeParameters)
                                                                      (implicit val hf: HF)
   extends VersionedAVLStorage[D] with ScorexLogging {
 
@@ -113,7 +114,7 @@ object VersionedLDBAVLStorage {
     */
   def fetch[D <: hash.Digest](dbKey: ADKey)(implicit hf: CryptographicHash[D],
                                             store: LDBVersionedStore,
-                                            nodeParameters: NodeParameters): ProverNodes[D] = {
+                                            nodeParameters: AvlTreeParameters): ProverNodes[D] = {
     val bytes = store(dbKey)
     lazy val keySize = nodeParameters.keySize
     lazy val labelSize = nodeParameters.labelSize
@@ -155,7 +156,7 @@ object VersionedLDBAVLStorage {
   /**
     * Serialize tree node (only, without possible children)
     */
-  private[batch] def toBytes[D <: hash.Digest](node: ProverNodes[D], nodeParameters: NodeParameters): Array[Byte] = {
+  private[batch] def toBytes[D <: hash.Digest](node: ProverNodes[D], nodeParameters: AvlTreeParameters): Array[Byte] = {
     val builder = new mutable.ArrayBuilder.ofByte;
     node match {
       case n: ProxyInternalNode[D] =>
@@ -177,7 +178,7 @@ object VersionedLDBAVLStorage {
                                chunks: Iterator[BatchAVLProverSubtree[D]],
                                additionalData: Iterator[(Array[Byte], Array[Byte])],
                                store: LDBVersionedStore,
-                               nodeParameters: NodeParameters)(implicit hf: HF): Try[VersionedLDBAVLStorage[D, HF]] = {
+                               nodeParameters: AvlTreeParameters)(implicit hf: HF): Try[VersionedLDBAVLStorage[D, HF]] = {
     //todo: the function below copy-pasted from BatchAVLProver, eliminate boilerplate
 
     val topNodeKey = nodeParameters.TopNodeKey

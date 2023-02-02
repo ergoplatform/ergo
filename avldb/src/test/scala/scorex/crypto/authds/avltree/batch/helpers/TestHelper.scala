@@ -29,7 +29,7 @@ trait TestHelper extends FileHelper {
   }
 
   def createVersionedStorage(store: LDBVersionedStore): STORAGE =
-    new VersionedLDBAVLStorage(store, NodeParameters(KL, Some(VL), LL))
+    new VersionedLDBAVLStorage(store, AvlTreeParameters(KL, Some(VL), LL))
 
   def createPersistentProver(storage: STORAGE): PERSISTENT_PROVER = {
     val prover = new BatchAVLProver[D, HF](KL, Some(VL))

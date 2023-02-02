@@ -16,8 +16,6 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.GetAllPeers
 import scorex.core.settings.RESTApiSettings
-import scorex.core.utils.NetworkTimeProvider
-import scorex.core.utils.TimeProvider.Time
 
 import java.net.InetSocketAddress
 import scala.concurrent.Future
@@ -29,10 +27,6 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
   with FailFastCirceSupport
   with ScalaCheckPropertyChecks
   with Stubs {
-
-  val fakeTimeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.scorexSettings.ntp) {
-    override def time(): Time = 123
-  }
 
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)

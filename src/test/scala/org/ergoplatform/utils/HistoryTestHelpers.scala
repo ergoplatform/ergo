@@ -51,7 +51,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
       utxoBootstrap = false, popowBootstrap = PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None,
       offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
-      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024
+      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false
 )
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
@@ -67,7 +67,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
       nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 
-    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+    ErgoHistory.readOrGenerate(fullHistorySettings)(null)
   }
 
 }

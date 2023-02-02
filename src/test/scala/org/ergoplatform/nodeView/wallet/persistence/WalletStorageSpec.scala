@@ -27,7 +27,7 @@ class WalletStorageSpec
           val bytes = DerivationPathSerializer.toBytes(path)
           acc ++ Ints.toByteArray(bytes.length) ++ bytes
         }
-      store.insert(Seq(SecretPathsKey -> toInsert)).get
+      store.insert(Array(SecretPathsKey -> toInsert)).get
     }
 
     forAll(Gen.nonEmptyListOf(derivationPathGen)) { paths =>

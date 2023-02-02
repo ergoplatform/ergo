@@ -90,7 +90,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     * @return ProgressInfo - info required for State to be consistent with History
     */
   protected def process(h: Header, nipopowMode: Boolean = false): Try[ProgressInfo[BlockSection]] = synchronized {
-    val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = toInsert(h, nipopowMode)
+    val dataToInsert: (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = toInsert(h, nipopowMode)
 
     historyStorage.insert(dataToInsert._1, dataToInsert._2).flatMap { _ =>
       bestHeaderIdOpt match {
@@ -108,7 +108,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   /**
     * Data to add to and remove from the storage to process this modifier
     */
-  private def toInsert(h: Header, nipopowMode: Boolean): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[BlockSection]) = {
+  private def toInsert(h: Header, nipopowMode: Boolean): (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = {
     //todo: construct resulting Array without ++
 
     val requiredDifficulty: Difficulty = h.requiredDifficulty
@@ -137,12 +137,12 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     val nipopowsRow = if (Constants.timeToTakeSnapshot(h.height) && settings.nodeSettings.popowBootstrap == false) { //todo: fix condition
       val pbs = popowProofBytes().get // todo: .get  , measure time
       log.info(s"Dumping nipopow proof (size: ${pbs.length}) @ ${h.height}")
-      Seq(NipopowSnapshotHeightKey -> pbs)
+      Array(NipopowSnapshotHeightKey -> pbs)
     } else {
-      Seq.empty
+      Array.empty
     }
 
-    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow ++ nipopowsRow, Seq(h))
+    (Array(scoreRow, heightRow) ++ bestRow ++ headerIdsRow ++ nipopowsRow, Array(h))
   }
 
   /**
@@ -177,7 +177,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     *
     * @return Success() if header is valid, Failure(error) otherwise
     */
-  protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
+  protected def validate(header: Header): Try[Unit] = HeaderValidator.validate(header).toTry
 
   /**
     * @param id - header id
@@ -328,9 +328,11 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     }
   }
 
-  class HeaderValidator extends ScorexEncoding {
+  private object HeaderValidator extends ScorexEncoding {
 
     private def validationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
+
+    private def time(): ErgoHistory.Time = System.currentTimeMillis()
 
     def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {
@@ -354,7 +356,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty, header.id, header.modifierTypeId)
         .validateNot(alreadyApplied, historyStorage.contains(header.id), InvalidModifier(header.toString, header.id, header.modifierTypeId))
         .validate(hdrTooOld, fullBlockHeight < nodeSettings.keepVersions, InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${timeProvider.time()}", header.id, header.modifierTypeId))
+        .validate(hdrFutureTimestamp, header.timestamp - time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${time()}", header.id, header.modifierTypeId))
         .result
     }
 
@@ -369,7 +371,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent), header.id, header.modifierTypeId)
         .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId), InvalidModifier(s"Parent semantics broken", header.id, header.modifierTypeId))
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${timeProvider.time()}", header.id, header.modifierTypeId))
+        .validate(hdrFutureTimestamp, header.timestamp - time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${time()}", header.id, header.modifierTypeId))
         .validateNot(alreadyApplied, historyStorage.contains(header.id), InvalidModifier(s"${header.id} already applied", header.id, header.modifierTypeId))
         .validate(hdrCheckpoint, checkpointCondition(header), InvalidModifier(s"${header.id} wrong checkpoint", header.id, header.modifierTypeId))
         .result

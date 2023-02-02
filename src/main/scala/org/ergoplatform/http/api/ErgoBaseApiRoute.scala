@@ -14,6 +14,9 @@ import akka.pattern.ask
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome._
+import scorex.util.encode.Base16
+import sigmastate.Values.ErgoTree
+import sigmastate.serialization.ErgoTreeSerializer
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Success, Try}
@@ -32,6 +35,16 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
       case Success(bytes) => provide(bytesToId(bytes))
       case _ => reject(ValidationRejection("Wrong modifierId format"))
     }
+  }
+
+  val ergoTree: Directive1[ErgoTree] = entity(as[String]).flatMap(handleErgoTree)
+
+  private def handleErgoTree(value: String): Directive1[ErgoTree] = {
+    Base16.decode(value) match {
+      case Success(bytes) => provide(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bytes))
+      case _ => reject(ValidationRejection("Invalid hex data"))
+    }
+
   }
 
   private def getStateAndPool(readersHolder: ActorRef): Future[(ErgoStateReader, ErgoMemPoolReader)] = {

@@ -16,7 +16,8 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-  "org.ethereum" % "leveldbjni-all"     % "1.18.3"
+  "org.ethereum" % "leveldbjni-all"     % "1.18.3",
+  "org.typelevel" %% "spire" % "0.14.1"
 )
 
 testOptions in Test := Seq(Tests.Filter(t => !t.matches(".*Benchmark$")))

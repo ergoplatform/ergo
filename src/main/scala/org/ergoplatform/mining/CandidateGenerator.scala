@@ -24,7 +24,6 @@ import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
-import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
@@ -46,7 +45,6 @@ class CandidateGenerator(
   minerPk: ProveDlog,
   readersHolderRef: ActorRef,
   viewHolderRef: ActorRef,
-  timeProvider: NetworkTimeProvider,
   ergoSettings: ErgoSettings
 ) extends Actor
   with ScorexLogging {
@@ -147,7 +145,6 @@ class CandidateGenerator(
           state.hr,
           state.sr,
           state.mpr,
-          timeProvider,
           minerPk,
           txsToInclude,
           ergoSettings
@@ -256,7 +253,6 @@ object CandidateGenerator extends ScorexLogging {
     minerPk: ProveDlog,
     readersHolderRef: ActorRef,
     viewHolderRef: ActorRef,
-    timeProvider: NetworkTimeProvider,
     ergoSettings: ErgoSettings
   )(implicit context: ActorRefFactory): ActorRef =
     context.actorOf(
@@ -265,7 +261,6 @@ object CandidateGenerator extends ScorexLogging {
           minerPk,
           readersHolderRef,
           viewHolderRef,
-          timeProvider,
           ergoSettings
         )
       ).withDispatcher("critical-dispatcher"),
@@ -328,7 +323,6 @@ object CandidateGenerator extends ScorexLogging {
     h: ErgoHistoryReader,
     s: UtxoStateReader,
     m: ErgoMemPoolReader,
-    timeProvider: NetworkTimeProvider,
     pk: ProveDlog,
     txsToInclude: Seq[ErgoTransaction],
     ergoSettings: ErgoSettings
@@ -368,7 +362,6 @@ object CandidateGenerator extends ScorexLogging {
           h,
           desiredUpdate,
           s,
-          timeProvider,
           poolTransactions,
           emissionTxOpt,
           unspentTxsToInclude,
@@ -445,7 +438,6 @@ object CandidateGenerator extends ScorexLogging {
                        history: ErgoHistoryReader,
                        proposedUpdate: ErgoValidationSettingsUpdate,
                        state: UtxoStateReader,
-                       timeProvider: NetworkTimeProvider,
                        poolTxs: Seq[UnconfirmedTransaction],
                        emissionTxOpt: Option[ErgoTransaction],
                        prioritizedTransactions: Seq[ErgoTransaction],
@@ -461,7 +453,7 @@ object CandidateGenerator extends ScorexLogging {
       // Make progress in time since last block.
       // If no progress is made, then, by consensus rules, the block will be rejected.
       val timestamp =
-        Math.max(timeProvider.time(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
+        Math.max(System.currentTimeMillis(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
 
       val stateContext = state.stateContext
 

@@ -18,7 +18,6 @@ import org.scalacheck.Gen
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.network.peer.PeerInfo
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -59,12 +58,11 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val settings = ErgoSettings.read()
     val pool = ErgoMemPool.empty(settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
-    val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")
     val vhProbe = TestProbe("ViewHolderProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
-    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
     val ref = system.actorOf(Props(
       new SyncronizerMock(
@@ -72,7 +70,6 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
         vhProbe.ref,
         ErgoSyncInfoMessageSpec,
         settings,
-        tp,
         syncTracker,
         deliveryTracker)
     ))
@@ -81,7 +78,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val tx = validErgoTransactionGenTemplate(minAssets = 0, maxAssets = 0).sample.get._2
 
 
-    val peerInfo = PeerInfo(defaultPeerSpec, timeProvider.time())
+    val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,

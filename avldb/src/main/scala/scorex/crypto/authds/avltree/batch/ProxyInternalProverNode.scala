@@ -17,7 +17,7 @@ class ProxyInternalProverNode[D <: Digest](protected var pk: ADKey,
                                            protected var pb: Balance = Balance @@ 0.toByte)
                                           (implicit val phf: CryptographicHash[D],
                                            store: LDBVersionedStore,
-                                           nodeParameters: NodeParameters)
+                                           nodeParameters: AvlTreeParameters)
   extends InternalProverNode(k = pk, l = null, r = null, b = pb)(phf) {
 
   override protected def computeLabel: D = {

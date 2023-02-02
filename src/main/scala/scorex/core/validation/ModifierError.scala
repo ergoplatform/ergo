@@ -5,6 +5,10 @@ import scorex.util.ModifierId
 
 import scala.util.control.NoStackTrace
 
+/**
+  * Container for error details in regards with block section turned out to be invalid. Wraps validation error,
+  * block section id, and block section type id.
+  */
 case class InvalidModifier(error: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value)
 
 /** Base trait for errors that were occurred during NodeView Modifier validation

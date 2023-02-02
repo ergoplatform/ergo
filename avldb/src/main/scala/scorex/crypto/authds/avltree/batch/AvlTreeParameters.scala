@@ -6,7 +6,7 @@ package scorex.crypto.authds.avltree.batch
   * @param valueSize - size of a value in a leaf (fixed, if defined, arbitrary, if None)
   * @param labelSize - size of a label (node hash), fixed
   */
-case class NodeParameters(keySize: Int, valueSize: Option[Int], labelSize: Int) {
+case class AvlTreeParameters(keySize: Int, valueSize: Option[Int], labelSize: Int) {
   /**
     * @return whether value is fixed-size
     */

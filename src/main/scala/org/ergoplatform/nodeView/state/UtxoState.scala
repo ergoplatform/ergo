@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
-import org.ergoplatform.settings.{Algos, Parameters}
+import org.ergoplatform.settings.{Algos, Constants, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
@@ -23,6 +23,7 @@ import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.ModifierId
 import scorex.util.ScorexLogging
+import Constants.StateTreeParameters
 
 import scala.util.{Failure, Success, Try}
 
@@ -276,8 +277,7 @@ object UtxoState extends ScorexLogging {
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
-      val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-      val storage: VersionedLDBAVLStorage[Digest32, HF] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+      val storage = new VersionedLDBAVLStorage[Digest32, HF](store, StateTreeParameters)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
     new UtxoState(persistentProver, version, store, constants)
@@ -300,8 +300,7 @@ object UtxoState extends ScorexLogging {
     val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
 
     val defaultStateContext = ErgoStateContext.empty(constants, parameters)
-    val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-    val storage: VersionedLDBAVLStorage[Digest32, HF] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+    val storage = new VersionedLDBAVLStorage[Digest32, HF](store, StateTreeParameters)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(
       p,
       storage,

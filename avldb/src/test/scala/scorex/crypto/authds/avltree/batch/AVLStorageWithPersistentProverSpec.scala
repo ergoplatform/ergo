@@ -18,7 +18,7 @@ class AVLStorageWithPersistentProverSpec extends AnyPropSpec with Matchers {
   val stateStore = new LDBVersionedStore(getRandomTempDir, 10)
 
   private lazy val np =
-    NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
+    AvlTreeParameters(keySize = 32, valueSize = None, labelSize = 32)
 
   protected lazy val storage = new VersionedLDBAVLStorage[Digest32, HF](stateStore, np)
 

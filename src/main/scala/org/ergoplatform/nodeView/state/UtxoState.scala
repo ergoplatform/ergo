@@ -238,10 +238,25 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
 object UtxoState extends ScorexLogging {
 
+  /**
+    * Short synonym for AVL+ tree type used in the node
+    */
   type Manifest = BatchAVLProverManifest[Digest32]
+
+  /**
+    * Short synonym for AVL subtree type used in the node
+    */
   type Subtree = BatchAVLProverSubtree[Digest32]
 
+
+  /**
+    * Manifest is associated with 32 bytes cryptographically strong unique id (root hash of the AVL tree under manifest)
+    */
   type ManifestId = Digest32
+
+  /**
+    * Subtree is associated with 32 bytes cryptographically strong unique id (hash of subtree's root node)
+    */
   type SubtreeId = Digest32
 
   private lazy val bestVersionKey = Algos.hash("best state version")

@@ -10,10 +10,15 @@ import scorex.util.ScorexLogging
 
 trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
 
-  // root hash and height of AVL+ tree authenticating UTXO set
+  /**
+   * Root hash and height of AVL+ tree authenticating UTXO set
+   */
   def rootHash: ADDigest
 
-  // must be ID of last applied block
+  /**
+    * Current version of the state
+    * Must be ID of last block applied
+    */
   def version: VersionTag
 
   val store: LDBVersionedStore

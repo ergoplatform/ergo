@@ -17,6 +17,7 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator}
 import scorex.crypto.authds.avltree.batch._
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
@@ -41,11 +42,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     with UtxoStateReader
     with ScorexEncoding {
 
+  import UtxoState.metadata
+
   override def rootHash: ADDigest = persistentProver.synchronized {
     persistentProver.digest
   }
-
-  import UtxoState.metadata
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
@@ -234,6 +235,27 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 }
 
 object UtxoState {
+
+  /**
+    * Short synonym for AVL+ tree type used in the node
+    */
+  type Manifest = BatchAVLProverManifest[Digest32]
+
+  /**
+    * Short synonym for AVL subtree type used in the node
+    */
+  type Subtree = BatchAVLProverSubtree[Digest32]
+
+
+  /**
+    * Manifest is associated with 32 bytes cryptographically strong unique id (root hash of the AVL tree under manifest)
+    */
+  type ManifestId = Digest32
+
+  /**
+    * Subtree is associated with 32 bytes cryptographically strong unique id (hash of subtree's root node)
+    */
+  type SubtreeId = Digest32
 
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")

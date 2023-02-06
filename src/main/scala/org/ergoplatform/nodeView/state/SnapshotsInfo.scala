@@ -7,13 +7,13 @@ import org.ergoplatform.nodeView.state.UtxoState.ManifestId
   * Container for UTXO set snapshots the node holds
   * @param availableManifests - available UTXO set snapshot manifests and corresponding heights
   */
-case class SnapshotsInfo(availableManifests: Map[Height, ManifestId]) {
+class SnapshotsInfo(val availableManifests: Map[Height, ManifestId]) {
 
   /**
     * @return new container instance with new snapshot added
     */
   def withNewManifest(height: Height, manifestId: ManifestId): SnapshotsInfo = {
-    SnapshotsInfo(availableManifests.updated(height, manifestId))
+    new SnapshotsInfo(availableManifests.updated(height, manifestId))
   }
 
   /**
@@ -24,7 +24,10 @@ case class SnapshotsInfo(availableManifests: Map[Height, ManifestId]) {
 
 object SnapshotsInfo {
 
-  def makeEmpty(): SnapshotsInfo = SnapshotsInfo(Map.empty)
+  /**
+    * @return empty container with no snapshots
+    */
+  val empty: SnapshotsInfo = new SnapshotsInfo(Map.empty)
 
 }
 

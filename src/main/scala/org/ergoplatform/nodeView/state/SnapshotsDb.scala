@@ -35,7 +35,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
       val manifestId = Digest32 @@ rowBytes.drop(4)
       height -> manifestId
     }.toMap
-    SnapshotsInfo(manifests)
+    new SnapshotsInfo(manifests)
   }
 
   def writeSnapshotsInfo(snapshotsInfo: SnapshotsInfo): Try[Unit] = {
@@ -43,7 +43,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
   }
 
   def readSnapshotsInfo: SnapshotsInfo = {
-    store.get(snapshotInfoKey).map(snapshotsInfoFromBytes).getOrElse(SnapshotsInfo.makeEmpty())
+    store.get(snapshotInfoKey).map(snapshotsInfoFromBytes).getOrElse(SnapshotsInfo.empty)
   }
 
 
@@ -71,7 +71,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
       store.remove(keysToRemove)
     }
 
-    val updInfo = SnapshotsInfo(toLeave)
+    val updInfo = new SnapshotsInfo(toLeave)
     writeSnapshotsInfo(updInfo)
 
     log.info("Snapshots pruning finished")

@@ -245,7 +245,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
         val m = (0 until 100).map { _ =>
           Random.nextInt(1000000) -> (Digest32 @@ Algos.decode(mod.id).get)
         }.toMap
-        val si = SnapshotsInfo(m)
+        val si = new SnapshotsInfo(m)
         val db = SnapshotsDb.create(s.constants.settings)
         db.writeSnapshotsInfo(si)
 

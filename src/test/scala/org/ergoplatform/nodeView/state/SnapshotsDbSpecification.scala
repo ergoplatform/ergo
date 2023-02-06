@@ -12,7 +12,7 @@ class SnapshotsDbSpecification extends ErgoPropertyTest {
       val m = manifestIds.map{mid =>
         Random.nextInt(1000000) -> (Digest32 @@ idToBytes(mid))
       }.toMap
-      val si = SnapshotsInfo(m)
+      val si = new SnapshotsInfo(m)
       val dir = createTempDir.getAbsolutePath
       val db = SnapshotsDb.create(dir)
       db.writeSnapshotsInfo(si)

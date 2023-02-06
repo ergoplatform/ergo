@@ -104,6 +104,11 @@ class ErgoApp(args: Args) extends ScorexLogging {
       None
     }
 
+  if(ergoSettings.nodeSettings.extraIndex)
+    require(
+      ergoSettings.nodeSettings.stateType.holdsUtxoSet && !ergoSettings.nodeSettings.isFullBlocksPruned,
+      "Node must store full UTXO set and all blocks to run extra indexer."
+    )
   // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
   ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings)
 

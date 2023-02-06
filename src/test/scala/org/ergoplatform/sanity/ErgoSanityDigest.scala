@@ -28,7 +28,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
 
   override val stateGen: Gen[WrappedDigestState] = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
-      val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
+      val digestState = DigestState.create(Some(wus.version), Some(wus.rootDigest), createTempDir, stateConstants)
       new WrappedDigestState(digestState, wus, settings)
     }
   }

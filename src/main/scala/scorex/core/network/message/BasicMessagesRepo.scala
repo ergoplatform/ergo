@@ -294,11 +294,12 @@ object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
     require(r.remaining <= SizeLimit, s"Too big SnapshotsInfo message: ${r.remaining} bytes found, $SizeLimit max expected.")
 
     val length = r.getUInt().toIntExact
-    SnapshotsInfo((0 until length).map { _ =>
+    val manifests = (0 until length).map { _ =>
       val height = r.getInt()
       val manifest = Digest32 @@ r.getBytes(Constants.ModifierIdLength)
       height -> manifest
-    }.toMap)
+    }.toMap
+    new SnapshotsInfo(manifests)
   }
 }
 

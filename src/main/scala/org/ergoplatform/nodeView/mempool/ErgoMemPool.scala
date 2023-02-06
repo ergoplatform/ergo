@@ -137,8 +137,13 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     pool.get(unconfirmedTransactionId) match {
       case Some(utx) => invalidate(utx)
       case None =>
-        log.warn(s"Can't invalidate transaction $unconfirmedTransactionId as it is not in the pool")
-        this
+        log.warn(s"pool.get failed for $unconfirmedTransactionId")
+        pool.orderedTransactions.valuesIterator.find(_.id == unconfirmedTransactionId) match {
+          case Some(utx) => invalidate(utx)
+          case None =>
+            log.warn(s"Can't invalidate transaction $unconfirmedTransactionId as it is not in the pool")
+            this
+        }
     }
   }
 

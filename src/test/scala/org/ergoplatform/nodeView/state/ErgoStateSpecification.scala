@@ -20,7 +20,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   property("applyModifier() - double spending") {
     forAll(boxesHolderGen, Gen.choose(1: Byte, 2: Byte)) { case (bh, version) =>
       val us = createUtxoState(bh, parameters)
-      val ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootHash, parameters)
+      val ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootDigest, parameters)
 
       val validBlock = validFullBlock(None, us, bh)
       val dsTxs = validBlock.transactions ++ validBlock.transactions
@@ -52,7 +52,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     }
 
     var (us, bh) = createUtxoState(parameters)
-    var ds = createDigestState(us.version, us.rootHash, parameters)
+    var ds = createDigestState(us.version, us.rootDigest, parameters)
     var lastBlocks: Seq[ErgoFullBlock] = Seq()
     forAll { seed: Int =>
       val blBh = validFullBlockWithBoxHolder(lastBlocks.headOption, us, bh, new RandomWrapper(Some(seed)))
@@ -68,8 +68,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   property("generateGenesisUtxoState & generateGenesisDigestState are compliant") {
     val settings = ErgoSettings.read(Args.empty)
     val dir = createTempDir
-    val rootHash = createUtxoState(parameters)._1.rootHash
-    val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings).rootHash
+    val rootHash = createUtxoState(parameters)._1.rootDigest
+    val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings).rootDigest
     rootHash shouldBe expectedRootHash
   }
 

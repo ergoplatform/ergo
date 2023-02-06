@@ -418,7 +418,7 @@ trait ApiCodecs extends JsonCodecs {
   implicit val SnapshotInfoDecoder: Decoder[SnapshotsInfo] = { cursor =>
     for {
       availableManifests <- Decoder.decodeMap[Int, ManifestId].tryDecode(cursor.downField("availableManifests"))
-    } yield SnapshotsInfo(availableManifests)
+    } yield new SnapshotsInfo(availableManifests)
   }
 
   implicit val transactionSigningRequestEncoder: Encoder[TransactionSigningRequest] = { tsr =>

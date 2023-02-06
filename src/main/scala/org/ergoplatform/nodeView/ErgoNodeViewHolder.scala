@@ -537,7 +537,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     ErgoState.readOrGenerate(settings, constants)
       .asInstanceOf[State]
       .ensuring(
-        state => java.util.Arrays.equals(state.rootHash, settings.chainSettings.genesisStateDigest),
+        state => java.util.Arrays.equals(state.rootDigest, settings.chainSettings.genesisStateDigest),
         "State root is incorrect"
       )
   }

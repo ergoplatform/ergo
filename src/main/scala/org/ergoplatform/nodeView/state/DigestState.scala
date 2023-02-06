@@ -26,7 +26,7 @@ import scala.util.{Failure, Success, Try}
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
 class DigestState protected(override val version: VersionTag,
-                            override val rootHash: ADDigest,
+                            override val rootDigest: ADDigest,
                             override val store: LDBVersionedStore,
                             ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
@@ -48,7 +48,7 @@ class DigestState protected(override val version: VersionTag,
     val knownBoxesTry =
       ErgoState.stateChanges(transactions).map { stateChanges =>
         val boxesFromProofs: Seq[ErgoBox] =
-          proofs.verify(stateChanges, rootHash, expectedHash).get.map(v => ErgoBoxSerializer.parseBytes(v))
+          proofs.verify(stateChanges, rootDigest, expectedHash).get.map(v => ErgoBoxSerializer.parseBytes(v))
         (transactions.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
       }
 
@@ -107,7 +107,7 @@ class DigestState protected(override val version: VersionTag,
   private def processFullBlock: ModifierProcessing[DigestState] = {
     case fb: ErgoFullBlock if nodeSettings.verifyTransactions =>
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
-        s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
+        s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootDigest)}")
       validate(fb)
         .flatMap { _ =>
           val version: VersionTag = idToVersion(fb.header.id)

@@ -5,7 +5,7 @@ import org.ergoplatform.utils.ErgoPropertyTest
 class SnapshotsInfoSpecification extends ErgoPropertyTest {
 
  property("makeEmpty / nonEmpty / withNewManifest") {
-   val empty = SnapshotsInfo.makeEmpty()
+   val empty = SnapshotsInfo.empty
    empty.nonEmpty shouldBe false
 
    val h = 10

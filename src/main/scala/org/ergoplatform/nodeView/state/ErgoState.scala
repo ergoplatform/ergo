@@ -64,6 +64,14 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
     */
   def getReader: ErgoStateReader = this
 
+  /**
+    * Close database where state-related data lives
+    */
+  def closeStorage(): Unit = {
+    log.warn("Closing state's store.")
+    store.close()
+  }
+
 }
 
 object ErgoState extends ScorexLogging {
@@ -262,8 +270,8 @@ object ErgoState extends ScorexLogging {
     val bh = BoxHolder(boxes)
 
     UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants, LaunchParameters).ensuring(us => {
-      log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      java.util.Arrays.equals(us.rootHash, constants.settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
+      log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootDigest)}")
+      java.util.Arrays.equals(us.rootDigest, constants.settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 

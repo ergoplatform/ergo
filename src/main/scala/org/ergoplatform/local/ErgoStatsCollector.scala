@@ -87,7 +87,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id)),
         genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption,
-        stateRoot = Some(Algos.encode(s.rootHash)),
+        stateRoot = Some(Algos.encode(s.rootDigest)),
         stateVersion = Some(s.version),
         parameters = s.stateContext.currentParameters
       )

@@ -44,7 +44,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   import UtxoState.metadata
 
-  override def rootHash: ADDigest = persistentProver.synchronized {
+  override def rootDigest: ADDigest = persistentProver.synchronized {
     persistentProver.digest
   }
 
@@ -132,7 +132,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
         log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
 
-        val inRoot = rootHash
+        val inRoot = rootDigest
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
           val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.id, fb.header.stateRoot, newStateContext)

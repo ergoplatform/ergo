@@ -41,7 +41,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
 
   private val t1 = TestCase("check genesis state") { fixture =>
     import fixture._
-    getCurrentState.rootHash shouldBe getGenesisStateDigest
+    getCurrentState.rootDigest shouldBe getGenesisStateDigest
   }
 
   private val t2 = TestCase("check history after genesis") { fixture =>
@@ -171,7 +171,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       applyBlock(block) shouldBe 'success
       getBestHeaderOpt shouldBe Some(block.header)
       if (verifyTransactions) {
-        getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
+        getRootHash shouldBe Algos.encode(wusAfterBlock.rootDigest)
       }
       getBestHeaderOpt shouldBe Some(block.header)
 
@@ -183,7 +183,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       applyBlock(brokenBlock2) shouldBe 'success
 
       getBestFullBlockOpt shouldBe Some(block)
-      getRootHash shouldBe Algos.encode(wusAfterBlock.rootHash)
+      getRootHash shouldBe Algos.encode(wusAfterBlock.rootDigest)
       getBestHeaderOpt shouldBe Some(block.header)
     }
   }
@@ -218,7 +218,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       }.get
 
     applyBlock(genesis) shouldBe 'success
-    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
+    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootDigest)
 
     val chain1block1 = validFullBlock(Some(genesis), wusAfterGenesis)
     val expectedBestFullBlockOpt = if (verifyTransactions) Some(chain1block1) else None
@@ -233,7 +233,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
 
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1)(mod => nodeViewHolderRef ! mod).get
     val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
-    chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
+    chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootDigest
 
     applyBlock(chain2block2) shouldBe 'success
     if (verifyTransactions) {
@@ -292,7 +292,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
       }.get
 
     applyBlock(genesis) shouldBe 'success
-    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
+    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootDigest)
 
     val chain2block1 = validFullBlock(Some(genesis), wusAfterGenesis)
     val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1)(mod => nodeViewHolderRef ! mod).get
@@ -456,7 +456,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
 
     val wusChain2Block1 = wusGenesis.applyModifier(chain2block1)(mod => nodeViewHolderRef ! mod).get
     val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
-    chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
+    chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootDigest
 
     applyBlock(chain2block2) shouldBe 'success
     if (verifyTransactions) {
@@ -508,13 +508,13 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers wi
 
     if (verifyTransactions) {
 
-      val initDigest = getCurrentState.rootHash
+      val initDigest = getCurrentState.rootDigest
 
       applyBlock(invalidBlock) shouldBe 'success
 
       getBestFullBlockOpt shouldBe None
       getBestHeaderOpt shouldBe None
-      getCurrentState.rootHash shouldEqual initDigest
+      getCurrentState.rootDigest shouldEqual initDigest
     }
   }
 

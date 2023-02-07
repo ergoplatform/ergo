@@ -234,7 +234,7 @@ object TransactionBuilder {
 
     // add burnTokens to target assets so that they are excluded from the change outputs
     // thus total outputs assets will be reduced which is interpreted as _token burning_
-    val tokensOutWithBurned = AssetUtils.mergeAssets(tokensOutNoMinted, burnTokens)
+    val tokensOutWithBurned = AssetUtils.mergeAssets(tokensOutNoMinted.toMap, burnTokens)
 
     val selection = boxSelector.select(inputs.toIterator, outputTotal, tokensOutWithBurned) match {
       case Left(err) => throw new IllegalArgumentException(

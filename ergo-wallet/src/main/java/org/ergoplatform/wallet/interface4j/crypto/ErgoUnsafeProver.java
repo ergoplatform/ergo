@@ -2,7 +2,7 @@ package org.ergoplatform.wallet.interface4j.crypto;
 
 import org.ergoplatform.ErgoLikeTransaction;
 import org.ergoplatform.UnsignedErgoLikeTransaction;
-import scala.collection.JavaConversions;
+import scala.collection.JavaConverters;
 import sigmastate.basics.DLogProtocol;
 import java.util.Map;
 
@@ -27,7 +27,7 @@ public class ErgoUnsafeProver {
      */
     public ErgoLikeTransaction prove(UnsignedErgoLikeTransaction unsignedTx, Map<String, DLogProtocol.DLogProverInput> sks) {
         // JavaConversions used to support Scala 2.11
-        return org.ergoplatform.wallet.interpreter.ErgoUnsafeProver.prove(unsignedTx, JavaConversions.mapAsScalaMap(sks));
+        return org.ergoplatform.wallet.interpreter.ErgoUnsafeProver.prove(unsignedTx, JavaConverters.mapAsScalaMap(sks));
     }
 
 }

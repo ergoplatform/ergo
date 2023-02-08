@@ -66,8 +66,8 @@ object Mnemonic {
     * Converts mnemonic phrase to seed it was derived from.
     */
   def toSeed(mnemonic: SecretString, passOpt: Option[SecretString] = None): Array[Byte] = {
-    val normalizedMnemonic = normalize(mnemonic.getData(), NFKD).toCharArray
-    val normalizedPass = normalize(("mnemonic".toCharArray ++ passOpt.fold("".toCharArray())(_.getData())), NFKD)
+    val normalizedMnemonic = normalize(ArrayCharSequence(mnemonic.getData()), NFKD).toCharArray
+    val normalizedPass = normalize(ArrayCharSequence("mnemonic".toCharArray ++ passOpt.fold("".toCharArray())(_.getData())), NFKD)
 
     passOpt.fold(())(_.erase())
     

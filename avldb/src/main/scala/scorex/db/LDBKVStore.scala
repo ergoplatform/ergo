@@ -16,9 +16,11 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
 
   def update(toInsert: Array[(K, V)], toRemove: Array[K]): Try[Unit] = {
     val batch = db.createWriteBatch()
+    val insertLen = toInsert.length
+    val removeLen = toRemove.length
     try {
-      cfor(0)(_ < toInsert.length, _ + 1) { i => batch.put(toInsert(i)._1, toInsert(i)._2)}
-      cfor(0)(_ < toRemove.length, _ + 1) { i => batch.delete(toRemove(i))}
+      cfor(0)(_ < insertLen, _ + 1) { i => batch.put(toInsert(i)._1, toInsert(i)._2)}
+      cfor(0)(_ < removeLen, _ + 1) { i => batch.delete(toRemove(i))}
       db.write(batch)
       Success(())
     } catch {

@@ -378,6 +378,20 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.size shouldBe 0
     pool.stats.takenTxns shouldBe (family_depth + 1) * txs.size
   }
+
+  it should "put not adding transaction twice" in {
+    val pool = ErgoMemPool.empty(settings).pool
+    val tx = invalidErgoTransactionGen.sample.get
+    val now = System.currentTimeMillis()
+
+    val utx1 = UnconfirmedTransaction(tx, None, now, now, None, None)
+    val utx2 = UnconfirmedTransaction(tx, None, now, now, None, None)
+    val utx3 = UnconfirmedTransaction(tx, None, now + 1, now + 1, None, None)
+    val updPool = pool.put(utx1, 100).remove(utx1).put(utx2, 500).put(utx3, 5000)
+    updPool.size shouldBe 1
+    updPool.get(utx3.id).get.lastCheckedTime shouldBe (now + 1)
+  }
+
 }
 
 

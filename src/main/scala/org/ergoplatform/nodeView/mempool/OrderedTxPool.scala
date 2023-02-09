@@ -66,14 +66,26 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
     */
   def put(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
-    val wtx = weighted(tx, feeFactor)
-    val newPool = OrderedTxPool(
-      orderedTransactions.updated(wtx, unconfirmedTx),
-      transactionsRegistry.updated(wtx.id, wtx),
-      invalidatedTxIds,
-      outputs ++ tx.outputs.map(_.id -> wtx),
-      inputs ++ tx.inputs.map(_.boxId -> wtx)
-    ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), 0)
+
+    val newPool = transactionsRegistry.get(tx.id) match {
+      case Some(wtx) =>
+        OrderedTxPool(
+          orderedTransactions.updated(wtx, unconfirmedTx),
+          transactionsRegistry,
+          invalidatedTxIds,
+          outputs,
+          inputs
+        )
+      case None =>
+        val wtx = weighted(tx, feeFactor)
+        OrderedTxPool(
+          orderedTransactions.updated(wtx, unconfirmedTx),
+          transactionsRegistry.updated(wtx.id, wtx),
+          invalidatedTxIds,
+          outputs ++ tx.outputs.map(_.id -> wtx),
+          inputs ++ tx.inputs.map(_.boxId -> wtx)
+        ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), 0)
+    }
     if (newPool.orderedTransactions.size > mempoolCapacity) {
       val victim = newPool.orderedTransactions.last._2
       newPool.remove(victim)
@@ -121,13 +133,6 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, UnconfirmedT
       case None =>
         OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
     }
-  }
-
-  def filter(condition: UnconfirmedTransaction => Boolean): OrderedTxPool = {
-    orderedTransactions.foldLeft(this)((pool, entry) => {
-      val tx = entry._2
-      if (condition(tx)) pool else pool.remove(tx)
-    })
   }
 
   /**

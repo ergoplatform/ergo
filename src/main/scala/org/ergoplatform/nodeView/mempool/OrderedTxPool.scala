@@ -131,7 +131,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
           inputs -- tx.inputs.map(_.boxId)
         ).updateFamily(tx, -wtx.weight, System.currentTimeMillis(), depth = 0)
       case None =>
-        if (transactionsRegistry.contains(tx.id)) {
+        if (orderedTransactions.valuesIterator.exists(utx => utx.id == tx.id)) {
           new OrderedTxPool(
             orderedTransactions,
             transactionsRegistry - tx.id,

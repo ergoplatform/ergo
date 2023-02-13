@@ -104,7 +104,7 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
         assetsMet
       )) {
         formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBoxes =>
-          selectionResultWithEip27Output(res, changeBoxes)
+          selectionResultWithEip27Output(res.toSeq, changeBoxes)
         }
       } else {
         Left(NotEnoughTokensError(

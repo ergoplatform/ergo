@@ -1252,6 +1252,10 @@ object ErgoNodeViewSynchronizer {
 
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
 
+    /**
+      * Event which is published when rollback happened (on finding a better chain)
+      * @param branchPoint - block id which is last in the chain after rollback (before applying blocks from a fork)
+      */
     case class Rollback(branchPoint: ModifierId) extends NodeViewHolderEvent
 
     case object RollbackFailed extends NodeViewHolderEvent

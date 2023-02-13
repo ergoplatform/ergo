@@ -36,12 +36,13 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
 
   // returns diff
   def updateLastSyncGetTime(peer: ConnectedPeer): Long = {
+    val now = currentTime()
     val prevSyncGetTime = statuses.get(peer).flatMap(_.lastSyncGetTime).getOrElse(0L)
 
     statuses.get(peer).foreach { status =>
-      statuses.update(peer, status.copy(lastSyncGetTime = Option(currentTime())))
+      statuses.update(peer, status.copy(lastSyncGetTime = Option(now)))
     }
-    currentTime - prevSyncGetTime
+    now - prevSyncGetTime
   }
 
   /**

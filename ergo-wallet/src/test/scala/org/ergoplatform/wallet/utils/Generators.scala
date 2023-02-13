@@ -15,7 +15,6 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.{SByte, SType}
 import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
 import scorex.util._
-import scala.collection.IndexedSeq
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.ErgoScriptPredef

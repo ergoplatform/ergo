@@ -91,9 +91,9 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
           val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
           utxo.withMempool(mp)
             .validateWithCost(tx, maxTxCost)
-            .map(cost => UnconfirmedTransaction(tx, Some(cost), now, now, bytes, source = None))
+            .map(cost => new UnconfirmedTransaction(tx, Some(cost), now, now, bytes, source = None))
         case _ =>
-          tx.statelessValidity().map(_ => UnconfirmedTransaction(tx, None, now, now, bytes, source = None))
+          tx.statelessValidity().map(_ => new UnconfirmedTransaction(tx, None, now, now, bytes, source = None))
       }
   }
 

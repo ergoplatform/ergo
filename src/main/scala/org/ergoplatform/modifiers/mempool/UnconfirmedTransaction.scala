@@ -13,12 +13,12 @@ import scorex.util.{ModifierId, ScorexLogging}
   * @param transactionBytes - transaction bytes, to avoid serializations when we send it over the wire
   * @param source - peer which delivered the transaction (None if transaction submitted via API)
   */
-case class UnconfirmedTransaction(transaction: ErgoTransaction,
-                                  lastCost: Option[Int],
-                                  createdTime: Long,
-                                  lastCheckedTime: Long,
-                                  transactionBytes: Option[Array[Byte]],
-                                  source: Option[ConnectedPeer])
+class UnconfirmedTransaction(val transaction: ErgoTransaction,
+                             val lastCost: Option[Int],
+                             val createdTime: Long,
+                             val lastCheckedTime: Long,
+                             val transactionBytes: Option[Array[Byte]],
+                             val source: Option[ConnectedPeer])
   extends ScorexLogging {
 
   def id: ModifierId = transaction.id
@@ -27,7 +27,13 @@ case class UnconfirmedTransaction(transaction: ErgoTransaction,
     * Updates cost and last checked time of unconfirmed transaction
     */
   def withCost(cost: Int): UnconfirmedTransaction = {
-    copy(lastCost = Some(cost), lastCheckedTime = System.currentTimeMillis())
+    new UnconfirmedTransaction(
+      transaction,
+      lastCost = Some(cost),
+      createdTime,
+      lastCheckedTime = System.currentTimeMillis(),
+      transactionBytes,
+      source)
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -42,12 +48,12 @@ object UnconfirmedTransaction {
 
   def apply(tx: ErgoTransaction, source: Option[ConnectedPeer]): UnconfirmedTransaction = {
     val now = System.currentTimeMillis()
-    UnconfirmedTransaction(tx, None, now, now, Some(tx.bytes), source)
+    new UnconfirmedTransaction(tx, None, now, now, Some(tx.bytes), source)
   }
 
   def apply(tx: ErgoTransaction, txBytes: Array[Byte], source: Option[ConnectedPeer]): UnconfirmedTransaction = {
     val now = System.currentTimeMillis()
-    UnconfirmedTransaction(tx, None, now, now, Some(txBytes), source)
+    new UnconfirmedTransaction(tx, None, now, now, Some(txBytes), source)
   }
 
 }

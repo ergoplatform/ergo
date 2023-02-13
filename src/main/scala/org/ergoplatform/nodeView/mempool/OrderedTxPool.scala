@@ -133,7 +133,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
       case None =>
         if (orderedTransactions.valuesIterator.exists(utx => utx.id == tx.id)) {
           new OrderedTxPool(
-            orderedTransactions,
+            orderedTransactions.filter(_._2.id != tx.id),
             transactionsRegistry - tx.id,
             invalidatedTxIds.put(tx.id),
             outputs -- tx.outputs.map(_.id),

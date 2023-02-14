@@ -15,7 +15,7 @@ import scorex.util.serialization.{Reader, Writer}
   * @param spendingTxIdOpt   - optional, id of the spending transaction
   * @param spendingHeightOpt - optional, height of the block in which the spending transaction was included in
   * @param box               - underlying ErgoBox
-  * @param globalIndex       - numeric index of the box
+  * @param globalIndex       - serial number of this output counting from genesis box
   */
 class IndexedErgoBox(val inclusionHeight: Int,
                      var spendingTxIdOpt: Option[ModifierId],

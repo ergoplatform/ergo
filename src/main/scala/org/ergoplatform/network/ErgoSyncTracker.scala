@@ -189,8 +189,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
           unknowns
         }
         val nonOutdated = eldersAndUnknown ++ forks
+        val now = currentTime()
         nonOutdated.filter { case (_, status) =>
-          (currentTime() - status.lastSyncSentTime.getOrElse(0L)).millis >= MinSyncInterval
+          (now - status.lastSyncSentTime.getOrElse(0L)).millis >= MinSyncInterval
         }.map(_._1)
       }
 

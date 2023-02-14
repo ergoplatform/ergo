@@ -30,6 +30,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 5)
 
+  /**
+    * Total number of boxes/transactions that can be requested at once to avoid too heavy requests ([[BlocksApiRoute.MaxHeaders]])
+    */
   private val MaxItems = 16384
 
   override implicit val ergoAddressEncoder: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder

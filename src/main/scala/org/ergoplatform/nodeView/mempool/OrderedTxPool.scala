@@ -119,6 +119,9 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
 
   def remove(utx: UnconfirmedTransaction): OrderedTxPool = remove(utx.transaction)
 
+  /**
+    * Remove transaction from the pool and add it to invalidated transaction ids cache
+    */
   def invalidate(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
     transactionsRegistry.get(tx.id) match {

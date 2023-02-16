@@ -11,7 +11,6 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -135,7 +134,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       }
       //Orphaned block or full chain is not initialized yet
       logStatus(Seq(), Seq(), params.fullBlock, None)
-      historyStorage.insert(Seq.empty, Seq(params.newModRow)).map { _ =>
+      historyStorage.insert(Array.empty[(ByteArrayWrapper, Array[Byte])], Array(params.newModRow)).map { _ =>
         ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
       }
   }
@@ -230,17 +229,17 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = {
-    val toRemove: Seq[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
+    val toRemove: Array[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
       .flatMap(id => typedModifierById[Header](id))
-      .flatMap(_.sectionIds.map(_._2))
-    historyStorage.remove(mutable.WrappedArray.empty, toRemove)
+      .flatMap(_.sectionIds.map(_._2)).toArray
+    historyStorage.remove(Array.empty, toRemove)
   }
 
   private def updateStorage(newModRow: BlockSection,
                             bestFullHeaderId: ModifierId,
                             additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])]): Try[Unit] = {
-    val indicesToInsert = Seq(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
-    historyStorage.insert(indicesToInsert, Seq(newModRow)).flatMap { _ =>
+    val indicesToInsert = Array(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
+    historyStorage.insert(indicesToInsert, Array(newModRow)).flatMap { _ =>
       if (headersHeight >= fullBlockHeight)
         Success(())
       else

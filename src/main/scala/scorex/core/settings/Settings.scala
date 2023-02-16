@@ -6,7 +6,6 @@ import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import scorex.core.network.message.Message
-import scorex.core.utils.NetworkTimeProviderSettings
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
@@ -57,8 +56,7 @@ case class ScorexSettings(dataDir: File,
                           logDir: File,
                           logging: LoggingSettings,
                           network: NetworkSettings,
-                          restApi: RESTApiSettings,
-                          ntp: NetworkTimeProviderSettings)
+                          restApi: RESTApiSettings)
 
 
 object ScorexSettings extends ScorexLogging with SettingsReaders {

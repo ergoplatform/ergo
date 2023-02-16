@@ -495,7 +495,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
         val genesis = validFullBlock(parentOpt = None, us, bh)
         val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
-        wusAfterGenesis.rootHash shouldEqual genesis.header.stateRoot
+        wusAfterGenesis.rootDigest shouldEqual genesis.header.stateRoot
 
         val (finalState: WrappedUtxoState, chain: Seq[ErgoFullBlock]) = (0 until depth)
           .foldLeft((wusAfterGenesis, Seq(genesis))) { (sb, _) =>
@@ -503,17 +503,17 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
             val block = validFullBlock(parentOpt = Some(sb._2.last), state)
             (state.applyModifier(block)(_ => ()).get, sb._2 ++ Seq(block))
           }
-        val finalRoot = finalState.rootHash
+        val finalRoot = finalState.rootDigest
         finalRoot shouldEqual chain.last.header.stateRoot
 
         val rollbackedState = finalState.rollbackTo(idToVersion(genesis.id)).get
-        rollbackedState.rootHash shouldEqual genesis.header.stateRoot
+        rollbackedState.rootDigest shouldEqual genesis.header.stateRoot
 
         val finalState2: WrappedUtxoState = chain.tail.foldLeft(rollbackedState) { (state, block) =>
           state.applyModifier(block)(_ => ()).get
         }
 
-        finalState2.rootHash shouldEqual finalRoot
+        finalState2.rootDigest shouldEqual finalRoot
       }
     }
   }

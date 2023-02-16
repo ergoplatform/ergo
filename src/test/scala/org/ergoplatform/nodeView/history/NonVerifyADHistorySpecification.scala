@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.history.HeaderChain
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
@@ -21,15 +20,6 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
-
-  ignore("Should apply UTXOSnapshotChunks") {
-    forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
-      popowHistory.applicable(snapshot) shouldBe true
-      val processInfo = popowHistory.append(snapshot).get._2
-      processInfo.toApply shouldEqual Some(snapshot)
-      popowHistory.applicable(snapshot) shouldBe false
-    }
-  }
 
   property("Should calculate difficulty correctly") {
     val epochLength = 3

@@ -8,9 +8,22 @@ import scorex.crypto.hash.Digest32
 import scorex.db.LDBVersionedStore
 import scorex.util.ScorexLogging
 
+/**
+  * State-related data and functions related to any state implementation ("utxo" or "digest") which are
+  * not modifying the state (so only reading it)
+  */
 trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
 
-  def rootHash: ADDigest
+  /**
+   * Root hash and height of AVL+ tree authenticating UTXO set
+   */
+  def rootDigest: ADDigest
+
+  /**
+    * Current version of the state
+    * Must be ID of last block applied
+    */
+  def version: VersionTag
 
   val store: LDBVersionedStore
   val constants: StateConstants
@@ -18,6 +31,13 @@ trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
   private lazy val chainSettings = constants.settings.chainSettings
 
   protected lazy val votingSettings: VotingSettings = chainSettings.voting
+
+  /**
+    * If the state is in its genesis version (before genesis block)
+    */
+  def isGenesis: Boolean = {
+    rootDigest.sameElements(constants.settings.chainSettings.genesisStateDigest)
+  }
 
   def stateContext: ErgoStateContext = ErgoStateReader.storageStateContext(store, constants)
 
@@ -27,14 +47,6 @@ trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
   def parameters: Parameters = stateContext.currentParameters
 
   def genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(chainSettings)
-
-  //must be ID of last applied modifier
-  def version: VersionTag
-
-  def closeStorage(): Unit = {
-    log.warn("Closing state's store.")
-    store.close()
-  }
 
 }
 

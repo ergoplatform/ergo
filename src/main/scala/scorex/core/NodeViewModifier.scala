@@ -1,23 +1,26 @@
 package scorex.core
 
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.BytesSerializable
 import scorex.core.utils.ScorexEncoding
 
-
 sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {self =>
 
-  val modifierTypeId: ModifierTypeId
+  val modifierTypeId: NetworkObjectTypeId.Value
 
   //todo: check statically or dynamically output size
   def id: scorex.util.ModifierId
-
-  def encodedId: String = encoder.encodeId(id)
 
   override def equals(obj: scala.Any): Boolean = obj match {
     case that: NodeViewModifier => (that.id == id) && (that.modifierTypeId == modifierTypeId)
     case _ => false
   }
+
+  /**
+    * @return readable representation of `id`, as `id` is a hex-encoded string now, just identity functions is used
+    */
+  def encodedId: String = id
 
 }
 

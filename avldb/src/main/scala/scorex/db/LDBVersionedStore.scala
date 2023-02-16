@@ -228,9 +228,12 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     Undo(versionID, key, value)
   }
 
+  /**
+    * Write versioned batch update to the database, removing keys from the database and adding new key -> value pairs
+    */
   def update(versionID: VersionID,
-             toRemove: Iterable[Array[Byte]],
-             toUpdate: Iterable[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
+             toRemove: TraversableOnce[Array[Byte]],
+             toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
     lock.writeLock().lock()
     val lastLsn = lsn // remember current LSN value
     val batch = db.createWriteBatch()

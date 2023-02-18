@@ -12,13 +12,11 @@ import scala.collection.immutable.TreeMap
   * An immutable pool of transactions of limited size with priority management and blacklisting support.
   *
   * @param orderedTransactions  - collection containing transactions ordered by `tx.weight`
-  * @param transactionsRegistry - mapping `tx.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting transaction by its `id`
   * @param invalidatedTxIds     - invalidated transaction ids in bloom filters
   * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its output box
   * @param inputs               - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its input box id
   */
 class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTransaction],
-                    val transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
                     val invalidatedTxIds: ApproximateCacheLike[String],
                     val outputs: TreeMap[BoxId, WeightedTxId],
                     val inputs: TreeMap[BoxId, WeightedTxId])
@@ -43,14 +41,11 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
 
   def size: Int = orderedTransactions.size
 
-  def get(id: ModifierId): Option[UnconfirmedTransaction] = {
-    transactionsRegistry.get(id).flatMap { wtx =>
-      orderedTransactions.get(wtx) match {
-        case s@Some(_) => s
-        case None => log.warn(s"Found $id in registry but not ordered transactions"); None
-      }
-    }
-  }
+  def getWtx(id: ModifierId): Option[WeightedTxId] =
+    orderedTransactions.keySet.find(_.id == id)
+
+  def get(id: ModifierId): Option[UnconfirmedTransaction] =
+    orderedTransactions.get(WeightedTxId(id, 0, 0, 0))
 
 
   /**
@@ -67,25 +62,23 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
   def put(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
 
-    val newPool = transactionsRegistry.get(tx.id) match {
-      case Some(wtx) =>
-        new OrderedTxPool(
-          orderedTransactions.updated(wtx, unconfirmedTx),
-          transactionsRegistry,
-          invalidatedTxIds,
-          outputs,
-          inputs
-        )
-      case None =>
-        val wtx = weighted(tx, feeFactor)
-        new OrderedTxPool(
-          orderedTransactions.updated(wtx, unconfirmedTx),
-          transactionsRegistry.updated(wtx.id, wtx),
-          invalidatedTxIds,
-          outputs ++ tx.outputs.map(_.id -> wtx),
-          inputs ++ tx.inputs.map(_.boxId -> wtx)
-        ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), 0)
+    val newPool = if(contains(tx.id)) {
+      new OrderedTxPool(
+        orderedTransactions.updated(getWtx(tx.id).get, unconfirmedTx),
+        invalidatedTxIds,
+        outputs,
+        inputs
+      )
+    }else {
+      val wtx = weighted(tx, feeFactor)
+      new OrderedTxPool(
+        orderedTransactions.updated(wtx, unconfirmedTx),
+        invalidatedTxIds,
+        outputs ++ tx.outputs.map(_.id -> wtx),
+        inputs ++ tx.inputs.map(_.boxId -> wtx)
+      ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), 0)
     }
+
     if (newPool.orderedTransactions.size > mempoolCapacity) {
       val victim = newPool.orderedTransactions.last._2
       newPool.remove(victim)
@@ -104,11 +97,10 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     * @param tx - Transaction to remove
     */
   def remove(tx: ErgoTransaction): OrderedTxPool = {
-    transactionsRegistry.get(tx.id) match {
+    getWtx(tx.id) match {
       case Some(wtx) =>
         new OrderedTxPool(
           orderedTransactions - wtx,
-          transactionsRegistry - tx.id,
           invalidatedTxIds,
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
@@ -124,27 +116,16 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     */
   def invalidate(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
-    transactionsRegistry.get(tx.id) match {
+    getWtx(tx.id) match {
       case Some(wtx) =>
         new OrderedTxPool(
           orderedTransactions - wtx,
-          transactionsRegistry - tx.id,
           invalidatedTxIds.put(tx.id),
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
         ).updateFamily(tx, -wtx.weight, System.currentTimeMillis(), depth = 0)
       case None =>
-        if (orderedTransactions.valuesIterator.exists(utx => utx.id == tx.id)) {
-          new OrderedTxPool(
-            orderedTransactions.filter(_._2.id != tx.id),
-            transactionsRegistry - tx.id,
-            invalidatedTxIds.put(tx.id),
-            outputs -- tx.outputs.map(_.id),
-            inputs -- tx.inputs.map(_.boxId)
-          )
-        } else {
-          new OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
-        }
+        new OrderedTxPool(orderedTransactions, invalidatedTxIds.put(tx.id), outputs, inputs)
     }
   }
 
@@ -164,9 +145,8 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     * @param id - transaction id
     * @return - true, if transaction is in the pool or invalidated earlier, false otherwise
     */
-  def contains(id: ModifierId): Boolean = {
-    transactionsRegistry.contains(id)
-  }
+  def contains(id: ModifierId): Boolean =
+    orderedTransactions.contains(WeightedTxId(id, 0, 0, 0))
 
   def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)
 
@@ -194,14 +174,13 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     } else {
 
       val uniqueTxIds: Set[WeightedTxId] = tx.inputs.flatMap(input => this.outputs.get(input.boxId)).toSet
-      val parentTxs = uniqueTxIds.flatMap(wtx => this.orderedTransactions.get(wtx).map(ut => wtx -> ut))
+      val parentTxs = uniqueTxIds.flatMap(wtx => orderedTransactions.get(wtx).map(ut => wtx -> ut))
 
       parentTxs.foldLeft(this) { case (pool, (wtx, ut)) =>
         val parent = ut.transaction
         val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerFactor, wtx.created)
         val newPool = new OrderedTxPool(
           pool.orderedTransactions - wtx + (newWtx -> ut),
-          pool.transactionsRegistry.updated(parent.id, newWtx),
           invalidatedTxIds,
           parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
           parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
@@ -241,7 +220,6 @@ object OrderedTxPool {
     val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
     new OrderedTxPool(
       TreeMap.empty[WeightedTxId, UnconfirmedTransaction],
-      TreeMap.empty[ModifierId, WeightedTxId],
       ExpiringApproximateCache.empty(frontCacheSize, frontCacheExpiration),
       TreeMap.empty[BoxId, WeightedTxId],
       TreeMap.empty[BoxId, WeightedTxId])(settings)

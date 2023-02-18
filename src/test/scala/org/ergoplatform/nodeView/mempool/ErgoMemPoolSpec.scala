@@ -392,6 +392,41 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     updPool.get(utx3.id).get.lastCheckedTime shouldBe (now + 1)
   }
 
+  it should "accept double-spending transaction if it is paying more than one already sitting in the pool" in {
+    val (us, bh) = createUtxoState(extendedParameters)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, stateConstants, extendedParameters).applyModifier(genesis)(_ => ()).get
+
+    val input = wus.takeBoxes(100).collectFirst {
+      case box if box.ergoTree == TrueLeaf.toSigmaProp.treeWithSegregation => box
+    }.get
+
+    val txCount = 5
+    val txs: Array[UnconfirmedTransaction] = Array.ofDim(txCount)
+
+    for(i <- 0 until  txCount) {
+      val out = new ErgoBoxCandidate(input.value, settings.chainSettings.monetary.feeProposition, creationHeight = 0)
+      val txLike = ErgoTransaction(
+        IndexedSeq(new Input(input.id, new ProverResult(Array.emptyByteArray,
+          ContextExtension(Map((1: Byte) -> ByteArrayConstant(Array.fill(1 + txCount - i)(0: Byte))))))
+        ), IndexedSeq(out)
+      )
+      txs(i) = UnconfirmedTransaction(ErgoTransaction(txLike.inputs, txLike.outputCandidates), None)
+    }
+
+    val pool = ErgoMemPool.empty(settings)
+
+    val endPool = txs.foldLeft(pool) { case (p, tx) =>
+      val (newP, txoutcome) = p.process(tx, us)
+      txoutcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+      newP
+    }
+
+    endPool.pool.orderedTransactions.size shouldBe 1
+    endPool.pool.inputs.contains(input.id) shouldBe true
+    endPool.pool.outputs.size shouldBe 1
+    endPool.pool.outputs.contains(txs.last.transaction.outputs(0).id) shouldBe true
+  }
 }
 
 

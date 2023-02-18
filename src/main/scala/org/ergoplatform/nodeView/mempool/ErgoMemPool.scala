@@ -102,7 +102,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   }
 
   private def updateStatsOnRemoval(tx: ErgoTransaction): MemPoolStatistics = {
-    val wtx = pool.transactionsRegistry.get(tx.id)
+    val wtx = pool.getWtx(tx.id)
     wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
        .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
   }
@@ -133,14 +133,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     pool.get(unconfirmedTransactionId) match {
       case Some(utx) => invalidate(utx)
       case None =>
-        log.warn(s"pool.get failed for $unconfirmedTransactionId")
-        pool.orderedTransactions.valuesIterator.find(_.id == unconfirmedTransactionId) match {
-          case Some(utx) =>
-            invalidate(utx)
-          case None =>
-            log.warn(s"Can't invalidate transaction $unconfirmedTransactionId as it is not in the pool")
-            this
-        }
+        log.warn(s"Can't invalidate transaction $unconfirmedTransactionId as it is not in the pool")
+        this
     }
   }
 
@@ -181,7 +175,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum / doubleSpendingWtxs.size
       if (ownWtx.weight > doubleSpendingTotalWeight) {
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
-        val p = pool.put(unconfirmedTransaction, feeF).remove(doubleSpendingTxs)
+        val p = pool.remove(doubleSpendingTxs).put(unconfirmedTransaction, feeF)
         val updPool = new ErgoMemPool(p, stats, sortingOption)
         updPool -> new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
       } else {

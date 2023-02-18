@@ -101,15 +101,15 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
           val stateToCheck = utxoState.withUnconfirmedTransactions(toBroadcast)
           toBroadcast.foreach { unconfirmedTx =>
             if (unconfirmedTx.transaction.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
-              log.info(s"Rebroadcasting $unconfirmedTx")
+              log.info(s"Rebroadcasting ${unconfirmedTx.id}")
               broadcastTx(unconfirmedTx)
             } else {
-              log.info(s"Not rebroadcasting $unconfirmedTx as not all the inputs are in place")
+              log.info(s"Not rebroadcasting ${unconfirmedTx.id} as not all the inputs are in place")
             }
           }
         case _ =>
           toBroadcast.foreach { unconfirmedTx =>
-            log.warn(s"Rebroadcasting $unconfirmedTx while state is not ready or not UTXO set")
+            log.warn(s"Rebroadcasting ${unconfirmedTx.id} while state is not ready or not UTXO set")
             broadcastTx(unconfirmedTx)
           }
       }

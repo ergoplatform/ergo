@@ -319,9 +319,7 @@ trait ExtraIndexerBase extends ScorexLogging {
         iEb.spendingHeightOpt = None
         iEb.spendingTxIdOpt = None
         val address = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(iEb.box.ergoTree))).get.addBox(iEb, record = false)
-        val addr: String = ae.fromProposition(iEb.box.ergoTree).get.toString.take(5)
         address.findAndModBox(iEb.globalIndex, history)
-        System.out.println(s"$addr spent box: ${iEb.globalIndex} -> ${address.boxes.mkString("(",",",")")}")
         historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.segments)
         address.segments.clear()
       })

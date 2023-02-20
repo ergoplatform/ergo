@@ -86,9 +86,13 @@ object NumericBoxIndex {
   /**
     * Get a box from database by its index number.
     * @param history - database handle
-    * @param n       - index number of a box
+    * @param n       - index number of a box, can be negative if box is spent
     * @return box with given index, if found
     */
   def getBoxByNumber(history: ErgoHistoryReader, n: Long): Option[IndexedErgoBox] =
-    history.typedExtraIndexById[IndexedErgoBox](history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n))).get.m)
+    history.typedExtraIndexById[IndexedErgoBox](
+      history.typedExtraIndexById[NumericBoxIndex](
+        bytesToId(NumericBoxIndex.indexToBytes(math.abs(n)))
+      ).get.m
+    )
 }

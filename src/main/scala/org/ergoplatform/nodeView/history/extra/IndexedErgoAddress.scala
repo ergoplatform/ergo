@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
+import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getSegmentsForRange, getTxs, segmentTreshold, slice}
@@ -18,7 +18,7 @@ import spire.syntax.all.cfor
   * An index of an address (ErgoTree)
   * @param treeHash    - hash of the corresponding ErgoTree
   * @param txs         - list of numberic transaction indexes associated with this address
-  * @param boxes       - list of numberic box indexes associated with this address
+  * @param boxes       - list of numberic box indexes associated with this address, negative values indicate the box is spent
   * @param balanceInfo - balance information (Optional because fragments do not contain it)
   */
 case class IndexedErgoAddress(treeHash: ModifierId,
@@ -29,6 +29,8 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   override def id: ModifierId = treeHash
   override def serializedId: Array[Byte] = fastIdToBytes(treeHash)
 
+
+  private[extra] val segments: ArrayBuffer[IndexedErgoAddress] = ArrayBuffer.empty[IndexedErgoAddress]
   private[extra] var boxSegmentCount: Int = 0
   private[extra] var txSegmentCount: Int = 0
 
@@ -41,6 +43,68 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @return total number of boxes associated with this address
     */
   def boxCount(): Long = segmentTreshold * boxSegmentCount + boxes.length
+
+  /**
+    * Copied from java.util.Arrays.binarySearch
+    * @param a
+    * @param key
+    * @return
+    */
+  private def binarySearch(a: ListBuffer[Long], key: Long): Int = {
+    var low: Int = 0
+    var high: Int = a.length - 1
+
+    while (low <= high) {
+      val mid = (low + high) >>> 1
+      val midVal = math.abs(a(mid)) // ignore negativity
+
+      if (midVal < key)
+        low = mid + 1
+      else if (midVal > key)
+        high = mid - 1
+      else
+        return mid // key found
+    }
+    -(low + 1) // key not found.
+  }
+
+  private def getSegmentFromBufferOrHistroy(history: ErgoHistoryReader, id: ModifierId): Int = {
+    cfor(segments.length - 1)(_ >= 0, _ - 1) { i =>
+      if(segments(i).id.equals(id)) return i
+    }
+    segments += history.typedExtraIndexById[IndexedErgoAddress](id).get
+    segments.length - 1
+  }
+
+  /**
+    * Locate which segment the given box number is in and make it negative, signalling it is spent.
+    * @param boxNum - box number to locate
+    * @return updated segment, if any
+    */
+  private def findAndSpendBox(boxNum: Long, history: ErgoHistoryReader): Unit = {
+    val inCurrent: Int = binarySearch(boxes, boxNum)
+    if(inCurrent >= 0) { // box found in current box array
+      boxes(inCurrent) = -boxes(inCurrent)
+    }else { // box is in another segment, use binary search to locate
+      var n = 0
+      var low = 0
+      var high = boxSegmentCount - 1
+      while(low <= high) {
+        val mid = (low + high) >>> 1
+        n = getSegmentFromBufferOrHistroy(history, boxSegmentId(treeHash, mid))
+        if(math.abs(segments(n).boxes(0)) < boxNum &&
+           math.abs(segments(n).boxes(segmentTreshold - 1)) < boxNum)
+          low = mid + 1
+        else if(math.abs(segments(n).boxes(0)) > boxNum &&
+                math.abs(segments(n).boxes(segmentTreshold - 1)) > boxNum)
+          high = mid - 1
+        else
+          low = high + 1 // break
+      }
+      val i: Int = binarySearch(segments(n).boxes, boxNum)
+      segments(n).boxes(i) = -segments(n).boxes(i)
+    }
+  }
 
   /**
     * Get a range of the transactions associated with this address
@@ -89,12 +153,12 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     */
   def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoBox] = {
     val data: ListBuffer[IndexedErgoBox] = ListBuffer.empty[IndexedErgoBox]
-    data ++= boxes.map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filter(!_.trackedBox.isSpent)
+    data ++= boxes.filter(_ >= 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
     var segment: Int = boxSegmentCount
     while(data.length < limit && segment > 0) {
       segment -= 1
       history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
-        .map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filter(!_.trackedBox.isSpent) ++=: data
+        .filter(_ >= 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
     }
     slice(data, offset, limit).toArray
   }
@@ -123,11 +187,18 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
   /**
     * Update BalanceInfo by spending a box associated with this address
-    * @param box - box to spend
+    * @param iEb - box to spend
+    * @param historyOpt - history handle to update address fragment if spent box is old
     * @return this address
     */
-  private[extra] def spendBox(box: ErgoBox)(implicit ae: ErgoAddressEncoder): IndexedErgoAddress = {
-    balanceInfo.get.subtract(box)
+  private[extra] def spendBox(iEb: IndexedErgoBox, historyOpt: Option[ErgoHistoryReader] = None)(implicit ae: ErgoAddressEncoder): IndexedErgoAddress = {
+    balanceInfo.get.subtract(iEb.box)
+
+    if(historyOpt.isEmpty)
+      return this
+
+    findAndSpendBox(iEb.globalIndex, historyOpt.get)
+
     this
   }
 
@@ -139,7 +210,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     */
   private[extra] def rollback(txTarget: Long, boxTarget: Long)(_history: ErgoHistory): Unit = {
 
-    if(txs.last <= txTarget && boxes.last <= boxTarget) return
+    if(txs.last <= txTarget && math.abs(boxes.last) <= boxTarget) return
 
     def history: ErgoHistoryReader = _history.getReader
 
@@ -161,7 +232,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
     // filter box numbers
     do {
-      val tmp = boxes.takeWhile(_ <= boxTarget)
+      val tmp = boxes.takeWhile(math.abs(_) <= boxTarget)
       boxes.clear()
       boxes ++= tmp
       if(boxes.isEmpty && boxSegmentCount > 0) { // entire current box set removed, retrieving more from database if possible
@@ -170,7 +241,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
         toRemove += id
         boxSegmentCount -= 1
       }
-    }while(boxCount() > 0 && boxes.last > boxTarget)
+    }while(boxCount() > 0 && math.abs(boxes.last) > boxTarget)
 
     if(txCount() == 0 && boxCount() == 0)
       toRemove += this.id // address is empty after rollback, delete
@@ -187,7 +258,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * These special addresses have their ids calculated by "txSegmentId" and "boxSegmentId" respectively.
     * @return array of addresses
     */
-  private[extra] def splitToSegments(): Array[IndexedErgoAddress] = {
+  private[extra] def splitToSegments: Array[IndexedErgoAddress] = {
     val data: Array[IndexedErgoAddress] = new Array[IndexedErgoAddress]((txs.length / segmentTreshold) + (boxes.length / segmentTreshold))
     var i: Int = 0
     while(txs.length >= segmentTreshold) {

@@ -370,7 +370,7 @@ class ExtraIndexer(cacheSettings: CacheSettings,
                    ae: ErgoAddressEncoder)
   extends Actor with ExtraIndexerBase {
 
-  override val saveLimit: Int = cacheSettings.history.extraCacheSize * 10
+  override val saveLimit: Int = cacheSettings.history.extraCacheSize * 20
 
   override implicit val addressEncoder: ErgoAddressEncoder = ae
 

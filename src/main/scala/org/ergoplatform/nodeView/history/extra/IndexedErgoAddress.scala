@@ -29,8 +29,9 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   override def id: ModifierId = treeHash
   override def serializedId: Array[Byte] = fastIdToBytes(treeHash)
 
-
+  // Internal segment buffer used when spending boxes
   private[extra] val segments: ArrayBuffer[IndexedErgoAddress] = ArrayBuffer.empty[IndexedErgoAddress]
+
   private[extra] var boxSegmentCount: Int = 0
   private[extra] var txSegmentCount: Int = 0
 
@@ -45,10 +46,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   def boxCount(): Long = segmentTreshold * boxSegmentCount + boxes.length
 
   /**
-    * Copied from java.util.Arrays.binarySearch
-    * @param a
-    * @param key
-    * @return
+    * Copied from [[java.util.Arrays.binarySearch]]
     */
   private def binarySearch(a: ListBuffer[Long], key: Long): Int = {
     var low: Int = 0
@@ -65,9 +63,15 @@ case class IndexedErgoAddress(treeHash: ModifierId,
       else
         return mid // key found
     }
-    -(low + 1) // key not found.
+    -1 // key not found.
   }
 
+  /**
+    * Retrieve segment with specified id from buffer or database
+    * @param history - database handle to search, if segment is not found in buffer
+    * @param id - address segment to search for
+    * @return
+    */
   private def getSegmentFromBufferOrHistroy(history: ErgoHistoryReader, id: ModifierId): Int = {
     cfor(segments.length - 1)(_ >= 0, _ - 1) { i =>
       if(segments(i).id.equals(id)) return i
@@ -79,13 +83,13 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   /**
     * Locate which segment the given box number is in and make it negative, signalling it is spent.
     * @param boxNum - box number to locate
-    * @return updated segment, if any
+    * @param history - database to retrieve swegments from
     */
   private def findAndSpendBox(boxNum: Long, history: ErgoHistoryReader): Unit = {
     val inCurrent: Int = binarySearch(boxes, boxNum)
-    if(inCurrent >= 0) { // box found in current box array
+    if(inCurrent >= 0) // box found in current box array
       boxes(inCurrent) = -boxes(inCurrent)
-    }else { // box is in another segment, use binary search to locate
+    else { // box is in another segment, use binary search to locate
       var n = 0
       var low = 0
       var high = boxSegmentCount - 1
@@ -102,7 +106,10 @@ case class IndexedErgoAddress(treeHash: ModifierId,
           low = high + 1 // break
       }
       val i: Int = binarySearch(segments(n).boxes, boxNum)
-      segments(n).boxes(i) = -segments(n).boxes(i)
+      if(i >= 0)
+        segments(n).boxes(i) = -segments(n).boxes(i)
+      else
+        log.warn(s"Box $boxNum not found in any segment of parent address when trying to spend")
     }
   }
 

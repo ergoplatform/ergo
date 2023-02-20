@@ -81,31 +81,32 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   }
 
   /**
-    * Locate which segment the given box number is in and make it negative, signalling it is spent.
+    * Locate which segment the given box number is in and change its sign, meaning it spends unspent boxes and vica versa.
     * @param boxNum - box number to locate
     * @param history - database to retrieve swegments from
     */
-  private def findAndSpendBox(boxNum: Long, history: ErgoHistoryReader): Unit = {
-    val inCurrent: Int = binarySearch(boxes, boxNum)
-    if(inCurrent >= 0) // box found in current box array
+  private[extra] def findAndModBox(boxNum: Long, history: ErgoHistoryReader): Unit = {
+    val boxNumAbs = math.abs(boxNum)
+    val inCurrent: Int = binarySearch(boxes, boxNumAbs)
+    if(inCurrent >= 0) { // box found in current box array
       boxes(inCurrent) = -boxes(inCurrent)
-    else { // box is in another segment, use binary search to locate
+    } else { // box is in another segment, use binary search to locate
       var n = 0
       var low = 0
       var high = boxSegmentCount - 1
       while(low <= high) {
         val mid = (low + high) >>> 1
         n = getSegmentFromBufferOrHistroy(history, boxSegmentId(treeHash, mid))
-        if(math.abs(segments(n).boxes(0)) < boxNum &&
-           math.abs(segments(n).boxes(segmentTreshold - 1)) < boxNum)
+        if(math.abs(segments(n).boxes(0)) < boxNumAbs &&
+           math.abs(segments(n).boxes(segmentTreshold - 1)) < boxNumAbs)
           low = mid + 1
-        else if(math.abs(segments(n).boxes(0)) > boxNum &&
-                math.abs(segments(n).boxes(segmentTreshold - 1)) > boxNum)
+        else if(math.abs(segments(n).boxes(0)) > boxNumAbs &&
+                math.abs(segments(n).boxes(segmentTreshold - 1)) > boxNumAbs)
           high = mid - 1
         else
           low = high + 1 // break
       }
-      val i: Int = binarySearch(segments(n).boxes, boxNum)
+      val i: Int = binarySearch(segments(n).boxes, boxNumAbs)
       if(i >= 0)
         segments(n).boxes(i) = -segments(n).boxes(i)
       else
@@ -160,12 +161,12 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     */
   def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoBox] = {
     val data: ListBuffer[IndexedErgoBox] = ListBuffer.empty[IndexedErgoBox]
-    data ++= boxes.filter(_ >= 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+    data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
     var segment: Int = boxSegmentCount
     while(data.length < limit && segment > 0) {
       segment -= 1
       history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
-        .filter(_ >= 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
+        .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
     }
     slice(data, offset, limit).toArray
   }
@@ -204,7 +205,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     if(historyOpt.isEmpty)
       return this
 
-    findAndSpendBox(iEb.globalIndex, historyOpt.get)
+    findAndModBox(iEb.globalIndex, historyOpt.get)
 
     this
   }

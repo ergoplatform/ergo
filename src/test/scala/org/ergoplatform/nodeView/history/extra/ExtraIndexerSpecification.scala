@@ -1,7 +1,9 @@
 package org.ergoplatform.nodeView.history.extra
 
+import io.circe.syntax.EncoderOps
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, P2PKAddress, UnsignedInput}
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -25,7 +27,8 @@ import scala.collection.mutable
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.Try
 
-class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase with HistoryTestHelpers {
+class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase with HistoryTestHelpers with ApiCodecs {
+  override implicit val ergoAddressEncoder: ErgoAddressEncoder = initSettings.chainSettings.addressEncoder
 
   override protected val saveLimit: Int = 1 // save every block
   override protected implicit val addressEncoder: ErgoAddressEncoder = initSettings.chainSettings.addressEncoder
@@ -36,7 +39,7 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
     1000000, 100, adProofsSuffixLength = 112 * 1024, extraIndex = false)
 
-  val HEIGHT: Int = 30
+  val HEIGHT: Int = 50
   val BRANCHPOINT: Int = HEIGHT / 2
 
   property("extra indexer rollback") {
@@ -62,24 +65,29 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     // manually count balances
     val addresses: mutable.HashMap[ErgoAddress,Long] = mutable.HashMap[ErgoAddress,Long]()
     cfor(1)(_ <= BRANCHPOINT, _ + 1) { i =>
-      _history.getReader.bestBlockTransactionsAt(i).get.txs.foreach(tx => { txsIndexed += 1
+      _history.getReader.bestBlockTransactionsAt(i).get.txs.foreach(tx => {
+        txsIndexed += 1
         if(i != 1) {
           tx.inputs.foreach(input => {
             val iEb: IndexedErgoBox = _history.getReader.typedExtraIndexById[IndexedErgoBox](bytesToId(input.boxId)).get
-            val address: ErgoAddress = ExtraIndexer.getAddress(iEb.box.ergoTree)
+            val address: ErgoAddress = ExtraIndexer.getAddress(iEb.box.ergoTree)(addressEncoder)
             addresses.put(address, addresses(address) - iEb.box.value)
           })
         }
-        tx.outputs.foreach(output => { boxesIndexed += 1
+        tx.outputs.foreach(output => {
+          boxesIndexed += 1
           val address: ErgoAddress =  addressEncoder.fromProposition(output.ergoTree).get
           addresses.put(address, addresses.getOrElse[Long](address, 0) + output.value)
         })
       })
     }
 
-    removeAfter(BRANCHPOINT)
+    removeAfter(BRANCHPOINT, addressEncoder)
 
     var mismatches: Int = 0
+
+    val json = NumericBoxIndex.getBoxByNumber(history, 50).get.asJson
+    System.out.println(json)
 
     addresses.foreach(e => {
       _history.getReader.typedExtraIndexById[IndexedErgoAddress](bytesToId(IndexedErgoAddressSerializer.hashErgoTree(e._1.script))) match {
@@ -88,6 +96,17 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
             mismatches += 1
             System.err.println(s"Address ${e._1.toString} has ${iEa.balanceInfo.get.nanoErgs / 1000000000}ERG, ${e._2  / 1000000000}ERG expected")
           }
+          System.out.println(s"Address ${e._1.toString.take(5)} boxes: ${iEa.boxes.mkString("(",",",")")}")
+          iEa.boxes.map(boxNum =>
+            NumericBoxIndex.getBoxByNumber(history, boxNum) match {
+              case Some(iEb) =>
+                if(iEb.trackedBox.isSpent)
+                  boxNum.toInt should be <= 0
+                else
+                  boxNum.toInt should be >= 0
+              case None => System.err.println(s"Box $boxNum not found in database")
+            }
+          )
         case None =>
           if(e._2 != 0) {
             mismatches += 1

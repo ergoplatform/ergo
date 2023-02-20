@@ -181,10 +181,8 @@ trait ExtraIndexerBase extends ScorexLogging {
                                      (GlobalTxIndexKey, globalTxIndexBuffer .putLong(globalTxIndex).array),
                                      (GlobalBoxIndexKey,globalBoxIndexBuffer.putLong(globalBoxIndex).array)), all)
 
-    val end: Long = System.currentTimeMillis
-
     if (writeLog)
-      log.info(s"Processed ${trees.length} ErgoTrees with ${boxes.length} boxes and inserted them to database in ${end - start}ms")
+      log.info(s"Processed ${trees.length} ErgoTrees with ${boxes.length} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
 
     // clear buffers for next batch
     general.clear()
@@ -304,7 +302,7 @@ trait ExtraIndexerBase extends ScorexLogging {
     *
     * @param height - starting height
     */
-  protected def removeAfter(height: Int): Unit = {
+  protected def removeAfter(height: Int, ae: ErgoAddressEncoder): Unit = {
 
     saveProgress(false)
     log.info(s"Rolling back indexes from $indexedHeight to $height")
@@ -318,10 +316,14 @@ trait ExtraIndexerBase extends ScorexLogging {
     while(globalTxIndex > txTarget) {
       val tx: IndexedErgoTransaction = NumericTxIndex.getTxByNumber(history, globalTxIndex).get
       tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach(iEb => { // undo all spendings
-          iEb.spendingHeightOpt = None
-          iEb.spendingTxIdOpt = None
-          val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(iEb.box.ergoTree))).get.addBox(iEb, record = false)
-          historyStorage.insertExtra(Array.empty, Array(iEb, address))
+        iEb.spendingHeightOpt = None
+        iEb.spendingTxIdOpt = None
+        val address = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(iEb.box.ergoTree))).get.addBox(iEb, record = false)
+        val addr: String = ae.fromProposition(iEb.box.ergoTree).get.toString.take(5)
+        address.findAndModBox(iEb.globalIndex, history)
+        System.out.println(s"$addr spent box: ${iEb.globalIndex} -> ${address.boxes.mkString("(",",",")")}")
+        historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.segments)
+        address.segments.clear()
       })
       txs += tx.id // tx by id
       txs += bytesToId(NumericTxIndex.indexToBytes(globalTxIndex)) // tx id by number
@@ -392,7 +394,7 @@ class ExtraIndexer(cacheSettings: CacheSettings,
       val branchHeight: Int = history.heightOf(branchPoint).get
       rollback = branchHeight < indexedHeight
       if(rollback) {
-        removeAfter(branchHeight)
+        removeAfter(branchHeight, null)
         run() // restart indexer
       }
 

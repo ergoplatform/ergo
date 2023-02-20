@@ -79,7 +79,7 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
       })
     }
 
-    removeAfter(BRANCHPOINT, addressEncoder)
+    removeAfter(BRANCHPOINT)
 
     var mismatches: Int = 0
 

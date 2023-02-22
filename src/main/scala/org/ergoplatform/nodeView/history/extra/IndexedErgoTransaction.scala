@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.DataInput
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ExtraIndexTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
@@ -22,8 +22,7 @@ case class IndexedErgoTransaction(txid: ModifierId,
                                   globalIndex: Long,
                                   inputNums: Array[Long]) extends ExtraIndex {
 
-  override def id: ModifierId = txid
-  override def serializedId: Array[Byte] = fastIdToBytes(txid)
+  override lazy val id: ModifierId = txid
 
   private var _blockId: ModifierId = ModifierId @@ ""
   private var _inclusionHeight: Int = 0

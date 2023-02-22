@@ -27,8 +27,7 @@ case class IndexedToken(tokenId: ModifierId,
                         description: String,
                         decimals: Int) extends ExtraIndex {
 
-  override def id: ModifierId = uniqueId(tokenId)
-  override def serializedId: Array[Byte] = fastIdToBytes(uniqueId(tokenId))
+  override lazy val id: ModifierId = uniqueId(tokenId)
 
 }
 

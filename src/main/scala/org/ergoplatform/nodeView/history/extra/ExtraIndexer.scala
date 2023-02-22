@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FullBlockApplied, Rollback}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey, getIndex}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey, fastIdToBytes, getIndex}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.segmentTreshold
@@ -454,6 +454,6 @@ object ExtraIndexer {
   * Base trait for all additional indexes made by ExtraIndexer
   */
 trait ExtraIndex {
-  def id: ModifierId = bytesToId(serializedId)
-  def serializedId: Array[Byte]
+  lazy val id: ModifierId = bytesToId(serializedId)
+  def serializedId: Array[Byte] = fastIdToBytes(id)
 }

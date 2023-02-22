@@ -145,7 +145,7 @@ object PeerManager {
           .filter { p =>
             (p.connectionType.isDefined || p.lastHandshake > 0) &&
             !blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip)) &&
-            (System.currentTimeMillis - p.lastHandshake < limit)
+            (System.currentTimeMillis() - p.lastStoredActivityTime < limit)
           }
         Random.shuffle(recentlySeenNonBlacklisted).take(howMany)
       }

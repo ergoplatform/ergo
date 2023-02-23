@@ -11,7 +11,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable.ArrayBuffer
 import spire.syntax.all.cfor
 
 import java.lang.Math.abs
@@ -24,8 +24,8 @@ import java.lang.Math.abs
   * @param balanceInfo - balance information (Optional because fragments do not contain it)
   */
 case class IndexedErgoAddress(treeHash: ModifierId,
-                              txs: ListBuffer[Long],
-                              boxes: ListBuffer[Long],
+                              txs: ArrayBuffer[Long],
+                              boxes: ArrayBuffer[Long],
                               balanceInfo: Option[BalanceInfo]) extends ExtraIndex with ScorexLogging {
 
   override lazy val id: ModifierId = treeHash
@@ -49,7 +49,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   /**
     * Copied from [[java.util.Arrays.binarySearch]]
     */
-  private def binarySearch(a: ListBuffer[Long], key: Long): Int = {
+  private def binarySearch(a: ArrayBuffer[Long], key: Long): Int = {
     var low: Int = 0
     var high: Int = a.length - 1
 
@@ -125,7 +125,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   def retrieveTxs(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoTransaction] = {
     if(offset + limit > txs.length && txSegmentCount > 0) {
       val range: Array[Int] = getSegmentsForRange(offset, limit)
-      val data: ListBuffer[Long] = ListBuffer.empty[Long]
+      val data: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
       cfor(0)(_ < range.length, _ + 1) { i =>
         history.typedExtraIndexById[IndexedErgoAddress](txSegmentId(treeHash, txSegmentCount - range(i))).get.txs ++=: data
       }
@@ -144,7 +144,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   def retrieveBoxes(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoBox] = {
     if(offset + limit > boxes.length && boxSegmentCount > 0) {
       val range: Array[Int] = getSegmentsForRange(offset, limit)
-      val data: ListBuffer[Long] = ListBuffer.empty[Long]
+      val data: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
       cfor(0)(_ < range.length, _ + 1) { i =>
         history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, boxSegmentCount - range(i))).get.boxes ++=: data
       }
@@ -161,7 +161,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @return array of unspent boxes
     */
   def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoBox] = {
-    val data: ListBuffer[IndexedErgoBox] = ListBuffer.empty[IndexedErgoBox]
+    val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
     data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
     var segment: Int = boxSegmentCount
     while(data.length < limit && segment > 0) {
@@ -271,13 +271,13 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     val data: Array[IndexedErgoAddress] = new Array[IndexedErgoAddress]((txs.length / segmentTreshold) + (boxes.length / segmentTreshold))
     var i: Int = 0
     while(txs.length >= segmentTreshold) {
-      data(i) = new IndexedErgoAddress(txSegmentId(treeHash, txSegmentCount), txs.take(segmentTreshold), ListBuffer.empty[Long], None)
+      data(i) = new IndexedErgoAddress(txSegmentId(treeHash, txSegmentCount), txs.take(segmentTreshold), ArrayBuffer.empty[Long], None)
       i += 1
       txSegmentCount += 1
       txs.remove(0, segmentTreshold)
     }
     while(boxes.length >= segmentTreshold) {
-      data(i) = new IndexedErgoAddress(boxSegmentId(treeHash, boxSegmentCount), ListBuffer.empty[Long], boxes.take(segmentTreshold), None)
+      data(i) = new IndexedErgoAddress(boxSegmentId(treeHash, boxSegmentCount), ArrayBuffer.empty[Long], boxes.take(segmentTreshold), None)
       i += 1
       boxSegmentCount += 1
       boxes.remove(0, segmentTreshold)
@@ -288,7 +288,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
 object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress] {
 
-  def hashErgoTree(tree: ErgoTree): Array[Byte] = Algos.hash(tree.bytes)
+  def hashErgoTree(tree: ErgoTree): ModifierId = bytesToId(Algos.hash(tree.bytes))
 
   /**
     * Calculates id of an address segment containing box indexes.
@@ -320,10 +320,10 @@ object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress]
   override def parse(r: Reader): IndexedErgoAddress = {
     val addressHash: ModifierId = bytesToId(r.getBytes(32))
     val txnsLen: Long = r.getUInt()
-    val txns: ListBuffer[Long] = ListBuffer.empty[Long]
+    val txns: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
     cfor(0)(_ < txnsLen, _ + 1) { _ => txns += r.getLong()}
     val boxesLen: Long = r.getUInt()
-    val boxes: ListBuffer[Long] = ListBuffer.empty[Long]
+    val boxes: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
     cfor(0)(_ < boxesLen, _ + 1) { _ => boxes += r.getLong()}
     val balanceInfo: Option[BalanceInfo] = r.getOption[BalanceInfo](BalanceInfoSerializer.parse(r))
     val iEa: IndexedErgoAddress = new IndexedErgoAddress(addressHash, txns, boxes, balanceInfo)

@@ -19,7 +19,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.ErgoTree
 
 import java.nio.ByteBuffer
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable.ArrayBuffer
 import spire.syntax.all.cfor
 
 import scala.collection.mutable
@@ -83,18 +83,15 @@ trait ExtraIndexerBase extends ScorexLogging {
     boxes.get(id).map(box => {
       tokens ++= box.asSpent(txId, height).box.additionalTokens.toArray
       return true
-    }) match {
-      case Some(_) => true
-      case None =>
-        history.typedExtraIndexById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
-          case Some(x) => // box found in DB, update
-            boxes.put(id, x.asSpent(txId, height))
-            tokens ++= x.box.additionalTokens.toArray
-            true
-          case None => // box not found at all (this shouldn't happen)
-            log.warn(s"Unknown box used as input: $id")
-            false
-        }
+    })
+    history.typedExtraIndexById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
+      case Some(x) => // box found in DB, update
+        boxes.put(id, x.asSpent(txId, height))
+        tokens ++= x.box.additionalTokens.toArray
+        true
+      case None => // box not found at all (this shouldn't happen)
+        log.warn(s"Unknown box used as input: $id")
+        false
     }
   }
 
@@ -121,7 +118,7 @@ trait ExtraIndexerBase extends ScorexLogging {
       case None => // address not found at all
         spendOrReceive match {
           case Left(iEb) => log.warn(s"Unknown address spent box ${bytesToId(iEb.box.id)}") // spend box should never happen by an unknown address
-          case Right(iEb) => trees.put(id, IndexedErgoAddress(id, ListBuffer(globalTxIndex), ListBuffer.empty[Long], Some(new BalanceInfo)).addBox(iEb)) // receive box
+          case Right(iEb) => trees.put(id, IndexedErgoAddress(id, ArrayBuffer(globalTxIndex), ArrayBuffer.empty[Long], Some(new BalanceInfo)).addBox(iEb)) // receive box
         }
     }
   }
@@ -210,7 +207,7 @@ trait ExtraIndexerBase extends ScorexLogging {
           val boxId = bytesToId(tx.inputs(i).boxId)
           if (findAndSpendBox(boxId, tx.id, height)) { // spend box and add tx
             val iEb = boxes(boxId)
-            findAndUpdateTree(bytesToId(hashErgoTree(iEb.box.ergoTree)), Left(iEb))
+            findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))
             inputs(i) = iEb.globalIndex
           }
         }
@@ -224,7 +221,7 @@ trait ExtraIndexerBase extends ScorexLogging {
         general += NumericBoxIndex(globalBoxIndex, bytesToId(box.id)) // box id by global box number
 
         // box by address
-        findAndUpdateTree(bytesToId(hashErgoTree(box.ergoTree)), Right(boxes(boxId)))
+        findAndUpdateTree(hashErgoTree(box.ergoTree), Right(boxes(boxId)))
 
         // check if box is creating a new token, if yes record it
         if (tokenRegistersSet(box))
@@ -310,7 +307,7 @@ trait ExtraIndexerBase extends ScorexLogging {
       tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach(iEb => { // undo all spendings
         iEb.spendingHeightOpt = None
         iEb.spendingTxIdOpt = None
-        val address = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(iEb.box.ergoTree))).get.addBox(iEb, record = false)
+        val address = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get.addBox(iEb, record = false)
         address.findAndModBox(iEb.globalIndex, history)
         historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.segments)
         address.segments.clear()
@@ -328,7 +325,7 @@ trait ExtraIndexerBase extends ScorexLogging {
     globalBoxIndex -= 1
     while(globalBoxIndex > boxTarget) {
       val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, globalBoxIndex).get
-      val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](bytesToId(hashErgoTree(iEb.box.ergoTree))).get
+      val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get
       address.spendBox(iEb)
       if(tokenRegistersSet(iEb.box))
         history.typedExtraIndexById[IndexedToken](IndexedTokenSerializer.fromBox(iEb.box).id) match {

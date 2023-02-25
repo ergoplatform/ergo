@@ -131,10 +131,10 @@ class NetworkController(ergoSettings: ErgoSettings,
           lastIncomingMessageTime = now
           cp.lastMessage = now
           // Update peer's last activity time every X minutes inside PeerInfo
-          cp.peerInfo.fold(()) { x =>
+          cp.peerInfo.foreach { x =>
             if ((now - x.lastStoredActivityTime) > activityDelta) {
               val peerInfo = x.copy(lastStoredActivityTime = now)
-              cp.handlerRef ! AddOrUpdatePeer(peerInfo)
+              peerManagerRef ! AddOrUpdatePeer(peerInfo)
             }
           }
 

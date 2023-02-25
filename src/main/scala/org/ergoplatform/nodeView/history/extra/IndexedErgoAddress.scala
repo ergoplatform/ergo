@@ -164,7 +164,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
     data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
     var segment: Int = boxSegmentCount
-    while(data.length < limit && segment > 0) {
+    while(data.length < (limit + offset) && segment > 0) {
       segment -= 1
       history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
         .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data

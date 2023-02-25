@@ -5942,7 +5942,7 @@ paths:
                     type: array
                     description: Array of boxes
                     items:
-                      $ref: '#/components/schemas/IndexedErgoTransaction'
+                      $ref: '#/components/schemas/IndexedErgoBox'
                   total:
                     type: integer
                     description: Total number of retreived boxes
@@ -5998,7 +5998,7 @@ paths:
                 type: array
                 description: Array of boxes
                 items:
-                  $ref: '#/components/schemas/IndexedErgoTransaction'
+                  $ref: '#/components/schemas/IndexedErgoBox'
         '404':
           description: No unspent boxes found for wanted address
           content:

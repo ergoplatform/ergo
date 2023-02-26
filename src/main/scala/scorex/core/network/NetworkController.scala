@@ -70,7 +70,7 @@ class NetworkController(ergoSettings: ErgoSettings,
     * Used to check whether connectivity is lost.
     */
   private var lastIncomingMessageTime: ErgoHistory.Time = 0L
-  private val activityDelta: Long = 20 * 60 * 1000 // 20min
+  private val activityDelta: Long = 60 * 1000 // 1 min
 
   //check own declared address for validity
   validateDeclaredAddress()

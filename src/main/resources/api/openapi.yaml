@@ -292,7 +292,7 @@ components:
           type: boolean
           example: false
         globalIndex:
-          description: The global index of the box
+          description: Global index of the output in the blockchain
           type: integer
           format: int64
           minimum: 0
@@ -495,7 +495,7 @@ components:
           format: int32
           example: 3
         globalIndex:
-          description: index of the box globally
+          description: Global index of the transaction in the blockchain
           type: integer
           format: int64
           example: 3565445
@@ -5813,7 +5813,7 @@ paths:
                       $ref: '#/components/schemas/IndexedErgoTransaction'
                   total:
                     type: integer
-                    description: Total count of transactions
+                    description: Total count of retreived transactions
         '404':
           description: No transactions found for wanted address
           content:
@@ -5978,7 +5978,7 @@ paths:
                       $ref: '#/components/schemas/IndexedErgoTransaction'
                   total:
                     type: integer
-                    description: Total number of boxes
+                    description: Total number of retreived boxes
         '404':
           description: No boxes found for wanted address
           content:
@@ -6131,7 +6131,7 @@ paths:
                       $ref: '#/components/schemas/IndexedErgoBox'
                   total:
                     type: integer
-                    description: Total number of boxes
+                    description: Total number of retreived boxes
         default:
           description: Error
           content:
@@ -6176,7 +6176,16 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IndexedErgoBox'
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoBox'
+                  total:
+                    type: integer
+                    description: Total number of retreived boxes
         '404':
           description: No unspent box found with wanted ergotree
           content:

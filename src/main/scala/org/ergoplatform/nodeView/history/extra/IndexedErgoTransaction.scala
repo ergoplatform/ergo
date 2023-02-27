@@ -14,7 +14,7 @@ import spire.implicits.cfor
   * Index of a transaction.
   * @param txid        - id of this transaction
   * @param height      - height of the block which includes this transaction
-  * @param globalIndex - numeric index of this transaction
+  * @param globalIndex - serial number of this transaction counting from block 1
   * @param inputNums   - list of transaction inputs (needed for rollback)
   */
 case class IndexedErgoTransaction(txid: ModifierId,

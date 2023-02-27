@@ -11,8 +11,4 @@ case class AvlTreeParameters(keySize: Int, valueSize: Option[Int], labelSize: In
     * @return whether value is fixed-size
     */
   def fixedSizeValue: Boolean = valueSize.isDefined
-
-  // todo: move out? not looking so good here
-  private[batch] val TopNodeKey: Array[Byte] = Array.fill(labelSize)(123: Byte)
-  private[batch] val TopNodeHeight: Array[Byte] = Array.fill(labelSize)(124: Byte)
 }

@@ -26,14 +26,15 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
                                                                      (implicit val hf: HF)
   extends VersionedAVLStorage[D] with ScorexLogging {
 
-  import VersionedLDBAVLStorage.{nodeLabel, toBytes}
+  import VersionedLDBAVLStorage.{nodeLabel, toBytes, topNodeKeys}
 
-  private val topNodeKey = nodeParameters.TopNodeKey
-  private val topNodeHeight = nodeParameters.TopNodeHeight
+  private val topKeys = topNodeKeys(nodeParameters)
+  private val topNodeHashKey: Array[Byte] = topKeys._1
+  private val topNodeHeightKey: Array[Byte] = topKeys._2
 
   private def restorePrunedTopNode(): Try[(ProverNodes[D], Int)] = Try {
-    val top = VersionedLDBAVLStorage.fetch[D](ADKey @@ store.get(topNodeKey).get)(hf, store, nodeParameters)
-    val topHeight = Ints.fromByteArray(store.get(topNodeHeight).get)
+    val top = VersionedLDBAVLStorage.fetch[D](ADKey @@ store.get(topNodeHashKey).get)(hf, store, nodeParameters)
+    val topHeight = Ints.fromByteArray(store.get(topNodeHeightKey).get)
 
     top -> topHeight
   }
@@ -64,8 +65,8 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
   override def update[K <: Array[Byte], V <: Array[Byte]](prover: BatchAVLProver[D, _],
                                                           additionalData: Seq[(K, V)]): Try[Unit] = {
     val digestWrapper = prover.digest
-    val indexes = Seq(topNodeKey -> nodeLabel(prover.topNode),
-                      topNodeHeight -> Ints.toByteArray(prover.rootNodeHeight))
+    val indexes = Seq(topNodeHashKey -> nodeLabel(prover.topNode),
+                      topNodeHeightKey -> Ints.toByteArray(prover.rootNodeHeight))
     val toInsert = serializedVisitedNodes(prover.topNode, isTop = true)
     val toRemove = prover.removedNodes().map(rn => rn.label)
     val toUpdate = indexes ++ toInsert
@@ -100,6 +101,12 @@ object VersionedLDBAVLStorage {
   // prefixes used to encode node type (internal or leaf) in database
   private[batch] val InternalNodePrefix: Byte = 0: Byte
   private[batch] val LeafPrefix: Byte = 1: Byte
+
+  private[batch] def topNodeKeys(nodeParameters: AvlTreeParameters) = {
+    val topNodeKey: Array[Byte] = Array.fill(nodeParameters.labelSize)(123: Byte)
+    val topNodeHeightKey: Array[Byte] = Array.fill(nodeParameters.labelSize)(124: Byte)
+    (topNodeKey, topNodeHeightKey)
+  }
 
   /**
     * Fetch tree node from database by its database id (hash of node contents)
@@ -181,8 +188,7 @@ object VersionedLDBAVLStorage {
                                nodeParameters: AvlTreeParameters)(implicit hf: HF): Try[VersionedLDBAVLStorage[D, HF]] = {
     //todo: the function below copy-pasted from BatchAVLProver, eliminate boilerplate
 
-    val topNodeKey = nodeParameters.TopNodeKey
-    val topNodeHeight = nodeParameters.TopNodeHeight
+    val (topNodeHashKey, topNodeHeightKey) = topNodeKeys(nodeParameters)
 
     def idCollector(node: ProverNodes[D],
                     acc: Iterator[(Array[Byte], Array[Byte])]): Iterator[(Array[Byte], Array[Byte])] = {
@@ -200,7 +206,7 @@ object VersionedLDBAVLStorage {
     val rootNode = manifest.root
     val rootNodeHeight = manifest.rootHeight
     val digestWrapper = VersionedLDBAVLStorage.digest(rootNode, rootNodeHeight)
-    val indices = Iterator(topNodeKey -> nodeLabel(rootNode), topNodeHeight -> Ints.toByteArray(rootNodeHeight))
+    val indices = Iterator(topNodeHashKey -> nodeLabel(rootNode), topNodeHeightKey -> Ints.toByteArray(rootNodeHeight))
     val nodesIterator = idCollector(manifest.root, Iterator.empty) ++
       chunks.flatMap(subtree => idCollector(subtree.subtreeTop, Iterator.empty))
     store.update(digestWrapper, toRemove = Nil, toUpdate = indices ++ nodesIterator ++ additionalData).map{_ =>

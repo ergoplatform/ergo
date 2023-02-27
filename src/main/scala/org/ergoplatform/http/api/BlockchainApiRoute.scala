@@ -31,6 +31,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 5)
 
+  private val sortDir: Directive[Tuple1[Int]] = parameters("sortDirection".as[SortDirection] ? SortDirection.DESC)
+
   /**
     * Total number of boxes/transactions that can be requested at once to avoid too heavy requests ([[BlocksApiRoute.MaxHeaders]])
     */
@@ -192,19 +194,21 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Int, limit: Int): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Int, limit: Int, sortDir: Int): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => addr.retrieveUtxos(history, offset, limit).reverse
+        case Some(addr) => addr.retrieveUtxos(history, offset, limit, sortDir)
         case None       => Seq.empty[IndexedErgoBox]
       }
     }
 
-  private def getBoxesByAddressUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
+  private def getBoxesByAddressUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir) { (address, offset, limit, dir) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
+    }else if(dir == SortDirection.INVALID) {
+      BadRequest("Invalid parameter for sort direction, valid values are \"ASC\" and \"DESC\"")
     }else {
-      ApiResponse(getBoxesByAddressUnspent(address, offset, limit))
+      ApiResponse(getBoxesByAddressUnspent(address, offset, limit, dir))
     }
   }
 
@@ -245,19 +249,21 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Int, limit: Int): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Int, limit: Int, sortDir: Int): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(tree)(history) match {
-        case Some(iEa) => iEa.retrieveUtxos(history, offset, limit).reverse
+        case Some(iEa) => iEa.retrieveUtxos(history, offset, limit, sortDir)
         case None      => Seq.empty[IndexedErgoBox]
       }
     }
 
-  private def getBoxesByErgoTreeUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging) { (tree, offset, limit) =>
+  private def getBoxesByErgoTreeUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging & sortDir) { (tree, offset, limit, dir) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
+    }else if (dir == SortDirection.INVALID) {
+      BadRequest("Invalid parameter for sort direction, valid values are \"ASC\" and \"DESC\"")
     }else {
-      ApiResponse(getBoxesByErgoTreeUnspent(tree, offset, limit))
+      ApiResponse(getBoxesByErgoTreeUnspent(tree, offset, limit, dir))
     }
   }
 

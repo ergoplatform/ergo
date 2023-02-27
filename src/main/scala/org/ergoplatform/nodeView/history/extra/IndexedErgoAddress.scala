@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.http.api.SortDirection
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getSegmentsForRange, getTxs, segmentTreshold, slice}
@@ -158,18 +159,32 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @param history - history to use
     * @param offset  - items to skip from the start
     * @param limit   - items to retrieve
+    * @param sortDir - whether to start retreival from newest ([[SortDirection.DESC]]) box or oldest ([[SortDirection.ASC]]) box
     * @return array of unspent boxes
     */
-  def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoBox] = {
+  def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int, sortDir: Int): Array[IndexedErgoBox] = {
     val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
-    data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
-    var segment: Int = boxSegmentCount
-    while(data.length < (limit + offset) && segment > 0) {
-      segment -= 1
-      history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
-        .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
+    sortDir match {
+      case SortDirection.DESC =>
+        data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+        var segment: Int = boxSegmentCount
+        while (data.length < (limit + offset) && segment > 0) {
+          segment -= 1
+          history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
+            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
+        }
+        slice(data, offset, limit).toArray.reverse
+      case SortDirection.ASC =>
+        var segment: Int = 0
+        while (data.length < (limit + offset) && segment < boxSegmentCount) {
+          data ++= history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
+            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+          segment += 1
+        }
+        if(data.length < (limit + offset))
+          data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+        slice(data, offset, limit).toArray
     }
-    slice(data, offset, limit).toArray
   }
 
   /**

@@ -7,9 +7,9 @@ import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -135,7 +135,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   val feeHistogramParameters: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
 
   def getFeeHistogramR: Route = (path("poolHistogram") & get & feeHistogramParameters) { (bins, maxtime) =>
-    ApiResponse(getMemPool.map(p => getFeeHistogram(System.currentTimeMillis(), bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
+    ApiResponse(getMemPool.map(p => getFeeHistogram(System.currentTimeMillis(), bins, maxtime, p.txTimesAndWeights).asJson))
   }
 
   val feeRequestParameters: Directive[(Int, Int)] = parameters("waitTime".as[Int] ? 1, "txSize".as[Int] ? 100)

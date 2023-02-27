@@ -1,8 +1,8 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, UnconfirmedTransaction}
 import scorex.util.ModifierId
 
 trait MempoolTestHelpers {
@@ -16,7 +16,7 @@ trait MempoolTestHelpers {
 
     override def size: Int = ???
 
-    override def weightedTransactionIds(limit: Int): Seq[OrderedTxPool.WeightedTxId] = ???
+    override def txTimesAndWeights: Seq[(Long,Long)] = ???
 
     override def getAll: Seq[UnconfirmedTransaction] = ???
 

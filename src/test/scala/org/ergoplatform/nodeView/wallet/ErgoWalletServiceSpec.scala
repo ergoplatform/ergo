@@ -3,8 +3,8 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R1}
 import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}

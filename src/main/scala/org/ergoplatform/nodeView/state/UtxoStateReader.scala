@@ -3,8 +3,8 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, UnconfirmedTransaction}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer

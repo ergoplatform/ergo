@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.scalameter.KeyValue
 import org.scalameter.api._

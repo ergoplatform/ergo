@@ -1,28 +1,26 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings}
 import scorex.util.{ModifierId, ScorexLogging}
 
-import scala.collection.immutable.TreeMap
+import scala.collection.immutable.{TreeMap, TreeSet}
 
 /**
   * An immutable pool of transactions of limited size with priority management and blacklisting support.
   *
   * @param orderedTransactions  - collection containing transactions ordered by `tx.weight`
   * @param invalidatedTxIds     - invalidated transaction ids in bloom filters
-  * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its output box
-  * @param inputs               - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its input box id
+  * @param outputs              - mapping `box.id` -> `ModifierId` required for getting a transaction by its output box
+  * @param inputs               - mapping `box.id` -> `ModifierId` required for getting a transaction by its input box id
   */
-class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTransaction],
+class OrderedTxPool(val orderedTransactions: TreeSet[UnconfirmedTransaction],
                     val invalidatedTxIds: ApproximateCacheLike[String],
-                    val outputs: TreeMap[BoxId, WeightedTxId],
-                    val inputs: TreeMap[BoxId, WeightedTxId])
-                   (implicit settings: ErgoSettings) extends ScorexLogging {
-
-  import OrderedTxPool.weighted
+                    val outputs: TreeMap[BoxId, ModifierId],
+                    val inputs: TreeMap[BoxId, ModifierId])
+                   (implicit settings: ErgoSettings, sortingOption: SortingOption) extends ScorexLogging {
 
   /**
     * When a transaction has a parent in the mempool, we update its weight, weight of parent's parents etc.
@@ -41,11 +39,8 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
 
   def size: Int = orderedTransactions.size
 
-  def getWtx(id: ModifierId): Option[WeightedTxId] =
-    orderedTransactions.keySet.find(_.id == id)
-
   def get(id: ModifierId): Option[UnconfirmedTransaction] =
-    orderedTransactions.get(WeightedTxId(id, 0, 0, 0))
+    orderedTransactions.find(_.id == id)
 
 
   /**
@@ -57,30 +52,35 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     * thrown from the pool.
     *
     * @param unconfirmedTx - transaction to add
+    * @param feeFactor - fee factor override, used in tests
     * @return - modified pool
     */
-  def put(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int): OrderedTxPool = {
+  def put(unconfirmedTx: UnconfirmedTransaction, feeFactor: Option[Int] = None): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
 
-    val newPool = if(contains(tx.id)) {
-      new OrderedTxPool(
-        orderedTransactions.updated(getWtx(tx.id).get, unconfirmedTx),
-        invalidatedTxIds,
-        outputs,
-        inputs
-      )
-    }else {
-      val wtx = weighted(tx, feeFactor)
-      new OrderedTxPool(
-        orderedTransactions.updated(wtx, unconfirmedTx),
-        invalidatedTxIds,
-        outputs ++ tx.outputs.map(_.id -> wtx),
-        inputs ++ tx.inputs.map(_.boxId -> wtx)
-      ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), 0)
-    }
+    if(feeFactor.isDefined)
+      unconfirmedTx._feeFactor = feeFactor.get
+
+    val newPool =
+      get(tx.id) match {
+        case Some(uTx) =>
+          new OrderedTxPool(
+            (orderedTransactions - uTx) + unconfirmedTx,
+            invalidatedTxIds,
+            outputs,
+            inputs
+          )
+        case None =>
+          new OrderedTxPool(
+            orderedTransactions + unconfirmedTx,
+            invalidatedTxIds,
+            outputs ++ tx.outputs.map(_.id -> tx.id),
+            inputs ++ tx.inputs.map(_.boxId -> tx.id)
+          ).updateFamily(tx, unconfirmedTx.weight, System.currentTimeMillis(), 0)
+      }
 
     if (newPool.orderedTransactions.size > mempoolCapacity) {
-      val victim = newPool.orderedTransactions.last._2
+      val victim = newPool.orderedTransactions.last
       newPool.remove(victim)
     } else {
       newPool
@@ -97,7 +97,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     * @param tx - Transaction to remove
     */
   def remove(tx: ErgoTransaction): OrderedTxPool = {
-    getWtx(tx.id) match {
+    get(tx.id) match {
       case Some(wtx) =>
         new OrderedTxPool(
           orderedTransactions - wtx,
@@ -116,7 +116,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     */
   def invalidate(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
-    getWtx(tx.id) match {
+    get(tx.id) match {
       case Some(wtx) =>
         new OrderedTxPool(
           orderedTransactions - wtx,
@@ -146,7 +146,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     * @return - true, if transaction is in the pool or invalidated earlier, false otherwise
     */
   def contains(id: ModifierId): Boolean =
-    orderedTransactions.contains(WeightedTxId(id, 0, 0, 0))
+    get(id).isDefined
 
   def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)
 
@@ -173,17 +173,16 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
       this
     } else {
 
-      val uniqueTxIds: Set[WeightedTxId] = tx.inputs.flatMap(input => this.outputs.get(input.boxId)).toSet
-      val parentTxs = uniqueTxIds.flatMap(wtx => orderedTransactions.get(wtx).map(ut => wtx -> ut))
+      val uniqueTxIds: Set[ModifierId] = tx.inputs.flatMap(input => outputs.get(input.boxId)).toSet
+      val parentTxs = uniqueTxIds.flatMap(get)
 
-      parentTxs.foldLeft(this) { case (pool, (wtx, ut)) =>
-        val parent = ut.transaction
-        val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerFactor, wtx.created)
+      parentTxs.foldLeft(this) { case (pool, uTx) =>
+        val parent = uTx.transaction
         val newPool = new OrderedTxPool(
-          pool.orderedTransactions - wtx + (newWtx -> ut),
+          pool.orderedTransactions - uTx + uTx.addWeight(weight),
           invalidatedTxIds,
-          parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
-          parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
+          parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, parent.id)),
+          parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, parent.id))
         )
         newPool.updateFamily(parent, weight, startTime, depth + 1)
       }
@@ -193,59 +192,20 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
 
 object OrderedTxPool {
 
-  /**
-    * Weighted transaction id
-    *
-    * @param id       - Transaction id
-    * @param weight   - Weight of transaction
-    * @param feePerFactor - Transaction's fee per factor (byte or execution cost)
-    * @param created  - Transaction creation time
-    */
-  case class WeightedTxId(id: ModifierId, weight: Long, feePerFactor: Long, created: Long) {
-    // `id` depends on `weight` so we can use only the former for comparison.
-    override def equals(obj: Any): Boolean = obj match {
-      case that: WeightedTxId => that.id == id
-      case _ => false
-    }
-
-    override def hashCode(): Int = id.hashCode()
-  }
-
-  private implicit val ordWeight: Ordering[WeightedTxId] = Ordering[(Long, ModifierId)].on(x => (-x.weight, x.id))
   private implicit val ordBoxId: Ordering[BoxId] = Ordering[String].on(b => Algos.encode(b))
 
-  def empty(settings: ErgoSettings): OrderedTxPool = {
+  def empty(settings: ErgoSettings, sortingOption: SortingOption): OrderedTxPool = {
     val cacheSettings = settings.cacheSettings.mempool
     val frontCacheSize = cacheSettings.invalidModifiersCacheSize
     val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
+    implicit val ms: MonetarySettings = settings.chainSettings.monetary
+    implicit val ordWeight: Ordering[UnconfirmedTransaction] =
+      Ordering[(Long, ModifierId)].on(x => (-x.weight(ms, sortingOption), x.id))
     new OrderedTxPool(
-      TreeMap.empty[WeightedTxId, UnconfirmedTransaction],
+      TreeSet.empty[UnconfirmedTransaction],
       ExpiringApproximateCache.empty(frontCacheSize, frontCacheExpiration),
-      TreeMap.empty[BoxId, WeightedTxId],
-      TreeMap.empty[BoxId, WeightedTxId])(settings)
-  }
-
-  def weighted(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int)(implicit ms: MonetarySettings): WeightedTxId = {
-    weighted(unconfirmedTx.transaction, feeFactor)
-  }
-
-  /**
-    * Wrap transaction into an entity which is storing its mempool sorting weight also
-    *
-    * @param tx - transaction
-    * @param feeFactor - fee-related factor of the transaction `tx`, so size or cost
-    * @param ms - monetary settings to extract fee proposition from
-    * @return - transaction and its weight wrapped in `WeightedTxId`
-    */
-  def weighted(tx: ErgoTransaction, feeFactor: Int)(implicit ms: MonetarySettings): WeightedTxId = {
-    val fee = tx.outputs
-      .filter(b => java.util.Arrays.equals(b.propositionBytes, ms.feePropositionBytes))
-      .map(_.value)
-      .sum
-
-    // We multiply by 1024 for better precision
-    val feePerFactor = fee * 1024 / feeFactor
-    // Weight is equal to feePerFactor here, however, it can be modified later when children transactions will arrive
-    WeightedTxId(tx.id, feePerFactor, feePerFactor, System.currentTimeMillis())
+      TreeMap.empty[BoxId, ModifierId],
+      TreeMap.empty[BoxId, ModifierId]
+    )(settings, sortingOption)
   }
 }

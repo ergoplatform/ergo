@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.viewholder
 import java.io.File
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
@@ -15,6 +14,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome.Accepted
+import org.ergoplatform.nodeView.mempool.UnconfirmedTransaction
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.testkit.utils.NoShrink
 import scorex.util.{ModifierId, bytesToId}

@@ -11,13 +11,13 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
 import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, FullBlockApplied}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox

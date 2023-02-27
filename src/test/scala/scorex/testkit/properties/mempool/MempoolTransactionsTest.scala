@@ -1,7 +1,8 @@
 package scorex.testkit.properties.mempool
 
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, UnconfirmedTransaction}
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -16,7 +17,7 @@ trait MempoolTransactionsTest
 
   val transactionSeqGenerator: Gen[Seq[ErgoTransaction]] = Gen.nonEmptyContainerOf[Seq, ErgoTransaction](transactionGenerator)
   val unconfirmedTxSeqGenerator: Gen[Seq[UnconfirmedTransaction]] =
-    transactionSeqGenerator.map(txs => txs.map(tx => UnconfirmedTransaction(tx, None)))
+    transactionSeqGenerator.map(txs => txs.map(tx => mempool.UnconfirmedTransaction(tx, None)))
 
   property("Size of mempool should increase when adding a non-present transaction") {
     forAll(memPoolGenerator, unconfirmedTxGenerator) { (mp: ErgoMemPool, unconfirmedTx: UnconfirmedTransaction) =>

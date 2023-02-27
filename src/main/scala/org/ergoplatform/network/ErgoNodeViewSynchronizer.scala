@@ -3,14 +3,14 @@ package org.ergoplatform.network
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader, UnconfirmedTransaction}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
@@ -19,6 +19,7 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{NodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.mempool
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
@@ -692,7 +693,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     } else {
       ErgoTransactionSerializer.parseBytesTry(bytes) match {
         case Success(tx) if id == tx.id =>
-          val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
+          val utx = mempool.UnconfirmedTransaction(tx, bytes, Some(remote))
           viewHolderRef ! TransactionFromRemote(utx)
         case _ =>
           // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery

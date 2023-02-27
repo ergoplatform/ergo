@@ -5,10 +5,10 @@ import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
@@ -374,7 +374,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val rolledBackTxs = blocksRemoved
       .flatMap(extractTransactions)
       .filter(tx => !appliedTxs.exists(_.id == tx.id))
-      .map(tx => UnconfirmedTransaction(tx, None))
+      .map(tx => mempool.UnconfirmedTransaction(tx, None))
     memPool.remove(appliedTxs).put(rolledBackTxs)
   }
 

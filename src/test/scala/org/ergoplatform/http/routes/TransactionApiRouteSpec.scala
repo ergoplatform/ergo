@@ -9,8 +9,9 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.http.api.{ApiCodecs, TransactionsApiRoute}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
+import org.ergoplatform.nodeView.mempool.UnconfirmedTransaction
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}

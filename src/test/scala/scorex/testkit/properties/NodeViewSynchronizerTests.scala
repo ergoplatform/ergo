@@ -4,9 +4,9 @@ import akka.actor._
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, UnconfirmedTransaction}
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec

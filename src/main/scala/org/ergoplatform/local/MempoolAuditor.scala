@@ -4,8 +4,8 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, UnconfirmedTransaction}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.network.Broadcast
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 
 
 /**
@@ -24,7 +24,7 @@ case class MemPoolStatistics(startMeasurement: Long,
     * prune statistic. To avoid siutation when we do not have statistic at all, we actually keep data up to
     * 2*measurementIntervalMsec and periodically cut half of range.
     */
-  def add(currTime: Long, wtx: WeightedTxId): MemPoolStatistics = {
+  def add(currTime: Long, utx: UnconfirmedTransaction)(implicit sortingOption: SortingOption): MemPoolStatistics = {
     val curTakenTx = takenTxns + 1
     val (newTakenTx, newMeasurement, newSnapTxs, newSnapTime) =
       if (currTime - snapTime > MemPoolStatistics.measurementIntervalMsec) {
@@ -36,10 +36,10 @@ case class MemPoolStatistics(startMeasurement: Long,
       } else {
         (curTakenTx, startMeasurement, snapTakenTxns, snapTime)
       }
-    val durationMinutes = ((currTime - wtx.created) / (60 * 1000)).toInt
+    val durationMinutes = ((currTime - utx.createdTime) / (60 * 1000)).toInt
     val newHist =
       if (durationMinutes < MemPoolStatistics.nHistogramBins) {
-        val (histx, hisfee) = (histogram(durationMinutes).nTxns + 1, histogram(durationMinutes).totalFee + wtx.feePerFactor)
+        val (histx, hisfee) = (histogram(durationMinutes).nTxns + 1, histogram(durationMinutes).totalFee + utx.feeFactor(sortingOption))
         histogram.updated(durationMinutes, FeeHistogramBin(histx, hisfee))
       } else {
         histogram

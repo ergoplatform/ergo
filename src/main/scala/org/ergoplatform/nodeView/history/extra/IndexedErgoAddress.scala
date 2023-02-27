@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoAddressEncoder
-import org.ergoplatform.http.api.SortDirection
+import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Type}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getSegmentsForRange, getTxs, segmentTreshold, slice}
@@ -159,13 +159,13 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @param history - history to use
     * @param offset  - items to skip from the start
     * @param limit   - items to retrieve
-    * @param sortDir - whether to start retreival from newest ([[SortDirection.DESC]]) box or oldest ([[SortDirection.ASC]]) box
+    * @param sortDir - whether to start retreival from newest ([[DESC]]) box or oldest ([[ASC]]) box
     * @return array of unspent boxes
     */
-  def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int, sortDir: Int): Array[IndexedErgoBox] = {
+  def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int, sortDir: Type): Array[IndexedErgoBox] = {
     val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
     sortDir match {
-      case SortDirection.DESC =>
+      case DESC =>
         data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
         var segment: Int = boxSegmentCount
         while (data.length < (limit + offset) && segment > 0) {
@@ -173,8 +173,8 @@ case class IndexedErgoAddress(treeHash: ModifierId,
           history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
         }
-        slice(data, offset, limit).toArray.reverse
-      case SortDirection.ASC =>
+        slice(data.reverse, offset, limit).toArray
+      case ASC =>
         var segment: Int = 0
         while (data.length < (limit + offset) && segment < boxSegmentCount) {
           data ++= history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
@@ -364,15 +364,15 @@ object IndexedErgoAddress {
     (math.max(math.ceil(offset * 1F / segmentTreshold).toInt, 1) to math.ceil((offset + limit) * 1F / segmentTreshold).toInt).toArray
 
   /**
-    * Shorthand to get a range from an array by offset and limit.
+    * Shorthand to get a range from an ArrayBuffer by offset and limit.
     * @param arr    - array to get range from
     * @param offset - items to skip from the start
     * @param limit  - items to retrieve
-    * @tparam T     - type of "arr" array
-    * @return range in "arr" array
+    * @tparam T     - type of ArrayBuffer
+    * @return range in "arr" ArrayBuffer
     */
-  def slice[T](arr: Iterable[T], offset: Int, limit: Int): Iterable[T] =
-    arr.slice(arr.size - offset - limit, arr.size - offset)
+  def slice[T](arr: ArrayBuffer[T], offset: Int, limit: Int): ArrayBuffer[T] =
+    arr.slice(offset, offset + limit)
 
   /**
     * Get an array of transactions with full bodies from an array of numeric transaction indexes

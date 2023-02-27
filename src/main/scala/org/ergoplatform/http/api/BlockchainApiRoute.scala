@@ -2,9 +2,11 @@ package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
+import akka.http.scaladsl.unmarshalling.Unmarshaller
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax.EncoderOps
+import org.ergoplatform.http.api.SortDirection.{ASC, DESC, INVALID, Type}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -31,7 +33,14 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 5)
 
-  private val sortDir: Directive[Tuple1[Int]] = parameters("sortDirection".as[SortDirection] ? SortDirection.DESC)
+  private implicit val sortMarsheller: Unmarshaller[String, Type] = Unmarshaller.strict[String, Type] { str =>
+    str.toLowerCase match {
+      case "asc" => ASC
+      case "desc" => DESC
+      case _ => INVALID
+    }
+  }
+  private val sortDir: Directive[Tuple1[Type]] = parameters("sortDirection".as(sortMarsheller) ? DESC)
 
   /**
     * Total number of boxes/transactions that can be requested at once to avoid too heavy requests ([[BlocksApiRoute.MaxHeaders]])
@@ -194,7 +203,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Int, limit: Int, sortDir: Int): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Int, limit: Int, sortDir: Type): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
         case Some(addr) => addr.retrieveUtxos(history, offset, limit, sortDir)
@@ -249,7 +258,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Int, limit: Int, sortDir: Int): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Int, limit: Int, sortDir: Type): Future[Seq[IndexedErgoBox]] =
     getHistory.map { history =>
       getAddress(tree)(history) match {
         case Some(iEa) => iEa.retrieveUtxos(history, offset, limit, sortDir)
@@ -301,5 +310,15 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getAddressBalanceTotalR: Route = (post & pathPrefix("balance") & ergoAddress) { address =>
     ApiResponse(getAddressBalanceTotal(address))
   }
+
+}
+
+object SortDirection {
+
+  type Type = Byte
+
+  val ASC: Type = 1.asInstanceOf[Type]
+  val DESC: Type = 0.asInstanceOf[Type]
+  val INVALID: Type = (-1).asInstanceOf[Type]
 
 }

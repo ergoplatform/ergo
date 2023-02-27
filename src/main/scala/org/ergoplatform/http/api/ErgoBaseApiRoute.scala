@@ -98,17 +98,3 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
   }
 
 }
-
-case class SortDirection(value: Int) {
-  def apply(str: String): SortDirection = str.toLowerCase match {
-    case "asc" => new SortDirection(SortDirection.ASC)
-    case "desc" => new SortDirection(SortDirection.DESC)
-    case _ => new SortDirection(SortDirection.INVALID)
-  }
-}
-
-object SortDirection {
-  val ASC: Int = 1
-  val DESC: Int = 0
-  val INVALID: Int = -1
-}

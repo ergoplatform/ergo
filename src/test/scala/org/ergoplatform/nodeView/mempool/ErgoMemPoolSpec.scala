@@ -333,7 +333,6 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       })
     }
 
-
     val conformingTxs = pool.take(3).toSeq
     val stateWithTxs = wus.withUnconfirmedTransactions(conformingTxs)
 

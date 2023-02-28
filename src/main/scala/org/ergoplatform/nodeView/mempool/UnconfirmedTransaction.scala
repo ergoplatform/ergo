@@ -53,7 +53,7 @@ class UnconfirmedTransaction(val transaction: ErgoTransaction,
      fee * 1024 / feeFactor
   }
 
-  var _weight: Long = -1
+  private[mempool] var _weight: Long = -1
   def weight(implicit ms: MonetarySettings, sortingOption: SortingOption): Long = {
     if(_weight == -1)
       _weight = feePerFactor
@@ -61,7 +61,7 @@ class UnconfirmedTransaction(val transaction: ErgoTransaction,
   }
 
   def addWeight(weight: Long): UnconfirmedTransaction = {
-    _weight = weight
+    _weight += weight
     this
   }
 

@@ -128,7 +128,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   it should "get unconfirmed txs from mempool" in {
     Get(prefix + "/unconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      memPool.take(50).map(_.transaction).toSeq shouldBe responseAs[Seq[ErgoTransaction]]
+      memPool.take(50).toSeq.map(_.transaction) shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
 

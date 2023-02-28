@@ -62,21 +62,16 @@ class OrderedTxPool(val orderedTransactions: TreeSet[UnconfirmedTransaction],
       unconfirmedTx._feeFactor = feeFactor.get
 
     val newPool =
-      get(tx.id) match {
-        case Some(uTx) =>
-          new OrderedTxPool(
-            (orderedTransactions - uTx) + unconfirmedTx,
-            invalidatedTxIds,
-            outputs,
-            inputs
-          )
-        case None =>
-          new OrderedTxPool(
-            orderedTransactions + unconfirmedTx,
-            invalidatedTxIds,
-            outputs ++ tx.outputs.map(_.id -> tx.id),
-            inputs ++ tx.inputs.map(_.boxId -> tx.id)
-          ).updateFamily(tx, unconfirmedTx.weight, System.currentTimeMillis(), 0)
+      if(orderedTransactions.contains(unconfirmedTx) &&
+         unconfirmedTx.lastCheckedTime == get(tx.id).get.lastCheckedTime)
+        this
+      else {
+        new OrderedTxPool(
+          (orderedTransactions - unconfirmedTx) + unconfirmedTx,
+          invalidatedTxIds,
+          outputs ++ tx.outputs.map(_.id -> tx.id),
+          inputs ++ tx.inputs.map(_.boxId -> tx.id)
+        ).updateFamily(tx, unconfirmedTx.weight, System.currentTimeMillis(), 0)
       }
 
     if (newPool.orderedTransactions.size > mempoolCapacity) {

@@ -70,6 +70,7 @@ class NetworkController(ergoSettings: ErgoSettings,
     * Used to check whether connectivity is lost.
     */
   private var lastIncomingMessageTime: ErgoHistory.Time = 0L
+  private val activityDelta: Long = 60 * 1000 // 1 min
 
   //check own declared address for validity
   validateDeclaredAddress()
@@ -129,6 +130,14 @@ class NetworkController(ergoSettings: ErgoSettings,
           val now = time()
           lastIncomingMessageTime = now
           cp.lastMessage = now
+          // Update peer's last activity time every X minutes inside PeerInfo
+          cp.peerInfo.foreach { x =>
+            if ((now - x.lastStoredActivityTime) > activityDelta) {
+              val peerInfo = x.copy(lastStoredActivityTime = now)
+              peerManagerRef ! AddOrUpdatePeer(peerInfo)
+            }
+          }
+
         case None => log.warn("Connection not found for a message got from: " + remoteAddress)
       }
 

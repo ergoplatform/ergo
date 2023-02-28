@@ -19,10 +19,13 @@ import scala.util.{Failure, Try}
   * @param nodeParameters - parameters of the tree node (key size, optional value size, label size)
   * @param hf - hash function used to construct the tree
   * @tparam D - type of hash function digest
+  * @tparam HF - type of hash function used in AVL+ tree
   */
-class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
-                                          nodeParameters: NodeParameters)
-                                         (implicit val hf: CryptographicHash[D]) extends VersionedAVLStorage[D] with ScorexLogging {
+class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDBVersionedStore,
+                                                                      nodeParameters: AvlTreeParameters)
+                                                                     (implicit val hf: HF)
+  extends VersionedAVLStorage[D] with ScorexLogging {
+
 
   private lazy val labelSize = nodeParameters.labelSize
 
@@ -105,13 +108,31 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
 
 
 object VersionedLDBAVLStorage {
-  val InternalNodePrefix: Byte = 0: Byte
-  val LeafPrefix: Byte = 1: Byte
+  // prefixes used to encode node type (internal or leaf) in database
+  private[batch] val InternalNodePrefix: Byte = 0: Byte
+  private[batch] val LeafPrefix: Byte = 1: Byte
 
-  def fetch[D <: hash.Digest](key: ADKey)(implicit hf: CryptographicHash[D],
-                                          store: LDBVersionedStore,
-                                          nodeParameters: NodeParameters): ProverNodes[D] = {
-    val bytes = store(key)
+  private[batch] def topNodeKeys(nodeParameters: AvlTreeParameters) = {
+    val topNodeKey: Array[Byte] = Array.fill(nodeParameters.labelSize)(123: Byte)
+    val topNodeHeightKey: Array[Byte] = Array.fill(nodeParameters.labelSize)(124: Byte)
+    (topNodeKey, topNodeHeightKey)
+  }
+
+  /**
+    * Fetch tree node from database by its database id (hash of node contents)
+    *
+    * @param dbKey - database key node of interest is stored under (hash of the node)
+    * @param hf - hash function instance
+    * @param store - database
+    * @param nodeParameters - tree node parameters
+    * @tparam D - type of an output of a hash function used
+    * @return node read from the database (or throws exception if there is no such node), in case of internal node it
+    *         returns pruned internal node, so a node where left and right children not stored, only their hashes
+    */
+  def fetch[D <: hash.Digest](dbKey: ADKey)(implicit hf: CryptographicHash[D],
+                                            store: LDBVersionedStore,
+                                            nodeParameters: AvlTreeParameters): ProverNodes[D] = {
+    val bytes = store(dbKey)
     lazy val keySize = nodeParameters.keySize
     lazy val labelSize = nodeParameters.labelSize
 

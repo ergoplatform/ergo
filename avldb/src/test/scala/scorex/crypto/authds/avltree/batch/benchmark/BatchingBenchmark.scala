@@ -19,7 +19,7 @@ object BatchingBenchmark extends App with FileHelper {
   type HF = Blake2b256.type
 
   val store = new LDBVersionedStore(getRandomTempDir, initialKeepVersions = 10)
-  val storage = new VersionedLDBAVLStorage(store, NodeParameters(KeyLength, Some(ValueLength), LabelLength))
+  val storage = new VersionedLDBAVLStorage[Digest32, HF](store, AvlTreeParameters(KeyLength, Some(ValueLength), LabelLength))
   require(storage.isEmpty)
   val mods = generateModifications()
   var digest: ADDigest = ADDigest @@ Array[Byte]()

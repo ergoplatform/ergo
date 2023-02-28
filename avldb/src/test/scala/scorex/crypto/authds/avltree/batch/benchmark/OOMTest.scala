@@ -23,8 +23,8 @@ object OOMTest extends App {
   val store = new LDBVersionedStore(dir, initialKeepVersions = 200)
 
   val bestVersionKey = Blake2b256("best state version")
-  private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-  protected lazy val storage = new VersionedLDBAVLStorage(store, np)
+  private lazy val np = AvlTreeParameters(keySize = 32, valueSize = None, labelSize = 32)
+  protected lazy val storage = new VersionedLDBAVLStorage[Digest32, HF](store, np)
 
   val afterGenesisStateDigestHex: String = "78b130095239561ecf5449a7794c0615326d1fd007cc79dcc286e46e4beb1d3f01"
   val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex).get

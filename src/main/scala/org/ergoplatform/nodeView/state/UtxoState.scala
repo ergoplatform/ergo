@@ -22,6 +22,7 @@ import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.ModifierId
+import org.ergoplatform.settings.Constants.StateTreeParameters
 
 import scala.util.{Failure, Success, Try}
 
@@ -281,8 +282,7 @@ object UtxoState {
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
-      val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-      val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+      val storage = new VersionedLDBAVLStorage[Digest32, HF](store, StateTreeParameters)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
     new UtxoState(persistentProver, version, store, constants)
@@ -305,8 +305,7 @@ object UtxoState {
     val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
 
     val defaultStateContext = ErgoStateContext.empty(constants, parameters)
-    val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-    val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+    val storage = new VersionedLDBAVLStorage[Digest32, HF](store, StateTreeParameters)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(
       p,
       storage,

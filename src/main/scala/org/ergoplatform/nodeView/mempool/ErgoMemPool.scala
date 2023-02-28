@@ -43,8 +43,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     pool.get(modifierId).map(unconfirmedTx => unconfirmedTx.transaction)
   }
 
-  override def contains(modifierId: ModifierId): Boolean = {
-    pool.contains(modifierId)
+   def contains(uTx: UnconfirmedTransaction): Boolean = {
+    pool.contains(uTx)
   }
 
   override def take(limit: Int): Iterable[UnconfirmedTransaction] = {
@@ -231,7 +231,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime)
           }
         } else {
-          val msg = if (this.contains(tx.id)) {
+          val msg = if (contains(unconfirmedTx)) {
             s"Pool can not accept transaction ${tx.id}, it is already in the mempool"
           } else if (pool.size == settings.nodeSettings.mempoolCapacity) {
             s"Pool can not accept transaction ${tx.id}, the mempool is full"

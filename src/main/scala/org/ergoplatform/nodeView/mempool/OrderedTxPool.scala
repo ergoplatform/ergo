@@ -58,12 +58,13 @@ class OrderedTxPool(val orderedTransactions: TreeSet[UnconfirmedTransaction],
   def put(unconfirmedTx: UnconfirmedTransaction, feeFactor: Option[Int] = None): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
 
-    if(feeFactor.isDefined)
-      unconfirmedTx._feeFactor = feeFactor.get
+    feeFactor match {
+      case Some(factor) => unconfirmedTx._feeFactor = factor
+      case _ =>
+    }
 
     val newPool =
-      if(orderedTransactions.contains(unconfirmedTx) &&
-         unconfirmedTx.lastCheckedTime == get(tx.id).get.lastCheckedTime)
+      if(contains(unconfirmedTx))
         this
       else {
         new OrderedTxPool(
@@ -132,16 +133,17 @@ class OrderedTxPool(val orderedTransactions: TreeSet[UnconfirmedTransaction],
     *
     */
   def canAccept(unconfirmedTx: UnconfirmedTransaction): Boolean = {
-    !contains(unconfirmedTx.id) && size <= mempoolCapacity
+    !contains(unconfirmedTx) && size <= mempoolCapacity
   }
 
   /**
     *
-    * @param id - transaction id
+    * @param uTx - unconfirmed transaction
     * @return - true, if transaction is in the pool or invalidated earlier, false otherwise
     */
-  def contains(id: ModifierId): Boolean =
-    get(id).isDefined
+  def contains(uTx: UnconfirmedTransaction): Boolean =
+    orderedTransactions.contains(uTx) &&
+      uTx.lastCheckedTime == get(uTx.id).get.lastCheckedTime
 
   def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)
 

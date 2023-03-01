@@ -27,7 +27,8 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
   }
 
   protected def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
-    if (timeToTakeSnapshot(height) &&
+    if (constants.settings.nodeSettings.areSnapshotsStored &&
+        timeToTakeSnapshot(height) &&
         estimatedTip.nonEmpty &&
         estimatedTip.get - height <= MakeSnapshotEvery) {
 

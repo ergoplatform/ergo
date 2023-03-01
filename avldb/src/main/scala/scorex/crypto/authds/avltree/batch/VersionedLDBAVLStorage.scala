@@ -205,7 +205,7 @@ object VersionedLDBAVLStorage {
 
     val rootNode = manifest.root
     val rootNodeHeight = manifest.rootHeight
-    val digestWrapper = VersionedLDBAVLStorage.digest(rootNode, rootNodeHeight)
+    val digestWrapper = VersionedLDBAVLStorage.digest(rootNode.label, rootNodeHeight)
     val indices = Iterator(topNodeHashKey -> nodeLabel(rootNode), topNodeHeightKey -> Ints.toByteArray(rootNodeHeight))
     val nodesIterator = idCollector(manifest.root, Iterator.empty) ++
       chunks.flatMap(subtree => idCollector(subtree.subtreeTop, Iterator.empty))
@@ -226,9 +226,5 @@ object VersionedLDBAVLStorage {
     // then the AVL tree has at least  2^{255/1.4405} = 2^177 leaves, which is more than the number of atoms on planet Earth.
     ADDigest @@ (rootNodeLabel :+ rootNodeHeight.toByte)
   }
-
-  def digest[D <: hash.Digest](rootNode: Node[D], rootNodeHeight: Int): ADDigest = {
-    digest(rootNode.label, rootNodeHeight)
-  }
-
+  
 }

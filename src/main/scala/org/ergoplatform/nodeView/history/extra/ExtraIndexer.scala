@@ -224,7 +224,7 @@ trait ExtraIndexerBase extends ScorexLogging {
         findAndUpdateTree(hashErgoTree(box.ergoTree), Right(boxes(boxId)))
 
         // check if box is creating a new token, if yes record it
-        if (tokenRegistersSet(box))
+        if(tokenRegistersSet(box))
           cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
             if (!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1)))
               general += IndexedToken.fromBox(box, j)
@@ -329,7 +329,8 @@ trait ExtraIndexerBase extends ScorexLogging {
       if(tokenRegistersSet(iEb.box))
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
           history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb.box, i).id) match {
-            case Some(token) => toRemove += token.id // token created, delete
+            case Some(token) if token.boxId == iEb.id =>
+              toRemove += token.id // token created, delete
             case None => // no token created
           }
         }

@@ -14,7 +14,7 @@ import sigmastate.{SByte, SType}
 /**
   * Index of a token containing creation information.
   * @param tokenId     - id of this token
-  * @param boxId       - id of the creation box
+  * @param boxId       - id of the box that created th is token
   * @param amount      - emission amount
   * @param name        - name of this token (UTF-8)
   * @param description - description of this token (UTF-8)

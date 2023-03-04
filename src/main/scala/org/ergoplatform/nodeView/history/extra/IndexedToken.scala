@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.extra
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
-import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
+import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.{ByteColl, getDecimals, uniqueId}
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
@@ -32,6 +32,9 @@ case class IndexedToken(tokenId: ModifierId,
 }
 
 object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
+
+  type ByteColl = CollectionConstant[SByte.type]
+
   /**
     * Calculate a unique identifier for this a token.
     * Necessary, because token ids are sometimes identical to box ids, which causes overwrites.
@@ -58,8 +61,8 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
 
     // registers correct type
     try {
-      box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]]
-      box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]]
+      box.additionalRegisters(R4).asInstanceOf[ByteColl]
+      box.additionalRegisters(R5).asInstanceOf[ByteColl]
       getDecimals(box.additionalRegisters(R6))
     }catch {
       case _: Throwable => return false
@@ -75,26 +78,13 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
     * @param reg - register to extract decimals from
     * @return number of decimals places
     */
-  private def getDecimals(reg: EvaluatedValue[_ <: SType]): Int = {
+  def getDecimals(reg: EvaluatedValue[_ <: SType]): Int = {
     try {
-      new String(reg.asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8").toInt
+      new String(reg.asInstanceOf[ByteColl].value.toArray, "UTF-8").toInt
     }catch {
       case _: Throwable => reg.value.asInstanceOf[Int]
     }
   }
-
-  /**
-    * Construct a token index from a box. Used after checking box with "tokenRegistersSet".
-    * @param box - box to use
-    * @return token index
-    */
-  def fromBox(box: ErgoBox): IndexedToken =
-    IndexedToken(bytesToId(box.additionalTokens(0)._1),
-                 bytesToId(box.id),
-                 box.additionalTokens(0)._2,
-                 new String(box.additionalRegisters(R4).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
-                 new String(box.additionalRegisters(R5).asInstanceOf[CollectionConstant[SByte.type]].value.toArray, "UTF-8"),
-                 getDecimals(box.additionalRegisters(R6)))
 
   override def serialize(iT: IndexedToken, w: Writer): Unit = {
     w.putBytes(fastIdToBytes(iT.tokenId))
@@ -123,5 +113,20 @@ object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
 }
 
 object IndexedToken {
+
   val extraIndexTypeId: ExtraIndexTypeId = 35.toByte
+
+  /**
+    * Construct a token index from a box. Used after checking box with "tokenRegistersSet".
+    *
+    * @param box - box to use
+    * @return token index
+    */
+  def fromBox(box: ErgoBox, tokenIndex: Int): IndexedToken =
+    IndexedToken(bytesToId(box.additionalTokens(tokenIndex)._1),
+                 bytesToId(box.id),
+                 box.additionalTokens(tokenIndex)._2,
+                 new String(box.additionalRegisters(R4).asInstanceOf[ByteColl].value.toArray, "UTF-8"),
+                 new String(box.additionalRegisters(R5).asInstanceOf[ByteColl].value.toArray, "UTF-8"),
+                 getDecimals(box.additionalRegisters(R6)))
 }

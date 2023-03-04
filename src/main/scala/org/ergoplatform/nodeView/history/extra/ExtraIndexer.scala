@@ -226,9 +226,8 @@ trait ExtraIndexerBase extends ScorexLogging {
         // check if box is creating a new token, if yes record it
         if (tokenRegistersSet(box))
           cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
-            if (!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1))) {
-              general += IndexedTokenSerializer.fromBox(box)
-            }
+            if (!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1)))
+              general += IndexedToken.fromBox(box, j)
           }
 
         globalBoxIndex += 1
@@ -328,9 +327,11 @@ trait ExtraIndexerBase extends ScorexLogging {
       val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get
       address.spendBox(iEb)
       if(tokenRegistersSet(iEb.box))
-        history.typedExtraIndexById[IndexedToken](IndexedTokenSerializer.fromBox(iEb.box).id) match {
-          case Some(token) => toRemove += token.id // token created, delete
-          case None => // no token created
+        cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
+          history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb.box, i).id) match {
+            case Some(token) => toRemove += token.id // token created, delete
+            case None => // no token created
+          }
         }
       address.rollback(txTarget, boxTarget)(_history)
       toRemove += iEb.id // box by id

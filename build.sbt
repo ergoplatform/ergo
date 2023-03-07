@@ -279,6 +279,40 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
       ),
   )
 
+lazy val ergoCore = (project in file("ergo-core"))
+  .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
+  .settings(
+    crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
+    commonSettings,
+    name := "ergo-core",
+    libraryDependencies ++= Seq(
+      effectiveSigma,
+      (effectiveSigma % Test).classifier("tests")
+    ),
+    scalacOptions in(Compile, compile) ++= (if(scalaBinaryVersion.value == "2.11")
+      Seq.empty
+    else
+      Seq("-release", "8")
+      ),
+  )
+
+lazy val ergoNIPoPoW = (project in file("ergo-nipopow"))
+  .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
+  .settings(
+    crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
+    commonSettings,
+    name := "ergo-nipopow",
+    libraryDependencies ++= Seq(
+      effectiveSigma,
+      (effectiveSigma % Test).classifier("tests")
+    ),
+    scalacOptions in(Compile, compile) ++= (if(scalaBinaryVersion.value == "2.11")
+      Seq.empty
+    else
+      Seq("-release", "8")
+      ),
+  )
+
 lazy val It2Test = config("it2") extend (IntegrationTest, Test)
 configs(It2Test)
 inConfig(It2Test)(Defaults.testSettings ++ Seq(
@@ -297,6 +331,8 @@ lazy val ergo = (project in file("."))
     scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
     javacOptions in(Compile, compile) ++= javacReleaseOption
   )
+  .dependsOn(ergoCore % "test->test;compile->compile")
+  .dependsOn(ergoNIPoPoW % "test->test;compile->compile")
   .dependsOn(ergoWallet % "test->test;compile->compile")
   .dependsOn(avldb % "test->test;compile->compile")
   .configs(It2Test)

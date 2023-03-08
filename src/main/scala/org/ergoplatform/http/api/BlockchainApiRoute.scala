@@ -101,7 +101,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getIndexedHeightF: Future[Json] =
     getHistory.map { history =>
       Json.obj(
-        "indexedHeight" -> ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey)(history).getInt().asJson,
+        "indexedHeight" -> ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, history).getInt().asJson,
         "fullHeight" -> history.fullBlockHeight.asJson
       )
     }

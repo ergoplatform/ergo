@@ -263,9 +263,11 @@ trait ExtraIndexerBase extends ScorexLogging {
     */
   protected def run(): Unit = {
 
-    indexedHeight  = getIndex(IndexedHeightKey)(history).getInt
-    globalTxIndex  = getIndex(GlobalTxIndexKey)(history).getLong
-    globalBoxIndex = getIndex(GlobalBoxIndexKey)(history).getLong
+
+
+    indexedHeight  = getIndex(IndexedHeightKey, history).getInt
+    globalTxIndex  = getIndex(GlobalTxIndexKey, history).getLong
+    globalBoxIndex = getIndex(GlobalBoxIndexKey, history).getLong
 
     log.info(s"Started extra indexer at height $indexedHeight")
 
@@ -357,6 +359,7 @@ trait ExtraIndexerBase extends ScorexLogging {
 /**
   * Actor that constructs an index of database elements.
   * @param cacheSettings - cacheSettings to use for saveLimit size
+  * @param ae - ergo address encoder to use for handling addresses
   */
 class ExtraIndexer(cacheSettings: CacheSettings,
                    ae: ErgoAddressEncoder)
@@ -438,12 +441,18 @@ object ExtraIndexer {
     x
   }
 
+  val NewestVersion: Int = 1
+  val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array()
+
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")
   val GlobalTxIndexKey: Array[Byte] = Algos.hash("txns height")
   val GlobalBoxIndexKey: Array[Byte] = Algos.hash("boxes height")
+  val SchemaVersionKey: Array[Byte] = Algos.hash("schema version")
 
-  def getIndex(key: Array[Byte])(history: ErgoHistoryReader): ByteBuffer =
+  def getIndex(key: Array[Byte], history: HistoryStorage): ByteBuffer =
     ByteBuffer.wrap(history.modifierBytesById(bytesToId(key)).getOrElse(Array.fill[Byte](8){0}))
+
+  def getIndex(key: Array[Byte], history: ErgoHistoryReader): ByteBuffer = getIndex(key, history.historyStorage)
 
   def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef =
     system.actorOf(Props.create(classOf[ExtraIndexer], cacheSettings, chainSettings.addressEncoder))

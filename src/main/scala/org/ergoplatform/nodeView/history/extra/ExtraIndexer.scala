@@ -442,7 +442,7 @@ object ExtraIndexer {
   }
 
   val NewestVersion: Int = 1
-  val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array()
+  val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")
   val GlobalTxIndexKey: Array[Byte] = Algos.hash("txns height")

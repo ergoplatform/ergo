@@ -4,8 +4,8 @@ import org.ergoplatform.settings.PeerFeatureDescriptors
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
 import scorex.core.network.message.Message
-import scorex.util.serialization._
 import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization._
 
 /**
   * This peer feature allows to more reliably detect connections to self node and connections from other networks

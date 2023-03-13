@@ -7,15 +7,14 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSeriali
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scorex.core.serialization.ScorexSerializer
 import scorex.core.NodeViewModifier
-import scorex.crypto.authds.avltree.batch.AvlTreeParameters
+import scorex.core.serialization.ScorexSerializer
 import sigmastate.Values
 import sigmastate.Values.ErgoTree
 
 
 object Constants {
-  val HashLength: Int = 32
+  val HashLength: Int = scorex.crypto.authds.avltree.batch.Constants.HashLength
 
   val CoinsInOneErgo: Long = 1000000000
 
@@ -64,12 +63,6 @@ object Constants {
 
   // Maximum extension size during bytes parsing
   val MaxExtensionSizeMax: Int = 1024 * 1024
-
-  /**
-    * AVL+ tree node parameters. The tree is used to authenticate UTXO set.
-    * Keys and hashes are 256-bits long, values are boxes, so value size is dynamic.
-    */
-  object StateTreeParameters extends AvlTreeParameters(keySize = HashLength, valueSize = None, labelSize = HashLength)
 
   val MakeSnapshotEvery = 1024 // test value, switch to 51200 after testing
 

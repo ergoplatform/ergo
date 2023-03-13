@@ -1,7 +1,6 @@
 package org.ergoplatform.mining.difficulty
 
 import java.math.BigInteger
-
 import org.ergoplatform.nodeView.history.ErgoHistory._
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}

@@ -5,16 +5,18 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateConstants, UtxoState}
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.VersionTag
 import scorex.core.network.ConnectedPeer
-import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
+import scorex.core.serialization.SubtreeSerializer
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
 import scorex.util.{ByteArrayBuilder, ModifierId, ScorexLogging}
 import scorex.util.serialization.VLQByteBufferWriter
 import spire.syntax.all.cfor
-import scala.util.{Try, Random}
+
+import scala.util.{Random, Try}
 import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
 /**
@@ -30,9 +32,6 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   protected val historyStorage: HistoryStorage
 
   private[history] var minimalFullBlockHeightVar: Int
-
-  private implicit val hf = Blake2b256
-  private val avlTreeSerializer = new BatchAVLProverSerializer[Digest32, Blake2b256.type]()
 
   var _utxoSnapshotApplied = false //todo: persistence?
 
@@ -135,7 +134,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
           val idxBytes = Ints.toByteArray(idx)
           historyStorage
             .get(downloadedChunksPrefix ++ idxBytes)
-            .flatMap(bs => avlTreeSerializer.subtreeFromBytes(bs, 32).toOption)
+            .flatMap(bs => SubtreeSerializer.parseBytesTry(bs).toOption)
         }
       case None =>
         log.error("todo: msg") // todo:
@@ -217,7 +216,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     log.info("Starting UTXO set snapshot transfer into state database")
     val esc = ErgoStateReader.storageStateContext(stateStore, StateConstants(settings))
     val metadata = UtxoState.metadata(VersionTag @@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
-    VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore, Constants.StateTreeParameters).flatMap {
+    VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
       ldbStorage =>
         log.info("Finished UTXO set snapshot transfer into state database")
         ldbStorage.restorePrunedProver().map { prunedAvlProver =>

@@ -8,8 +8,8 @@ import org.ergoplatform.wallet.Constants
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
-import scorex.core.serialization.ScorexSerializer
 import scorex.core.NodeViewModifier
+import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}

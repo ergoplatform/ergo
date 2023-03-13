@@ -5,7 +5,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -15,7 +15,6 @@ import scorex.core.validation.MalformedModifierError
 import scorex.crypto.authds.avltree.batch.{Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
-import Constants.StateTreeParameters
 
 import scala.util.{Failure, Success, Try}
 
@@ -25,7 +24,7 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence wi
 
   val constants: StateConstants
 
-  protected lazy val storage = new VersionedLDBAVLStorage[Digest32, HF](store, StateTreeParameters)
+  protected lazy val storage = new VersionedLDBAVLStorage(store)
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 

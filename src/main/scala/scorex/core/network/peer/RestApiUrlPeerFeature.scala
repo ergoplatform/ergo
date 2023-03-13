@@ -2,11 +2,11 @@ package scorex.core.network.peer
 
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
-import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization._
-import java.net.URL
 
+import java.net.URL
 import org.ergoplatform.settings.PeerFeatureDescriptors
+import scorex.core.serialization.ScorexSerializer
 
 /**
   * Peer may have rest-api URL enabled in which case it needs to be passed to/from other peers

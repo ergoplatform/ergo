@@ -2,10 +2,8 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
-import scorex.crypto.authds.avltree.batch.PersistentBatchAVLProver
-import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
+import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import org.ergoplatform.settings.Constants.{MakeSnapshotEvery, timeToTakeSnapshot}
@@ -15,15 +13,10 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
   def constants: StateConstants
   protected def persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
-  private val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move to some other place ?
+  private[nodeView] val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move to some other place ?
 
-  //todo: scaladoc
-  //todo: return Iterator?
-  def slicedTree(): (BatchAVLProverManifest[Digest32], Seq[BatchAVLProverSubtree[Digest32]]) = {
-    persistentProver.synchronized {
-      val serializer = new BatchAVLProverSerializer[Digest32, HF]()(Algos.hash)
-      serializer.slice(persistentProver.avlProver, subtreeDepth = 12) //todo: name constant
-    }
+  private[nodeView] def dumpSnapshot(height: Height): Array[Byte] = {
+    snapshotsDb.writeSnapshot(persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage], height)
   }
 
   protected def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
@@ -32,11 +25,9 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
         estimatedTip.nonEmpty &&
         estimatedTip.get - height <= MakeSnapshotEvery) {
 
-      val (manifest, subtrees) = slicedTree()
-
       val ms0 = System.currentTimeMillis()
       snapshotsDb.pruneSnapshots(height - MakeSnapshotEvery * 2)
-      snapshotsDb.writeSnapshot(height, manifest, subtrees)
+      dumpSnapshot(height)
       val ms = System.currentTimeMillis()
       log.info("Time to dump utxo set snapshot: " + (ms - ms0))
     }

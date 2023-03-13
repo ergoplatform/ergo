@@ -407,4 +407,23 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
   def rollbackVersions(): Iterable[VersionID] = {
     versions.reverse
   }
+
+  trait ReadInterface {
+    def get(key: Array[Byte]): Array[Byte]
+  }
+
+  def backup[T](logic: ReadInterface => T): T = {
+    val ro = new ReadOptions()
+    ro.snapshot(db.getSnapshot)
+    try {
+      val ri = new ReadInterface {
+        override def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
+      }
+      logic(ri)
+    } finally {
+      // Make sure you close the snapshot to avoid resource leaks.
+      ro.snapshot().close()
+    }
+  }
+
 }

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.extra
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 
-object ExtraIndexSerializer  extends ScorexSerializer[ExtraIndex]{
+object ExtraIndexSerializer extends ScorexSerializer[ExtraIndex]{
 
     override def serialize(obj: ExtraIndex, w: Writer): Unit = {
       obj match {

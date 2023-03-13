@@ -1,12 +1,11 @@
 package scorex.core.network.peer
 
 import java.net.{InetAddress, InetSocketAddress}
-
 import org.ergoplatform.settings.PeerFeatureDescriptors
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
-import scorex.util.serialization._
 import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization._
 import scorex.util.Extensions._
 
 /**

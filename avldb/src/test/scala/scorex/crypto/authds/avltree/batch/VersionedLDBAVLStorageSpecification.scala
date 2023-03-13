@@ -10,7 +10,7 @@ import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.util.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.LDBVersionedStore
+import scorex.db.{LDBFactory, LDBVersionedStore}
 import scorex.utils.{Random => RandomBytes}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -25,7 +25,6 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
 
   override protected val KL = 32
   override protected val VL = 8
-  override protected val LL = 32
 
   def kvGen: Gen[(ADKey, ADValue)] = for {
     key <- Gen.listOfN(KL, Arbitrary.arbitrary[Byte]).map(_.toArray) suchThat
@@ -338,6 +337,19 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
 
   property("Persistence AVL batch prover - save additional info") {
     testAddInfoSaving(createVersionedStore _)
+  }
+
+  property("dumping snapshot") {
+    val prover = createPersistentProver()
+    blockchainWorkflowTest(prover)
+
+    val storage = prover.storage.asInstanceOf[VersionedLDBAVLStorage]
+    val store = LDBFactory.createKvDb("/tmp/aa")
+
+    val ts0 = System.currentTimeMillis()
+    storage.dumpSnapshot(store, 4)
+    val ts = System.currentTimeMillis()
+    println("time: " + (ts-ts0))
   }
 
 }

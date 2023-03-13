@@ -6,13 +6,14 @@ import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{ErgoAlgos, ErgoSettings}
 import org.ergoplatform.wallet.Constants
+import scorex.core.serialization.ManifestSerializer
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
 import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBFactory, LDBKVStore}
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
@@ -48,6 +49,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
 
   def pruneSnapshots(before: Height): Unit = {
+    //todo: consider storingUtxoSnapsots setting
     log.info("Starting snapshots pruning")
     val (toPrune, toLeave) = readSnapshotsInfo
       .availableManifests
@@ -77,29 +79,12 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     log.info("Snapshots pruning finished")
   }
 
-  def writeSnapshot(height: Height,
-                    manifest: UtxoState.Manifest,
-                    subtrees: Seq[UtxoState.Subtree]): Unit = {
-
-    val keysBuilder = mutable.ArrayBuilder.make[Array[Byte]]()
-    keysBuilder.sizeHint(subtrees.length + 1)
-
-    val valuesBuilder = mutable.ArrayBuilder.make[Array[Byte]]()
-    valuesBuilder.sizeHint(subtrees.length + 1)
-
-    keysBuilder += manifest.id
-    valuesBuilder += serializer.manifestToBytes(manifest)
-
-    // todo: not efficient to write tree to the memory ?
-    subtrees.foreach { s =>
-      keysBuilder += s.id
-      valuesBuilder += serializer.subtreeToBytes(s)
-    }
-    store.insert(keysBuilder.result(), valuesBuilder.result())
-    val si = readSnapshotsInfo.withNewManifest(height, manifest.id)
+  def writeSnapshot(pullFrom: VersionedLDBAVLStorage, height: Height): Array[Byte] = {
+    val manifestId = pullFrom.dumpSnapshot(store, ManifestSerializer.ManifestDepth)
+    val si = readSnapshotsInfo.withNewManifest(height, Digest32 @@ manifestId)
     writeSnapshotsInfo(si)
+    manifestId
   }
-
 
   def readManifestBytes(id: ManifestId): Option[Array[Byte]] = {
     store.get(id)
@@ -108,6 +93,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
   def readSubtreeBytes(id: SubtreeId): Option[Array[Byte]] = {
     store.get(id)
   }
+
 }
 
 object SnapshotsDb {

@@ -28,7 +28,6 @@ import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, Request
 import scorex.core.network._
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
@@ -48,6 +47,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success}
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
+import scorex.core.serialization.ScorexSerializer
 
 /**
   * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the

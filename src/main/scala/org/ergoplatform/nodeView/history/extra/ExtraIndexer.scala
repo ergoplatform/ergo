@@ -133,8 +133,6 @@ trait ExtraIndexerBase extends ScorexLogging {
     */
   private def saveProgress(writeLog: Boolean = true): Unit = {
 
-    if(modCount == 0) return
-
     val start: Long = System.currentTimeMillis
 
     // perform segmentation on big addresses and save their internal segment buffer
@@ -263,8 +261,6 @@ trait ExtraIndexerBase extends ScorexLogging {
     */
   protected def run(): Unit = {
 
-
-
     indexedHeight  = getIndex(IndexedHeightKey, history).getInt
     globalTxIndex  = getIndex(GlobalTxIndexKey, history).getLong
     globalBoxIndex = getIndex(GlobalBoxIndexKey, history).getLong
@@ -344,6 +340,7 @@ trait ExtraIndexerBase extends ScorexLogging {
     globalBoxIndex += 1
     historyStorage.removeExtra(toRemove.toArray)
     indexedHeight = height
+    caughtUp = false
 
     saveProgress(false)
 

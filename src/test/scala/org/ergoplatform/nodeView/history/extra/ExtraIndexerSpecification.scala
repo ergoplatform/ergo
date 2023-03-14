@@ -134,6 +134,23 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     // balances
     mismatches shouldBe 0
 
+    // -------------------------------------------------------------------
+    // restart indexer to catch up
+    run()
+
+    globalTxIndex shouldBe txIndexBefore
+    globalBoxIndex shouldBe boxIndexBefore
+
+    // txs after caught up
+    cfor(0)(_ < txIndexBefore, _ + 1) { txNum =>
+      history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(txNum))) shouldNot be(empty)
+    }
+
+    // boxes after caught up
+    cfor(0)(_ < boxIndexBefore, _ + 1) { boxNum =>
+      history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(boxNum))) shouldNot be(empty)
+    }
+
   }
 
 }

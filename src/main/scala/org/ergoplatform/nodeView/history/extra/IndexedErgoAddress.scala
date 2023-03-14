@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoAddressEncoder
-import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Type}
+import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Direction}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getFromSegments, getTxs, segmentTreshold, slice}
@@ -144,7 +144,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @param sortDir - whether to start retreival from newest box ([[DESC]]) or oldest box ([[ASC]])
     * @return array of unspent boxes
     */
-  def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int, sortDir: Type): Array[IndexedErgoBox] = {
+  def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int, sortDir: Direction): Array[IndexedErgoBox] = {
     val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
     sortDir match {
       case DESC =>

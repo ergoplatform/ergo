@@ -85,7 +85,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   /**
     * Locate which segment the given box number is in and change its sign, meaning it spends unspent boxes and vice versa.
     * @param boxNum - box number to locate
-    * @param history - database to retrieve swegments from
+    * @param history - database to retrieve segments from
     */
   private[extra] def findAndModBox(boxNum: Long, history: ErgoHistoryReader): Unit = {
     val boxNumAbs = abs(boxNum)
@@ -254,6 +254,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     else
       toSave += this // save the changes made to this address
 
+    // Save changes
     _history.historyStorage.insertExtra(Array.empty, toSave.toArray)
     _history.historyStorage.removeExtra(toRemove.toArray)
 
@@ -267,12 +268,16 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   private[extra] def splitToSegments: Array[IndexedErgoAddress] = {
     val data: Array[IndexedErgoAddress] = new Array[IndexedErgoAddress]((txs.length / segmentTreshold) + (boxes.length / segmentTreshold))
     var i: Int = 0
+
+    // Split txs until under segmentTreshold
     while(txs.length >= segmentTreshold) {
       data(i) = new IndexedErgoAddress(txSegmentId(treeHash, txSegmentCount), txs.take(segmentTreshold), ArrayBuffer.empty[Long], None)
       i += 1
       txSegmentCount += 1
       txs.remove(0, segmentTreshold)
     }
+
+    // Split boxes until under segmentTreshold
     while(boxes.length >= segmentTreshold) {
       data(i) = new IndexedErgoAddress(boxSegmentId(treeHash, boxSegmentCount), ArrayBuffer.empty[Long], boxes.take(segmentTreshold), None)
       i += 1
@@ -285,6 +290,11 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
 object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress] {
 
+  /**
+    * Compute the Blake2b hash of given ErgoTree
+    * @param tree - tree to use
+    * @return hex representation of hash
+    */
   def hashErgoTree(tree: ErgoTree): ModifierId = bytesToId(Algos.hash(tree.bytes))
 
   /**

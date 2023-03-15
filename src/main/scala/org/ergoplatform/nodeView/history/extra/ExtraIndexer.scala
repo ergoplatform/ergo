@@ -64,9 +64,9 @@ trait ExtraIndexerBase extends ScorexLogging {
   protected def historyStorage: HistoryStorage = _history.historyStorage
 
   // fast access buffers
-  private val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
-  private val boxes: mutable.HashMap[ModifierId,IndexedErgoBox] = mutable.HashMap.empty[ModifierId,IndexedErgoBox]
-  private val trees: mutable.HashMap[ModifierId,IndexedErgoAddress] = mutable.HashMap.empty[ModifierId,IndexedErgoAddress]
+  protected val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
+  protected val boxes: mutable.HashMap[ModifierId,IndexedErgoBox] = mutable.HashMap.empty[ModifierId,IndexedErgoBox]
+  protected val trees: mutable.HashMap[ModifierId,IndexedErgoAddress] = mutable.HashMap.empty[ModifierId,IndexedErgoAddress]
 
   // input tokens in a tx
   protected val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
@@ -118,7 +118,7 @@ trait ExtraIndexerBase extends ScorexLogging {
       case None => // address not found at all
         spendOrReceive match {
           case Left(iEb) => log.warn(s"Unknown address spent box ${bytesToId(iEb.box.id)}") // spend box should never happen by an unknown address
-          case Right(iEb) => trees.put(id, IndexedErgoAddress(id, ArrayBuffer(globalTxIndex), ArrayBuffer.empty[Long], Some(new BalanceInfo)).addBox(iEb)) // receive box
+          case Right(iEb) => trees.put(id, IndexedErgoAddress(id, ArrayBuffer(globalTxIndex), ArrayBuffer.empty[Long], Some(BalanceInfo())).addBox(iEb)) // receive box
         }
     }
   }
@@ -337,17 +337,18 @@ trait ExtraIndexerBase extends ScorexLogging {
       toRemove += bytesToId(NumericBoxIndex.indexToBytes(globalBoxIndex)) // box id by number
       globalBoxIndex -= 1
     }
+
+    // Reset indexer flags
     globalBoxIndex += 1
-    historyStorage.removeExtra(toRemove.toArray)
     indexedHeight = height
     caughtUp = false
-
-    saveProgress(false)
-
-    log.info(s"Successfully rolled back indexes to $height")
-
     rollback = false
 
+    // Save changes
+    saveProgress(false)
+    historyStorage.removeExtra(toRemove.toArray)
+
+    log.info(s"Successfully rolled back indexes to $height")
   }
 
 }

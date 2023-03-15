@@ -284,7 +284,8 @@ object ErgoHistory extends ScorexLogging {
   def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
     var db = HistoryStorage(ergoSettings)
 
-    if(ergoSettings.nodeSettings.extraIndex) { // check extra indexer db schema
+    // ExtraIndexer db check
+    if(ergoSettings.nodeSettings.extraIndex) { // check db schema
       val schemaVersion: Int = getIndex(SchemaVersionKey, db).getInt
       if (schemaVersion != NewestVersion) {
         if(getIndex(IndexedHeightKey, db).getInt > 0)

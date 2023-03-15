@@ -11,7 +11,7 @@ import scorex.util.{ModifierId, bytesToId}
 import spire.implicits.cfor
 
 /**
-  * Index of a transaction.
+  * Minimum general information for transaction. Not storing the whole transation is done to save space.
   * @param txid        - id of this transaction
   * @param height      - height of the block which includes this transaction
   * @param globalIndex - serial number of this transaction counting from block 1

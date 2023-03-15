@@ -287,7 +287,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getUnconfirmedForAddress(address: ErgoAddress)(mempool: ErgoMemPoolReader): BalanceInfo = {
-    val bal: BalanceInfo = new BalanceInfo
+    val bal: BalanceInfo = BalanceInfo()
     mempool.getAll.map(_.transaction).foreach(tx => {
       tx.outputs.foreach(box => {
         if(address.equals(ExtraIndexer.getAddress(box.ergoTree))) bal.add(box)
@@ -302,7 +302,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
         case Some(addr) =>
           (addr.balanceInfo.get.retreiveAdditionalTokenInfo(history), getUnconfirmedForAddress(address)(mempool).retreiveAdditionalTokenInfo(history))
         case None =>
-          (new BalanceInfo, getUnconfirmedForAddress(address)(mempool).retreiveAdditionalTokenInfo(history))
+          (BalanceInfo(), getUnconfirmedForAddress(address)(mempool).retreiveAdditionalTokenInfo(history))
       }
     }
   }

@@ -8,7 +8,7 @@ import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 
 /**
-  * Index of a box.
+  * Wrapper with dditional information for ErgoBox.
   * @param inclusionHeight   - height of the block in which the creating transaction was included in
   * @param spendingTxIdOpt   - optional, id of the spending transaction
   * @param spendingHeightOpt - optional, height of the block in which the spending transaction was included in

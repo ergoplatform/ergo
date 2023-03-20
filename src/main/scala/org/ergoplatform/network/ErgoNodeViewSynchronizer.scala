@@ -810,7 +810,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def sendManifest(id: ManifestId, usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
-    usr.getManifest(id) match {
+    usr.getManifestBytes(id) match {
       case Some(manifest) => {
         val msg = Message(ManifestSpec, Right(manifest), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))

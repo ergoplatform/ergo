@@ -41,7 +41,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
     snapshotsDb.readSnapshotsInfo
   }
 
-  def getManifest(id: ManifestId): Option[Array[Byte]] = {
+  def getManifestBytes(id: ManifestId): Option[Array[Byte]] = {
     snapshotsDb.readManifestBytes(id)
   }
 

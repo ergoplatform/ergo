@@ -13,6 +13,7 @@ import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 
 import scala.collection.mutable
+import scala.concurrent.Future
 import scala.util.{Failure, Try}
 
 /**
@@ -96,13 +97,6 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
   def dumpSnapshot(dumpStorage: LDBKVStore,
                    manifestDepth: Int): Array[Byte] = {
     store.backup { ri =>
-      val rootNodeLabel = ri.get(topNodeHashKey)
-      val rootNodeHeight = Ints.fromByteArray(ri.get(topNodeHeightKey))
-
-      val manifestBuilder = mutable.ArrayBuilder.make[Byte]()
-      manifestBuilder.sizeHint(200000)
-      manifestBuilder ++= Ints.toByteArray(rootNodeHeight)
-      manifestBuilder += ManifestSerializer.ManifestDepth
 
       def subtreeLoop(label: DigestType, builder: mutable.ArrayBuilder[Byte]): Unit = {
         val nodeBytes = ri.get(label)
@@ -123,7 +117,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
         dumpStorage.insert(sid, builder.result())
       }
 
-      def manifestLoop(nodeDbKey: Array[Byte], level: Int): Unit = {
+      def manifestLoop(nodeDbKey: Array[Byte], level: Int, manifestBuilder: mutable.ArrayBuilder[Byte]): Unit = {
         val nodeBytes = ri.get(nodeDbKey)
         manifestBuilder ++= nodeBytes
         val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
@@ -132,17 +126,31 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
             dumpSubtree(Digest32 @@ in.leftLabel)
             dumpSubtree(Digest32 @@ in.rightLabel)
           case in: ProxyInternalNode[DigestType] =>
-            manifestLoop(in.leftLabel, level + 1)
-            manifestLoop(in.rightLabel, level + 1)
+            manifestLoop(in.leftLabel, level + 1, manifestBuilder)
+            manifestLoop(in.rightLabel, level + 1, manifestBuilder)
           case _ =>
             //todo: support leafs
             println("!!!")
         }
       }
 
-      manifestLoop(rootNodeLabel, level = 1)
-      val manifestBytes = manifestBuilder.result()
-      dumpStorage.insert(rootNodeLabel, manifestBytes)
+      val rootNodeLabel = ri.get(topNodeHashKey)
+      val rootNodeHeight = Ints.fromByteArray(ri.get(topNodeHeightKey))
+
+      import scala.concurrent.ExecutionContext.Implicits.global
+      Future {
+        val ft0 = System.currentTimeMillis()
+        val manifestBuilder = mutable.ArrayBuilder.make[Byte]()
+        manifestBuilder.sizeHint(200000)
+        manifestBuilder ++= Ints.toByteArray(rootNodeHeight)
+        manifestBuilder += ManifestSerializer.ManifestDepth
+
+        manifestLoop(rootNodeLabel, level = 1, manifestBuilder)
+        val manifestBytes = manifestBuilder.result()
+        dumpStorage.insert(rootNodeLabel, manifestBytes)
+        val ft = System.currentTimeMillis()
+        log.info("Work within future: " + (ft - ft0) + " ms.")
+      }
       rootNodeLabel
     }
   }
@@ -161,54 +169,6 @@ object VersionedLDBAVLStorage {
     val topNodeHeightKey: Array[Byte] = Array.fill(StateTreeParameters.labelSize)(124: Byte)
     (topNodeKey, topNodeHeightKey)
   }
-
-  /*
-  /**
-    * Serialize tree node (only, without possible children)
-    */
-  private[batch] def toBytes[D <: hash.Digest](node: ProverNodes[D]): Array[Byte] = {
-    val builder = new mutable.ArrayBuilder.ofByte
-    node match {
-      case n: ProxyInternalNode[D] =>
-        builder += InternalNodePrefix += n.balance ++= n.key ++= n.leftLabel ++= n.rightLabel
-      case n: InternalProverNode[D] =>
-        builder += InternalNodePrefix += n.balance ++= n.key ++= n.left.label ++= n.right.label
-      case n: ProverLeaf[D] =>
-        builder += LeafPrefix ++= n.key ++= Ints.toByteArray(n.value.length) ++= n.value ++= n.nextLeafKey
-    }
-    builder.result()
-  }
-
-  // todo: replace store: LDBVersionedStore with some generic interface
-  def fromBytes[D <: hash.Digest](bytes: Array[Byte],
-                                  store: LDBVersionedStore): ProverNodes[DigestType] = {
-    lazy val keySize = StateTreeParameters.keySize
-    lazy val labelSize = StateTreeParameters.labelSize
-    bytes.head match {
-      case InternalNodePrefix =>
-        val balance = Balance @@ bytes.slice(1, 2).head
-        val key = ADKey @@ bytes.slice(2, 2 + keySize)
-        val leftKey = ADKey @@ bytes.slice(2 + keySize, 2 + keySize + labelSize)
-        val rightKey = ADKey @@ bytes.slice(2 + keySize + labelSize, 2 + keySize + (2 * labelSize))
-
-        if(store != null) {
-          new ProxyInternalProverNode(key, leftKey, rightKey, balance)(store)
-        } else {
-          new ProxyInternalNode[DigestType](key, Digest32 @@ leftKey, Digest32 @@ rightKey, balance)(hashFn)
-        }
-
-      case LeafPrefix =>
-        val key = ADKey @@ bytes.slice(1, 1 + keySize)
-        val (value, nextLeafKey) =  {
-          val valueSize = Ints.fromByteArray(bytes.slice(1 + keySize, 1 + keySize + 4))
-          val value = ADValue @@ bytes.slice(1 + keySize + 4, 1 + keySize + 4 + valueSize)
-          val nextLeafKey = ADKey @@ bytes.slice(1 + keySize + 4 + valueSize, 1 + (2 * keySize) + 4 + valueSize)
-          value -> nextLeafKey
-        }
-        new ProverLeaf[DigestType](key, value, nextLeafKey)(hashFn)
-    }
-  }
-  */
 
   /**
     * Fetch tree node from database by its database id (hash of node contents)

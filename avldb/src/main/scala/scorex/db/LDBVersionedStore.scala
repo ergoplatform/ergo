@@ -421,7 +421,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
       }
       logic(ri)
     } finally {
-      // Make sure you close the snapshot to avoid resource leaks.
+      // Close the snapshot to avoid resource leaks
       ro.snapshot().close()
     }
   }

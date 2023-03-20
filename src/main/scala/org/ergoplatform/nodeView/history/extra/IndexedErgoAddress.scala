@@ -1,9 +1,10 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
+import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Direction}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
-import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getSegmentsForRange, getTxs, segmentTreshold, slice}
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getFromSegments, getTxs, segmentTreshold, slice}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.ScorexSerializer
@@ -11,23 +12,27 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable.ArrayBuffer
 import spire.syntax.all.cfor
+
+import java.lang.Math.abs
 
 /**
   * An index of an address (ErgoTree)
   * @param treeHash    - hash of the corresponding ErgoTree
   * @param txs         - list of numberic transaction indexes associated with this address
-  * @param boxes       - list of numberic box indexes associated with this address
+  * @param boxes       - list of numberic box indexes associated with this address, negative values indicate the box is spent
   * @param balanceInfo - balance information (Optional because fragments do not contain it)
   */
 case class IndexedErgoAddress(treeHash: ModifierId,
-                              txs: ListBuffer[Long],
-                              boxes: ListBuffer[Long],
+                              txs: ArrayBuffer[Long],
+                              boxes: ArrayBuffer[Long],
                               balanceInfo: Option[BalanceInfo]) extends ExtraIndex with ScorexLogging {
 
-  override def id: ModifierId = treeHash
-  override def serializedId: Array[Byte] = fastIdToBytes(treeHash)
+  override lazy val id: ModifierId = treeHash
+
+  // Internal segment buffer used when spending boxes
+  private[extra] val segments: ArrayBuffer[IndexedErgoAddress] = ArrayBuffer.empty[IndexedErgoAddress]
 
   private[extra] var boxSegmentCount: Int = 0
   private[extra] var txSegmentCount: Int = 0
@@ -43,23 +48,83 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   def boxCount(): Long = segmentTreshold * boxSegmentCount + boxes.length
 
   /**
+    * Copied from [[java.util.Arrays.binarySearch]]
+    */
+  private def binarySearch(a: ArrayBuffer[Long], key: Long): Int = {
+    var low: Int = 0
+    var high: Int = a.length - 1
+
+    while (low <= high) {
+      val mid = (low + high) >>> 1
+      val midVal = abs(a(mid)) // ignore negativity
+
+      if (midVal < key)
+        low = mid + 1
+      else if (midVal > key)
+        high = mid - 1
+      else
+        return mid // key found
+    }
+    -1 // key not found.
+  }
+
+  /**
+    * Retrieve segment with specified id from buffer or database
+    * @param history - database handle to search, if segment is not found in buffer
+    * @param id - address segment to search for
+    * @return
+    */
+  private def getSegmentFromBufferOrHistroy(history: ErgoHistoryReader, id: ModifierId): Int = {
+    cfor(segments.length - 1)(_ >= 0, _ - 1) { i =>
+      if(segments(i).id.equals(id)) return i
+    }
+    segments += history.typedExtraIndexById[IndexedErgoAddress](id).get
+    segments.length - 1
+  }
+
+  /**
+    * Locate which segment the given box number is in and change its sign, meaning it spends unspent boxes and vice versa.
+    * @param boxNum - box number to locate
+    * @param history - database to retrieve segments from
+    */
+  private[extra] def findAndModBox(boxNum: Long, history: ErgoHistoryReader): Unit = {
+    val boxNumAbs = abs(boxNum)
+    val inCurrent: Int = binarySearch(boxes, boxNumAbs)
+    if(inCurrent >= 0) { // box found in current box array
+      boxes(inCurrent) = -boxes(inCurrent)
+    } else { // box is in another segment, use binary search to locate
+      var n = 0
+      var low = 0
+      var high = boxSegmentCount - 1
+      while(low <= high) {
+        val mid = (low + high) >>> 1
+        n = getSegmentFromBufferOrHistroy(history, boxSegmentId(treeHash, mid))
+        if(abs(segments(n).boxes.head) < boxNumAbs &&
+           abs(segments(n).boxes.last) < boxNumAbs)
+          low = mid + 1
+        else if(abs(segments(n).boxes.head) > boxNumAbs &&
+                abs(segments(n).boxes.last) > boxNumAbs)
+          high = mid - 1
+        else
+          low = high + 1 // break
+      }
+      val i: Int = binarySearch(segments(n).boxes, boxNumAbs)
+      if(i >= 0)
+        segments(n).boxes(i) = -segments(n).boxes(i)
+      else
+        log.warn(s"Box $boxNum not found in any segment of parent address when trying to spend")
+    }
+  }
+
+  /**
     * Get a range of the transactions associated with this address
     * @param history - history to use
     * @param offset  - items to skip from the start
     * @param limit   - items to retrieve
     * @return array of transactions with full bodies
     */
-  def retrieveTxs(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoTransaction] = {
-    if(offset + limit > txs.length && txSegmentCount > 0) {
-      val range: Array[Int] = getSegmentsForRange(offset, limit)
-      val data: ListBuffer[Long] = ListBuffer.empty[Long]
-      cfor(0)(_ < range.length, _ + 1) { i =>
-        history.typedExtraIndexById[IndexedErgoAddress](txSegmentId(treeHash, txSegmentCount - range(i))).get.txs ++=: data
-      }
-      getTxs(slice(data ++= (if(offset < txs.length) txs else Nil), offset % segmentTreshold, limit))(history)
-    } else
-      getTxs(slice(txs, offset, limit))(history)
-  }
+  def retrieveTxs(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoTransaction] =
+    getFromSegments(history, treeHash, offset, limit, txSegmentCount, txs, txSegmentId, _.txs, getTxs)
 
   /**
     * Get a range of the boxes associated with this address
@@ -68,35 +133,40 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @param limit   - items to retrieve
     * @return array of boxes
     */
-  def retrieveBoxes(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoBox] = {
-    if(offset + limit > boxes.length && boxSegmentCount > 0) {
-      val range: Array[Int] = getSegmentsForRange(offset, limit)
-      val data: ListBuffer[Long] = ListBuffer.empty[Long]
-      cfor(0)(_ < range.length, _ + 1) { i =>
-        history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, boxSegmentCount - range(i))).get.boxes ++=: data
-      }
-      getBoxes(slice(data ++= (if(offset < boxes.length) boxes else Nil), offset % segmentTreshold, limit))(history)
-    } else
-      getBoxes(slice(boxes, offset, limit))(history)
-  }
+  def retrieveBoxes(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoBox] =
+    getFromSegments(history, treeHash, offset, limit, boxSegmentCount, boxes, boxSegmentId, _.boxes, getBoxes)
 
   /**
     * Get a range of the boxes associated with this address that are NOT spent
     * @param history - history to use
     * @param offset  - items to skip from the start
     * @param limit   - items to retrieve
+    * @param sortDir - whether to start retreival from newest box ([[DESC]]) or oldest box ([[ASC]])
     * @return array of unspent boxes
     */
-  def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int): Array[IndexedErgoBox] = {
-    val data: ListBuffer[IndexedErgoBox] = ListBuffer.empty[IndexedErgoBox]
-    data ++= boxes.map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filter(!_.trackedBox.isSpent)
-    var segment: Int = boxSegmentCount
-    while(data.length < limit && segment > 0) {
-      segment -= 1
-      history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
-        .map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filter(!_.trackedBox.isSpent) ++=: data
+  def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int, sortDir: Direction): Array[IndexedErgoBox] = {
+    val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
+    sortDir match {
+      case DESC =>
+        data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+        var segment: Int = boxSegmentCount
+        while (data.length < (limit + offset) && segment > 0) {
+          segment -= 1
+          history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
+            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
+        }
+        slice(data.reverse, offset, limit).toArray
+      case ASC =>
+        var segment: Int = 0
+        while (data.length < (limit + offset) && segment < boxSegmentCount) {
+          data ++= history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
+            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+          segment += 1
+        }
+        if(data.length < (limit + offset))
+          data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+        slice(data, offset, limit).toArray
     }
-    slice(data, offset, limit).toArray
   }
 
   /**
@@ -123,11 +193,18 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
   /**
     * Update BalanceInfo by spending a box associated with this address
-    * @param box - box to spend
+    * @param iEb - box to spend
+    * @param historyOpt - history handle to update address fragment if spent box is old
     * @return this address
     */
-  private[extra] def spendBox(box: ErgoBox)(implicit ae: ErgoAddressEncoder): IndexedErgoAddress = {
-    balanceInfo.get.subtract(box)
+  private[extra] def spendBox(iEb: IndexedErgoBox, historyOpt: Option[ErgoHistoryReader] = None)(implicit ae: ErgoAddressEncoder): IndexedErgoAddress = {
+    balanceInfo.get.subtract(iEb.box)
+
+    if(historyOpt.isEmpty)
+      return this
+
+    findAndModBox(iEb.globalIndex, historyOpt.get)
+
     this
   }
 
@@ -139,7 +216,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     */
   private[extra] def rollback(txTarget: Long, boxTarget: Long)(_history: ErgoHistory): Unit = {
 
-    if(txs.last <= txTarget && boxes.last <= boxTarget) return
+    if(txs.last <= txTarget && abs(boxes.last) <= boxTarget) return
 
     def history: ErgoHistoryReader = _history.getReader
 
@@ -161,7 +238,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
     // filter box numbers
     do {
-      val tmp = boxes.takeWhile(_ <= boxTarget)
+      val tmp = boxes.takeWhile(abs(_) <= boxTarget)
       boxes.clear()
       boxes ++= tmp
       if(boxes.isEmpty && boxSegmentCount > 0) { // entire current box set removed, retrieving more from database if possible
@@ -170,13 +247,14 @@ case class IndexedErgoAddress(treeHash: ModifierId,
         toRemove += id
         boxSegmentCount -= 1
       }
-    }while(boxCount() > 0 && boxes.last > boxTarget)
+    }while(boxCount() > 0 && abs(boxes.last) > boxTarget)
 
     if(txCount() == 0 && boxCount() == 0)
       toRemove += this.id // address is empty after rollback, delete
     else
       toSave += this // save the changes made to this address
 
+    // Save changes
     _history.historyStorage.insertExtra(Array.empty, toSave.toArray)
     _history.historyStorage.removeExtra(toRemove.toArray)
 
@@ -187,17 +265,21 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * These special addresses have their ids calculated by "txSegmentId" and "boxSegmentId" respectively.
     * @return array of addresses
     */
-  private[extra] def splitToSegments(): Array[IndexedErgoAddress] = {
+  private[extra] def splitToSegments: Array[IndexedErgoAddress] = {
     val data: Array[IndexedErgoAddress] = new Array[IndexedErgoAddress]((txs.length / segmentTreshold) + (boxes.length / segmentTreshold))
     var i: Int = 0
+
+    // Split txs until under segmentTreshold
     while(txs.length >= segmentTreshold) {
-      data(i) = new IndexedErgoAddress(txSegmentId(treeHash, txSegmentCount), txs.take(segmentTreshold), ListBuffer.empty[Long], None)
+      data(i) = new IndexedErgoAddress(txSegmentId(treeHash, txSegmentCount), txs.take(segmentTreshold), ArrayBuffer.empty[Long], None)
       i += 1
       txSegmentCount += 1
       txs.remove(0, segmentTreshold)
     }
+
+    // Split boxes until under segmentTreshold
     while(boxes.length >= segmentTreshold) {
-      data(i) = new IndexedErgoAddress(boxSegmentId(treeHash, boxSegmentCount), ListBuffer.empty[Long], boxes.take(segmentTreshold), None)
+      data(i) = new IndexedErgoAddress(boxSegmentId(treeHash, boxSegmentCount), ArrayBuffer.empty[Long], boxes.take(segmentTreshold), None)
       i += 1
       boxSegmentCount += 1
       boxes.remove(0, segmentTreshold)
@@ -208,7 +290,12 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
 object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress] {
 
-  def hashErgoTree(tree: ErgoTree): Array[Byte] = Algos.hash(tree.bytes)
+  /**
+    * Compute the Blake2b hash of given ErgoTree
+    * @param tree - tree to use
+    * @return hex representation of hash
+    */
+  def hashErgoTree(tree: ErgoTree): ModifierId = bytesToId(Algos.hash(tree.bytes))
 
   /**
     * Calculates id of an address segment containing box indexes.
@@ -240,10 +327,10 @@ object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress]
   override def parse(r: Reader): IndexedErgoAddress = {
     val addressHash: ModifierId = bytesToId(r.getBytes(32))
     val txnsLen: Long = r.getUInt()
-    val txns: ListBuffer[Long] = ListBuffer.empty[Long]
+    val txns: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
     cfor(0)(_ < txnsLen, _ + 1) { _ => txns += r.getLong()}
     val boxesLen: Long = r.getUInt()
-    val boxes: ListBuffer[Long] = ListBuffer.empty[Long]
+    val boxes: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
     cfor(0)(_ < boxesLen, _ + 1) { _ => boxes += r.getLong()}
     val balanceInfo: Option[BalanceInfo] = r.getOption[BalanceInfo](BalanceInfoSerializer.parse(r))
     val iEa: IndexedErgoAddress = new IndexedErgoAddress(addressHash, txns, boxes, balanceInfo)
@@ -265,19 +352,19 @@ object IndexedErgoAddress {
     * @param limit  - items to retrieve
     * @return array of offsets
     */
-  def getSegmentsForRange(offset: Int, limit: Int): Array[Int] =
+  private def getSegmentsForRange(offset: Int, limit: Int): Array[Int] =
     (math.max(math.ceil(offset * 1F / segmentTreshold).toInt, 1) to math.ceil((offset + limit) * 1F / segmentTreshold).toInt).toArray
 
   /**
-    * Shorthand to get a range from an array by offset and limit.
+    * Shorthand to get a range from an ArrayBuffer by offset and limit.
     * @param arr    - array to get range from
     * @param offset - items to skip from the start
     * @param limit  - items to retrieve
-    * @tparam T     - type of "arr" array
-    * @return range in "arr" array
+    * @tparam T     - type of ArrayBuffer
+    * @return range in "arr" ArrayBuffer
     */
-  def slice[T](arr: Iterable[T], offset: Int, limit: Int): Iterable[T] =
-    arr.slice(arr.size - offset - limit, arr.size - offset)
+  private def slice[T](arr: ArrayBuffer[T], offset: Int, limit: Int): ArrayBuffer[T] =
+    arr.slice(offset, offset + limit)
 
   /**
     * Get an array of transactions with full bodies from an array of numeric transaction indexes
@@ -285,7 +372,7 @@ object IndexedErgoAddress {
     * @param history - database handle
     * @return array of transactions with full bodies
     */
-  def getTxs(arr: Iterable[Long])(history: ErgoHistoryReader): Array[IndexedErgoTransaction] = // sorted to match explorer
+  private def getTxs(arr: ArrayBuffer[Long], history: ErgoHistoryReader): Array[IndexedErgoTransaction] = // sorted to match explorer
     arr.map(n => NumericTxIndex.getTxByNumber(history, n).get.retrieveBody(history)).toArray.sortBy(tx => (-tx.height, tx.id))
 
   /**
@@ -294,6 +381,42 @@ object IndexedErgoAddress {
     * @param history - database handle
     * @return array of boxes
     */
-  def getBoxes(arr: Iterable[Long])(history: ErgoHistoryReader): Array[IndexedErgoBox] =
+  private def getBoxes(arr: ArrayBuffer[Long], history: ErgoHistoryReader): Array[IndexedErgoBox] =
     arr.map(n => NumericBoxIndex.getBoxByNumber(history, n).get).toArray
+
+  /**
+    * Get a set of address segments from database containing numeric transaction or box indexes. Then actually retreive these indexes.
+    * @param history - database handle
+    * @param treeHash - hash of parent ErgoTree
+    * @param offset - number of items to skip from the start
+    * @param limit - max number of item to be returned
+    * @param segmentCount - number of segments of the parent address
+    * @param array - the indexes already in memory
+    * @param idOf - function to calculate segment ids, either [[txSegmentId]] or [[boxSegmentId]]
+    * @param arraySelector - function to select index array from retreived segments
+    * @param retreive - function to retreive indexes from database
+    * @tparam T - type of desired indexes, either [[IndexedErgoTransaction]] or [[IndexedErgoBox]]
+    * @return
+    */
+  private def getFromSegments[T](history: ErgoHistoryReader,
+                                 treeHash: ModifierId,
+                                 offset: Int,
+                                 limit: Int,
+                                 segmentCount: Int,
+                                 array: ArrayBuffer[Long],
+                                 idOf: (ModifierId, Int) => ModifierId,
+                                 arraySelector: IndexedErgoAddress => ArrayBuffer[Long],
+                                 retreive: (ArrayBuffer[Long], ErgoHistoryReader) => Array[T]): Array[T] = {
+    if (offset + limit > array.length && segmentCount > 0) {
+      val range: Array[Int] = getSegmentsForRange(offset, limit)
+      val data: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
+      cfor(0)(_ < range.length, _ + 1) { i =>
+        arraySelector(
+          history.typedExtraIndexById[IndexedErgoAddress](idOf(treeHash, segmentCount - range(i))).get
+        ) ++=: data
+      }
+      retreive(slice(data ++= (if (offset < array.length) array else Nil), offset % segmentTreshold, limit), history)
+    } else
+      retreive(slice(array, offset, limit), history)
+  }
 }

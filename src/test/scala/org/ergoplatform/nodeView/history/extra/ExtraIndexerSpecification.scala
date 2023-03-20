@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UtxoState, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings}
@@ -36,11 +37,10 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
     1000000, 100, adProofsSuffixLength = 112 * 1024, extraIndex = false)
 
-  val HEIGHT: Int = 30
+  val HEIGHT: Int = 50
   val BRANCHPOINT: Int = HEIGHT / 2
 
-  property("extra indexer rollback") {
-
+  def createDB(): Unit = {
     val dir: File = createTempDir
     dir.mkdirs()
 
@@ -51,56 +51,120 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
 
     ChainGenerator.generate(HEIGHT, dir)(_history)
 
-    run()
+    // reset all variables
+    indexedHeight = 0
+    globalTxIndex = 0L
+    globalBoxIndex = 0L
+    lastWroteToDB = 0
+    caughtUp = false
+    rollback = false
+    general.clear()
+    boxes.clear()
+    trees.clear()
+  }
 
-    val txIndexBefore = globalTxIndex
-    val boxIndexBefore = globalBoxIndex
-
-    var txsIndexed: Int = 0
-    var boxesIndexed: Int = 0
-
-    // manually count balances
-    val addresses: mutable.HashMap[ErgoAddress,Long] = mutable.HashMap[ErgoAddress,Long]()
-    cfor(1)(_ <= BRANCHPOINT, _ + 1) { i =>
-      _history.getReader.bestBlockTransactionsAt(i).get.txs.foreach(tx => { txsIndexed += 1
-        if(i != 1) {
+  def getAddresses(limit: Int = BRANCHPOINT): (mutable.HashMap[ErgoAddress,Long],Int,Int) = {
+    var txsIndexed = 0
+    var boxesIndexed = 0
+    val addresses: mutable.HashMap[ErgoAddress, Long] = mutable.HashMap[ErgoAddress, Long]()
+    cfor(1)(_ <= limit, _ + 1) { i =>
+      _history.getReader.bestBlockTransactionsAt(i).get.txs.foreach(tx => {
+        txsIndexed += 1
+        if (i != 1) {
           tx.inputs.foreach(input => {
             val iEb: IndexedErgoBox = _history.getReader.typedExtraIndexById[IndexedErgoBox](bytesToId(input.boxId)).get
-            val address: ErgoAddress = ExtraIndexer.getAddress(iEb.box.ergoTree)
+            val address: ErgoAddress = ExtraIndexer.getAddress(iEb.box.ergoTree)(addressEncoder)
             addresses.put(address, addresses(address) - iEb.box.value)
           })
         }
-        tx.outputs.foreach(output => { boxesIndexed += 1
-          val address: ErgoAddress =  addressEncoder.fromProposition(output.ergoTree).get
+        tx.outputs.foreach(output => {
+          boxesIndexed += 1
+          val address: ErgoAddress = addressEncoder.fromProposition(output.ergoTree).get
           addresses.put(address, addresses.getOrElse[Long](address, 0) + output.value)
         })
       })
     }
+    (addresses, txsIndexed, boxesIndexed)
+  }
 
-    removeAfter(BRANCHPOINT)
-
+  def checkAddresses(addresses: mutable.HashMap[ErgoAddress,Long]): Int = {
     var mismatches: Int = 0
-
     addresses.foreach(e => {
-      _history.getReader.typedExtraIndexById[IndexedErgoAddress](bytesToId(IndexedErgoAddressSerializer.hashErgoTree(e._1.script))) match {
+      _history.getReader.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(e._1.script)) match {
         case Some(iEa) =>
-          if(iEa.balanceInfo.get.nanoErgs != e._2) {
+          if (iEa.balanceInfo.get.nanoErgs != e._2) {
             mismatches += 1
-            System.err.println(s"Address ${e._1.toString} has ${iEa.balanceInfo.get.nanoErgs / 1000000000}ERG, ${e._2  / 1000000000}ERG expected")
+            System.err.println(s"Address ${e._1.toString} has ${iEa.balanceInfo.get.nanoErgs / 1000000000}ERG, ${e._2 / 1000000000}ERG expected")
           }
+          iEa.boxes.map(boxNum =>
+            NumericBoxIndex.getBoxByNumber(history, boxNum) match {
+              case Some(iEb) =>
+                if (iEb.isSpent)
+                  boxNum.toInt should be <= 0
+                else
+                  boxNum.toInt should be >= 0
+              case None => System.err.println(s"Box $boxNum not found in database")
+            }
+          )
         case None =>
-          if(e._2 != 0) {
+          if (e._2 != 0) {
             mismatches += 1
             System.err.println(s"Address ${e._1.toString} should exist, but was not found")
           }
       }
     })
+    mismatches
+  }
 
-    // indexnumbers
+  property("extra indexer transactions") {
+    createDB()
+    run()
+    cfor(0)(_ < globalTxIndex, _ + 1) {n =>
+      val id = history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n)))
+      id shouldNot be(empty)
+      history.typedExtraIndexById[IndexedErgoTransaction](id.get.m) shouldNot be(empty)
+    }
+  }
+
+  property("extra indexer boxes") {
+    createDB()
+    run()
+    cfor(0)(_ < globalBoxIndex, _ + 1) { n =>
+      val id = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n)))
+      id shouldNot be(empty)
+      history.typedExtraIndexById[IndexedErgoBox](id.get.m) shouldNot be(empty)
+    }
+  }
+
+  property("extra indexer addresses") {
+    createDB()
+    run()
+    val (addresses, _, _) = getAddresses(HEIGHT)
+    checkAddresses(addresses) shouldBe 0
+  }
+
+  property("extra indexer rollback") {
+    createDB()
+
+    run()
+
+    val txIndexBefore = globalTxIndex
+    val boxIndexBefore = globalBoxIndex
+
+    // manually count balances
+    val (addresses, txsIndexed, boxesIndexed) = getAddresses()
+
+    // perform rollback
+    removeAfter(BRANCHPOINT)
+
+    // address balances
+    checkAddresses(addresses) shouldBe 0
+
+    // check indexnumbers
     globalTxIndex shouldBe txsIndexed
     globalBoxIndex shouldBe boxesIndexed
 
-    // txs
+    // check txs
     cfor(0)(_ < txIndexBefore, _ + 1) {txNum =>
       val txOpt = history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(txNum)))
       if(txNum < globalTxIndex)
@@ -109,7 +173,7 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
         txOpt shouldBe None
     }
 
-    // boxes
+    // check boxes
     cfor(0)(_ < boxIndexBefore, _ + 1) { boxNum =>
       val boxOpt = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(boxNum)))
       if (boxNum < globalBoxIndex)
@@ -118,8 +182,23 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
         boxOpt shouldBe None
     }
 
-    // balances
-    mismatches shouldBe 0
+    // -------------------------------------------------------------------
+    // restart indexer to catch up
+    run()
+
+    // check indexnumbers again
+    globalTxIndex shouldBe txIndexBefore
+    globalBoxIndex shouldBe boxIndexBefore
+
+    // check txs after caught up
+    cfor(0)(_ < txIndexBefore, _ + 1) { txNum =>
+      history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(txNum))) shouldNot be(empty)
+    }
+
+    // check boxes after caught up
+    cfor(0)(_ < boxIndexBefore, _ + 1) { boxNum =>
+      history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(boxNum))) shouldNot be(empty)
+    }
 
   }
 

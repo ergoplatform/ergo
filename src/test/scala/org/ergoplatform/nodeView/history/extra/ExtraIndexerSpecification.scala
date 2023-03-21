@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, P2PKAddress, UnsignedInput}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, P2PKAddress, UnsignedInput}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, hashErgoTree, txSegmentId}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UtxoState, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings}
@@ -29,6 +29,7 @@ import scala.util.Try
 class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase with HistoryTestHelpers {
 
   override protected val saveLimit: Int = 1 // save every block
+  override protected implicit val segmentTreshold: Int = 8 // split to smaller segments
   override protected implicit val addressEncoder: ErgoAddressEncoder = initSettings.chainSettings.addressEncoder
 
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
@@ -63,23 +64,23 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     trees.clear()
   }
 
-  def getAddresses(limit: Int = BRANCHPOINT): (mutable.HashMap[ErgoAddress,Long],Int,Int) = {
+  def getAddresses(limit: Int): (mutable.HashMap[ModifierId,Long],Int,Int) = {
     var txsIndexed = 0
     var boxesIndexed = 0
-    val addresses: mutable.HashMap[ErgoAddress, Long] = mutable.HashMap[ErgoAddress, Long]()
+    val addresses: mutable.HashMap[ModifierId, Long] = mutable.HashMap[ModifierId, Long]()
     cfor(1)(_ <= limit, _ + 1) { i =>
       _history.getReader.bestBlockTransactionsAt(i).get.txs.foreach(tx => {
         txsIndexed += 1
         if (i != 1) {
           tx.inputs.foreach(input => {
             val iEb: IndexedErgoBox = _history.getReader.typedExtraIndexById[IndexedErgoBox](bytesToId(input.boxId)).get
-            val address: ErgoAddress = ExtraIndexer.getAddress(iEb.box.ergoTree)(addressEncoder)
+            val address = hashErgoTree(ExtraIndexer.getAddress(iEb.box.ergoTree)(addressEncoder).script)
             addresses.put(address, addresses(address) - iEb.box.value)
           })
         }
         tx.outputs.foreach(output => {
           boxesIndexed += 1
-          val address: ErgoAddress = addressEncoder.fromProposition(output.ergoTree).get
+          val address = hashErgoTree(addressEncoder.fromProposition(output.ergoTree).get.script)
           addresses.put(address, addresses.getOrElse[Long](address, 0) + output.value)
         })
       })
@@ -87,16 +88,27 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     (addresses, txsIndexed, boxesIndexed)
   }
 
-  def checkAddresses(addresses: mutable.HashMap[ErgoAddress,Long]): Int = {
+  def checkAddresses(addresses: mutable.HashMap[ModifierId,Long], isSegment: Boolean = false): Int = {
     var mismatches: Int = 0
     addresses.foreach(e => {
-      _history.getReader.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(e._1.script)) match {
+      history.typedExtraIndexById[IndexedErgoAddress](e._1) match {
         case Some(iEa) =>
-          if (iEa.balanceInfo.get.nanoErgs != e._2) {
+          if(!isSegment && iEa.balanceInfo.get.nanoErgs != e._2) {
             mismatches += 1
-            System.err.println(s"Address ${e._1.toString} has ${iEa.balanceInfo.get.nanoErgs / 1000000000}ERG, ${e._2 / 1000000000}ERG expected")
+            System.err.println(s"Address ${e._1} has ${iEa.balanceInfo.get.nanoErgs / 1000000000}ERG, ${e._2 / 1000000000}ERG expected")
           }
-          iEa.boxes.map(boxNum =>
+          if(!isSegment) {
+            // check tx segments
+            val txSegments: mutable.HashMap[ModifierId, Long] = mutable.HashMap.empty[ModifierId, Long]
+            txSegments ++= (0 until iEa.txSegmentCount).map(txSegmentId(iEa.treeHash, _)).map(Tuple2(_, 0L))
+            checkAddresses(txSegments, isSegment = true) shouldBe 0
+            // check box segments
+            val boxSegments: mutable.HashMap[ModifierId, Long] = mutable.HashMap.empty[ModifierId, Long]
+            boxSegments ++= (0 until iEa.boxSegmentCount).map(boxSegmentId(iEa.treeHash, _)).map(Tuple2(_, 0L))
+            checkAddresses(boxSegments, isSegment = true) shouldBe 0
+          }
+          // check boxes in memory
+          iEa.boxes.foreach(boxNum =>
             NumericBoxIndex.getBoxByNumber(history, boxNum) match {
               case Some(iEb) =>
                 if (iEb.isSpent)
@@ -106,10 +118,14 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
               case None => System.err.println(s"Box $boxNum not found in database")
             }
           )
+          // check txs in memory
+          iEa.txs.foreach(txNum =>
+            NumericTxIndex.getTxByNumber(history, txNum) shouldNot be(empty)
+          )
         case None =>
           if (e._2 != 0) {
             mismatches += 1
-            System.err.println(s"Address ${e._1.toString} should exist, but was not found")
+            System.err.println(s"Address ${e._1} should exist, but was not found")
           }
       }
     })
@@ -152,7 +168,7 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     val boxIndexBefore = globalBoxIndex
 
     // manually count balances
-    val (addresses, txsIndexed, boxesIndexed) = getAddresses()
+    val (addresses, txsIndexed, boxesIndexed) = getAddresses(BRANCHPOINT)
 
     // perform rollback
     removeAfter(BRANCHPOINT)
@@ -185,6 +201,10 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     // -------------------------------------------------------------------
     // restart indexer to catch up
     run()
+
+    // Check addresses again
+    val (addresses2, _, _) = getAddresses(HEIGHT)
+    checkAddresses(addresses2) shouldBe 0
 
     // check indexnumbers again
     globalTxIndex shouldBe txIndexBefore

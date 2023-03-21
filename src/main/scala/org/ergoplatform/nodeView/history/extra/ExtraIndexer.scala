@@ -9,8 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FullBlockApplied, Rollback}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey, fastIdToBytes, getIndex}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
-import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.segmentTreshold
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.{GetSegmentTreshold, StartExtraIndexer}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.tokenRegistersSet
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -46,6 +45,9 @@ trait ExtraIndexerBase extends ScorexLogging {
 
   // Max buffer size (determined by config)
   protected val saveLimit: Int
+
+  // Size of box and tx number containing segment addresses
+  protected implicit val segmentTreshold: Int
 
   // Address encoder instance
   protected implicit val addressEncoder: ErgoAddressEncoder
@@ -332,7 +334,7 @@ trait ExtraIndexerBase extends ScorexLogging {
             case None => // no token created
           }
         }
-      address.rollback(txTarget, boxTarget)(_history)
+      address.rollback(txTarget, boxTarget, _history)
       toRemove += iEb.id // box by id
       toRemove += bytesToId(NumericBoxIndex.indexToBytes(globalBoxIndex)) // box id by number
       globalBoxIndex -= 1
@@ -365,6 +367,8 @@ class ExtraIndexer(cacheSettings: CacheSettings,
 
   override val saveLimit: Int = cacheSettings.history.extraCacheSize * 20
 
+  override implicit val segmentTreshold: Int = 512
+
   override implicit val addressEncoder: ErgoAddressEncoder = ae
 
   override def preStart(): Unit = {
@@ -393,6 +397,8 @@ class ExtraIndexer(cacheSettings: CacheSettings,
       _history = history
       run()
 
+    case GetSegmentTreshold =>
+      sender ! segmentTreshold
   }
 }
 
@@ -406,6 +412,11 @@ object ExtraIndexer {
       * @param history - handle to database
       */
     case class StartExtraIndexer(history: ErgoHistory)
+
+    /**
+      * Retreive the currently used segment treshold
+      */
+    case class GetSegmentTreshold()
   }
 
   /**

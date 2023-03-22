@@ -21,6 +21,7 @@ class IndexedErgoBox(val inclusionHeight: Int,
                      val box: ErgoBox,
                      val globalIndex: Long) extends ExtraIndex {
 
+  override lazy val id: ModifierId = bytesToId(serializedId)
   override def serializedId: Array[Byte] = box.id
 
 

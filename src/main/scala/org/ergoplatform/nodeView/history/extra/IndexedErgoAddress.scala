@@ -30,6 +30,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
                               balanceInfo: Option[BalanceInfo]) extends ExtraIndex with ScorexLogging {
 
   override lazy val id: ModifierId = treeHash
+  override def serializedId: Array[Byte] = fastIdToBytes(id)
 
   // Internal segment buffer used when spending boxes
   private[extra] val segments: ArrayBuffer[IndexedErgoAddress] = ArrayBuffer.empty[IndexedErgoAddress]

@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FullBlockApplied, Rollback}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey, fastIdToBytes, getIndex}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey, getIndex}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.{GetSegmentTreshold, StartExtraIndexer}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
@@ -30,15 +30,12 @@ trait ExtraIndexerBase extends ScorexLogging {
 
   // Indexed block height
   protected var indexedHeight: Int = 0
-  private val indexedHeightBuffer: ByteBuffer = ByteBuffer.allocate(4)
 
   // Indexed transaction count
   protected var globalTxIndex: Long = 0L
-  private val globalTxIndexBuffer: ByteBuffer = ByteBuffer.allocate(8)
 
   // Indexed box count
   protected var globalBoxIndex: Long = 0L
-  private val globalBoxIndexBuffer: ByteBuffer = ByteBuffer.allocate(8)
 
   // Last block height when buffer contents were saved to database
   protected var lastWroteToDB: Int = 0
@@ -59,7 +56,7 @@ trait ExtraIndexerBase extends ScorexLogging {
   protected var rollback: Boolean = false
 
   // Database handle
-  protected var _history: ErgoHistory = null
+  protected var _history: ErgoHistory = _
 
   protected def chainHeight: Int = _history.fullBlockHeight
   protected def history: ErgoHistoryReader = _history.getReader
@@ -69,6 +66,7 @@ trait ExtraIndexerBase extends ScorexLogging {
   protected val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
   protected val boxes: mutable.HashMap[ModifierId,IndexedErgoBox] = mutable.HashMap.empty[ModifierId,IndexedErgoBox]
   protected val trees: mutable.HashMap[ModifierId,IndexedErgoAddress] = mutable.HashMap.empty[ModifierId,IndexedErgoAddress]
+  protected val segments: mutable.HashMap[ModifierId,IndexedErgoAddress] = mutable.HashMap.empty[ModifierId,IndexedErgoAddress]
 
   // input tokens in a tx
   protected val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
@@ -140,33 +138,18 @@ trait ExtraIndexerBase extends ScorexLogging {
     // perform segmentation on big addresses and save their internal segment buffer
     trees.values.foreach { tree =>
       if(tree.segments.nonEmpty) {
-        tree.segments.foreach(seg => trees.put(seg.id, seg))
+        tree.segments.foreach(seg => segments.put(seg.id, seg))
         tree.segments.clear()
       }
       if(tree.txs.length > segmentTreshold || tree.boxes.length > segmentTreshold)
-        tree.splitToSegments.foreach(seg => trees.put(seg.id, seg))
+        tree.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 
-    // merge all modifiers to an Array, avoids reallocations during concatenation (++)
-    val all: Array[ExtraIndex] = new Array[ExtraIndex](modCount)
-    cfor(0)(_ < general.length , _ + 1) { i => all(i) = general(i) }
-    var i: Int = general.length
-    boxes.foreach(box => {
-      all(i) = box._2
-      i += 1
-    })
-    trees.foreach(tree => {
-      all(i) = tree._2
-      i += 1
-    })
-
     // insert modifiers and progress info to db
-    indexedHeightBuffer.clear()
-    globalTxIndexBuffer.clear()
-    globalBoxIndexBuffer.clear()
-    historyStorage.insertExtra(Array((IndexedHeightKey, indexedHeightBuffer .putInt(indexedHeight).array),
-                                     (GlobalTxIndexKey, globalTxIndexBuffer .putLong(globalTxIndex).array),
-                                     (GlobalBoxIndexKey,globalBoxIndexBuffer.putLong(globalBoxIndex).array)), all)
+    historyStorage.insertExtra(Array((IndexedHeightKey, ByteBuffer.allocate(4).putInt(indexedHeight).array),
+                                     (GlobalTxIndexKey, ByteBuffer.allocate(8).putLong(globalTxIndex).array),
+                                     (GlobalBoxIndexKey,ByteBuffer.allocate(8).putLong(globalBoxIndex).array)),
+                              (((general ++= boxes.values) ++= trees.values) ++= segments.values).toArray)
 
     if (writeLog)
       log.info(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
@@ -175,6 +158,7 @@ trait ExtraIndexerBase extends ScorexLogging {
     general.clear()
     boxes.clear()
     trees.clear()
+    segments.clear()
 
     lastWroteToDB = indexedHeight
   }
@@ -472,5 +456,5 @@ object ExtraIndexer {
   */
 trait ExtraIndex {
   lazy val id: ModifierId = bytesToId(serializedId)
-  def serializedId: Array[Byte] = fastIdToBytes(id)
+  def serializedId: Array[Byte]
 }

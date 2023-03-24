@@ -8,6 +8,8 @@ import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import org.ergoplatform.settings.Constants.{MakeSnapshotEvery, timeToTakeSnapshot}
 
+import scala.concurrent.Future
+
 trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
   def constants: StateConstants
@@ -25,9 +27,17 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
         estimatedTip.nonEmpty &&
         estimatedTip.get - height <= MakeSnapshotEvery) {
 
+      import scala.concurrent.ExecutionContext.Implicits.global
       val ms0 = System.currentTimeMillis()
-      snapshotsDb.pruneSnapshots(height - MakeSnapshotEvery * 2)
-      dumpSnapshot(height)
+      // todo: check that future will work with the same tree
+      Future {
+        log.info("Started work within future")
+        val ft0 = System.currentTimeMillis()
+        dumpSnapshot(height)
+        snapshotsDb.pruneSnapshots(height - MakeSnapshotEvery * 2) //todo: async
+        val ft = System.currentTimeMillis()
+        log.info("Work within future: " + (ft - ft0) + " ms.")
+      }
       val ms = System.currentTimeMillis()
       log.info("Time to dump utxo set snapshot: " + (ms - ms0))
     }

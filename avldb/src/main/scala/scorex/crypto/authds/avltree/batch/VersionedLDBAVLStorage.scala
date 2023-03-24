@@ -13,7 +13,6 @@ import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 
 import scala.collection.mutable
-import scala.concurrent.Future
 import scala.util.{Failure, Try}
 
 /**
@@ -137,20 +136,15 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       val rootNodeLabel = ri.get(topNodeHashKey)
       val rootNodeHeight = Ints.fromByteArray(ri.get(topNodeHeightKey))
 
-      import scala.concurrent.ExecutionContext.Implicits.global
-      Future {
-        val ft0 = System.currentTimeMillis()
-        val manifestBuilder = mutable.ArrayBuilder.make[Byte]()
-        manifestBuilder.sizeHint(200000)
-        manifestBuilder ++= Ints.toByteArray(rootNodeHeight)
-        manifestBuilder += ManifestSerializer.ManifestDepth
+      val manifestBuilder = mutable.ArrayBuilder.make[Byte]()
+      manifestBuilder.sizeHint(200000)
+      manifestBuilder ++= Ints.toByteArray(rootNodeHeight)
+      manifestBuilder += ManifestSerializer.ManifestDepth
 
-        manifestLoop(rootNodeLabel, level = 1, manifestBuilder)
-        val manifestBytes = manifestBuilder.result()
-        dumpStorage.insert(rootNodeLabel, manifestBytes)
-        val ft = System.currentTimeMillis()
-        log.info("Work within future: " + (ft - ft0) + " ms.")
-      }
+      manifestLoop(rootNodeLabel, level = 1, manifestBuilder)
+      val manifestBytes = manifestBuilder.result()
+      dumpStorage.insert(rootNodeLabel, manifestBytes)
+
       rootNodeLabel
     }
   }

@@ -12,7 +12,7 @@ import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
 import Extension.SystemParametersPrefix
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 
 /**
   * System parameters which could be readjusted via collective miners decision.
@@ -382,7 +382,7 @@ object Parameters {
 
 }
 
-object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs {
+object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
 
   override def serialize(params: Parameters, w: Writer): Unit = {
     require(params.parametersTable.nonEmpty, s"$params is empty")

@@ -7,11 +7,11 @@ import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import scorex.core.NodeViewModifier
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 
 object ModifierWriter {
 
-  val modifierSerializers: Map[NetworkObjectTypeId.Value, ScorexSerializer[_ <: BlockSection]] =
+  val modifierSerializers: Map[NetworkObjectTypeId.Value, ErgoSerializer[_ <: BlockSection]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofsSerializer)

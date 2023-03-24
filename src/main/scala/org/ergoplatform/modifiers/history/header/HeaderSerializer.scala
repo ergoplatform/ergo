@@ -3,14 +3,14 @@ package org.ergoplatform.modifiers.history.header
 import org.ergoplatform.mining.AutolykosSolutionSerializer
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import scorex.core.idToBytes
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 import scorex.util.{ByteArrayBuilder, bytesToId}
 import scorex.util.Extensions._
 
-object HeaderSerializer extends ScorexSerializer[Header] {
+object HeaderSerializer extends ErgoSerializer[Header] {
 
   override def serialize(h: Header, w: Writer): Unit = {
     serializeWithoutPow(h, w)

@@ -1,6 +1,6 @@
 package scorex.core.network
 
-import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
+import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
 
 /**
   * An abstract trait to describe peer capabilities.
@@ -17,5 +17,5 @@ trait PeerFeature extends BytesSerializable {
 
 object PeerFeature {
   type Id = Byte
-  type Serializers = Map[Id, ScorexSerializer[_ <: PeerFeature]]
+  type Serializers = Map[Id, ErgoSerializer[_ <: PeerFeature]]
 }

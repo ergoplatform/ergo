@@ -6,7 +6,10 @@ import scorex.util.serialization._
 
 import scala.util.Try
 
-trait ScorexSerializer[T] extends Serializer[T, T, Reader, Writer] {
+/**
+  * Basic interface for serializer with additional method to work with bytes insted of Reader/Writer instances
+  */
+trait ErgoSerializer[T] extends Serializer[T, T, Reader, Writer] {
 
   def toBytes(obj: T): Array[Byte] = {
     val writer = new VLQByteBufferWriter(new ByteArrayBuilder())

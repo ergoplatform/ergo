@@ -6,7 +6,10 @@ import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest,
 import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes, VersionedLDBAVLStorage}
 import scorex.util.serialization.{Reader, Writer}
 
-class ManifestSerializer(manifestDepth: Byte) extends ScorexSerializer[BatchAVLProverManifest[DigestType]] {
+/**
+  * Serializer of manifest, a tree which is cut at some `manifestDepth` from root
+  */
+class ManifestSerializer(manifestDepth: Byte) extends ErgoSerializer[BatchAVLProverManifest[DigestType]] {
   private val nodeSerializer = VersionedLDBAVLStorage.noStoreSerializer
 
   override def serialize(manifest: BatchAVLProverManifest[DigestType], w: Writer): Unit = {

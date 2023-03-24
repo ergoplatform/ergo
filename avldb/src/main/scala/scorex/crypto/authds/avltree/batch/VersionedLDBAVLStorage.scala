@@ -1,7 +1,7 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import scorex.core.serialization.{ManifestSerializer, ScorexSerializer}
+import scorex.core.serialization.{ManifestSerializer, ErgoSerializer}
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, Balance}
@@ -231,7 +231,7 @@ object VersionedLDBAVLStorage {
 
 }
 
-class ProverNodeSerializer(store: LDBVersionedStore) extends ScorexSerializer[ProverNodes[DigestType]] {
+class ProverNodeSerializer(store: LDBVersionedStore) extends ErgoSerializer[ProverNodes[DigestType]] {
 
   import VersionedLDBAVLStorage.{InternalNodePrefix,LeafPrefix}
 

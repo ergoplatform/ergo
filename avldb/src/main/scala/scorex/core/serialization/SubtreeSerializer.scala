@@ -6,7 +6,10 @@ import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverSubtree, 
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 
-object SubtreeSerializer extends ScorexSerializer[BatchAVLProverSubtree[DigestType]] with ScorexLogging {
+/**
+  * Serializer for subtree
+  */
+object SubtreeSerializer extends ErgoSerializer[BatchAVLProverSubtree[DigestType]] with ScorexLogging {
   private val nodeSerializer = VersionedLDBAVLStorage.noStoreSerializer
 
   override def serialize(subtree: BatchAVLProverSubtree[DigestType], w: Writer): Unit = {

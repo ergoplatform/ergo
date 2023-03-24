@@ -47,7 +47,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success}
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 
 /**
   * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the
@@ -665,7 +665,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                       requestedModifiers: Map[ModifierId, Array[Byte]],
                                       remote: ConnectedPeer): Unit  = {
     Constants.modifierSerializers.get(typeId) match {
-      case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
+      case Some(serializer: ErgoSerializer[BlockSection]@unchecked) =>
         // parse all modifiers and put them to modifiers cache
         val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)
 
@@ -749,7 +749,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   def parseModifiers[M <: NodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
                                             modifierTypeId: NetworkObjectTypeId.Value,
-                                            serializer: ScorexSerializer[M],
+                                            serializer: ErgoSerializer[M],
                                             remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
       serializer.parseBytesTry(bytes) match {

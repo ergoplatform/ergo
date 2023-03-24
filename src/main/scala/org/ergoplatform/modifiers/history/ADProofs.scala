@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.{NetworkObjectTypeId, NonHeaderBlockSection, P
 import org.ergoplatform.modifiers.state._
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.avltree.batch.{Lookup => _, _}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -27,7 +27,7 @@ case class ADProofs(headerId: ModifierId,
 
   override type M = ADProofs
 
-  override lazy val serializer: ScorexSerializer[ADProofs] = ADProofsSerializer
+  override lazy val serializer: ErgoSerializer[ADProofs] = ADProofsSerializer
 
   override def toString: String = s"ADProofs(Id:$id,HeaderId:$headerId)"
 
@@ -93,7 +93,7 @@ object ADProofs extends ApiCodecs {
   }
 }
 
-object ADProofsSerializer extends ScorexSerializer[ADProofs] {
+object ADProofsSerializer extends ErgoSerializer[ADProofs] {
 
   override def serialize(obj: ADProofs, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.headerId))

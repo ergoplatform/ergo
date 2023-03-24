@@ -20,7 +20,7 @@ import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
-import scorex.core.serialization.{BytesSerializable, ManifestSerializer, ScorexSerializer}
+import scorex.core.serialization.{BytesSerializable, ManifestSerializer, ErgoSerializer}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
@@ -47,7 +47,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   val stateGen: Gen[ST]
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
-  (ActorRef, ErgoSyncInfo, BlockSection, ErgoTransaction, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[BlockSection])
+  (ActorRef, ErgoSyncInfo, BlockSection, ErgoTransaction, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ErgoSerializer[BlockSection])
 
   class SynchronizerFixture extends AkkaFixture {
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
@@ -118,7 +118,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
     withFixture { ctx =>
       import ctx._
 
-      val dummySyncInfoMessageSpec = new SyncInfoMessageSpec[SyncInfo](serializer = new ScorexSerializer[SyncInfo] {
+      val dummySyncInfoMessageSpec = new SyncInfoMessageSpec[SyncInfo](serializer = new ErgoSerializer[SyncInfo] {
         override def parse(r: Reader): SyncInfo = {
           throw new Exception()
         }
@@ -129,7 +129,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       val dummySyncInfo: SyncInfo = new SyncInfo {
         type M = BytesSerializable
 
-        def serializer: ScorexSerializer[M] = throw new Exception
+        def serializer: ErgoSerializer[M] = throw new Exception
       }
 
       val msgBytes = dummySyncInfoMessageSpec.toBytes(dummySyncInfo)

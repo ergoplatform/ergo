@@ -3,10 +3,10 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
-object HistoryModifierSerializer extends ScorexSerializer[BlockSection] {
+object HistoryModifierSerializer extends ErgoSerializer[BlockSection] {
 
   override def serialize(obj: BlockSection, w: Writer): Unit = {
     obj match {

@@ -4,7 +4,7 @@ import java.net.{InetAddress, InetSocketAddress}
 import org.ergoplatform.settings.PeerFeatureDescriptors
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization._
 import scorex.util.Extensions._
 
@@ -19,7 +19,7 @@ case class LocalAddressPeerFeature(address: InetSocketAddress) extends PeerFeatu
   override def serializer: LocalAddressPeerFeatureSerializer.type = LocalAddressPeerFeatureSerializer
 }
 
-object LocalAddressPeerFeatureSerializer extends ScorexSerializer[LocalAddressPeerFeature] {
+object LocalAddressPeerFeatureSerializer extends ErgoSerializer[LocalAddressPeerFeature] {
 
   private val AddressLength = 4
 

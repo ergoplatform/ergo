@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
@@ -88,7 +88,7 @@ case class Header(override val version: Header.Version,
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
-  override lazy val serializer: ScorexSerializer[Header] = HeaderSerializer
+  override lazy val serializer: ErgoSerializer[Header] = HeaderSerializer
 
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 

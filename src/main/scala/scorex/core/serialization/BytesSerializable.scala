@@ -6,5 +6,5 @@ trait BytesSerializable extends Serializable {
 
   def bytes: Array[Byte] = serializer.toBytes(this)
 
-  def serializer: ScorexSerializer[M]
+  def serializer: ErgoSerializer[M]
 }

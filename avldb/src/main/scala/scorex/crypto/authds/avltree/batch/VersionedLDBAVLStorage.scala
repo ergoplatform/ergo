@@ -93,8 +93,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
   //todo: this method is not used, should be removed on next scrypto update?
   override def update(prover: BatchAVLProver[DigestType, _]): Try[Unit] = update(prover, Nil)
 
-  def dumpSnapshot(dumpStorage: LDBKVStore,
-                   manifestDepth: Int): Array[Byte] = {
+  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Int): Array[Byte] = {
     store.backup { ri =>
 
       def subtreeLoop(label: DigestType, builder: mutable.ArrayBuilder[Byte]): Unit = {
@@ -128,8 +127,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
             manifestLoop(in.leftLabel, level + 1, manifestBuilder)
             manifestLoop(in.rightLabel, level + 1, manifestBuilder)
           case _ =>
-            //todo: support leafs
-            println("!!!")
+            // do nothing for a leaf
         }
       }
 

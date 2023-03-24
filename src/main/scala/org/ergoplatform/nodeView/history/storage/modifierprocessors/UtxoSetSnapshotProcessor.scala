@@ -12,8 +12,7 @@ import scorex.core.serialization.SubtreeSerializer
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
-import scorex.util.{ByteArrayBuilder, ModifierId, ScorexLogging}
-import scorex.util.serialization.VLQByteBufferWriter
+import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
 import scala.util.{Random, Try}
@@ -41,7 +40,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     minimalFullBlockHeightVar = height + 1
   }
 
-  private val expectedChunksPrefix = Blake2b256.hash("expected chunk").drop(4)
+ // private val expectedChunksPrefix = Blake2b256.hash("expected chunk").drop(4)
   private val downloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
 
   private val downloadPlanKey = Blake2b256.hash("download plan")
@@ -150,7 +149,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   }
 
   private def writeDownloadPlanToTheDb(plan: UtxoSetSnapshotDownloadPlan) = {
-    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
+   /* val w = new VLQByteBufferWriter(new ByteArrayBuilder())
     w.putULong(plan.startingTime)
     w.putULong(plan.latestUpdateTime)
     w.putUInt(plan.snapshotHeight)
@@ -168,7 +167,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
       historyStorage.insert(expectedChunksPrefix ++ idxBytes, chunkId)
       idx = idx + 1
     }
-
+*/
   }
 
   /*

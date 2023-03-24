@@ -7,7 +7,7 @@ import scorex.util.serialization._
 import scala.util.Try
 
 /**
-  * Basic interface for serializer with additional method to work with bytes insted of Reader/Writer instances
+  * Basic interface for serializer with additional methods to work with bytes, not only Reader/Writer instances
   */
 trait ErgoSerializer[T] extends Serializer[T, T, Reader, Writer] {
 

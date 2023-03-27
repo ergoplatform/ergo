@@ -6,10 +6,11 @@ import akka.http.scaladsl.unmarshalling.Unmarshaller
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax.EncoderOps
-import org.ergoplatform.http.api.SortDirection.{ASC, DESC, INVALID, Direction}
+import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Direction, INVALID}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.GetSegmentTreshold
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra._
@@ -23,24 +24,28 @@ import sigmastate.Values.ErgoTree
 import spire.implicits.cfor
 
 import java.nio.ByteBuffer
-import scala.concurrent.Future
+import scala.concurrent.duration.{Duration, SECONDS}
+import scala.concurrent.{Await, Future}
 import scala.util.Success
 
-case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
+case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, indexer: ActorRef)
                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
+  private implicit val segmentTreshold: Int =
+    Await.result[Int]((indexer ? GetSegmentTreshold).asInstanceOf[Future[Int]], Duration(3, SECONDS))
+
   private val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 5)
 
-  private implicit val sortMarsheller: Unmarshaller[String, Direction] = Unmarshaller.strict[String, Direction] { str =>
+  private implicit val sortMarshaller: Unmarshaller[String, Direction] = Unmarshaller.strict[String, Direction] { str =>
     str.toLowerCase match {
       case "asc" => ASC
       case "desc" => DESC
       case _ => INVALID
     }
   }
-  private val sortDir: Directive[Tuple1[Direction]] = parameters("sortDirection".as(sortMarsheller) ? DESC)
+  private val sortDir: Directive[Tuple1[Direction]] = parameters("sortDirection".as(sortMarshaller) ? DESC)
 
   /**
     * Total number of boxes/transactions that can be requested at once to avoid too heavy requests ([[BlocksApiRoute.MaxHeaders]])
@@ -132,7 +137,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getTxsByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[(Seq[IndexedErgoTransaction],Long)] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => (addr.retrieveTxs(history, offset, limit), addr.txCount())
+        case Some(addr) => (addr.retrieveTxs(history, offset, limit), addr.txCount)
         case None       => (Seq.empty[IndexedErgoTransaction], 0L)
       }
     }
@@ -190,7 +195,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxesByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => (addr.retrieveBoxes(history, offset, limit).reverse, addr.boxCount())
+        case Some(addr) => (addr.retrieveBoxes(history, offset, limit).reverse, addr.boxCount)
         case None       => (Seq.empty[IndexedErgoBox], 0L)
       }
     }
@@ -245,7 +250,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxesByErgoTree(tree: ErgoTree, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
     getHistory.map { history =>
       getAddress(tree)(history) match {
-        case Some(iEa) => (iEa.retrieveBoxes(history, offset, limit).reverse, iEa.boxCount())
+        case Some(iEa) => (iEa.retrieveBoxes(history, offset, limit).reverse, iEa.boxCount)
         case None      => (Seq.empty[IndexedErgoBox], 0L)
       }
     }

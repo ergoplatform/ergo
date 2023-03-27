@@ -13,6 +13,7 @@ import scorex.util.serialization.{Reader, Writer}
   * @param m - id of a transaction
   */
 case class NumericTxIndex(n: Long, m: ModifierId) extends ExtraIndex {
+  override lazy val id: ModifierId = bytesToId(serializedId)
   override def serializedId: Array[Byte] = NumericTxIndex.indexToBytes(n)
 }
 
@@ -56,6 +57,7 @@ object NumericTxIndex {
   * @param m - id of a box
   */
 case class NumericBoxIndex(n: Long, m: ModifierId) extends ExtraIndex {
+  override lazy val id: ModifierId = bytesToId(serializedId)
   override def serializedId: Array[Byte] = NumericBoxIndex.indexToBytes(n)
 }
 

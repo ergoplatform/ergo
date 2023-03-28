@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import scorex.core.NodeViewModifier
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.message.SyncInfoMessageSpec
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
@@ -20,7 +20,7 @@ sealed trait ErgoSyncInfo extends SyncInfo {
 
   override type M = ErgoSyncInfo
 
-  override lazy val serializer: ScorexSerializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
+  override lazy val serializer: ErgoSerializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
 }
 
 /**
@@ -46,7 +46,7 @@ object ErgoSyncInfo {
   val MaxBlockIds = 1000
 }
 
-object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with ScorexLogging {
+object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLogging {
 
   val v2HeaderMode: Byte = -1 // used to mark sync v2 messages
 

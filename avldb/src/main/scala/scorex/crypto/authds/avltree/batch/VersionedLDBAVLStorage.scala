@@ -1,13 +1,16 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import scorex.crypto.authds.avltree.batch.serialization.ProxyInternalNode
+import scorex.core.serialization.{ManifestSerializer, ErgoSerializer}
+import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, Balance}
 import scorex.util.encode.Base58
 import scorex.crypto.hash
-import scorex.crypto.hash.{CryptographicHash, Digest}
-import scorex.db.LDBVersionedStore
+import scorex.crypto.hash.Digest32
+import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.ScorexLogging
+import scorex.util.serialization.{Reader, Writer}
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}
@@ -16,24 +19,18 @@ import scala.util.{Failure, Try}
   * Persistent versioned authenticated AVL+ tree implementation on top of versioned LevelDB storage
   *
   * @param store - level db storage to save the tree in
-  * @param nodeParameters - parameters of the tree node (key size, optional value size, label size)
-  * @param hf - hash function used to construct the tree
-  * @tparam D - type of hash function digest
-  * @tparam HF - type of hash function used in AVL+ tree
   */
-class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDBVersionedStore,
-                                                                      nodeParameters: AvlTreeParameters)
-                                                                     (implicit val hf: HF)
-  extends VersionedAVLStorage[D] with ScorexLogging {
+class VersionedLDBAVLStorage(store: LDBVersionedStore)
+  extends VersionedAVLStorage[DigestType] with ScorexLogging {
 
-  import VersionedLDBAVLStorage.{LeafPrefix, nodeLabel, topNodeKeys, toBytes}
+  import VersionedLDBAVLStorage.{nodeLabel, topNodeKeys}
 
-  private val topKeys = topNodeKeys(nodeParameters)
+  private val topKeys = topNodeKeys()
   private val topNodeHashKey: Array[Byte] = topKeys._1
   private val topNodeHeightKey: Array[Byte] = topKeys._2
 
-  private def restorePrunedTopNode(): Try[(ProverNodes[D], Int)] = Try {
-    val top = VersionedLDBAVLStorage.fetch[D](ADKey @@ store.get(topNodeHashKey).get)(hf, store, nodeParameters)
+  private def restorePrunedTopNode(): Try[(ProverNodes[DigestType], Int)] = Try {
+    val top = VersionedLDBAVLStorage.fetch(ADKey @@ store.get(topNodeHashKey).get)(store)
     val topHeight = Ints.fromByteArray(store.get(topNodeHeightKey).get)
 
     top -> topHeight
@@ -42,13 +39,13 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
   /**
    * Restore prover's tree from database with just pruned top node (so only one node is fetched)
    */
-  def restorePrunedProver(): Try[BatchAVLProver[D, HF]] = {
+  def restorePrunedProver(): Try[BatchAVLProver[DigestType, HashFnType]] = {
     restorePrunedTopNode().map { recoveredTop =>
-      new BatchAVLProver(nodeParameters.keySize, nodeParameters.valueSize, Some(recoveredTop))(hf)
+      new BatchAVLProver(StateTreeParameters.keySize, StateTreeParameters.valueSize, Some(recoveredTop))(hashFn)
     }
   }
 
-  override def rollback(version: ADDigest): Try[(ProverNodes[D], Int)] = Try {
+  override def rollback(version: ADDigest): Try[(ProverNodes[DigestType], Int)] = Try {
     if (!this.version.contains(version)) { // do not rollback to self
       store.rollbackTo(version)
     }
@@ -62,10 +59,7 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
 
   def rollbackVersions: Iterable[ADDigest] = store.rollbackVersions().map(d => ADDigest @@ d)
 
-  def leafsIterator(): Iterator[(Array[Byte], Array[Byte])] =
-    store.getWithFilter{ case (_, v) => v.head == LeafPrefix }
-
-  override def update[K <: Array[Byte], V <: Array[Byte]](prover: BatchAVLProver[D, _],
+  override def update[K <: Array[Byte], V <: Array[Byte]](prover: BatchAVLProver[DigestType, _],
                                                           additionalData: Seq[(K, V)]): Try[Unit] = {
     val digestWrapper = prover.digest
     val indexes = Seq(topNodeHashKey -> nodeLabel(prover.topNode),
@@ -78,17 +72,18 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
     store.update(digestWrapper, toRemove, toUpdateWithWrapped)
   }
 
-  private def serializedVisitedNodes(node: ProverNodes[D],
+  //todo: optimize the method
+  private def serializedVisitedNodes(node: ProverNodes[DigestType],
                                      isTop: Boolean): Array[(Array[Byte], Array[Byte])] = {
     // Should always serialize top node. It may not be new if it is the creation of the tree
     if (node.isNew || isTop) {
-      val pair: (Array[Byte], Array[Byte]) = (nodeLabel(node), toBytes(node, nodeParameters))
+      val pair: (Array[Byte], Array[Byte]) = (nodeLabel(node), VersionedLDBAVLStorage.noStoreSerializer.toBytes(node))
       node match {
-        case n: InternalProverNode[D] =>
+        case n: InternalProverNode[DigestType] =>
           val leftSubtree = serializedVisitedNodes(n.left, isTop = false)
           val rightSubtree = serializedVisitedNodes(n.right, isTop = false)
           pair +: (leftSubtree ++ rightSubtree)
-        case _: ProverLeaf[D] => Array(pair)
+        case _: ProverLeaf[DigestType] => Array(pair)
       }
     } else {
       Array.empty
@@ -96,7 +91,61 @@ class VersionedLDBAVLStorage[D <: Digest, HF <: CryptographicHash[D]](store: LDB
   }
 
   //todo: this method is not used, should be removed on next scrypto update?
-  override def update(prover: BatchAVLProver[D, _]): Try[Unit] = update(prover, Nil)
+  override def update(prover: BatchAVLProver[DigestType, _]): Try[Unit] = update(prover, Nil)
+
+  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Int): Array[Byte] = {
+    store.backup { ri =>
+
+      def subtreeLoop(label: DigestType, builder: mutable.ArrayBuilder[Byte]): Unit = {
+        val nodeBytes = ri.get(label)
+        builder ++= nodeBytes
+        val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
+        node match {
+          case in: ProxyInternalNode[DigestType] =>
+            subtreeLoop(Digest32 @@ in.leftLabel, builder)
+            subtreeLoop(Digest32 @@ in.rightLabel, builder)
+          case _ =>
+        }
+      }
+
+      def dumpSubtree(sid: DigestType): Try[Unit] = {
+        val builder = mutable.ArrayBuilder.make[Byte]()
+        builder.sizeHint(200000)
+        subtreeLoop(sid, builder)
+        dumpStorage.insert(sid, builder.result())
+      }
+
+      def manifestLoop(nodeDbKey: Array[Byte], level: Int, manifestBuilder: mutable.ArrayBuilder[Byte]): Unit = {
+        val nodeBytes = ri.get(nodeDbKey)
+        manifestBuilder ++= nodeBytes
+        val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
+        node match {
+          case in: ProxyInternalNode[DigestType] if level == manifestDepth =>
+            dumpSubtree(Digest32 @@ in.leftLabel)
+            dumpSubtree(Digest32 @@ in.rightLabel)
+          case in: ProxyInternalNode[DigestType] =>
+            manifestLoop(in.leftLabel, level + 1, manifestBuilder)
+            manifestLoop(in.rightLabel, level + 1, manifestBuilder)
+          case _ =>
+            // do nothing for a leaf
+        }
+      }
+
+      val rootNodeLabel = ri.get(topNodeHashKey)
+      val rootNodeHeight = Ints.fromByteArray(ri.get(topNodeHeightKey))
+
+      val manifestBuilder = mutable.ArrayBuilder.make[Byte]()
+      manifestBuilder.sizeHint(200000)
+      manifestBuilder ++= Ints.toByteArray(rootNodeHeight)
+      manifestBuilder += ManifestSerializer.MainnetManifestDepth
+
+      manifestLoop(rootNodeLabel, level = 1, manifestBuilder)
+      val manifestBytes = manifestBuilder.result()
+      dumpStorage.insert(rootNodeLabel, manifestBytes)
+
+      rootNodeLabel
+    }
+  }
 }
 
 
@@ -105,83 +154,132 @@ object VersionedLDBAVLStorage {
   private[batch] val InternalNodePrefix: Byte = 0: Byte
   private[batch] val LeafPrefix: Byte = 1: Byte
 
-  private[batch] def topNodeKeys(nodeParameters: AvlTreeParameters) = {
-    val topNodeKey: Array[Byte] = Array.fill(nodeParameters.labelSize)(123: Byte)
-    val topNodeHeightKey: Array[Byte] = Array.fill(nodeParameters.labelSize)(124: Byte)
+  val noStoreSerializer = new ProverNodeSerializer(null)
+
+  private[batch] def topNodeKeys(): (Array[Byte], Array[Byte]) = {
+    val topNodeKey: Array[Byte] = Array.fill(StateTreeParameters.labelSize)(123: Byte)
+    val topNodeHeightKey: Array[Byte] = Array.fill(StateTreeParameters.labelSize)(124: Byte)
     (topNodeKey, topNodeHeightKey)
   }
-
-
-  /**
-    * Node label (hash). Used as database key for node contents
-    */
-  private[batch] def nodeLabel[D <: hash.Digest](node: ProverNodes[D]): Array[Byte] = node.label
 
   /**
     * Fetch tree node from database by its database id (hash of node contents)
     *
     * @param dbKey - database key node of interest is stored under (hash of the node)
-    * @param hf - hash function instance
     * @param store - database
-    * @param nodeParameters - tree node parameters
-    * @tparam D - type of an output of a hash function used
     * @return node read from the database (or throws exception if there is no such node), in case of internal node it
     *         returns pruned internal node, so a node where left and right children not stored, only their hashes
     */
-  def fetch[D <: hash.Digest](dbKey: ADKey)(implicit hf: CryptographicHash[D],
-                                            store: LDBVersionedStore,
-                                            nodeParameters: AvlTreeParameters): ProverNodes[D] = {
+  def fetch(dbKey: ADKey)(store: LDBVersionedStore): ProverNodes[DigestType] = {
     val bytes = store(dbKey)
-    lazy val keySize = nodeParameters.keySize
-    lazy val labelSize = nodeParameters.labelSize
+    val node = new ProverNodeSerializer(store).parseBytes(bytes)
+    node.isNew = false
+    node
+  }
 
-    bytes.head match {
-      case InternalNodePrefix =>
-        val balance = Balance @@ bytes.slice(1, 2).head
-        val key = ADKey @@ bytes.slice(2, 2 + keySize)
-        val leftKey = ADKey @@ bytes.slice(2 + keySize, 2 + keySize + labelSize)
-        val rightKey = ADKey @@ bytes.slice(2 + keySize + labelSize, 2 + keySize + (2 * labelSize))
+  /**
+    * Node label (hash). Used as database key for node contents
+    */
+  private[batch] def nodeLabel(node: ProverNodes[DigestType]): Array[Byte] = node.label
 
-        val n = new ProxyInternalProverNode[D](key, leftKey, rightKey, balance)
-        n.isNew = false
-        n
-      case LeafPrefix =>
-        val key = ADKey @@ bytes.slice(1, 1 + keySize)
-        val (value, nextLeafKey) = if (nodeParameters.valueSize.isDefined) {
-          val valueSize = nodeParameters.valueSize.get
-          val value = ADValue @@ bytes.slice(1 + keySize, 1 + keySize + valueSize)
-          val nextLeafKey = ADKey @@ bytes.slice(1 + keySize + valueSize, 1 + (2 * keySize) + valueSize)
-          value -> nextLeafKey
-        } else {
-          val valueSize = Ints.fromByteArray(bytes.slice(1 + keySize, 1 + keySize + 4))
-          val value = ADValue @@ bytes.slice(1 + keySize + 4, 1 + keySize + 4 + valueSize)
-          val nextLeafKey = ADKey @@ bytes.slice(1 + keySize + 4 + valueSize, 1 + (2 * keySize) + 4 + valueSize)
-          value -> nextLeafKey
-        }
-        val l = new ProverLeaf[D](key, value, nextLeafKey)
-        l.isNew = false
-        l
+  def recreate(manifest: BatchAVLProverManifest[DigestType],
+                               chunks: Iterator[BatchAVLProverSubtree[DigestType]],
+                               additionalData: Iterator[(Array[Byte], Array[Byte])],
+                               store: LDBVersionedStore): Try[VersionedLDBAVLStorage] = {
+    //todo: the function below copy-pasted from BatchAVLProver, eliminate boilerplate
+
+    val (topNodeHashKey, topNodeHeightKey) = topNodeKeys()
+
+    def idCollector(node: ProverNodes[DigestType],
+                    acc: Iterator[(Array[Byte], Array[Byte])]): Iterator[(Array[Byte], Array[Byte])] = {
+      val pair: (Array[Byte], Array[Byte]) = (nodeLabel(node), noStoreSerializer.toBytes(node))
+      node match {
+        case n: ProxyInternalNode[DigestType] if n.isEmpty =>
+          acc ++ Iterator(pair)
+        case i: InternalProverNode[DigestType] =>
+          acc ++ Iterator(pair) ++ idCollector(i.left, acc) ++ idCollector(i.right, acc)
+        case _: ProverLeaf[DigestType] =>
+          acc ++ Iterator(pair)
+      }
+    }
+
+    val rootNode = manifest.root
+    val rootNodeHeight = manifest.rootHeight
+    val digestWrapper = VersionedLDBAVLStorage.digest(rootNode.label, rootNodeHeight)
+    val indices = Iterator(topNodeHashKey -> nodeLabel(rootNode), topNodeHeightKey -> Ints.toByteArray(rootNodeHeight))
+    val nodesIterator = idCollector(manifest.root, Iterator.empty) ++
+      chunks.flatMap(subtree => idCollector(subtree.subtreeTop, Iterator.empty))
+    store.update(digestWrapper, toRemove = Nil, toUpdate = indices ++ nodesIterator ++ additionalData).map{_ =>
+      new VersionedLDBAVLStorage(store)
     }
   }
 
   /**
-    * Serialize tree node (only, without possible children)
+    * Calculate tree digest, given root node label(hash) and root node height, by appending height to the hash
     */
-  private[batch] def toBytes[D <: hash.Digest](node: ProverNodes[D], nodeParameters: AvlTreeParameters): Array[Byte] = {
-    val builder = new mutable.ArrayBuilder.ofByte;
+  def digest[D <: hash.Digest](rootNodeLabel: D, rootNodeHeight: Int): ADDigest = {
+    assert(rootNodeHeight >= 0 && rootNodeHeight < 256)
+    // rootNodeHeight should never be more than 255, so the toByte conversion is safe (though it may cause an incorrect
+    // sign on the signed byte if rootHeight>127, but we handle that case correctly on decoding the byte back to int in the
+    // verifier, by adding 256 if it's negative).
+    // The reason rootNodeHeight should never be more than 255 is that if height is more than 255,
+    // then the AVL tree has at least  2^{255/1.4405} = 2^177 leaves, which is more than the number of atoms on planet Earth.
+    ADDigest @@ (rootNodeLabel :+ rootNodeHeight.toByte)
+  }
+
+}
+
+class ProverNodeSerializer(store: LDBVersionedStore) extends ErgoSerializer[ProverNodes[DigestType]] {
+
+  import VersionedLDBAVLStorage.{InternalNodePrefix,LeafPrefix}
+
+  override def serialize(node: ProverNodes[DigestType], w: Writer): Unit = {
     node match {
-      case n: ProxyInternalNode[D] =>
-        builder += InternalNodePrefix += n.balance ++= n.key ++= n.leftLabel ++= n.rightLabel
-      case n: InternalProverNode[D] =>
-        builder += InternalNodePrefix += n.balance ++= n.key ++= n.left.label ++= n.right.label
-      case n: ProverLeaf[D] =>
-        if (nodeParameters.fixedSizeValue) {
-          builder += LeafPrefix ++= n.key ++= n.value ++= n.nextLeafKey
-        } else {
-          builder += LeafPrefix ++= n.key ++= Ints.toByteArray(n.value.length) ++= n.value ++= n.nextLeafKey
-        }
+      case n: ProxyInternalNode[DigestType] =>
+        w.put(InternalNodePrefix)
+        w.put(n.balance)
+        w.putBytes(n.key)
+        w.putBytes(n.leftLabel)
+        w.putBytes(n.rightLabel)
+      case n: InternalProverNode[DigestType] =>
+        w.put(InternalNodePrefix)
+        w.put(n.balance)
+        w.putBytes(n.key)
+        w.putBytes(n.left.label)
+        w.putBytes(n.right.label)
+      case n: ProverLeaf[DigestType] =>
+        w.put(LeafPrefix)
+        w.putBytes(n.key)
+        w.putBytes(Ints.toByteArray(n.value.length))
+        w.putBytes(n.value)
+        w.putBytes(n.nextLeafKey)
     }
-    builder.result()
+  }
+
+  override def parse(r: Reader): ProverNodes[DigestType] = {
+    val prefix = r.getByte()
+    prefix match {
+      case InternalNodePrefix =>
+        val balance = Balance @@ r.getByte()
+        val key = ADKey @@ r.getBytes(StateTreeParameters.keySize)
+        val leftKey = ADKey @@ r.getBytes(StateTreeParameters.labelSize)
+        val rightKey = ADKey @@ r.getBytes(StateTreeParameters.labelSize)
+
+        if (store != null) {
+          new ProxyInternalProverNode(key, leftKey, rightKey, balance)(store)
+        } else {
+          new ProxyInternalNode[DigestType](key, Digest32 @@ leftKey, Digest32 @@ rightKey, balance)(hashFn)
+        }
+      case LeafPrefix =>
+        val key = ADKey @@ r.getBytes(StateTreeParameters.keySize)
+        val (value, nextLeafKey) =  {
+          val valueSize = Ints.fromByteArray(r.getBytes(4))
+          val value = ADValue @@ r.getBytes(valueSize)
+          val nextLeafKey = ADKey @@ r.getBytes(StateTreeParameters.keySize)
+          value -> nextLeafKey
+        }
+        new ProverLeaf[DigestType](key, value, nextLeafKey)(hashFn)
+    }
   }
 
 }

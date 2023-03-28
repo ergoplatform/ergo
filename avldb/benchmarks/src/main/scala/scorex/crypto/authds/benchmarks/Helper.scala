@@ -34,11 +34,11 @@ object Helper {
   }
 
   def persistentProverWithVersionedStore(initialKeepVersions: Int,
-                                         baseOperationsCount: Int = 0): (Prover, LDBVersionedStore, VersionedLDBAVLStorage[Digest32, HF]) = {
+                                         baseOperationsCount: Int = 0): (Prover, LDBVersionedStore, VersionedLDBAVLStorage) = {
     val dir = java.nio.file.Files.createTempDirectory("bench_testing_" + scala.util.Random.alphanumeric.take(15)).toFile
     dir.deleteOnExit()
     val store = new LDBVersionedStore(dir, initialKeepVersions = initialKeepVersions)
-    val storage = new VersionedLDBAVLStorage[Digest32, HF](store, AvlTreeParameters(kl, Some(vl), ll))
+    val storage = new VersionedLDBAVLStorage(store)
     require(storage.isEmpty)
     val prover = new BatchAVLProver[Digest32, HF](kl, Some(vl))
 

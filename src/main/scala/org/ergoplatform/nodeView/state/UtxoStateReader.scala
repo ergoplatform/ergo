@@ -7,7 +7,6 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransacti
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.Constants.StateTreeParameters
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
@@ -25,7 +24,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
 
   val constants: StateConstants
 
-  protected lazy val storage = new VersionedLDBAVLStorage[Digest32, HF](store, StateTreeParameters)
+  protected lazy val storage = new VersionedLDBAVLStorage(store)
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 

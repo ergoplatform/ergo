@@ -60,6 +60,7 @@ object ManifestSerializer {
     * Current manifest depth in the Ergo mainnet
     */
   val MainnetManifestDepth: Byte = 14
-  lazy val defaultSerializer = new ManifestSerializer(MainnetManifestDepth)
+
+  val defaultSerializer = new ManifestSerializer(MainnetManifestDepth)
 }
 

@@ -141,20 +141,22 @@ object PeerManager {
       override def choose(knownPeers: Map[InetSocketAddress, PeerInfo],
                           blacklistedPeers: Seq[InetAddress],
                           sc: ScorexContext): Seq[PeerInfo] = {
-        val recentlySeenNonBlacklisted = knownPeers.values.toSeq
+        val nonBlacklisted = knownPeers.values.toSeq
           .filter { p =>
             (p.connectionType.isDefined || p.lastHandshake > 0) &&
-            !blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip)) &&
-            (System.currentTimeMillis() - p.lastStoredActivityTime < limit)
+              !blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip))
           }
 
-        // todo: rework output before release ?
+        val recentlySeenNonBlacklisted = nonBlacklisted.filter { p =>
+          (System.currentTimeMillis() - p.lastStoredActivityTime < limit)
+        }
+
         if (recentlySeenNonBlacklisted.nonEmpty) {
           val res = Random.shuffle(recentlySeenNonBlacklisted).take(howMany)
           log.debug(s"Sending ${res.length} active peers: " + res)
           res
         } else {
-          val res = Random.shuffle(knownPeers.values.toSeq).take(howMany)
+          val res = Random.shuffle(nonBlacklisted).take(howMany)
           log.debug(s"Sending ${res.length} known peers: " + res)
           res
         }

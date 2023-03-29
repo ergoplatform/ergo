@@ -14,10 +14,12 @@ import scorex.util.serialization.{Reader, Writer}
   * @param peerSpec       - general information about the peer
   * @param lastHandshake  - timestamp when last handshake was done
   * @param connectionType - type of connection (Incoming/Outgoing) established to this peer if any
+  * @param lastStoredActivityTime - timestamp when peer was last seen active
   */
 case class PeerInfo(peerSpec: PeerSpec,
                     lastHandshake: Long,
-                    connectionType: Option[ConnectionDirection] = None)
+                    connectionType: Option[ConnectionDirection] = None,
+                    lastStoredActivityTime: Long = 0L)
 
 /**
   * Information about P2P layer status

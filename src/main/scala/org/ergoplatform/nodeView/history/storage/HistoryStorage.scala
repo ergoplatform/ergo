@@ -4,13 +4,18 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.extra.{ExtraIndexSerializer, ExtraIndex, IndexedErgoAddress}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, IndexedErgoAddress}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import scorex.core.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+
 import scala.util.{Failure, Success, Try}
 import spire.syntax.all.cfor
+
+import java.io.File
+import java.nio.file.Files
+import scala.jdk.CollectionConverters.asScalaIteratorConverter
 
 /**
   * Storage for Ergo history
@@ -176,6 +181,27 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
     extraStore.close()
     indexStore.close()
     objectsStore.close()
+  }
+
+  /**
+    * Delete the extra index database and reopen it.
+    *
+    * @param ergoSettings - settings to use
+    * @return new HistoryStorage instance with empty extra database, or this instance in case of failure
+    */
+  def deleteExtraDB(ergoSettings: ErgoSettings): HistoryStorage = {
+    log.warn(s"Removing extra index database due to old schema.")
+    close()
+    // org.ergoplatform.wallet.utils.FileUtils
+    val root = new File(s"${ergoSettings.directory}/history/extra")
+    if (root.exists()) {
+      Files.walk(root.toPath).iterator().asScala.toSeq.reverse.foreach(path => Try(Files.delete(path)))
+    }else {
+      log.error(s"Could not delete ${root.toString}")
+      return this
+    }
+    log.info(s"Deleted ${root.toString}")
+    HistoryStorage.apply(ergoSettings)
   }
 
 }

@@ -408,18 +408,21 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     versions.reverse
   }
 
-  trait ReadInterface {
-    def get(key: Array[Byte]): Array[Byte]
-  }
-
-  def backup[T](logic: ReadInterface => T): T = {
+  /**
+    * Take database snapshot, process it, and then close the snapshot.
+    * Could be useful when it is needed to process current state of database without blocking database (and so threads
+    * possibly working with it).
+    *
+    * @param logic - processing logic which is getting access to `get` function to read from database snapshot
+    */
+  def processSnapshot[T](logic: {def get(key: Array[Byte]): Array[Byte]} => T): T = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
     try {
-      val ri = new ReadInterface {
-        override def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
+      object readInterface {
+        def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
       }
-      logic(ri)
+      logic(readInterface)
     } finally {
       // Close the snapshot to avoid resource leaks
       ro.snapshot().close()

@@ -1,8 +1,9 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import scorex.core.serialization.{ManifestSerializer, ErgoSerializer}
+import scorex.core.serialization.{ErgoSerializer, ManifestSerializer}
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, Balance}
 import scorex.util.encode.Base58
@@ -14,6 +15,7 @@ import scorex.util.serialization.{Reader, Writer}
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}
+import scala.language.reflectiveCalls
 
 /**
   * Persistent versioned authenticated AVL+ tree implementation on top of versioned LevelDB storage
@@ -23,24 +25,20 @@ import scala.util.{Failure, Try}
 class VersionedLDBAVLStorage(store: LDBVersionedStore)
   extends VersionedAVLStorage[DigestType] with ScorexLogging {
 
-  import VersionedLDBAVLStorage.{nodeLabel, topNodeKeys}
+  import VersionedLDBAVLStorage.nodeLabel
 
-  private val topKeys = topNodeKeys()
-  private val topNodeHashKey: Array[Byte] = topKeys._1
-  private val topNodeHeightKey: Array[Byte] = topKeys._2
+  private def restorePrunedRootNode(): Try[(ProverNodes[DigestType], Int)] = Try {
+    val rootNode = VersionedLDBAVLStorage.fetch(ADKey @@ store.get(topNodeHashKey).get)(store)
+    val rootHeight = Ints.fromByteArray(store.get(topNodeHeightKey).get)
 
-  private def restorePrunedTopNode(): Try[(ProverNodes[DigestType], Int)] = Try {
-    val top = VersionedLDBAVLStorage.fetch(ADKey @@ store.get(topNodeHashKey).get)(store)
-    val topHeight = Ints.fromByteArray(store.get(topNodeHeightKey).get)
-
-    top -> topHeight
+    rootNode -> rootHeight
   }
 
   /**
    * Restore prover's tree from database with just pruned top node (so only one node is fetched)
    */
   def restorePrunedProver(): Try[BatchAVLProver[DigestType, HashFnType]] = {
-    restorePrunedTopNode().map { recoveredTop =>
+    restorePrunedRootNode().map { recoveredTop =>
       new BatchAVLProver(StateTreeParameters.keySize, StateTreeParameters.valueSize, Some(recoveredTop))(hashFn)
     }
   }
@@ -49,7 +47,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     if (!this.version.contains(version)) { // do not rollback to self
       store.rollbackTo(version)
     }
-  }.flatMap(_ => restorePrunedTopNode())
+  }.flatMap(_ => restorePrunedRootNode())
     .recoverWith { case e =>
       log.warn(s"Failed to recover tree for digest ${Base58.encode(version)}:", e)
       Failure(e)
@@ -93,11 +91,18 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
   //todo: this method is not used, should be removed on next scrypto update?
   override def update(prover: BatchAVLProver[DigestType, _]): Try[Unit] = update(prover, Nil)
 
+  /**
+    * Dump current state of AVL+ tree into another (non-versioned) storage. Tree is dumped in
+    * (manifest, subtrees) format
+    * @param dumpStorage - non-versioned storage to dump tree to
+    * @param manifestDepth - depth of manifest tree
+    * @return - hash of root node of tree
+    */
   def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Int): Array[Byte] = {
-    store.backup { ri =>
+    store.processSnapshot { dbReader =>
 
       def subtreeLoop(label: DigestType, builder: mutable.ArrayBuilder[Byte]): Unit = {
-        val nodeBytes = ri.get(label)
+        val nodeBytes = dbReader.get(label)
         builder ++= nodeBytes
         val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
         node match {
@@ -116,7 +121,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       }
 
       def manifestLoop(nodeDbKey: Array[Byte], level: Int, manifestBuilder: mutable.ArrayBuilder[Byte]): Unit = {
-        val nodeBytes = ri.get(nodeDbKey)
+        val nodeBytes = dbReader.get(nodeDbKey)
         manifestBuilder ++= nodeBytes
         val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
         node match {
@@ -131,8 +136,8 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
         }
       }
 
-      val rootNodeLabel = ri.get(topNodeHashKey)
-      val rootNodeHeight = Ints.fromByteArray(ri.get(topNodeHeightKey))
+      val rootNodeLabel = dbReader.get(topNodeHashKey)
+      val rootNodeHeight = Ints.fromByteArray(dbReader.get(topNodeHeightKey))
 
       val manifestBuilder = mutable.ArrayBuilder.make[Byte]()
       manifestBuilder.sizeHint(200000)
@@ -150,17 +155,15 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
 
 
 object VersionedLDBAVLStorage {
+
+  val topNodeHashKey: Array[Byte] = Array.fill(StateTreeParameters.labelSize)(123: Byte)
+  val topNodeHeightKey: Array[Byte] = Array.fill(StateTreeParameters.labelSize)(124: Byte)
+
   // prefixes used to encode node type (internal or leaf) in database
   private[batch] val InternalNodePrefix: Byte = 0: Byte
   private[batch] val LeafPrefix: Byte = 1: Byte
 
-  val noStoreSerializer = new ProverNodeSerializer(null)
-
-  private[batch] def topNodeKeys(): (Array[Byte], Array[Byte]) = {
-    val topNodeKey: Array[Byte] = Array.fill(StateTreeParameters.labelSize)(123: Byte)
-    val topNodeHeightKey: Array[Byte] = Array.fill(StateTreeParameters.labelSize)(124: Byte)
-    (topNodeKey, topNodeHeightKey)
-  }
+  val noStoreSerializer = new ProverNodeSerializer(store = null)
 
   /**
     * Fetch tree node from database by its database id (hash of node contents)
@@ -187,8 +190,6 @@ object VersionedLDBAVLStorage {
                                additionalData: Iterator[(Array[Byte], Array[Byte])],
                                store: LDBVersionedStore): Try[VersionedLDBAVLStorage] = {
     //todo: the function below copy-pasted from BatchAVLProver, eliminate boilerplate
-
-    val (topNodeHashKey, topNodeHeightKey) = topNodeKeys()
 
     def idCollector(node: ProverNodes[DigestType],
                     acc: Iterator[(Array[Byte], Array[Byte])]): Iterator[(Array[Byte], Array[Byte])] = {

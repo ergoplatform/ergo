@@ -5,7 +5,7 @@ import akka.pattern.StatusReply
 import com.google.common.primitives.Longs
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -460,7 +460,7 @@ object CandidateGenerator extends ScorexLogging {
       // Calculate required difficulty for the new block
       val nBits: Long = bestHeaderOpt
         .map(parent => history.requiredDifficultyAfter(parent))
-        .map(d => RequiredDifficulty.encodeCompactBits(d))
+        .map(d => DifficultySerializer.encodeCompactBits(d))
         .getOrElse(ergoSettings.chainSettings.initialNBits)
 
       // Obtain NiPoPoW interlinks vector to pack it into the extension section

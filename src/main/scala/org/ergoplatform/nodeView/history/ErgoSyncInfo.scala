@@ -13,7 +13,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
   *
   */
 sealed trait ErgoSyncInfo extends SyncInfo {
-  /*
+  /**
    * Whether sync info message corresponds to non-empty blockchain
    */
   val nonEmpty: Boolean

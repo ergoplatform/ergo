@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.history.header
 
 import org.ergoplatform.mining.AutolykosSolutionSerializer
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import scorex.core.idToBytes
 import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
@@ -25,7 +25,7 @@ object HeaderSerializer extends ErgoSerializer[Header] {
     w.putBytes(h.stateRoot)
     w.putULong(h.timestamp)
     w.putBytes(h.extensionRoot)
-    RequiredDifficulty.serialize(h.nBits, w)
+    DifficultySerializer.serialize(h.nBits, w)
     w.putUInt(h.height)
     w.putBytes(h.votes)
 
@@ -50,7 +50,7 @@ object HeaderSerializer extends ErgoSerializer[Header] {
     val stateRoot = ADDigest @@ r.getBytes(33)
     val timestamp = r.getULong()
     val extensionHash = Digest32 @@ r.getBytes(32)
-    val nBits = RequiredDifficulty.parse(r)
+    val nBits = DifficultySerializer.parse(r)
     val height = r.getUInt().toIntExact
     val votes = r.getBytes(3)
 

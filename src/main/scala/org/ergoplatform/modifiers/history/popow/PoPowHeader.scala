@@ -134,7 +134,7 @@ object PoPowHeader {
 }
 
 /**
-  * Binary serializer for PoPowHeader,
+  * Binary serializer for PoPowHeader
   */
 object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
   import org.ergoplatform.wallet.Constants.ModifierIdLength

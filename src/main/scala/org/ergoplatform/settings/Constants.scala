@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
@@ -21,7 +21,7 @@ object Constants {
 
   val MaxTarget: BigInt = BigInt(1, Array.fill(HashLength)((-1).toByte))
   val InitialDifficulty: Difficulty = BigInt(1)
-  val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)
+  val InitialNBits: Long = DifficultySerializer.encodeCompactBits(InitialDifficulty)
   val ModifierIdSize: Int = HashLength
 
   val BlocksPerHour = 30

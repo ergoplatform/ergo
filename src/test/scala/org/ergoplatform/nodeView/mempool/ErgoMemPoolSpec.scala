@@ -67,7 +67,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     var poolSize = ErgoMemPool.empty(sortBySizeSettings)
     val uTx1 = mempool.UnconfirmedTransaction(tx, None)
     poolSize = poolSize.process(uTx1, wus)._1
-    poolSize.pool.orderedTransactions.firstKey.weight(ms,fPb) shouldBe uTx1.weight(ms,fPb)
+    poolSize.pool.orderedTransactions.firstKey._2 shouldBe uTx1.weight(ms,fPb)
 
     val sortByCostSettings: ErgoSettings = settings.copy(
       nodeSettings = settings.nodeSettings.copy(
@@ -77,7 +77,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     var poolCost = ErgoMemPool.empty(sortByCostSettings)
     val uTx2 = mempool.UnconfirmedTransaction(tx, None)
     poolCost = poolCost.process(uTx2, wus)._1
-    poolCost.pool.orderedTransactions.firstKey.weight(ms,fPc) shouldBe uTx2.withCost(wus.validateWithCost(tx, Int.MaxValue).get).weight(ms,fPc)
+    poolCost.pool.orderedTransactions.firstKey._2 shouldBe uTx2.withCost(wus.validateWithCost(tx, Int.MaxValue).get).weight(ms,fPc)
   }
 
   it should "decline already contained transaction" in {
@@ -298,7 +298,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
     pool.size shouldBe (family_depth + 1) * txs.size
     allTxs.foreach { tx =>
-      pool = pool.remove(tx.transaction)
+      pool = pool.remove(tx)
     }
     pool.size shouldBe 0
   }
@@ -370,7 +370,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.stats.snapTakenTxns shouldBe MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis()).snapTakenTxns
 
     allTxs.foreach { tx =>
-      pool = pool.remove(tx.transaction)
+      pool = pool.remove(tx)
     }
     pool.size shouldBe 0
     pool.stats.takenTxns shouldBe (family_depth + 1) * txs.size

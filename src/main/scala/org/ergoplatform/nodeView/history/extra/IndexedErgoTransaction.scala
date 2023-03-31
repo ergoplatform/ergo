@@ -11,7 +11,7 @@ import scorex.util.{ModifierId, bytesToId}
 import spire.implicits.cfor
 
 /**
-  * Index of a transaction.
+  * Minimum general information for transaction. Not storing the whole transation is done to save space.
   * @param txid        - id of this transaction
   * @param height      - height of the block which includes this transaction
   * @param globalIndex - serial number of this transaction counting from block 1
@@ -22,8 +22,8 @@ case class IndexedErgoTransaction(txid: ModifierId,
                                   globalIndex: Long,
                                   inputNums: Array[Long]) extends ExtraIndex {
 
-  override def id: ModifierId = txid
-  override def serializedId: Array[Byte] = fastIdToBytes(txid)
+  override lazy val id: ModifierId = txid
+  override def serializedId: Array[Byte] = fastIdToBytes(id)
 
   private var _blockId: ModifierId = ModifierId @@ ""
   private var _inclusionHeight: Int = 0

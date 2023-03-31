@@ -85,7 +85,15 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
   private def gossipPeers(remote: ConnectedPeer): Unit = {
     implicit val timeout: Timeout = Timeout(settings.syncTimeout.getOrElse(5.seconds))
 
-    (peerManager ? SeenPeers(settings.maxPeerSpecObjects))
+    // we send less peer that can be accepted, starting from 5.0.8
+    val maxToSend = settings.maxPeerSpecObjects
+    val peersToSend = if (maxToSend >= 16) {
+      maxToSend / 8
+    } else {
+      maxToSend
+    }
+
+    (peerManager ? SeenPeers(peersToSend))
       .mapTo[Seq[PeerInfo]]
       .foreach { peers =>
         val msg = Message(peersSpec, Right(peers.map(_.peerSpec)), None)

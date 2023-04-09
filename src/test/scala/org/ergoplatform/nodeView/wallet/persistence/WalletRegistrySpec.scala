@@ -140,6 +140,7 @@ class WalletRegistrySpec
 
         WalletRegistry.putBox(emptyBag, tb).transact(store).get
         reg.getBox(tb.box.id) shouldBe Some(tb)
+        reg.cache -= tb.boxId
         WalletRegistry.removeBoxes(emptyBag, Seq(tb)).transact(store).get
         reg.getBox(tb.box.id) shouldBe None
       }
@@ -174,6 +175,7 @@ class WalletRegistrySpec
           scans = Set(PaymentsScanId, ScanId @@ 2.toShort))
         val updatedBoxes = tbs.map(updateFn)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)
+        reg.cache --= tbs.map(_.boxId)
         WalletRegistry.removeBoxes(emptyBag, tbs).transact(store).get
         reg.getBoxes(tbs.map(_.box.id)).flatten shouldBe Seq()
       }

@@ -31,7 +31,7 @@ import scala.collection.mutable
   * * boxes, spent or not
   *
   */
-class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
+class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
 

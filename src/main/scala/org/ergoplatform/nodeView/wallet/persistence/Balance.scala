@@ -1,13 +1,13 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.nodeView.wallet.IdUtils._
+import org.ergoplatform.ErgoBox.{BoxId, TokenId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 
-case class Balance(id: EncodedBoxId,
+case class Balance(id: BoxId,
                    value: Long,
-                   assets: Map[EncodedTokenId, Long])
+                   assets: Map[TokenId, Long])
 
 object Balance {
-  def apply(tb: TrackedBox): Balance = Balance(encodedBoxId(tb.box.id), tb.box.value,
-    tb.box.additionalTokens.toArray.map(x => encodedTokenId(x._1) -> x._2).toMap)
+  def apply(tb: TrackedBox): Balance = Balance(tb.box.id, tb.box.value,
+    tb.box.additionalTokens.toArray.toMap)
 }

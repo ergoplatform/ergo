@@ -95,7 +95,7 @@ trait KVStoreReader extends AutoCloseable {
     * @param end - end of the range (inclusive)
     * @return
     */
-  def getRange(start: K, end: K, limit: Int = Int.MaxValue): Seq[(K, V)] = {
+  def getRange(start: K, end: K, limit: Int = Int.MaxValue): Array[(K, V)] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
     val iter = db.iterator(ro)

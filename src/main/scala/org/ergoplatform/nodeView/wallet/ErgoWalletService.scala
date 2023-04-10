@@ -411,7 +411,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     val unconfirmed = if (considerUnconfirmed) {
       state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
     } else {
-      Seq.empty
+      Array.empty
     }
 
     val currentHeight = state.fullHeight

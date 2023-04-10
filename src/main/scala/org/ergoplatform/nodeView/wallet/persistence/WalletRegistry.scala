@@ -78,7 +78,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param ids - box identifier
     * @return wallet related boxes (optional result for each box)
     */
-  def getBoxes(ids: Seq[BoxId]): Seq[Option[TrackedBox]] = {
+  def getBoxes(ids: Array[BoxId]): Array[Option[TrackedBox]] = {
     ids.map(id => getBox(id))
   }
 
@@ -87,7 +87,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     *
     * @return sequences of all the unspent boxes from the database
     */
-  def allUnspentBoxes(): Seq[TrackedBox] = {
+  def allUnspentBoxes(): Array[TrackedBox] = {
     store.getRange(firstUnspentBoxKey, lastUnspentBoxKey).flatMap(pair => getBox(ADKey @@ pair._2))
   }
 
@@ -97,7 +97,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param scanId - scan identifier
     * @return sequences of scan-related unspent boxes found in the database
     */
-  def unspentBoxes(scanId: ScanId, limit: Int = Int.MaxValue): Seq[TrackedBox] = {
+  def unspentBoxes(scanId: ScanId, limit: Int = Int.MaxValue): Array[TrackedBox] = {
     store
       .getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId), limit)
       .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
@@ -111,7 +111,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param heightTo - max inclusion height of unspent boxes
     * @return sequences of scan-related boxes found in the database
     */
-  def boxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+  def boxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Array[TrackedBox] =
     store
       .getRange(fromScanBoxSpaceKey(scanId, heightFrom), toScanBoxSpaceKey(scanId, heightTo))
       .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
@@ -124,7 +124,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param heightTo   - max inclusion height of unspent boxes
     * @return sequences of scan-related unspent boxes found in the database
     */
-  def unspentBoxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+  def unspentBoxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Array[TrackedBox] =
     boxesByInclusionHeight(scanId, heightFrom, heightTo).filter(_.spendingHeightOpt.isEmpty)
 
   /**
@@ -135,7 +135,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param heightTo   - max inclusion height of unspent boxes
     * @return sequences of scan-related spent boxes found in the database
     */
-  def spentBoxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+  def spentBoxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Array[TrackedBox] =
     boxesByInclusionHeight(scanId, heightFrom, heightTo).filter(_.spendingHeightOpt.isDefined)
 
   /**
@@ -144,7 +144,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param scanId - scan identifier
     * @return sequences of scan-related spent boxes found in the database
     */
-  def spentBoxes(scanId: ScanId): Seq[TrackedBox] = {
+  def spentBoxes(scanId: ScanId): Array[TrackedBox] = {
     store.getRange(firstSpentScanBoxSpaceKey(scanId), lastSpentScanBoxSpaceKey(scanId))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
@@ -154,12 +154,12 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
   /**
     * Unspent boxes belong to the wallet (payments scan)
     */
-  def walletUnspentBoxes(limit: Int = Int.MaxValue): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId, limit)
+  def walletUnspentBoxes(limit: Int = Int.MaxValue): Array[TrackedBox] = unspentBoxes(Constants.PaymentsScanId, limit)
 
   /**
     * Spent boxes belong to the wallet (payments scan)
     */
-  def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsScanId)
+  def walletSpentBoxes(): Array[TrackedBox] = spentBoxes(Constants.PaymentsScanId)
 
   /**
     * Read wallet boxes, both spent or not
@@ -167,7 +167,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param scanId scan identifier
     * @return sequence of scan-related boxes
     */
-  def confirmedBoxes(scanId: ScanId): Seq[TrackedBox] = {
+  def confirmedBoxes(scanId: ScanId): Array[TrackedBox] = {
     unspentBoxes(scanId) ++ spentBoxes(scanId)
   }
 
@@ -176,7 +176,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     *
     * @return sequence of (P2PK-payment)-related boxes
     */
-  def walletConfirmedBoxes(): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsScanId)
+  def walletConfirmedBoxes(): Array[TrackedBox] = confirmedBoxes(Constants.PaymentsScanId)
 
   /**
     * Read transaction with wallet-related metadata
@@ -193,7 +193,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     *
     * @return all the transactions for all the scans
     */
-  def allWalletTxs(): Seq[WalletTransaction] = {
+  def allWalletTxs(): Array[WalletTransaction] = {
     store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
       .flatMap { case (_, txBytes) =>
         WalletTransactionSerializer.parseBytesTry(txBytes).toOption
@@ -207,7 +207,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param heightTo - height to finish at (inclusive)
     * @return - wallet transactions for the heights range provided
     */
-  def walletTxsBetween(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[WalletTransaction] = {
+  def walletTxsBetween(scanId: ScanId, heightFrom: Height, heightTo: Height): Array[WalletTransaction] = {
     val firstKey = firstIncludedScanTransactionSpaceKey(scanId, heightFrom)
     val lastKey = lastIncludedScanTransactionSpaceKey(scanId, heightTo)
 

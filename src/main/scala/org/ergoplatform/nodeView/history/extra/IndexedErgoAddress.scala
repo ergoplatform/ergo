@@ -363,7 +363,7 @@ object IndexedErgoAddress {
     * @return range in "arr" ArrayBuffer
     */
   private def slice[T](arr: ArrayBuffer[T], offset: Int, limit: Int): ArrayBuffer[T] =
-    arr.slice(offset, offset + limit)
+    arr.slice(arr.length - limit - offset, arr.length - offset).reverse
 
   /**
     * Get an array of transactions with full bodies from an array of numeric transaction indexes

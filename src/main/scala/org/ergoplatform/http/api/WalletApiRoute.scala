@@ -25,7 +25,6 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 import akka.http.scaladsl.server.MissingQueryParamRejection
-import org.ergoplatform.nodeView.mempool
 import org.ergoplatform.nodeView.mempool.UnconfirmedTransaction
 
 case class WalletApiRoute(readersHolder: ActorRef,
@@ -178,7 +177,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
       requests,
       inputsRaw,
       dataInputsRaw,
-      tx => Future(Success(mempool.UnconfirmedTransaction(tx, source = None))),
+      tx => Future(Success(UnconfirmedTransaction(tx, source = None))),
       utx => ApiResponse(utx.transaction)
     )
   }

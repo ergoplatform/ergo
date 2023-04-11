@@ -374,7 +374,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val rolledBackTxs = blocksRemoved
       .flatMap(extractTransactions)
       .filter(tx => !appliedTxs.exists(_.id == tx.id))
-      .map(tx => mempool.UnconfirmedTransaction(tx, None))
+      .map(tx => UnconfirmedTransaction(tx, None))
     memPool.remove(appliedTxs).put(rolledBackTxs)
   }
 

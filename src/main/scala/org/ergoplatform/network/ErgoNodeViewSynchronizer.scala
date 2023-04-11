@@ -693,7 +693,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     } else {
       ErgoTransactionSerializer.parseBytesTry(bytes) match {
         case Success(tx) if id == tx.id =>
-          val utx = mempool.UnconfirmedTransaction(tx, bytes, Some(remote))
+          val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
           viewHolderRef ! TransactionFromRemote(utx)
         case _ =>
           // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery

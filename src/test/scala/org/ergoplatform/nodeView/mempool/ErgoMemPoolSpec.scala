@@ -84,13 +84,13 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val (us, bh) = createUtxoState(parameters)
     val genesis = validFullBlock(None, us, bh)
     val wus = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
-    val txs = validTransactionsFromUtxoState(wus)
+    val txs = validTransactionsFromUtxoState(wus).map(UnconfirmedTransaction(_, None))
     var pool = ErgoMemPool.empty(settings)
     txs.foreach { tx =>
-      pool = pool.put(mempool.UnconfirmedTransaction(tx, None))
+      pool = pool.put(tx)
     }
     txs.foreach { tx =>
-      pool.process(mempool.UnconfirmedTransaction(tx, None), us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+      pool.process(tx, us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
     }
   }
 

@@ -70,7 +70,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedKey, UnconfirmedTra
       else {
         val key = WeightedKey(unconfirmedTx)
         new OrderedTxPool(
-          (orderedTransactions - key) + Tuple2(key, unconfirmedTx),
+          orderedTransactions.updated(key, unconfirmedTx),
           invalidatedTxIds,
           outputs ++ tx.outputs.map(_.id -> tx.id),
           inputs ++ tx.inputs.map(_.boxId -> tx.id)
@@ -125,7 +125,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedKey, UnconfirmedTra
     */
   def invalidate(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
-    get(tx.id) match {
+    orderedTransactions.get(WeightedKey(unconfirmedTx)) match {
       case Some(wtx) =>
         new OrderedTxPool(
           orderedTransactions - WeightedKey(wtx),

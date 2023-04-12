@@ -34,12 +34,13 @@ class ErgoInterpreter(params: ErgoLikeParameters)
     val storageFee = params.storageFeeFactor * box.bytes.length
 
     val storageFeeNotCovered = box.value - storageFee <= 0
-    val correctCreationHeight = output.creationHeight == currentHeight
-    val correctOutValue = output.value >= box.value - storageFee
+    lazy val correctCreationHeight = output.creationHeight == currentHeight
+    lazy val correctOutValue = output.value >= box.value - storageFee
 
     // all the registers except of R0 (monetary value) and R3 (creation height and reference) must be preserved
-    val correctRegisters = ErgoBox.allRegisters.tail
-      .forall(rId => rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
+    lazy val correctRegisters = ErgoBox.allRegisters
+      .iterator
+      .forall(rId => rId == ErgoBox.ValueRegId || rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
 
     storageFeeNotCovered || (correctCreationHeight && correctOutValue && correctRegisters)
   }

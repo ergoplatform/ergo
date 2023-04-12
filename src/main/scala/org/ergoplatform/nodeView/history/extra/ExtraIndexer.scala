@@ -206,7 +206,7 @@ trait ExtraIndexerBase extends ScorexLogging {
         // box by address
         findAndUpdateTree(hashErgoTree(box.ergoTree), Right(boxes(boxId)))
 
-        // check if box is creating a new token, if yes record it
+        // check if box is creating new tokens, if yes record them
         cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
           if (!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1)))
             general += IndexedToken.fromBox(box, j)
@@ -431,6 +431,9 @@ object ExtraIndexer {
     x
   }
 
+  /**
+   * Current newest database schema version. Used to force extra database resync.
+   */
   val NewestVersion: Int = 2
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 

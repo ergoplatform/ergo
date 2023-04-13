@@ -4,7 +4,7 @@ import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Direction}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
-import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getFromSegments, getTxs, slice}
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getFromSegments, getTxs}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.ScorexSerializer
@@ -156,7 +156,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
           history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
         }
-        slice(data.reverse, offset, limit).toArray
+        data.reverse.slice(offset, offset + limit).toArray
       case ASC =>
         var segment: Int = 0
         while (data.length < (limit + offset) && segment < boxSegmentCount) {
@@ -166,7 +166,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
         }
         if(data.length < (limit + offset))
           data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
-        slice(data, offset, limit).toArray
+        data.slice(offset, offset + limit).toArray
     }
   }
 
@@ -355,15 +355,15 @@ object IndexedErgoAddress {
     (math.max(math.ceil(offset * 1F / segmentTreshold).toInt, 1) to math.ceil((offset + limit) * 1F / segmentTreshold).toInt).toArray
 
   /**
-    * Shorthand to get a range from an ArrayBuffer by offset and limit.
+    * Get a range of elements from an ArrayBuffer by removing the last "offset" elements,
+    * then getting the last "limit" elements reversed.
     * @param arr    - array to get range from
-    * @param offset - items to skip from the start
-    * @param limit  - items to retrieve
-    * @tparam T     - type of ArrayBuffer
-    * @return range in "arr" ArrayBuffer
+    * @param offset - number of items to skip from the end
+    * @param limit  - number of items to retrieve
+    * @return a reversed range in "arr" ArrayBuffer
     */
-  private def slice[T](arr: ArrayBuffer[T], offset: Int, limit: Int): ArrayBuffer[T] =
-    arr.slice(offset, offset + limit)
+  private def sliceReversed(arr: ArrayBuffer[Long], offset: Int, limit: Int): ArrayBuffer[Long] =
+    arr.slice(arr.length - limit - offset, arr.length - offset).reverse
 
   /**
     * Get an array of transactions with full bodies from an array of numeric transaction indexes
@@ -415,8 +415,8 @@ object IndexedErgoAddress {
           history.typedExtraIndexById[IndexedErgoAddress](idOf(treeHash, segmentCount - range(i))).get
         ) ++=: data
       }
-      retreive(slice(data ++= (if (offset < array.length) array else Nil), offset % segmentTreshold, limit), history)
+      retreive(sliceReversed(data ++= (if (offset < array.length) array else Nil), offset % segmentTreshold, limit), history)
     } else
-      retreive(slice(array, offset, limit), history)
+      retreive(sliceReversed(array, offset, limit), history)
   }
 }

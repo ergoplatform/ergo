@@ -11,7 +11,6 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, 
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.{GetSegmentTreshold, StartExtraIndexer}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
-import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.tokenRegistersSet
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -207,12 +206,11 @@ trait ExtraIndexerBase extends ScorexLogging {
         // box by address
         findAndUpdateTree(hashErgoTree(box.ergoTree), Right(boxes(boxId)))
 
-        // check if box is creating a new token, if yes record it
-        if(tokenRegistersSet(box))
-          cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
-            if (!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1)))
-              general += IndexedToken.fromBox(box, j)
-          }
+        // check if box is creating new tokens, if yes record them
+        cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
+          if (!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1)))
+            general += IndexedToken.fromBox(box, j)
+        }
 
         globalBoxIndex += 1
         boxCount += 1
@@ -310,14 +308,13 @@ trait ExtraIndexerBase extends ScorexLogging {
       val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, globalBoxIndex).get
       val address: IndexedErgoAddress = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get
       address.spendBox(iEb)
-      if(tokenRegistersSet(iEb.box))
-        cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
-          history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb.box, i).id) match {
-            case Some(token) if token.boxId == iEb.id =>
-              toRemove += token.id // token created, delete
-            case None => // no token created
-          }
+      cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
+        history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb.box, i).id) match {
+          case Some(token) if token.boxId == iEb.id =>
+            toRemove += token.id // token created, delete
+          case None => // no token created
         }
+      }
       address.rollback(txTarget, boxTarget, _history)
       toRemove += iEb.id // box by id
       toRemove += bytesToId(NumericBoxIndex.indexToBytes(globalBoxIndex)) // box id by number
@@ -434,7 +431,10 @@ object ExtraIndexer {
     x
   }
 
-  val NewestVersion: Int = 1
+  /**
+   * Current newest database schema version. Used to force extra database resync.
+   */
+  val NewestVersion: Int = 2
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")

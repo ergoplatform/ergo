@@ -75,23 +75,37 @@ object IndexedToken {
   val extraIndexTypeId: ExtraIndexTypeId = 35.toByte
 
   /**
-    * Construct a token index from a box.
+    * Construct an indexed token from a box.
+    * Tokens can be created without setting registers or something other than token information can be in them,
+    * so they are checked with Try-catches.
     *
     * @param box - box to use
+    * @param tokenIndex - token index to check in [[ErgoBox.additionalTokens]]
     * @return token index
     */
   def fromBox(box: ErgoBox, tokenIndex: Int): IndexedToken = {
-    val name: String = try {
-      new String(box.additionalRegisters(R4).asInstanceOf[ByteColl].value.toArray, "UTF-8")
-    }catch {
-      case _: Throwable => ""
-    }
+    val name: String =
+      box.additionalRegisters.get(R4) match {
+        case Some(reg) =>
+          try {
+            new String(reg.asInstanceOf[ByteColl].value.toArray, "UTF-8")
+          } catch {
+            case _: Throwable => ""
+          }
+        case None => ""
+      }
 
-    val description: String = try {
-      new String(box.additionalRegisters(R5).asInstanceOf[ByteColl].value.toArray, "UTF-8")
-    } catch {
-      case _: Throwable => ""
-    }
+    val description: String =
+      box.additionalRegisters.get(R5) match {
+        case Some(reg) =>
+          try {
+            new String(reg.asInstanceOf[ByteColl].value.toArray, "UTF-8")
+          } catch {
+            case _: Throwable => ""
+          }
+        case None => ""
+      }
+
 
     val decimals: Int =
       box.additionalRegisters.get(R6) match {

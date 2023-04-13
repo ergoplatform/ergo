@@ -355,11 +355,12 @@ object IndexedErgoAddress {
     (math.max(math.ceil(offset * 1F / segmentTreshold).toInt, 1) to math.ceil((offset + limit) * 1F / segmentTreshold).toInt).toArray
 
   /**
-    * Get a range from the end of an ArrayBuffer by offset and limit.
+    * Get a range of elements from an ArrayBuffer by removing the last "offset" elements,
+    * then getting the last "limit" elements reversed.
     * @param arr    - array to get range from
     * @param offset - number of items to skip from the end
     * @param limit  - number of items to retrieve
-    * @return range in "arr" ArrayBuffer
+    * @return a reversed range in "arr" ArrayBuffer
     */
   private def sliceReversed(arr: ArrayBuffer[Long], offset: Int, limit: Int): ArrayBuffer[Long] =
     arr.slice(arr.length - limit - offset, arr.length - offset).reverse

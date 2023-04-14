@@ -42,6 +42,9 @@ case class ChainSettings(protocolVersion: Byte,
   val initialDifficulty: BigInt = Base16.decode(initialDifficultyHex)
     .fold(_ => throw new Error(s"Failed to parse initialDifficultyHex = $initialDifficultyHex"), BigInt(_))
 
+  /**
+    * Initial (genesis block) difficulty encoded as nbits
+    */
   val initialNBits: Long = DifficultySerializer.encodeCompactBits(initialDifficulty)
 
   val initialDifficultyVersion2: BigInt = Base16.decode(voting.version2ActivationDifficultyHex)

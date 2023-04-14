@@ -8,7 +8,10 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import scorex.crypto.hash.Blake2b256
-import scala.util.Try
+import scorex.db.LDBVersionedStore.SnapshotReadInterface
+import scorex.util.ScorexLogging
+
+import scala.util.{Failure, Success, Try}
 
 
 /**
@@ -23,7 +26,9 @@ import scala.util.Try
   * @param initialKeepVersions - number of versions to keep when the store is created. Can be changed after.
   *
   */
-class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) extends KVStoreReader {
+class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
+  extends KVStoreReader with ScorexLogging {
+
   type VersionID = Array[Byte]
 
   type LSN = Long // logical serial number: type used to provide order of records in undo list
@@ -415,18 +420,38 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int) e
     *
     * @param logic - processing logic which is getting access to `get` function to read from database snapshot
     */
-  def processSnapshot[T](logic: {def get(key: Array[Byte]): Array[Byte]} => T): T = {
+  def processSnapshot[T](logic: SnapshotReadInterface => T): Try[T] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
     try {
-      object readInterface {
+      object readInterface extends SnapshotReadInterface {
         def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
       }
-      logic(readInterface)
+      Success(logic(readInterface))
+    } catch {
+      case t: Throwable =>
+        log.info("Error during snapshot processing: ", t)
+        Failure(t)
     } finally {
       // Close the snapshot to avoid resource leaks
       ro.snapshot().close()
     }
+  }
+
+}
+
+object LDBVersionedStore {
+
+  /**
+    * Interface to read from versioned database snapshot which can be provided to clients in order to serve them with
+    * snapshot. Contains only reader function.
+    */
+  trait SnapshotReadInterface {
+    /**
+      * Read value by key. Client should care about key existence on its side. If key does not exist in database,
+      * an exception will be thrown.
+      */
+    def get(key: Array[Byte]): Array[Byte]
   }
 
 }

@@ -14,7 +14,6 @@ import scorex.util.ScorexLogging
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}
-import scala.language.reflectiveCalls
 
 /**
   * Persistent versioned authenticated AVL+ tree implementation on top of versioned LevelDB storage
@@ -96,9 +95,9 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     *
     * @param dumpStorage   - non-versioned storage to dump tree to
     * @param manifestDepth - depth of manifest tree
-    * @return - hash of root node of tree
+    * @return - hash of root node of tree, or failure if an error (e.g. in database) happened
     */
-  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Int): Array[Byte] = {
+  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Int): Try[Array[Byte]] = {
     store.processSnapshot { dbReader =>
 
       def subtreeLoop(label: DigestType, builder: mutable.ArrayBuilder[Byte]): Unit = {

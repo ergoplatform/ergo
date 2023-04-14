@@ -202,16 +202,15 @@ object VersionedLDBAVLStorage {
                store: LDBVersionedStore): Try[VersionedLDBAVLStorage] = {
     //todo: the function below copy-pasted from BatchAVLProver, eliminate boilerplate?
 
-    def idCollector(node: ProverNodes[DigestType],
-                    acc: Iterator[(Array[Byte], Array[Byte])]): Iterator[(Array[Byte], Array[Byte])] = {
+    def idCollector(node: ProverNodes[DigestType]): Iterator[(Array[Byte], Array[Byte])] = {
       val pair: (Array[Byte], Array[Byte]) = (nodeLabel(node), noStoreSerializer.toBytes(node))
       node match {
         case n: ProxyInternalNode[DigestType] if n.isEmpty =>
-          acc ++ Iterator(pair)
+          Iterator(pair)
         case i: InternalProverNode[DigestType] =>
-          acc ++ Iterator(pair) ++ idCollector(i.left, acc) ++ idCollector(i.right, acc)
+          Iterator(pair) ++ idCollector(i.left) ++ idCollector(i.right)
         case _: ProverLeaf[DigestType] =>
-          acc ++ Iterator(pair)
+          Iterator(pair)
       }
     }
 
@@ -219,8 +218,8 @@ object VersionedLDBAVLStorage {
     val rootNodeHeight = manifest.rootHeight
     val digestWrapper = VersionedLDBAVLStorage.digest(rootNode.label, rootNodeHeight)
     val indices = Iterator(topNodeHashKey -> nodeLabel(rootNode), topNodeHeightKey -> Ints.toByteArray(rootNodeHeight))
-    val nodesIterator = idCollector(manifest.root, Iterator.empty) ++
-      chunks.flatMap(subtree => idCollector(subtree.subtreeTop, Iterator.empty))
+    val nodesIterator = idCollector(manifest.root) ++
+      chunks.flatMap(subtree => idCollector(subtree.subtreeTop))
     store.update(digestWrapper, toRemove = Nil, toUpdate = indices ++ nodesIterator ++ additionalData).map { _ =>
       new VersionedLDBAVLStorage(store)
     }

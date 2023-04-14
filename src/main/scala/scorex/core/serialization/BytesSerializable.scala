@@ -9,5 +9,9 @@ trait BytesSerializable extends Serializable {
 
   def bytes: Array[Byte] = serializer.toBytes(this)
 
+  /**
+    * Serializer which can convert self to bytes
+    */
   def serializer: ErgoSerializer[M]
+  
 }

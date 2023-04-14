@@ -3,9 +3,6 @@ package org.ergoplatform.nodeView.history.extra
 import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
-/**
-  * Binary serializer for optinal additional (explorer-like) indexes
-  */
 object ExtraIndexSerializer  extends ErgoSerializer[ExtraIndex]{
 
     override def serialize(obj: ExtraIndex, w: Writer): Unit = {

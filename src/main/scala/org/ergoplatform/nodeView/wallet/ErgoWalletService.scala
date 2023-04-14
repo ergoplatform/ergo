@@ -23,6 +23,7 @@ import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.SigmaBoolean
+import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import java.io.FileNotFoundException
 import scala.util.{Failure, Success, Try}
@@ -159,6 +160,14 @@ trait ErgoWalletService {
     * @return Try of pay-to-public-key-address and new wallet state
     */
   def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String, addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)]
+
+  /**
+   * Get the secret key for a give derivation path.
+   * @param state current wallet state
+   * @param path derivation path from the master key
+   * @return Try of private key
+   */
+  def getPrivateKeyFromPath(state: ErgoWalletState, path: DerivationPath): Try[DLogProverInput]
 
   /**
     * Derive next key from master key
@@ -543,6 +552,19 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       case None =>
         Failure(new Exception("Unable to derive key from path, wallet is not initialized"))
     }
+
+  override def getPrivateKeyFromPath(state: ErgoWalletState, path: DerivationPath): Try[DLogProverInput] =
+    state.secretStorageOpt match {
+      case Some(secretStorage) if !secretStorage.isLocked =>
+        val secret = secretStorage.secret.get
+        val newSecret = path.decodedPath.drop(secret.path.depth).foldLeft(secret)((parent, i) => parent.child(i))
+        Success(newSecret.privateInput)
+      case Some(_) =>
+        Failure(new Exception("Unable to derive key from path, wallet is locked"))
+      case None =>
+        Failure(new Exception("Unable to derive key from path, wallet is not initialized"))
+    }
+
 
   override def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean): Try[(DeriveNextKeyResult, ErgoWalletState)] =
     state.secretStorageOpt match {

@@ -67,7 +67,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
         signTransactionR ~
         checkSeedR ~
         rescanWalletR ~
-        extractHintsR
+        extractHintsR ~
+        getPrivateKeyR
     }
   }
 
@@ -124,16 +125,12 @@ case class WalletApiRoute(readersHolder: ActorRef,
   )
 
 
-  private val p2pkAddress: Directive1[P2PKAddress] = entity(as[Json])
-    .flatMap {
-      _.hcursor.downField("address").as[String]
-        .flatMap { address =>
-          addressEncoder.fromString(address).toEither
-        } match {
-        case Right(value: P2PKAddress) => provide(value)
-        case _ => reject
-      }
+  private val p2pkAddress: Directive1[P2PKAddress] = entity(as[String]).flatMap { str =>
+    addressEncoder.fromString(str).toEither match {
+      case Right(value: P2PKAddress) => provide(value)
+      case _ => reject
     }
+  }
 
   /** POST body field - from what height to rescan wallet */
   private val heightEntityField: Directive1[Int] = entity(as[Option[Json]])
@@ -480,6 +477,19 @@ case class WalletApiRoute(readersHolder: ActorRef,
       val extDataInputsOpt = her.dataInputs.map(ErgoWalletService.stringsToBoxes)
 
       w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
+    }
+  }
+
+  def getPrivateKeyR: Route = (path("getPrivateKey") & post & p2pkAddress) { p2pk =>
+    withWalletOp(_.allExtendedPublicKeys()) { extKeys =>
+      extKeys.find(_.key.value.equals(p2pk.pubkey.value)).map(_.path) match {
+        case Some(path) =>
+          withWalletOp(_.getPrivateKeyFromPath(path)) {
+            case Success(secret) => ApiResponse(secret.w)
+            case Failure(f) => BadRequest(f.getMessage)
+          }
+        case None => NotExists("Address not found in wallet database.")
+      }
     }
   }
 

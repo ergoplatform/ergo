@@ -57,7 +57,7 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
       require(prevInterlinks.nonEmpty, "Interlinks vector could not be empty in case of non-genesis header")
       val genesis = prevInterlinks.head
       val tail = prevInterlinks.tail
-      val prevLevel = maxLevelOf(prevHeader)
+      val prevLevel = maxLevelOf(prevHeader) & 0xFF
       if (prevLevel > 0) {
         (genesis +: tail.dropRight(prevLevel)) ++ Seq.fill(prevLevel)(prevHeader.id)
       } else {
@@ -78,8 +78,8 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
   def maxLevelOf(header: Header): Int =
     if (!header.isGenesis) {
       val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
-      val realTarget = powScheme.powHit(header).doubleValue
-      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
+      val realTarget = powScheme.powHit(header)
+      val level = log2(requiredTarget) - log2(realTarget)
       level.toInt
     } else {
       Int.MaxValue
@@ -245,7 +245,7 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
 
 object NipopowAlgos {
 
-  private def log2(x: Double): Double = math.log(x) / math.log(2)
+  private def log2(x: BigInt): Double = math.log(x.doubleValue()) / math.log(2)
 
   /**
     * Packs interlinks into key-value format of the block extension.

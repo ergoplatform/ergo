@@ -312,7 +312,7 @@ trait ExtraIndexerBase extends ScorexLogging {
         history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb.box, i).id) match {
           case Some(token) if token.boxId == iEb.id =>
             toRemove += token.id // token created, delete
-          case None => // no token created
+          case _ => // no token created
         }
       }
       address.rollback(txTarget, boxTarget, _history)

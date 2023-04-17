@@ -56,7 +56,14 @@ class ManifestSerializer(manifestDepth: Byte) extends ErgoSerializer[BatchAVLPro
 }
 
 object ManifestSerializer {
-  val ManifestDepth: Byte = 14
-  lazy val defaultSerializer = new ManifestSerializer(ManifestDepth)
+  /**
+    * Current manifest depth in the Ergo mainnet
+    */
+  val MainnetManifestDepth: Byte = 14
+
+  /**
+    * Manifest serializer used in the Ergo mainnet
+    */
+  val defaultSerializer = new ManifestSerializer(MainnetManifestDepth)
 }
 

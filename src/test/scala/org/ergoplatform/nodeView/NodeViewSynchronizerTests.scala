@@ -277,7 +277,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
           val height = 1
           usr.applyModifier(mod, Some(height))(_ => ())
 
-          val manifestId = usr.dumpSnapshot(height)
+          val manifestId = usr.dumpSnapshot(height).get
 
           // Then send message to request it
           node ! Message[ManifestId](GetManifestSpec, Left(manifestId), Option(peer))

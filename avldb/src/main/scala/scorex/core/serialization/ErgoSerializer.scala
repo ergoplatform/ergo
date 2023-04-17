@@ -11,17 +11,27 @@ import scala.util.Try
   */
 trait ErgoSerializer[T] extends Serializer[T, T, Reader, Writer] {
 
+  /**
+    * Serialize object `obj` to byte array
+    */
   def toBytes(obj: T): Array[Byte] = {
     val writer = new VLQByteBufferWriter(new ByteArrayBuilder())
     serialize(obj, writer)
     writer.result().toBytes
   }
 
+
+  /**
+    * Deserialize byte array into object of type `T` (or throw exception)
+    */
   def parseBytes(bytes: Array[Byte]): T = {
     val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
     parse(reader)
   }
 
+  /**
+    * Deserialize byte array into object of type `T` (or return Failure)
+    */
   def parseBytesTry(bytes: Array[Byte]): Try[T] = {
     Try(parseBytes(bytes))
   }

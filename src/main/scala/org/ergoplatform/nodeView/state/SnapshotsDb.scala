@@ -79,11 +79,12 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     log.info("Snapshots pruning finished")
   }
 
-  def writeSnapshot(pullFrom: VersionedLDBAVLStorage, height: Height): Array[Byte] = {
-    val manifestId = pullFrom.dumpSnapshot(store, ManifestSerializer.ManifestDepth)
-    val si = readSnapshotsInfo.withNewManifest(height, Digest32 @@ manifestId)
-    writeSnapshotsInfo(si)
-    manifestId
+  def writeSnapshot(pullFrom: VersionedLDBAVLStorage, height: Height): Try[Array[Byte]] = {
+    pullFrom.dumpSnapshot(store, ManifestSerializer.MainnetManifestDepth).map { manifestId =>
+      val si = readSnapshotsInfo.withNewManifest(height, Digest32 @@ manifestId)
+      writeSnapshotsInfo(si)
+      manifestId
+    }
   }
 
   def readManifestBytes(id: ManifestId): Option[Array[Byte]] = {

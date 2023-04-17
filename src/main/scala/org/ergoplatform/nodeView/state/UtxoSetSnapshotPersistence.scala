@@ -9,6 +9,7 @@ import scorex.util.ScorexLogging
 import org.ergoplatform.settings.Constants.{MakeSnapshotEvery, timeToTakeSnapshot}
 
 import scala.concurrent.Future
+import scala.util.Try
 
 trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
@@ -17,7 +18,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
   private[nodeView] val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move to some other place ?
 
-  private[nodeView] def dumpSnapshot(height: Height): Array[Byte] = {
+  private[nodeView] def dumpSnapshot(height: Height): Try[Array[Byte]] = {
     snapshotsDb.writeSnapshot(persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage], height)
   }
 

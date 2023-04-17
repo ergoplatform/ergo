@@ -2,6 +2,7 @@ package org.ergoplatform.wallet.interface4j.crypto;
 
 import org.bouncycastle.math.ec.custom.sec.SecP256K1Point;
 import scala.math.BigInt;
+import sigmastate.crypto.Platform;
 
 import java.math.BigInteger;
 
@@ -25,7 +26,7 @@ public class ErgoSignature {
      * @return `true` is the signature is valid, `false` otherwise
      */
     public boolean verify(byte[] msg, byte[] signature, SecP256K1Point pk) {
-        return org.ergoplatform.wallet.crypto.ErgoSignature.verify(msg, signature, pk);
+        return org.ergoplatform.wallet.crypto.ErgoSignature.verify(msg, signature, new Platform.Ecp(pk));
     }
 
 }

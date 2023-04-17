@@ -16,6 +16,7 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.CryptoFacade
 
 import scala.annotation.tailrec
 import scala.math.BigInt
@@ -126,8 +127,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val N = calcN(header)
 
     require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
-    require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
-    require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
+    require(CryptoFacade.getCurve(s.pk) == group.ctx.curve && !CryptoFacade.isInfinityPoint(s.pk), "pk is incorrect")
+    require(CryptoFacade.getCurve(s.w) == group.ctx.curve && !CryptoFacade.isInfinityPoint(s.w), "w is incorrect")
 
     val pkBytes = groupElemToBytes(s.pk)
     val wBytes = groupElemToBytes(s.w)
@@ -137,8 +138,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     //height is not used in v1
     val f = indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx), null)).sum.mod(q)
-    val left = s.w.multiply(f.bigInteger)
-    val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
+    val left = CryptoFacade.exponentiatePoint(s.w, f.bigInteger)
+    val right = CryptoFacade.multiplyPoints(
+      CryptoFacade.exponentiatePoint(group.generator, s.d.bigInteger),
+      s.pk)
     left == right
   }
 

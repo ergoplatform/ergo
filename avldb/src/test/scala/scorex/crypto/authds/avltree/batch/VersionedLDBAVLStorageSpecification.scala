@@ -1,6 +1,6 @@
 package scorex.crypto.authds.avltree.batch
 
-import com.google.common.primitives.Longs
+import scorex.utils.Longs
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertion
 import org.scalatest.matchers.should.Matchers
@@ -193,7 +193,7 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
   val rollbackVersionsTest: (PERSISTENT_PROVER, STORAGE) => Assertion = { (prover: PERSISTENT_PROVER, storage: STORAGE) =>
     (0L until 50L).foreach { long =>
       val insert = Insert(ADKey @@ RandomBytes.randomBytes(32),
-        ADValue @@ com.google.common.primitives.Longs.toByteArray(long))
+        ADValue @@ scorex.utils.Longs.toByteArray(long))
       prover.performOneOperation(insert)
       prover.generateProofAndUpdateStorage()
       prover.digest

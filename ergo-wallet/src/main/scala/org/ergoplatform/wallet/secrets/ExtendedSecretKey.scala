@@ -1,8 +1,9 @@
 package org.ergoplatform.wallet.secrets
 
+import org.bouncycastle.math.ec.ECPoint
+
 import java.math.BigInteger
 import java.util
-
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.crypto.HmacSHA512
@@ -10,6 +11,7 @@ import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.crypto.CryptoFacade
 import sigmastate.interpreter.CryptoConstants
 
 /**
@@ -30,8 +32,11 @@ final class ExtendedSecretKey(private[secrets] val keyBytes: Array[Byte],
 
   def child(idx: Int): ExtendedSecretKey = ExtendedSecretKey.deriveChildSecretKey(this, idx)
 
+  /** Returns extended public key corresponding to this secret key. */
   def publicKey: ExtendedPublicKey =
-    new ExtendedPublicKey(privateInput.publicImage.value.getEncoded(true), chainCode, path.toPublicBranch)
+    new ExtendedPublicKey(
+      CryptoFacade.encodePoint(privateInput.publicImage.value, compressed = true),
+      chainCode, path.toPublicBranch)
 
   def isErased: Boolean = keyBytes.forall(_ == 0x00)
 
@@ -60,7 +65,7 @@ object ExtendedSecretKey {
   def deriveChildSecretKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedSecretKey = {
     val keyCoded: Array[Byte] =
       if (Index.isHardened(idx)) (0x00: Byte) +: parentKey.keyBytes
-      else parentKey.privateInput.publicImage.value.getEncoded(true)
+      else CryptoFacade.encodePoint(parentKey.privateInput.publicImage.value, compressed = true)
     val (childKeyProto, childChainCode) = HmacSHA512
       .hash(parentKey.chainCode, keyCoded ++ Index.serializeIndex(idx))
       .splitAt(Constants.SecretKeyLength)
@@ -85,7 +90,8 @@ object ExtendedSecretKey {
 
   def deriveChildPublicKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedPublicKey = {
     val derivedSecret = deriveChildSecretKey(parentKey, idx)
-    val derivedPk = derivedSecret.privateInput.publicImage.value.getEncoded(true)
+    val derivedPk = CryptoFacade.encodePoint(
+      derivedSecret.privateInput.publicImage.value, compressed = true)
     val derivedPath = derivedSecret.path.copy(publicBranch = true)
     new ExtendedPublicKey(derivedPk, derivedSecret.chainCode, derivedPath)
   }

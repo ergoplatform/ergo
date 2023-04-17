@@ -3,7 +3,7 @@ package scorex.crypto.authds.avltree.batch.benchmark
 import java.io.File
 import java.nio.file.Files
 
-import com.google.common.primitives.{Longs, Shorts}
+import scorex.utils.{Longs, Shorts}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.crypto.authds.avltree.batch._
 import scorex.util.encode.Base16
@@ -67,7 +67,7 @@ object OOMTest extends App {
       Longs.toByteArray(value) ++ propBytes ++ (0.toByte +: Array.emptyByteArray) ++
         transactionId ++ Shorts.toByteArray(boxId)
     val id = Blake2b256.hash(bytes)
-    ADKey @@ id -> ADValue @@ bytes
+    ADKey @@@ id -> ADValue @@@ bytes
   }
 
   private def metadata(modId: Array[Byte], stateRoot: ADDigest): Seq[(Array[Byte], Array[Byte])] = {

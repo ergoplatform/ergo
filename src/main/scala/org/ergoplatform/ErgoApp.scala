@@ -110,7 +110,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
       "Node must store full UTXO set and all blocks to run extra indexer."
     )
   // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
-  ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings)
+  private val indexer: ActorRef = ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings)
 
   private val syncTracker = ErgoSyncTracker(scorexSettings.network)
 
@@ -178,7 +178,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
-    BlockchainApiRoute(readersHolderRef, ergoSettings),
+    BlockchainApiRoute(readersHolderRef, ergoSettings, indexer),
     ErgoPeersApiRoute(
       peerManagerRef,
       networkControllerRef,

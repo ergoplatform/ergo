@@ -49,7 +49,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 500, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersCacheSize                 = 10000,
@@ -100,7 +100,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 500, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersCacheSize                 = 10000,
@@ -144,7 +144,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 500, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersCacheSize                 = 10000,

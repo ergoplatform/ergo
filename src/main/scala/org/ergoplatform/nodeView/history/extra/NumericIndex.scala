@@ -13,6 +13,7 @@ import scorex.util.serialization.{Reader, Writer}
   * @param m - id of a transaction
   */
 case class NumericTxIndex(n: Long, m: ModifierId) extends ExtraIndex {
+  override lazy val id: ModifierId = bytesToId(serializedId)
   override def serializedId: Array[Byte] = NumericTxIndex.indexToBytes(n)
 }
 
@@ -56,6 +57,7 @@ object NumericTxIndex {
   * @param m - id of a box
   */
 case class NumericBoxIndex(n: Long, m: ModifierId) extends ExtraIndex {
+  override lazy val id: ModifierId = bytesToId(serializedId)
   override def serializedId: Array[Byte] = NumericBoxIndex.indexToBytes(n)
 }
 
@@ -86,9 +88,13 @@ object NumericBoxIndex {
   /**
     * Get a box from database by its index number.
     * @param history - database handle
-    * @param n       - index number of a box
+    * @param n       - index number of a box, can be negative if box is spent
     * @return box with given index, if found
     */
   def getBoxByNumber(history: ErgoHistoryReader, n: Long): Option[IndexedErgoBox] =
-    history.typedExtraIndexById[IndexedErgoBox](history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n))).get.m)
+    history.typedExtraIndexById[IndexedErgoBox](
+      history.typedExtraIndexById[NumericBoxIndex](
+        bytesToId(NumericBoxIndex.indexToBytes(math.abs(n)))
+      ).get.m
+    )
 }

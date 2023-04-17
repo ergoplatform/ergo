@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.7"
+  version: "5.0.9"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -5975,7 +5975,7 @@ paths:
                     type: array
                     description: Array of boxes
                     items:
-                      $ref: '#/components/schemas/IndexedErgoTransaction'
+                      $ref: '#/components/schemas/IndexedErgoBox'
                   total:
                     type: integer
                     description: Total number of retreived boxes
@@ -6022,6 +6022,13 @@ paths:
             type: integer
             format: int32
             default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
       responses:
         '200':
           description: unspent boxes associated with wanted address
@@ -6031,7 +6038,7 @@ paths:
                 type: array
                 description: Array of boxes
                 items:
-                  $ref: '#/components/schemas/IndexedErgoTransaction'
+                  $ref: '#/components/schemas/IndexedErgoBox'
         '404':
           description: No unspent boxes found for wanted address
           content:
@@ -6170,6 +6177,13 @@ paths:
             type: integer
             format: int32
             default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
       responses:
         '200':
           description: unspent boxes with wanted ergotree

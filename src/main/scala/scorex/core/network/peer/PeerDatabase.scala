@@ -16,7 +16,7 @@ import scala.util.{Failure, Success, Try}
   */
 final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
 
-  private val objectStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
+  private val persistentStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
 
   private var peers =
     loadPeers match {
@@ -61,7 +61,7 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
    */
   private def loadPeers: Try[Map[InetSocketAddress, PeerInfo]] = Try {
     var peers = Map.empty[InetSocketAddress, PeerInfo]
-    for ((addr,peer) <- objectStore.getAll) {
+    for ((addr,peer) <- persistentStore.getAll) {
       val address = deserialize(addr).asInstanceOf[InetSocketAddress]
       val peerInfo = PeerInfoSerializer.parseBytes(peer)
       peers += address -> peerInfo
@@ -76,7 +76,7 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
       peerInfo.peerSpec.address.foreach { address =>
         log.debug(s"Updating peer info for $address")
         peers += address -> peerInfo
-        objectStore.insert(Array((serialize(address), PeerInfoSerializer.toBytes(peerInfo))))
+        persistentStore.insert(Array((serialize(address), PeerInfoSerializer.toBytes(peerInfo))))
       }
     }
   }
@@ -100,7 +100,7 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
 
   def remove(address: InetSocketAddress): Unit = {
     peers -= address
-    objectStore.remove(Array(serialize(address)))
+    persistentStore.remove(Array(serialize(address)))
   }
 
   def knownPeers: Map[InetSocketAddress, PeerInfo] = peers

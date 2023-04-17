@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.extra
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 
@@ -43,7 +43,7 @@ class IndexedErgoBox(val inclusionHeight: Int,
     */
   def isSpent: Boolean = spendingTxIdOpt.isDefined
 }
-object IndexedErgoBoxSerializer extends ScorexSerializer[IndexedErgoBox] {
+object IndexedErgoBoxSerializer extends ErgoSerializer[IndexedErgoBox] {
 
   override def serialize(iEb: IndexedErgoBox, w: Writer): Unit = {
     w.putInt(iEb.inclusionHeight)

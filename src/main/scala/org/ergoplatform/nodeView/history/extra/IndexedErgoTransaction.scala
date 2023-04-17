@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.DataInput
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
 import spire.implicits.cfor
@@ -69,7 +69,7 @@ case class IndexedErgoTransaction(txid: ModifierId,
   }
 }
 
-object IndexedErgoTransactionSerializer extends ScorexSerializer[IndexedErgoTransaction] {
+object IndexedErgoTransactionSerializer extends ErgoSerializer[IndexedErgoTransaction] {
 
   override def serialize(iTx: IndexedErgoTransaction, w: Writer): Unit = {
     w.putUByte(iTx.serializedId.length)

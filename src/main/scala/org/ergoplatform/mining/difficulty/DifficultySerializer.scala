@@ -3,10 +3,14 @@ package org.ergoplatform.mining.difficulty
 import java.math.BigInteger
 
 import org.ergoplatform.nodeView.history.ErgoHistory._
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
-object RequiredDifficulty extends ScorexSerializer[NBits] {
+/**
+  * Binary serializer and (en/de)coding utils for difficulty presented in different formats (as a big integer or nbits
+  * encoded 32 bits number)
+  */
+object DifficultySerializer extends ErgoSerializer[NBits] {
 
   override def serialize(obj: NBits, w: Writer): Unit = {
     w.putBytes(uint32ToByteArrayBE(obj))

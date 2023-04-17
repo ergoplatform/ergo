@@ -15,7 +15,7 @@ trait TestHelper extends FileHelper {
   type PROVER = BatchAVLProver[D, HF]
   type VERIFIER = BatchAVLVerifier[D, HF]
   type PERSISTENT_PROVER = PersistentBatchAVLProver[D, HF]
-  type STORAGE = VersionedLDBAVLStorage[D]
+  type STORAGE = VersionedLDBAVLStorage
 
   protected val KL: Int
   protected val VL: Int
@@ -28,8 +28,7 @@ trait TestHelper extends FileHelper {
     new LDBVersionedStore(dir, initialKeepVersions = initialKeepVersions)
   }
 
-  def createVersionedStorage(store: LDBVersionedStore): STORAGE =
-    new VersionedLDBAVLStorage(store, NodeParameters(KL, Some(VL), LL))
+  def createVersionedStorage(store: LDBVersionedStore): STORAGE = new VersionedLDBAVLStorage(store)
 
   def createPersistentProver(storage: STORAGE): PERSISTENT_PROVER = {
     val prover = new BatchAVLProver[D, HF](KL, Some(VL))

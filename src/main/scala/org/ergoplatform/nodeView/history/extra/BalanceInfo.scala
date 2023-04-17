@@ -4,7 +4,7 @@ import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.fastIdToBytes
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import spire.implicits.cfor
@@ -88,7 +88,7 @@ case class BalanceInfo() extends ScorexLogging {
 
 }
 
-object BalanceInfoSerializer extends ScorexSerializer[BalanceInfo] {
+object BalanceInfoSerializer extends ErgoSerializer[BalanceInfo] {
 
   override def serialize(bI: BalanceInfo, w: Writer): Unit = {
     w.putLong(bI.nanoErgs)

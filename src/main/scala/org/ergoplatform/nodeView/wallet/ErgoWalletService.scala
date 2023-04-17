@@ -556,9 +556,8 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   override def getPrivateKeyFromPath(state: ErgoWalletState, path: DerivationPath): Try[DLogProverInput] =
     state.secretStorageOpt match {
       case Some(secretStorage) if !secretStorage.isLocked =>
-        val secret = secretStorage.secret.get
-        val newSecret = path.decodedPath.drop(secret.path.depth).foldLeft(secret)((parent, i) => parent.child(i))
-        Success(newSecret.privateInput)
+        val rootSecret = secretStorage.secret.get // unlocked means Some(secret)
+        Success(rootSecret.derive(path.toPrivateBranch).privateInput)
       case Some(_) =>
         Failure(new Exception("Unable to derive key from path, wallet is locked"))
       case None =>

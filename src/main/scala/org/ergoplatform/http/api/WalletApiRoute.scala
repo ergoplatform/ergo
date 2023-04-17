@@ -125,12 +125,16 @@ case class WalletApiRoute(readersHolder: ActorRef,
   )
 
 
-  private val p2pkAddress: Directive1[P2PKAddress] = entity(as[String]).flatMap { str =>
-    addressEncoder.fromString(str).toEither match {
-      case Right(value: P2PKAddress) => provide(value)
-      case _ => reject
+  private val p2pkAddress: Directive1[P2PKAddress] = entity(as[Json])
+    .flatMap {
+      _.hcursor.downField("address").as[String]
+        .flatMap { address =>
+          addressEncoder.fromString(address).toEither
+        } match {
+        case Right(value: P2PKAddress) => provide(value)
+        case _ => reject
+      }
     }
-  }
 
   /** POST body field - from what height to rescan wallet */
   private val heightEntityField: Directive1[Int] = entity(as[Option[Json]])

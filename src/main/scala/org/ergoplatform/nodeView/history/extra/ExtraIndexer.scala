@@ -366,7 +366,7 @@ class ExtraIndexer(cacheSettings: CacheSettings,
     case FullBlockApplied(header: Header) if caughtUp =>
       index(history.typedModifierById[BlockTransactions](header.transactionsId).get, header.height) // after the indexer caught up with the chain, stay up to date
 
-    case Rollback(branchPoint: ModifierId) =>
+    case Rollback(branchPoint: ModifierId) if _history != null => // only rollback if indexing is enabled
       val branchHeight: Int = history.heightOf(branchPoint).get
       rollback = branchHeight < indexedHeight
       if(rollback) {

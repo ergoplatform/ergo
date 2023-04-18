@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, P2PKAddress, UnsignedInput}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.difficulty.DifficultySerializer
@@ -15,16 +16,20 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UtxoState, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestHelpers, HistoryTestHelpers}
+import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.eval._
+import special.collection.Coll
 import spire.implicits.cfor
 
 import java.io.File
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
-import scala.util.Try
+import scala.util.{Random, Try}
 
 class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase with HistoryTestHelpers {
 
@@ -64,10 +69,10 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     trees.clear()
   }
 
-  def getAddresses(limit: Int): (mutable.HashMap[ModifierId,Long],Int,Int) = {
+  def getAddresses(limit: Int): (mutable.HashMap[ModifierId,(Long,Long)],Int,Int) = {
     var txsIndexed = 0
     var boxesIndexed = 0
-    val addresses: mutable.HashMap[ModifierId, Long] = mutable.HashMap[ModifierId, Long]()
+    val addresses: mutable.HashMap[ModifierId,(Long,Long)] = mutable.HashMap[ModifierId,(Long,Long)]()
     cfor(1)(_ <= limit, _ + 1) { i =>
       _history.getReader.bestBlockTransactionsAt(i).get.txs.foreach(tx => {
         txsIndexed += 1
@@ -75,36 +80,36 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
           tx.inputs.foreach(input => {
             val iEb: IndexedErgoBox = _history.getReader.typedExtraIndexById[IndexedErgoBox](bytesToId(input.boxId)).get
             val address = hashErgoTree(ExtraIndexer.getAddress(iEb.box.ergoTree)(addressEncoder).script)
-            addresses.put(address, addresses(address) - iEb.box.value)
+            val prev = addresses(address)
+            addresses.put(address, (prev._1 - iEb.box.value, prev._2 - iEb.box.additionalTokens.toArray.map(_._2).sum))
           })
         }
         tx.outputs.foreach(output => {
           boxesIndexed += 1
           val address = hashErgoTree(addressEncoder.fromProposition(output.ergoTree).get.script)
-          addresses.put(address, addresses.getOrElse[Long](address, 0) + output.value)
+          val prev = addresses.getOrElse(address, (0L, 0L))
+          addresses.put(address, (prev._1 + output.value, prev._2 + output.additionalTokens.toArray.map(_._2).sum))
         })
       })
     }
     (addresses, txsIndexed, boxesIndexed)
   }
 
-  def checkAddresses(addresses: mutable.HashMap[ModifierId,Long], isSegment: Boolean = false): Int = {
+  def checkAddresses(addresses: mutable.HashMap[ModifierId,(Long,Long)], isSegment: Boolean = false): Int = {
     var mismatches: Int = 0
-    addresses.foreach(e => {
-      history.typedExtraIndexById[IndexedErgoAddress](e._1) match {
+    addresses.foreach(addr => {
+      history.typedExtraIndexById[IndexedErgoAddress](addr._1) match {
         case Some(iEa) =>
-          if(!isSegment && iEa.balanceInfo.get.nanoErgs != e._2) {
+          if(!isSegment && (iEa.balanceInfo.get.nanoErgs != addr._2._1 || iEa.balanceInfo.get.tokens.map(_._2).sum != addr._2._2))
             mismatches += 1
-            System.err.println(s"Address ${e._1} has ${iEa.balanceInfo.get.nanoErgs / 1000000000}ERG, ${e._2 / 1000000000}ERG expected")
-          }
           if(!isSegment) {
             // check tx segments
-            val txSegments: mutable.HashMap[ModifierId, Long] = mutable.HashMap.empty[ModifierId, Long]
-            txSegments ++= (0 until iEa.txSegmentCount).map(txSegmentId(iEa.treeHash, _)).map(Tuple2(_, 0L))
+            val txSegments: mutable.HashMap[ModifierId,(Long,Long)] = mutable.HashMap.empty[ModifierId, (Long,Long)]
+            txSegments ++= (0 until iEa.txSegmentCount).map(txSegmentId(iEa.treeHash, _)).map(Tuple2(_, (0L, 0L)))
             checkAddresses(txSegments, isSegment = true) shouldBe 0
             // check box segments
-            val boxSegments: mutable.HashMap[ModifierId, Long] = mutable.HashMap.empty[ModifierId, Long]
-            boxSegments ++= (0 until iEa.boxSegmentCount).map(boxSegmentId(iEa.treeHash, _)).map(Tuple2(_, 0L))
+            val boxSegments: mutable.HashMap[ModifierId,(Long,Long)] = mutable.HashMap.empty[ModifierId,(Long,Long)]
+            boxSegments ++= (0 until iEa.boxSegmentCount).map(boxSegmentId(iEa.treeHash, _)).map(Tuple2(_, (0L, 0L)))
             checkAddresses(boxSegments, isSegment = true) shouldBe 0
           }
           // check boxes in memory
@@ -123,9 +128,9 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
             NumericTxIndex.getTxByNumber(history, txNum) shouldNot be(empty)
           )
         case None =>
-          if (e._2 != 0) {
+          if (addr._2._1 != 0L && addr._2._2 != 0L) {
             mismatches += 1
-            System.err.println(s"Address ${e._1} should exist, but was not found")
+            System.err.println(s"Address ${addr._1} should exist, but was not found")
           }
       }
     })
@@ -289,6 +294,18 @@ object ChainGenerator extends ErgoTestHelpers {
     }
   }
 
+  private def moveTokens(inOpt: Option[ErgoBox], cond: Boolean): Coll[(TokenId, Long)] = {
+    val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
+    inOpt match {
+      case Some(input) if cond =>
+        tokens += Tuple2(Digest32 @@ input.id, math.abs(Random.nextInt()))
+      case Some(tokenBox) if !cond =>
+        tokenBox.additionalTokens.toArray.foreach(tokens += _)
+      case _ =>
+    }
+    Colls.fromArray(tokens.toArray)
+  }
+
   private def genTransactions(height: Height,
                               inOpt: Option[ErgoBox],
                               ctx: ErgoStateContext): (Seq[ErgoTransaction], Option[ErgoBox]) = {
@@ -300,15 +317,18 @@ object ChainGenerator extends ErgoTestHelpers {
       .map { input =>
         val qty = MaxTxsPerBlock
         val amount = input.value
-        val outs = (0 until qty).map(_ => new ErgoBoxCandidate(amount, selfAddressScript, height))
+        val outs = (0 until qty).map(i => new ErgoBoxCandidate(amount, selfAddressScript, height, moveTokens(inOpt, i == 0)))
+        var i = 0
         val x = outs
           .foldLeft((Seq.empty[ErgoTransaction], input)) { case ((acc, in), out) =>
             val inputs = IndexedSeq(in)
-            val unsignedTx = UnsignedErgoTransaction(
-              inputs.map(_.id).map(id => new UnsignedInput(id)),
-              IndexedSeq(out)
-            )
-
+            val newOut =
+              if (i > 0)
+                new ErgoBoxCandidate(amount, selfAddressScript, height, moveTokens(acc.lastOption.map(_.outputs.head), cond = false))
+              else
+                out
+            val unsignedTx = UnsignedErgoTransaction(inputs.map(box => new UnsignedInput(box.id)), IndexedSeq(newOut))
+            i += 1
             defaultProver.sign(unsignedTx, inputs, emptyDataBoxes, ctx)
               .fold(_ => acc -> in, tx => (acc :+ ErgoTransaction(tx)) -> unsignedTx.outputs.head)
           }

@@ -312,7 +312,7 @@ trait ExtraIndexerBase extends ScorexLogging {
         history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb.box, i).id) match {
           case Some(token) if token.boxId == iEb.id =>
             toRemove += token.id // token created, delete
-          case None => // no token created
+          case _ => // no token created
         }
       }
       address.rollback(txTarget, boxTarget, _history)
@@ -366,7 +366,7 @@ class ExtraIndexer(cacheSettings: CacheSettings,
     case FullBlockApplied(header: Header) if caughtUp =>
       index(history.typedModifierById[BlockTransactions](header.transactionsId).get, header.height) // after the indexer caught up with the chain, stay up to date
 
-    case Rollback(branchPoint: ModifierId) =>
+    case Rollback(branchPoint: ModifierId) if _history != null => // only rollback if indexing is enabled
       val branchHeight: Int = history.heightOf(branchPoint).get
       rollback = branchHeight < indexedHeight
       if(rollback) {

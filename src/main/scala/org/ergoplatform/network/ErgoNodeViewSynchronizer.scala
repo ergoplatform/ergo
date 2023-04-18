@@ -24,7 +24,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
 import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
@@ -626,7 +626,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                       requestedModifiers: Map[ModifierId, Array[Byte]],
                                       remote: ConnectedPeer): Unit  = {
     Constants.modifierSerializers.get(typeId) match {
-      case Some(serializer: ScorexSerializer[BlockSection]@unchecked) =>
+      case Some(serializer: ErgoSerializer[BlockSection]@unchecked) =>
         // parse all modifiers and put them to modifiers cache
         val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)
 
@@ -710,7 +710,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   def parseModifiers[M <: NodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
                                             modifierTypeId: NetworkObjectTypeId.Value,
-                                            serializer: ScorexSerializer[M],
+                                            serializer: ErgoSerializer[M],
                                             remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
       serializer.parseBytesTry(bytes) match {

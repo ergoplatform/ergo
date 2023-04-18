@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.extension.Extension.merkleTree
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
-import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
+import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
 import scorex.crypto.authds.Side
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
@@ -33,7 +33,7 @@ case class PoPowHeader(header: Header,
 
   override type M = PoPowHeader
 
-  override def serializer: ScorexSerializer[M] = PoPowHeaderSerializer
+  override def serializer: ErgoSerializer[M] = PoPowHeaderSerializer
 
   def id: ModifierId = header.id
 
@@ -134,9 +134,9 @@ object PoPowHeader {
 }
 
 /**
-  * Binary serializer for PoPowHeader,
+  * Binary serializer for PoPowHeader
   */
-object PoPowHeaderSerializer extends ScorexSerializer[PoPowHeader] {
+object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
   import org.ergoplatform.wallet.Constants.ModifierIdLength
 
   implicit val hf: HF = Algos.hash

@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox.{R4, R5, R6}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.{ByteColl, uniqueId}
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.CollectionConstant
@@ -32,7 +32,7 @@ case class IndexedToken(tokenId: ModifierId,
 
 }
 
-object IndexedTokenSerializer extends ScorexSerializer[IndexedToken] {
+object IndexedTokenSerializer extends ErgoSerializer[IndexedToken] {
 
   type ByteColl = CollectionConstant[SByte.type]
 

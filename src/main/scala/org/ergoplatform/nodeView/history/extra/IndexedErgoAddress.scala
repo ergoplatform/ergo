@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, f
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getFromSegments, getTxs}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
@@ -289,7 +289,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   }
 }
 
-object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress] {
+object IndexedErgoAddressSerializer extends ErgoSerializer[IndexedErgoAddress] {
 
   /**
     * Compute the Blake2b hash of given ErgoTree

@@ -3,7 +3,7 @@ package org.ergoplatform.mining
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
@@ -208,7 +208,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Get target `b` from encoded difficulty `nBits`
     */
   private[mining] def getB(nBits: Long): BigInt = {
-    q / RequiredDifficulty.decodeCompactBits(nBits)
+    q / DifficultySerializer.decodeCompactBits(nBits)
   }
 
   /**

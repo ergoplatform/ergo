@@ -10,14 +10,14 @@ class LDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
       val valueA = (byteString("A"), byteString("1"))
       val valueB = (byteString("B"), byteString("2"))
 
-      store.update(toInsert = Array(valueA, valueB), toRemove = Array.empty).get
+      store.update(Array(valueA._1, valueB._1), Array(valueA._2, valueB._2), toRemove = Array.empty).get
 
       store.get(valueA._1).toBs shouldBe Some(valueA._2).toBs
       store.get(valueB._1).toBs shouldBe Some(valueB._2).toBs
 
       store.getAll.toSeq.toBs shouldBe Seq(valueA, valueB).toBs
 
-      store.update(toInsert = Array.empty, toRemove = Array(valueA._1)).get
+      store.update(Array.empty, Array.empty, toRemove = Array(valueA._1)).get
       store.get(valueA._1) shouldBe None
     }
   }

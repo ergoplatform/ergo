@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history.header
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, PreHeader}
@@ -60,7 +60,7 @@ case class Header(override val version: Header.Version,
 
   override val modifierTypeId: NetworkObjectTypeId.Value = Header.modifierTypeId
 
-  lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
+  lazy val requiredDifficulty: Difficulty = DifficultySerializer.decodeCompactBits(nBits)
 
   lazy val ADProofsId: ModifierId = NonHeaderBlockSection.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
 

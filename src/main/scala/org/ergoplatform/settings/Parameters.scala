@@ -4,6 +4,7 @@ import com.google.common.primitives.Ints
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 
@@ -12,7 +13,6 @@ import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
 import Extension.SystemParametersPrefix
-import scorex.core.serialization.ErgoSerializer
 
 /**
   * System parameters which could be readjusted via collective miners decision.

@@ -7,8 +7,8 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import scorex.core.TransactionsCarryingPersistentNodeViewModifier
 import scorex.core.serialization.ErgoSerializer
+import scorex.core.TransactionsCarryingPersistentNodeViewModifier
 import scorex.util.ModifierId
 
 case class ErgoFullBlock(header: Header,

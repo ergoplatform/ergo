@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.state
 
-import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos.HF
@@ -16,35 +15,21 @@ import scorex.util.encode.Base16
 
 import scala.util.{Failure, Success, Try}
 
+/**
+  * Interface for a (non-versioned) database storing UTXO set snapshots and metadata about them
+  */
 class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
   private val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
 
   private val snapshotInfoKey: Array[Byte] = Array.fill(32)(0: Byte)
 
-  private def snapshotsInfoToBytes(snapshotsInfo: SnapshotsInfo): Array[Byte] = {
-    Bytes.concat(
-      snapshotsInfo.availableManifests.map { case (h, manifestId) =>
-        Bytes.concat(Ints.toByteArray(h), manifestId)
-      }.toSeq: _*
-    )
-  }
-
-  private def snapshotsInfoFromBytes(bytes: Array[Byte]): SnapshotsInfo = {
-    val manifests = bytes.grouped(36).map { rowBytes =>
-      val height = Ints.fromByteArray(rowBytes.take(4))
-      val manifestId = Digest32 @@ rowBytes.drop(4)
-      height -> manifestId
-    }.toMap
-    new SnapshotsInfo(manifests)
-  }
-
   def writeSnapshotsInfo(snapshotsInfo: SnapshotsInfo): Try[Unit] = {
-    store.insert(Array(snapshotInfoKey -> snapshotsInfoToBytes(snapshotsInfo)))
+    store.insert(Array(snapshotInfoKey -> SnapshotsInfoSerializer.toBytes(snapshotsInfo)))
   }
 
   def readSnapshotsInfo: SnapshotsInfo = {
-    store.get(snapshotInfoKey).map(snapshotsInfoFromBytes).getOrElse(SnapshotsInfo.empty)
+    store.get(snapshotInfoKey).map(SnapshotsInfoSerializer.parseBytes).getOrElse(SnapshotsInfo.empty)
   }
 
 

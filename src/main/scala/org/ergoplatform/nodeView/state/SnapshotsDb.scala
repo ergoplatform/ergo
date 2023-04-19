@@ -35,7 +35,9 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
   def pruneSnapshots(toStore: Int): Unit = {
     log.info("Starting snapshots pruning")
-    val manifests = readSnapshotsInfo.availableManifests
+
+    // sort manifests by height to prune oldest ones after
+    val manifests = readSnapshotsInfo.availableManifests.toSeq.sortBy(_._1)
 
     val (toPrune, toLeave) = if (manifests.size > toStore) {
       val tp = manifests.dropRight(toStore)
@@ -64,7 +66,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
       store.remove(keysToRemove)
     }
 
-    val updInfo = new SnapshotsInfo(toLeave)
+    val updInfo = new SnapshotsInfo(toLeave.toMap)
     writeSnapshotsInfo(updInfo)
 
     log.info("Snapshots pruning finished")

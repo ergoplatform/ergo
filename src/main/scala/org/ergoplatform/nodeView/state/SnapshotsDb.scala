@@ -33,12 +33,18 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
   }
 
 
-  def pruneSnapshots(before: Height): Unit = {
-    //todo: consider storingUtxoSnapsots setting
+  def pruneSnapshots(toStore: Int): Unit = {
     log.info("Starting snapshots pruning")
-    val (toPrune, toLeave) = readSnapshotsInfo
-      .availableManifests
-      .partition(_._1 < before)
+    val manifests = readSnapshotsInfo.availableManifests
+
+    val (toPrune, toLeave) = if (manifests.size > toStore) {
+      val tp = manifests.dropRight(toStore)
+      val tl = manifests.takeRight(toStore)
+      tp -> tl
+    } else {
+      log.info("No snapshots to prune")
+      return
+    }
 
     toPrune.foreach { case (h, manifestId) =>
       log.info(s"Pruning snapshot at height $h")

@@ -28,7 +28,7 @@ import scala.util.{Failure, Success, Try}
 /**
   * Utxo set implementation
   *
-  * @param persistentProver - persistent prover that build authenticated AVL+ tree on top of utxo set
+  * @param persistentProver - persistent prover that builds authenticated AVL+ tree on top of utxo set
   * @param store            - storage of persistentProver that also keeps metadata
   * @param version          - current state version
   * @param constants        - constants, that do not change with state version changes
@@ -36,7 +36,7 @@ import scala.util.{Failure, Success, Try}
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: LDBVersionedStore,
-                override val constants: StateConstants)
+                override protected val constants: StateConstants)
   extends ErgoState[UtxoState]
     with TransactionValidation
     with UtxoStateReader

@@ -114,9 +114,10 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
 object SnapshotsDb {
 
-  // internal method to open or init snapshots database in given folder
-  // private[state] to use it in tests also
-  private[state] def create(dir: String): SnapshotsDb = {
+  /**
+    * Open or init snapshots database in given folder
+    */
+  def create(dir: String): SnapshotsDb = {
     val store = LDBFactory.createKvDb(dir)
     new SnapshotsDb(store)
   }

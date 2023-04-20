@@ -22,7 +22,7 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence wi
 
   protected implicit val hf: HF = Algos.hash
 
-  val constants: StateConstants
+  protected def constants: StateConstants
 
   protected lazy val storage = new VersionedLDBAVLStorage(store)
 

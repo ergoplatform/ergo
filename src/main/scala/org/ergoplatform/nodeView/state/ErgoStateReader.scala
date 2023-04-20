@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.settings.{Algos, LaunchParameters, Parameters, VotingSettings}
+import org.ergoplatform.settings.{Algos, LaunchParameters, Parameters}
 import scorex.core.{NodeViewComponent, VersionTag}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -26,11 +26,8 @@ trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
   def version: VersionTag
 
   val store: LDBVersionedStore
-  val constants: StateConstants
 
-  private lazy val chainSettings = constants.settings.chainSettings
-
-  protected lazy val votingSettings: VotingSettings = chainSettings.voting
+  protected def constants: StateConstants
 
   /**
     * If the state is in its genesis version (before genesis block)
@@ -46,7 +43,7 @@ trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
     */
   def parameters: Parameters = stateContext.currentParameters
 
-  def genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(chainSettings)
+  def genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(constants.settings.chainSettings)
 
 }
 

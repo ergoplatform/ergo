@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -20,7 +21,7 @@ import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
-import scorex.core.serialization.{BytesSerializable, ManifestSerializer, ErgoSerializer}
+import scorex.core.serialization.{BytesSerializable, ErgoSerializer, ManifestSerializer}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
@@ -37,7 +38,8 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   with Matchers
   with ScorexLogging
   with SyntacticallyTargetedModifierProducer
-  with TotallyValidModifierProducer[ST] {
+  with TotallyValidModifierProducer[ST]
+  with TestFileUtils {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
@@ -247,7 +249,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
           Random.nextInt(1000000) -> (Digest32 @@ Algos.decode(mod.id).get)
         }.toMap
         val si = new SnapshotsInfo(m)
-        val db = SnapshotsDb.create(s.constants.settings)
+        val db = SnapshotsDb.create(createTempDir.getPath)
         db.writeSnapshotsInfo(si)
 
         // Then send message to request it

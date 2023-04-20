@@ -13,7 +13,7 @@ import scala.util.Try
 
 trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
-  def constants: StateConstants
+  protected def constants: StateConstants
   protected def persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
   private[nodeView] val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move to some other place ?

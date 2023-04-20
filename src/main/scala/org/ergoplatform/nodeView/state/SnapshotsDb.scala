@@ -24,15 +24,21 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
   private val snapshotInfoKey: Array[Byte] = Array.fill(32)(0: Byte)
 
-  def writeSnapshotsInfo(snapshotsInfo: SnapshotsInfo): Try[Unit] = {
+  // helper method to write information about store UTXO set snapshots into the database
+  /// private[nodeView] as used in some tests
+  private[nodeView] def writeSnapshotsInfo(snapshotsInfo: SnapshotsInfo): Try[Unit] = {
     store.insert(Array(snapshotInfoKey -> SnapshotsInfoSerializer.toBytes(snapshotsInfo)))
   }
 
-  def readSnapshotsInfo: SnapshotsInfo = {
+  // helper method to read information about store UTXO set snapshots from the database
+  /// private[nodeView] as used in some tests
+  private[nodeView] def readSnapshotsInfo: SnapshotsInfo = {
     store.get(snapshotInfoKey).map(SnapshotsInfoSerializer.parseBytes).getOrElse(SnapshotsInfo.empty)
   }
 
-
+  /**
+    * Remove old snapshots in the database and metadata records about them, leaving only `toStore` most recent snapshots
+    */
   def pruneSnapshots(toStore: Int): Unit = {
     log.info("Starting snapshots pruning")
 
@@ -72,6 +78,14 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     log.info("Snapshots pruning finished")
   }
 
+  /**
+    * Lazily read current UTXO set snapshot from versioned AVL+ tree database and store it in this snapshots database
+    *
+    * @param pullFrom - versioned AVL+ tree database to pull snapshot from
+    * @param height - height of a block snapshot is corresponding to
+    * @return - id of the snapshot (root hash of its authenticating AVL+ tree),
+    *           or error happened during read-write process
+    */
   def writeSnapshot(pullFrom: VersionedLDBAVLStorage, height: Height): Try[Array[Byte]] = {
     pullFrom.dumpSnapshot(store, ManifestSerializer.MainnetManifestDepth).map { manifestId =>
       val si = readSnapshotsInfo.withNewManifest(height, Digest32 @@ manifestId)
@@ -80,10 +94,18 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     }
   }
 
+  /**
+    * Read manifest bytes without deserializing it. Useful when manifest is to be sent over the wir
+    * @param id - manifest id
+    */
   def readManifestBytes(id: ManifestId): Option[Array[Byte]] = {
     store.get(id)
   }
 
+  /**
+    * Read subtree bytes without deserializing it. Useful when subtree is to be sent over the wir
+    * @param id - subtree id
+    */
   def readSubtreeBytes(id: SubtreeId): Option[Array[Byte]] = {
     store.get(id)
   }
@@ -92,14 +114,19 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
 object SnapshotsDb {
 
-  def create(ergoSettings: ErgoSettings): SnapshotsDb = {
-    val dir = s"${ergoSettings.directory}/snapshots"
-    create(dir)
-  }
-
+  // internal method to open or init snapshots database in given folder
+  // private[state] to use it in tests also
   private[state] def create(dir: String): SnapshotsDb = {
     val store = LDBFactory.createKvDb(dir)
     new SnapshotsDb(store)
+  }
+
+  /**
+    * Read or create snapshots database in a folder defined by provided settings
+    */
+  def create(ergoSettings: ErgoSettings): SnapshotsDb = {
+    val dir = s"${ergoSettings.directory}/snapshots"
+    create(dir)
   }
 
 }

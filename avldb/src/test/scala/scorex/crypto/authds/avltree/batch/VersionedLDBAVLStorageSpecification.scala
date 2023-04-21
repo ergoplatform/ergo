@@ -347,7 +347,7 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
     val store = LDBFactory.createKvDb("/tmp/aa")
 
     val ts0 = System.currentTimeMillis()
-    storage.dumpSnapshot(store, 4)
+    storage.dumpSnapshot(store, 4, prover.digest.dropRight(1))
     val ts = System.currentTimeMillis()
     println("time: " + (ts-ts0))
   }

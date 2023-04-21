@@ -28,7 +28,7 @@ import scala.util.{Failure, Success, Try}
 /**
   * Utxo set implementation
   *
-  * @param persistentProver - persistent prover that build authenticated AVL+ tree on top of utxo set
+  * @param persistentProver - persistent prover that builds authenticated AVL+ tree on top of utxo set
   * @param store            - storage of persistentProver that also keeps metadata
   * @param version          - current state version
   * @param constants        - constants, that do not change with state version changes
@@ -36,7 +36,7 @@ import scala.util.{Failure, Success, Try}
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: LDBVersionedStore,
-                override val constants: StateConstants)
+                override protected val constants: StateConstants)
   extends ErgoState[UtxoState]
     with TransactionValidation
     with UtxoStateReader
@@ -200,6 +200,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
+            saveSnapshotIfNeeded(fb.height, estimatedTip)
             new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
         }
@@ -210,7 +211,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
           Failure(e)
         }
-
       }
 
     case h: Header =>
@@ -261,10 +261,19 @@ object UtxoState {
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
   // block-specific metadata to write into database (in addition to AVL+ tree)
-  private def metadata(modId: VersionTag,
-                       stateRoot: ADDigest,
-                       currentEmissionBoxOpt: Option[ErgoBox],
-                       context: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = {
+
+  /**
+    *
+    * @param modId - ID of a block (header) corresponding to UTXO set
+    * @param stateRoot - UTXO set digest (hash and tree height) AFTER applying block `modId`
+    * @param currentEmissionBoxOpt
+    * @param context
+    * @return
+    */
+  def metadata(modId: VersionTag,
+               stateRoot: ADDigest,
+               currentEmissionBoxOpt: Option[ErgoBox],
+               context: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = {
     val modIdBytes = versionToBytes(modId)
     val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modIdBytes -> stateRoot
     val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modIdBytes

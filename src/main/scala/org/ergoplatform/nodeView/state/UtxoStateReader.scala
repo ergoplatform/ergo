@@ -18,11 +18,11 @@ import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
+trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence with TransactionValidation {
 
   protected implicit val hf: HF = Algos.hash
 
-  val constants: StateConstants
+  protected def constants: StateConstants
 
   /**
     * Versioned database where UTXO set and its authenticating AVL+ tree are stored

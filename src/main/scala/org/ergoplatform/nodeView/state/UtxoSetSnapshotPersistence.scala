@@ -23,8 +23,9 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
   // Dump current UTXO set snapshot to persistent snapshots database
   // private[nodeView] as used in tests also
-  private[nodeView] def dumpSnapshot(height: Height): Try[Array[Byte]] = {
-    snapshotsDb.writeSnapshot(persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage], height)
+  private[nodeView] def dumpSnapshot(height: Height, expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
+    val storage = persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage]
+    snapshotsDb.writeSnapshot(storage, height, expectedRootHash)
   }
 
   /**
@@ -46,17 +47,21 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
       import scala.concurrent.ExecutionContext.Implicits.global
       val ms0 = System.currentTimeMillis()
-      // todo: check that future will work with the same tree
+
+      // drop tree height byte from digest to get current root hash of AVL+ tree
+      // we then pass the hash and check in another thread whether it is the same after taking db snapshot
+      // there is small probability of failure, but that is ok, and better than any locking likely
+      val expectedRootHash = persistentProver.digest.dropRight(1)
       Future {
         log.info("Started work within future")
         val ft0 = System.currentTimeMillis()
-        dumpSnapshot(height)
+        dumpSnapshot(height, expectedRootHash)
         snapshotsDb.pruneSnapshots(constants.settings.nodeSettings.storingUtxoSnapshots)
         val ft = System.currentTimeMillis()
-        log.info("Work within future: " + (ft - ft0) + " ms.")
+        log.info("Work within future finished in: " + (ft - ft0) + " ms.")
       }
       val ms = System.currentTimeMillis()
-      log.info("Time to dump utxo set snapshot: " + (ms - ms0))
+      log.info("Main thread time to dump utxo set snapshot: " + (ms - ms0))
     }
   }
 

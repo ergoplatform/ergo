@@ -83,11 +83,14 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     *
     * @param pullFrom - versioned AVL+ tree database to pull snapshot from
     * @param height - height of a block snapshot is corresponding to
+    * @param expectedRootHash - expected tree root hash in `pullFrom` database
     * @return - id of the snapshot (root hash of its authenticating AVL+ tree),
     *           or error happened during read-write process
     */
-  def writeSnapshot(pullFrom: VersionedLDBAVLStorage, height: Height): Try[Array[Byte]] = {
-    pullFrom.dumpSnapshot(store, ManifestSerializer.MainnetManifestDepth).map { manifestId =>
+  def writeSnapshot(pullFrom: VersionedLDBAVLStorage,
+                    height: Height,
+                    expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
+    pullFrom.dumpSnapshot(store, ManifestSerializer.MainnetManifestDepth, expectedRootHash).map { manifestId =>
       val si = readSnapshotsInfo.withNewManifest(height, Digest32 @@ manifestId)
       writeSnapshotsInfo(si)
       manifestId

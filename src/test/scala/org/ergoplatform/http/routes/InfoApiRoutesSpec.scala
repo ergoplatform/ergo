@@ -14,7 +14,7 @@ import org.ergoplatform.http.api.InfoApiRoute
 import org.ergoplatform.local.ErgoStatsCollector.NodeInfo.difficultyEncoder
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.local.ErgoStatsCollectorRef
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.ChangedHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
@@ -79,7 +79,7 @@ class InfoApiRoutesSpec extends AnyFlatSpec
       PoPoWBootstrap = settings.nodeSettings.poPoWBootstrap,
       blocksToKeep = settings.nodeSettings.blocksToKeep
     )
-    val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
+    val nBits = DifficultySerializer.encodeCompactBits(difficulty)
     val chain = genChain(height = 5, emptyHistory, Header.InitialVersion, nBits)
     val history = applyChain(emptyHistory, chain)
     val generatedDifficulty = history.bestFullBlockOpt

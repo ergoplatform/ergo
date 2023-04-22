@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.SType
@@ -11,7 +11,7 @@ import sigmastate.serialization.ValueSerializer
 import scorex.util.Extensions._
 
 
-object ScanningPredicateSerializer extends ScorexSerializer[ScanningPredicate] {
+object ScanningPredicateSerializer extends ErgoSerializer[ScanningPredicate] {
 
   val EqualsPrefix = 1: Byte
   val ContainsPrefix = 2: Byte

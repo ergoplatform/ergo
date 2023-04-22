@@ -20,7 +20,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import scorex.core.EphemerealNodeViewModifier
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
@@ -452,7 +452,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override type M = ErgoTransaction
 
-  override def serializer: ScorexSerializer[ErgoTransaction] = ErgoTransactionSerializer
+  override def serializer: ErgoSerializer[ErgoTransaction] = ErgoTransactionSerializer
 
   override def toString: String = {
     import ErgoTransaction._
@@ -486,7 +486,7 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     inputs.zipWithIndex.filterNot(i => resolvedInputs.exists(bx => util.Arrays.equals(bx.id, i._1))).map(_._2)
 }
 
-object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
+object ErgoTransactionSerializer extends ErgoSerializer[ErgoTransaction] {
 
   override def serialize(tx: ErgoTransaction, w: Writer): Unit = {
     val elt = new ErgoLikeTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)

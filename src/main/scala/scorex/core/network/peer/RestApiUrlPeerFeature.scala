@@ -2,7 +2,7 @@ package scorex.core.network.peer
 
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization._
 import java.net.URL
 
@@ -19,7 +19,7 @@ case class RestApiUrlPeerFeature(restApiUrl: URL) extends PeerFeature {
   override def serializer: RestApiUrlPeerFeatureSerializer.type = RestApiUrlPeerFeatureSerializer
 }
 
-object RestApiUrlPeerFeatureSerializer extends ScorexSerializer[RestApiUrlPeerFeature] {
+object RestApiUrlPeerFeatureSerializer extends ErgoSerializer[RestApiUrlPeerFeature] {
 
   override def serialize(obj: RestApiUrlPeerFeature, w: Writer): Unit = {
     val restApiUrl = obj.restApiUrl.toString

@@ -1,11 +1,11 @@
 package org.ergoplatform.modifiers.history.extension
 
 import org.ergoplatform.settings.Constants
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{bytesToId, idToBytes}
 
-object ExtensionSerializer extends ScorexSerializer[Extension] {
+object ExtensionSerializer extends ErgoSerializer[Extension] {
 
   override def serialize(obj: Extension, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.headerId))

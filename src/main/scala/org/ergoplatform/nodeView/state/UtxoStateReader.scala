@@ -12,7 +12,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.validation.MalformedModifierError
-import scorex.crypto.authds.avltree.batch.{Lookup, NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
@@ -24,8 +24,10 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
 
   val constants: StateConstants
 
-  private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-  protected lazy val storage = new VersionedLDBAVLStorage(store, np)
+  /**
+    * Versioned database where UTXO set and its authenticating AVL+ tree are stored
+    */
+  protected lazy val storage = new VersionedLDBAVLStorage(store)
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 

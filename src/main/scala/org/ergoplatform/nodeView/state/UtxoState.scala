@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGe
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator}
+import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -281,8 +281,7 @@ object UtxoState {
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
-      val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-      val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+      val storage = new VersionedLDBAVLStorage(store)
       PersistentBatchAVLProver.create(bp, storage).get
     }
     new UtxoState(persistentProver, version, store, constants)
@@ -305,8 +304,7 @@ object UtxoState {
     val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
 
     val defaultStateContext = ErgoStateContext.empty(constants, parameters)
-    val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-    val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
+    val storage = new VersionedLDBAVLStorage(store)
     val persistentProver = PersistentBatchAVLProver.create(
       p,
       storage,

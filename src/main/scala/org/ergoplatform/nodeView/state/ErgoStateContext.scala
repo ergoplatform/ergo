@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionVal
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
-import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
+import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
@@ -107,7 +107,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
-  override def serializer: ScorexSerializer[M] = ErgoStateContextSerializer(ergoSettings)
+  override def serializer: ErgoSerializer[M] = ErgoStateContextSerializer(ergoSettings)
 
   def upcoming(minerPk: EcPointType,
                timestamp: Long,
@@ -351,7 +351,7 @@ object ErgoStateContext {
 
 }
 
-case class ErgoStateContextSerializer(ergoSettings: ErgoSettings) extends ScorexSerializer[ErgoStateContext] {
+case class ErgoStateContextSerializer(ergoSettings: ErgoSettings) extends ErgoSerializer[ErgoStateContext] {
 
   private val Eip27SupportValue = 100 // see comment in serialize()
 

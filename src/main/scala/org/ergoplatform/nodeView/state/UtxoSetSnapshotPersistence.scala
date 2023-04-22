@@ -7,6 +7,7 @@ import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLD
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import org.ergoplatform.settings.Constants.MakeSnapshotEvery
+import org.ergoplatform.settings.ErgoSettings
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -16,10 +17,10 @@ import scala.util.Try
   */
 trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
-  protected def constants: StateConstants
+  protected def ergoSettings: ErgoSettings
   protected def persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
-  private[nodeView] val snapshotsDb = SnapshotsDb.create(constants.settings)
+  private[nodeView] val snapshotsDb = SnapshotsDb.create(ergoSettings)
 
   // Dump current UTXO set snapshot to persistent snapshots database
   // private[nodeView] as used in tests also
@@ -44,7 +45,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
       height % MakeSnapshotEvery == MakeSnapshotEvery - 1
     }
 
-    if (constants.settings.nodeSettings.areSnapshotsStored &&
+    if (ergoSettings.nodeSettings.areSnapshotsStored &&
         timeToTakeSnapshot(height) &&
         estimatedTip.nonEmpty &&
         estimatedTip.get - height <= MakeSnapshotEvery) {
@@ -60,7 +61,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
         log.info("Started work within future")
         val ft0 = System.currentTimeMillis()
         dumpSnapshot(height, expectedRootHash)
-        snapshotsDb.pruneSnapshots(constants.settings.nodeSettings.storingUtxoSnapshots)
+        snapshotsDb.pruneSnapshots(ergoSettings.nodeSettings.storingUtxoSnapshots)
         val ft = System.currentTimeMillis()
         log.info("Work within future finished in: " + (ft - ft0) + " ms.")
       }

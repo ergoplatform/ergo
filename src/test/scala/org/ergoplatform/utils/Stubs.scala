@@ -58,7 +58,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val digestState: DigestState = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
-      DigestState.create(Some(wus.version), Some(wus.rootDigest), createTempDir, stateConstants)
+      DigestState.create(Some(wus.version), Some(wus.rootDigest), createTempDir, settings)
     }
   }.sample.value
 
@@ -257,7 +257,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! Success(tx)
 
       case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
-        val sc = ErgoStateContext.empty(stateConstants, parameters)
+        val sc = ErgoStateContext.empty(settings, parameters)
         sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
           utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
         }

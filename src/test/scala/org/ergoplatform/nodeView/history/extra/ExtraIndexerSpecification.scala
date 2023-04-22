@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, hashErgoTree, txSegmentId}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UtxoState, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoState, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestHelpers, HistoryTestHelpers}
 import scorex.crypto.hash.Digest32
@@ -251,7 +251,7 @@ object ChainGenerator extends ErgoTestHelpers {
   def generate(length: Int, dir: File)(history: ErgoHistory): Unit = {
     val stateDir = new File(s"${dir.getAbsolutePath}/state")
     stateDir.mkdirs()
-    val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(initSettings))
+    val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, initSettings)
     System.out.println(s"Going to generate a chain at ${dir.getAbsolutePath} starting from ${history.bestFullBlockOpt}")
     startTime = System.currentTimeMillis() - (blockInterval * (length - 1)).toMillis
     val chain = loop(state, None, None, Seq())(history)

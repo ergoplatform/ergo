@@ -5,7 +5,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -22,7 +22,7 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence wi
 
   protected implicit val hf: HF = Algos.hash
 
-  protected def constants: StateConstants
+  protected def ergoSettings: ErgoSettings
 
   /**
     * Versioned database where UTXO set and its authenticating AVL+ tree are stored
@@ -84,13 +84,13 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence wi
     */
   protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
     def hasEmissionBox(tx: ErgoTransaction): Boolean =
-      if(fb.height > constants.settings.chainSettings.reemission.activationHeight) {
+      if(fb.height > ergoSettings.chainSettings.reemission.activationHeight) {
         // after EIP-27 we search for emission box NFT for efficiency's sake
         tx.outputs.size == 2 &&
           !tx.outputs.head.additionalTokens.isEmpty &&
-          java.util.Arrays.equals(tx.outputs.head.additionalTokens(0)._1, constants.settings.chainSettings.reemission.emissionNftIdBytes)
+          java.util.Arrays.equals(tx.outputs.head.additionalTokens(0)._1, ergoSettings.chainSettings.reemission.emissionNftIdBytes)
       } else {
-        tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition
+        tx.outputs.head.ergoTree == ergoSettings.chainSettings.monetary.emissionBoxProposition
       }
 
     def fullSearch(fb: ErgoFullBlock): Option[ErgoBox] = {
@@ -169,7 +169,7 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence wi
     * Useful when checking mempool transactions.
     */
   def withUnconfirmedTransactions(unconfirmedTxs: Seq[UnconfirmedTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, constants) {
+    new UtxoState(persistentProver, version, store, ergoSettings) {
       lazy val createdBoxes: Seq[ErgoBox] = unconfirmedTxs.map(_.transaction).flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {
@@ -183,7 +183,7 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence wi
    * Useful when checking mempool transactions.
    */
   def withTransactions(transactions: Seq[ErgoTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, constants) {
+    new UtxoState(persistentProver, version, store, ergoSettings) {
       lazy val createdBoxes: Seq[ErgoBox] = transactions.flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {

@@ -6,6 +6,7 @@ import org.ergoplatform._
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletPhase
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
@@ -27,6 +28,7 @@ case class ErgoWalletState(
     utxoStateReaderOpt: Option[UtxoStateReader],
     parameters: Parameters,
     maxInputsToUse: Int,
+    walletPhase: WalletPhase,
     error: Option[String] = None,
     rescanInProgress: Boolean
   ) extends ScorexLogging {
@@ -90,7 +92,11 @@ case class ErgoWalletState(
     }
   }
 
-  // Read a box from UTXO set if the node has it, otherwise, from the wallet
+  /**
+    * Read a box from UTXO set if the node has it, otherwise, from the wallet
+    * @param boxId of the box to read
+    * @return maybe ErgoBox
+    */
   def readBoxFromUtxoWithWalletFallback(boxId: BoxId): Option[ErgoBox] = {
     utxoStateReaderOpt match {
       case Some(utxoReader) =>
@@ -100,7 +106,10 @@ case class ErgoWalletState(
     }
   }
 
-  // expected height of a next block when the wallet is receiving a new block with the height blockHeight
+  /** Get expected height of a next block when the wallet is receiving a new block with the height blockHeight
+    * @param blockHeight height of the block being currently received
+    * @param isFullBlocksPruned whether node has all the full blocks and applies them sequentially
+    */
   def expectedNextBlockHeight(blockHeight: Height, isFullBlocksPruned: Boolean): Height = {
     val walletHeight = getWalletHeight
     if (!isFullBlocksPruned) {
@@ -153,6 +162,7 @@ object ErgoWalletState {
         utxoStateReaderOpt = None,
         parameters,
         maxInputsToUse,
+        walletPhase = WalletPhase.UnInitialized,
         rescanInProgress = false
       )
     }

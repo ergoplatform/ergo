@@ -5,6 +5,7 @@ import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletPhase
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
@@ -20,6 +21,7 @@ import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
@@ -38,6 +40,7 @@ class ErgoWalletServiceSpec
     with ErgoWalletSupport
     with ErgoTransactionGenerators
     with DBSpec
+    with FileUtils
     with BeforeAndAfterAll {
 
   override val ergoSettings: ErgoSettings = settings
@@ -62,6 +65,7 @@ class ErgoWalletServiceSpec
       utxoStateReaderOpt = Option.empty,
       parameters,
       maxInputsToUse = 1000,
+      walletPhase = WalletPhase.UnInitialized,
       rescanInProgress = false
     )
   }
@@ -190,7 +194,7 @@ class ErgoWalletServiceSpec
 
           // let's update wallet registry with a transaction from a block
           val genesisBlock = makeGenesisBlock(pks.head.pubkey, randomNewAsset)
-          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq(walletTx1)), genesisBlock.id, blockHeight = 100).get
+          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq(walletTx1)), genesisBlock.id, blockHeight = 100, WalletPhase.Created).get
 
           // transaction should be retrieved by only a scan id that was associated with it
           val txs1 = walletService.getScanTransactions(wState, ScanId @@ 0.shortValue(), 100)
@@ -221,7 +225,7 @@ class ErgoWalletServiceSpec
           val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(PaymentsScanId)))
           val spentBox = boxes.head.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = Set(PaymentsScanId))
           val allBoxes = unspentBoxes :+ spentBox
-          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq.empty), blockId, 100).get
+          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq.empty), blockId, 100, WalletPhase.Created).get
 
           val walletService = new ErgoWalletServiceImpl(settings)
           val actualUnspentOnlyWalletBoxes = walletService.getWalletBoxes(wState, unspentOnly = true, considerUnconfirmed = false).toList
@@ -294,6 +298,8 @@ class ErgoWalletServiceSpec
   property("it should lock/unlock wallet") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
+        deleteRecursive(WalletStorage.storageFolder(settings))
+        deleteRecursive(WalletRegistry.registryFolder(settings))
         val walletState = initialState(store, versionedStore)
         val walletService = new ErgoWalletServiceImpl(settings)
         val pass = Random.nextString(10)

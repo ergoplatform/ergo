@@ -73,7 +73,7 @@ trait ErgoWalletService {
                     settings: ErgoSettings,
                     mnemonic: SecretString,
                     mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString, 
+                    walletPass: SecretString,
                     usePre1627KeyDerivation: Boolean): Try[ErgoWalletState]
 
   /**
@@ -563,6 +563,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         block,
         state.outputsFilter,
         dustLimit,
+        state.walletPhase,
         ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
         state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
       }

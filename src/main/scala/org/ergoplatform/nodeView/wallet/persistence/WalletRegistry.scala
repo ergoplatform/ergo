@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
@@ -15,6 +14,7 @@ import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.PreGenesisHeader
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletPhase
 import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
@@ -239,8 +239,9 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param scanResults - block scan data (outputs created and spent along with corresponding transactions)
     * @param blockId     - block identifier
     * @param blockHeight - block height
+    * @param walletPhase - whether wallet is uninitialized, created or restored
     */
-  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = {
+  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int, walletPhase: WalletPhase): Try[Unit] = {
 
     // first, put newly created outputs and related transactions into key-value bag
     val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
@@ -252,7 +253,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
 
     // and update wallet digest
     updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
-      if (height + 1 != blockHeight) {
+      if (height + 1 != blockHeight && walletPhase != WalletPhase.Created) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
       val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.scans.contains(PaymentsScanId))

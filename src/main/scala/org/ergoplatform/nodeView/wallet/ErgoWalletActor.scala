@@ -80,7 +80,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     }
   }
 
-  private def emptyWallet: Receive = {
+  private def expectWalletReading: Receive = {
     case ReadWallet(state) =>
       val ws = settings.walletSettings
       // Try to read wallet from json file or test mnemonic provided in a config file
@@ -97,7 +97,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt) match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState.copy(walletPhase = WalletPhase.Created)))
           self ! UnlockWallet(walletPass)
           sender() ! Success(mnemonic)
         case Failure(t) =>
@@ -112,7 +112,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) match {
         case Success(newState) =>
           log.info("Wallet is restored")
-          context.become(loadedWallet(newState))
+          context.become(loadedWallet(newState.copy(walletPhase = WalletPhase.Restored)))
           self ! UnlockWallet(walletPass)
           sender() ! Success(())
         case Failure(t) =>
@@ -267,7 +267,9 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ScanOnChain(newBlock) =>
       if (state.secretIsSet(settings.walletSettings.testMnemonic)) { // scan blocks only if wallet is initialized
         val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)
-        if (nextBlockHeight == newBlock.height) {
+        // we want to scan a block either when it is its turn or when wallet is freshly created (no need to load the past)
+        val walletFreshlyCreated = state.walletPhase == WalletPhase.Created && state.getWalletHeight == 0
+        if (nextBlockHeight == newBlock.height || walletFreshlyCreated) {
           log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
           val newState =
             ergoWalletService.scanBlockUpdate(state, newBlock, settings.walletSettings.dustLimit) match {
@@ -276,14 +278,17 @@ class ErgoWalletActor(settings: ErgoSettings,
                 log.error(errorMsg, ex)
                 state.copy(error = Some(errorMsg))
               case Success(updatedState) =>
+                if (walletFreshlyCreated) {
+                  logger.info(s"Freshly created wallet initialized at height $nextBlockHeight without scanning the past.")
+                }
                 updatedState
             }
           context.become(loadedWallet(newState))
         } else if (nextBlockHeight < newBlock.height) {
-          log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
-          self ! ScanInThePast(nextBlockHeight, false)
+          log.warn(s"Wallet at height ${state.getWalletHeight}: skipped blocks found starting from $nextBlockHeight, going back to scan them")
+          self ! ScanInThePast(nextBlockHeight, rescan = false)
         } else {
-          log.warn(s"Wallet: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
+          log.warn(s"Wallet at height ${state.getWalletHeight}: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
         }
       }
 
@@ -492,7 +497,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     sender() ! txsToSend
   }
 
-  override def receive: Receive = emptyWallet
+  override def receive: Receive = expectWalletReading
 
   private def wrapLegalExc[T](e: Throwable): Failure[T] =
     if (e.getMessage.startsWith("Illegal key size")) {
@@ -522,6 +527,17 @@ object ErgoWalletActor extends ScorexLogging {
       Some(CloseWallet)
     )
     walletActorRef
+  }
+
+  /** Wallet transitions either from Default -> Initialized or Default -> Restored */
+  trait WalletPhase
+  object WalletPhase {
+    /** Wallet is expecting either Creation or Restoration */
+    case object UnInitialized extends WalletPhase
+    /** New wallet initialized with generated mnemonic in this runtime */
+    case object Created extends WalletPhase
+    /** Wallet restored from existing mnemonic in this runtime */
+    case object Restored extends WalletPhase
   }
 
   // Private signals the wallet actor sends to itself

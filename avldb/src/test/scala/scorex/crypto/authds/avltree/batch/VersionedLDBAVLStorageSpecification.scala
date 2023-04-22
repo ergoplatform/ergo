@@ -193,7 +193,7 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
   val rollbackVersionsTest: (PERSISTENT_PROVER, STORAGE) => Assertion = { (prover: PERSISTENT_PROVER, storage: STORAGE) =>
     (0L until 50L).foreach { long =>
       val insert = Insert(ADKey @@ RandomBytes.randomBytes(32),
-        ADValue @@ scorex.utils.Longs.toByteArray(long))
+        ADValue @@ Longs.toByteArray(long))
       prover.performOneOperation(insert)
       prover.generateProofAndUpdateStorage()
       prover.digest

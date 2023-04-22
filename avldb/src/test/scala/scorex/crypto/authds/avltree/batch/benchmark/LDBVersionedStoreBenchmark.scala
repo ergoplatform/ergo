@@ -1,6 +1,6 @@
 package scorex.crypto.authds.avltree.batch.benchmark
 
-import scorex.utils.Longs
+import com.google.common.primitives.Longs
 import scorex.crypto.authds.avltree.batch.helpers.FileHelper
 import scorex.utils.Random
 import scorex.db.LDBVersionedStore

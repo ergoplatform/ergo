@@ -1,6 +1,6 @@
 package scorex.crypto.authds.avltree.batch
 
-import scorex.utils.Longs
+import com.google.common.primitives.Longs
 import org.scalacheck.Test.Parameters
 import org.scalacheck.commands.Commands
 import org.scalacheck.{Prop, Gen}

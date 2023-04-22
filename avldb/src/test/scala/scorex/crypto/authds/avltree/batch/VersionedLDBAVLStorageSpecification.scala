@@ -1,6 +1,6 @@
 package scorex.crypto.authds.avltree.batch
 
-import scorex.utils.Longs
+import com.google.common.primitives.Longs
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Assertion
 import org.scalatest.matchers.should.Matchers

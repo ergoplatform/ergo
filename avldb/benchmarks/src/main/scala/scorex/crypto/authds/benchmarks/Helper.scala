@@ -1,6 +1,6 @@
 package scorex.crypto.authds.benchmarks
 
-import scorex.utils.Longs
+import com.google.common.primitives.Longs
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADKey, ADValue}
 import scorex.crypto.hash.{Blake2b256, Digest32}

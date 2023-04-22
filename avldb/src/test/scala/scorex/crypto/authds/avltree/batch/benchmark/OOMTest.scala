@@ -3,7 +3,7 @@ package scorex.crypto.authds.avltree.batch.benchmark
 import java.io.File
 import java.nio.file.Files
 
-import scorex.utils.{Longs, Shorts}
+import com.google.common.primitives.{Longs, Shorts}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.crypto.authds.avltree.batch._
 import scorex.util.encode.Base16

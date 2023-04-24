@@ -1,6 +1,5 @@
 package scorex.core.serialization
 
-import com.google.common.primitives.Ints
 import scorex.crypto.authds.avltree.batch.Constants.DigestType
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, ProxyInternalNode}
 import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes, VersionedLDBAVLStorage}
@@ -13,8 +12,8 @@ class ManifestSerializer(manifestDepth: Byte) extends ErgoSerializer[BatchAVLPro
   private val nodeSerializer = VersionedLDBAVLStorage.noStoreSerializer
 
   override def serialize(manifest: BatchAVLProverManifest[DigestType], w: Writer): Unit = {
-    val height = manifest.rootHeight
-    w.putBytes(Ints.toByteArray(height))
+    val rootNodeHeight = manifest.rootHeight.toByte
+    w.put(rootNodeHeight)
     w.put(manifestDepth)
 
     def loop(node: ProverNodes[DigestType], level: Int): Unit = {
@@ -32,10 +31,11 @@ class ManifestSerializer(manifestDepth: Byte) extends ErgoSerializer[BatchAVLPro
   }
 
   override def parse(r: Reader): BatchAVLProverManifest[DigestType] = {
-    val rootHeight = Ints.fromByteArray(r.getBytes(4))
+    val rootHeight = r.getByte()
     val manifestDepth = r.getByte()
 
-    require(manifestDepth == this.manifestDepth, "Wrong manifest depth")
+    require(manifestDepth == this.manifestDepth,
+            s"Wrong manifest depth, found: $manifestDepth, expected: ${this.manifestDepth}")
 
     def loop(level: Int): ProverNodes[DigestType] = {
       val node = nodeSerializer.parse(r)

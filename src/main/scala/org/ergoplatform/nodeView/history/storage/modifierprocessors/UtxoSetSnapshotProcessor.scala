@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.nodeView.state.{ErgoStateReader, StateConstants, UtxoState}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoState}
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.VersionTag
@@ -213,7 +213,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
                              blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = {
     val manifest = _manifest.get //todo: .get
     log.info("Starting UTXO set snapshot transfer into state database")
-    val esc = ErgoStateReader.storageStateContext(stateStore, StateConstants(settings))
+    val esc = ErgoStateReader.storageStateContext(stateStore, settings)
     val metadata = UtxoState.metadata(VersionTag @@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
     VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
       ldbStorage =>

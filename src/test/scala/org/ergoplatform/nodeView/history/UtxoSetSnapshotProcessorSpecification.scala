@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
-import org.ergoplatform.nodeView.state.{StateConstants, UtxoState}
+import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.VersionTag
@@ -29,7 +29,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
     val snapshotHeight = 1
     val serializer = ManifestSerializer.defaultSerializer
 
-    us.dumpSnapshot(snapshotHeight)
+    us.dumpSnapshot(snapshotHeight, us.rootDigest.dropRight(1))
     val manifestId = us.snapshotsDb.readSnapshotsInfo.availableManifests.apply(snapshotHeight)
     val manifestBytes = us.snapshotsDb.readManifestBytes(manifestId).get
     val manifest = serializer.parseBytes(manifestBytes)
@@ -65,7 +65,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
       restoredProver.unauthenticatedLookup(box.id).isDefined shouldBe true
     }
     restoredProver.checkTree(postProof = false)
-    val restoredState = new UtxoState(restoredProver, version = VersionTag @@ blockId, store, StateConstants(settings))
+    val restoredState = new UtxoState(restoredProver, version = VersionTag @@ blockId, store, settings)
     bh.sortedBoxes.foreach { box =>
       restoredState.boxById(box.id).isDefined shouldBe true
     }

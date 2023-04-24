@@ -6,6 +6,7 @@ import org.scalatest.Assertion
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.topNodeHashKey
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.util.encode.Base16
@@ -346,10 +347,8 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
     val storage = prover.storage.asInstanceOf[VersionedLDBAVLStorage]
     val store = LDBFactory.createKvDb("/tmp/aa")
 
-    val ts0 = System.currentTimeMillis()
-    storage.dumpSnapshot(store, 4)
-    val ts = System.currentTimeMillis()
-    println("time: " + (ts-ts0))
+    storage.dumpSnapshot(store, 4, prover.digest.dropRight(1))
+    store.get(topNodeHashKey).sameElements(prover.digest.dropRight(1)) shouldBe true
   }
 
 }

@@ -83,6 +83,11 @@ case class UtxoApiRoute(readersHolder: ActorRef,
       case _ => None
     })
   }
+
+  /**
+    * Handler for /utxo/getSnapshotsInfo API call which is providing list of
+    * UTXO set snapshots stored locally
+    */
   def getSnapshotsInfo: Route = (get & path("getSnapshotsInfo")) {
     ApiResponse(getState.map {
       case usr: UtxoSetSnapshotPersistence =>

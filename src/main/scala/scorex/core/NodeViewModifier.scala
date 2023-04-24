@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.BytesSerializable
 import scorex.core.utils.ScorexEncoding
 
-
 sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {self =>
 
   val modifierTypeId: NetworkObjectTypeId.Value

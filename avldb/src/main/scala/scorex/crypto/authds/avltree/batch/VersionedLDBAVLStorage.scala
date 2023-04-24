@@ -1,7 +1,6 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import scorex.core.serialization.ManifestSerializer
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
@@ -98,7 +97,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     * @param expectedRootHash - expected UTXO set aunthenticating tree root hash
     * @return - hash of root node of tree, or failure if an error (e.g. in database) happened
     */
-  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Int, expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
+  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Byte, expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
     store.processSnapshot { dbReader =>
 
       def subtreeLoop(label: DigestType, builder: mutable.ArrayBuilder[Byte]): Unit = {
@@ -137,14 +136,14 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       }
 
       val rootNodeLabel = dbReader.get(topNodeHashKey)
-      val rootNodeHeight = Ints.fromByteArray(dbReader.get(topNodeHeightKey))
+      val rootNodeHeight = Ints.fromByteArray(dbReader.get(topNodeHeightKey)).toByte
 
       require(rootNodeLabel.sameElements(expectedRootHash), "Root node hash changed")
 
       val manifestBuilder = mutable.ArrayBuilder.make[Byte]()
       manifestBuilder.sizeHint(200000)
-      manifestBuilder ++= Ints.toByteArray(rootNodeHeight)
-      manifestBuilder += ManifestSerializer.MainnetManifestDepth
+      manifestBuilder += rootNodeHeight
+      manifestBuilder += manifestDepth
 
       manifestLoop(rootNodeLabel, level = 1, manifestBuilder)
       val manifestBytes = manifestBuilder.result()
@@ -205,16 +204,15 @@ object VersionedLDBAVLStorage {
                store: LDBVersionedStore): Try[VersionedLDBAVLStorage] = {
     //todo: the function below copy-pasted from BatchAVLProver, eliminate boilerplate?
 
-    def idCollector(node: ProverNodes[DigestType],
-                    acc: Iterator[(Array[Byte], Array[Byte])]): Iterator[(Array[Byte], Array[Byte])] = {
+    def idCollector(node: ProverNodes[DigestType]): Iterator[(Array[Byte], Array[Byte])] = {
       val pair: (Array[Byte], Array[Byte]) = (nodeLabel(node), noStoreSerializer.toBytes(node))
       node match {
         case n: ProxyInternalNode[DigestType] if n.isEmpty =>
-          acc ++ Iterator(pair)
+          Iterator(pair)
         case i: InternalProverNode[DigestType] =>
-          acc ++ Iterator(pair) ++ idCollector(i.left, acc) ++ idCollector(i.right, acc)
+          Iterator(pair) ++ idCollector(i.left) ++ idCollector(i.right)
         case _: ProverLeaf[DigestType] =>
-          acc ++ Iterator(pair)
+          Iterator(pair)
       }
     }
 
@@ -222,8 +220,8 @@ object VersionedLDBAVLStorage {
     val rootNodeHeight = manifest.rootHeight
     val digestWrapper = VersionedLDBAVLStorage.digest(rootNode.label, rootNodeHeight)
     val indices = Iterator(topNodeHashKey -> nodeLabel(rootNode), topNodeHeightKey -> Ints.toByteArray(rootNodeHeight))
-    val nodesIterator = idCollector(manifest.root, Iterator.empty) ++
-      chunks.flatMap(subtree => idCollector(subtree.subtreeTop, Iterator.empty))
+    val nodesIterator = idCollector(manifest.root) ++
+      chunks.flatMap(subtree => idCollector(subtree.subtreeTop))
     store.update(digestWrapper, toRemove = Nil, toUpdate = indices ++ nodesIterator ++ additionalData).map { _ =>
       new VersionedLDBAVLStorage(store)
     }

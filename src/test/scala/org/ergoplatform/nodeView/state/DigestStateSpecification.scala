@@ -21,19 +21,19 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       val fb = validFullBlock(parentOpt = None, us, bh)
       val dir2 = createTempDir
-      val ds = DigestState.create(Some(us.version), Some(us.rootDigest), dir2, stateConstants)
+      val ds = DigestState.create(Some(us.version), Some(us.rootDigest), dir2, settings)
       ds.applyModifier(fb, None)(_ => ()) shouldBe 'success
       ds.close()
 
-      val state = DigestState.create(None, None, dir2, stateConstants)
+      val state = DigestState.create(None, None, dir2, settings)
       state.version shouldEqual fb.header.id
       state.rootDigest shouldEqual fb.header.stateRoot
     }
   }
 
   property("validate() - valid block") {
-    var (us, bh) = createUtxoState(parameters)
-    var ds = createDigestState(us.version, us.rootDigest, parameters)
+    var (us, bh) = createUtxoState(settings)
+    var ds = createDigestState(us.version, us.rootDigest)
     var parentOpt: Option[ErgoFullBlock] = None
 
     forAll { seed: Int =>
@@ -48,7 +48,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
   property("validate() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createDigestState(emptyVersion, emptyAdDigest, parameters)
+      val state = createDigestState(emptyVersion, emptyAdDigest)
       state.validate(b).isFailure shouldBe true
     }
   }
@@ -61,14 +61,14 @@ class DigestStateSpecification extends ErgoPropertyTest {
       val block = validFullBlock(parentOpt = None, us, bh)
       block.blockTransactions.transactions.exists(_.dataInputs.nonEmpty) shouldBe true
 
-      val ds = createDigestState(us.version, us.rootDigest, parameters)
+      val ds = createDigestState(us.version, us.rootDigest)
       ds.applyModifier(block, None)(_ => ()) shouldBe 'success
     }
   }
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createDigestState(emptyVersion, emptyAdDigest, parameters)
+      val state = createDigestState(emptyVersion, emptyAdDigest)
       state.applyModifier(b, None)(_ => ()).isFailure shouldBe true
     }
   }
@@ -80,7 +80,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       val block = validFullBlock(parentOpt = None, us, bh)
 
-      val ds = createDigestState(us.version, us.rootDigest, parameters)
+      val ds = createDigestState(us.version, us.rootDigest)
 
       ds.rollbackVersions.size shouldEqual 1
 
@@ -104,7 +104,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
   property("validateTransactions() - dataInputs") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh, parameters)
-      val ds = createDigestState(us.version, us.rootDigest, parameters)
+      val ds = createDigestState(us.version, us.rootDigest)
 
       // generate 2 independent transactions spending state boxes only
       val headTx = validTransactionsFromBoxes(1, bh.boxes.take(10).values.toSeq, new RandomWrapper())._1.head

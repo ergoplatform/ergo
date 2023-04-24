@@ -70,11 +70,8 @@ object Constants {
   // Maximum extension size during bytes parsing
   val MaxExtensionSizeMax: Int = 1024 * 1024
 
-  val MakeSnapshotEvery = 1024 // test value, switch to 51200 after testing
-
-  def timeToTakeSnapshot(height: Int): Boolean = {
-    height % MakeSnapshotEvery == MakeSnapshotEvery - 1
-  }
+  // UTXO set snapshot to be taken every this number of blocks
+  val MakeSnapshotEvery = 51200
 
   /**
     * AVL+ tree node parameters. The tree is used to authenticate UTXO set.

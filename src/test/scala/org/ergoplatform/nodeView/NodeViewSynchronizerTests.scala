@@ -279,7 +279,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
           val height = 1
           usr.applyModifier(mod, Some(height))(_ => ())
 
-          val manifestId = usr.dumpSnapshot(height).get
+          val manifestId = usr.dumpSnapshot(height, usr.rootDigest.dropRight(1)).get
 
           // Then send message to request it
           node ! Message[ManifestId](GetManifestSpec, Left(manifestId), Option(peer))
@@ -311,8 +311,9 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
 
           usr.applyModifier(mod, Some(height))(_ => ())
 
-          val serializer = ManifestSerializer.defaultSerializer
-          usr.dumpSnapshot(height)
+          val manifestDepth = 2.toByte
+          val serializer = new ManifestSerializer(manifestDepth)
+          usr.dumpSnapshot(height, usr.rootDigest.dropRight(1), manifestDepth)
           val manifestId = usr.snapshotsDb.readSnapshotsInfo.availableManifests.apply(height)
           val manifestBytes = usr.snapshotsDb.readManifestBytes(manifestId).get
           val manifest = serializer.parseBytes(manifestBytes)

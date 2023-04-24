@@ -6,7 +6,6 @@ import org.ergoplatform.settings.Constants
 import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
-
 import scala.collection.mutable
 import scorex.util.Extensions._
 

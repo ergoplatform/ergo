@@ -421,8 +421,8 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     * @param logic - processing logic which is getting access to `get` function to read from database snapshot
     */
   def processSnapshot[T](logic: SnapshotReadInterface => T): Try[T] = {
+    val ro = new ReadOptions()
     try {
-      val ro = new ReadOptions()
       ro.snapshot(db.getSnapshot)
       object readInterface extends SnapshotReadInterface {
         def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)

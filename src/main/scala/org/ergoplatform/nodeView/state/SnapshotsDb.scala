@@ -89,8 +89,9 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     */
   def writeSnapshot(pullFrom: VersionedLDBAVLStorage,
                     height: Height,
-                    expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
-    pullFrom.dumpSnapshot(store, ManifestSerializer.MainnetManifestDepth, expectedRootHash).map { manifestId =>
+                    expectedRootHash: Array[Byte],
+                    manifestDepth: Byte = ManifestSerializer.MainnetManifestDepth): Try[Array[Byte]] = {
+    pullFrom.dumpSnapshot(store, manifestDepth, expectedRootHash).map { manifestId =>
       val si = readSnapshotsInfo.withNewManifest(height, Digest32 @@ manifestId)
       writeSnapshotsInfo(si)
       manifestId
@@ -117,10 +118,9 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
 object SnapshotsDb {
 
-  /**
-    * Open or init snapshots database in given folder
-    */
-  def create(dir: String): SnapshotsDb = {
+  // internal method to open or init snapshots database in given folder
+  // private[nodeView] to use it in tests also
+  private[nodeView] def create(dir: String): SnapshotsDb = {
     val store = LDBFactory.createKvDb(dir)
     new SnapshotsDb(store)
   }

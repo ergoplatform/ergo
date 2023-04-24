@@ -66,7 +66,7 @@ object OOMTest extends App {
       Longs.toByteArray(value) ++ propBytes ++ (0.toByte +: Array.emptyByteArray) ++
         transactionId ++ Shorts.toByteArray(boxId)
     val id = Blake2b256.hash(bytes)
-    ADKey @@ id -> ADValue @@ bytes
+    ADKey @@@ id -> ADValue @@@ bytes
   }
 
   private def metadata(modId: Array[Byte], stateRoot: ADDigest): Seq[(Array[Byte], Array[Byte])] = {

@@ -54,7 +54,7 @@ class ProverNodeSerializer(store: LDBVersionedStore) extends ErgoSerializer[Prov
         if (store != null) {
           new ProxyInternalProverNode(key, leftKey, rightKey, balance)(store)
         } else {
-          new ProxyInternalNode[DigestType](key, Digest32 @@ leftKey, Digest32 @@ rightKey, balance)(hashFn)
+          new ProxyInternalNode[DigestType](key, Digest32 @@@ leftKey, Digest32 @@@ rightKey, balance)(hashFn)
         }
       case LeafPrefix =>
         val key = ADKey @@ r.getBytes(StateTreeParameters.keySize)

@@ -78,7 +78,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   def makeGenesisTxWithAsset(publicKey: ProveDlog, issueAsset: Boolean): ErgoTransaction = {
     val inputs = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
     val assets: Seq[(TokenId, Long)] = if (issueAsset) {
-      Seq((Digest32 @@ inputs.head.boxId) -> 1L)
+      Seq((Digest32 @@@ inputs.head.boxId) -> 1L)
     } else {
       Seq.empty
     }
@@ -128,7 +128,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     def isNewAsset(tokenId: TokenId, value: Long): Boolean = java.util.Arrays.equals(tokenId, newAssetIdStub)
 
     val (newAsset, spentAssets) = assets.partition((isNewAsset _).tupled)
-    newAsset.map(Digest32 @@ inputs.head.boxId -> _._2) ++ spentAssets
+    newAsset.map(Digest32 @@@ inputs.head.boxId -> _._2) ++ spentAssets
   }
 
   def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> randomLong())

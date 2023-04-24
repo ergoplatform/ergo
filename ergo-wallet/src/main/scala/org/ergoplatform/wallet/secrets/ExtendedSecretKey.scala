@@ -1,7 +1,5 @@
 package org.ergoplatform.wallet.secrets
 
-import org.bouncycastle.math.ec.ECPoint
-
 import java.math.BigInteger
 import java.util
 import org.bouncycastle.util.BigIntegers
@@ -35,8 +33,9 @@ final class ExtendedSecretKey(private[secrets] val keyBytes: Array[Byte],
   /** Returns extended public key corresponding to this secret key. */
   def publicKey: ExtendedPublicKey =
     new ExtendedPublicKey(
-      CryptoFacade.encodePoint(privateInput.publicImage.value, compressed = true),
-      chainCode, path.toPublicBranch)
+      keyBytes = CryptoFacade.encodePoint(privateInput.publicImage.value, compressed = true),
+      chainCode = chainCode,
+      path = path.toPublicBranch)
 
   def isErased: Boolean = keyBytes.forall(_ == 0x00)
 

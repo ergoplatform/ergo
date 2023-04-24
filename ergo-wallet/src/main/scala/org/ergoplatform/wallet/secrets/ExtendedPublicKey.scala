@@ -1,7 +1,5 @@
 package org.ergoplatform.wallet.secrets
 
-import org.bouncycastle.math.ec.ECPoint
-
 import java.util
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.wallet.Constants
@@ -65,8 +63,10 @@ object ExtendedPublicKey {
       deriveChildPublicKey(parentKey, idx + 1)
     } else {
       new ExtendedPublicKey(
-        CryptoFacade.encodePoint(childKey, true),
-        childChainCode, parentKey.path.extended(idx))
+        keyBytes = CryptoFacade.encodePoint(childKey, compressed = true),
+        chainCode = childChainCode,
+        path = parentKey.path.extended(idx)
+      )
     }
   }
 

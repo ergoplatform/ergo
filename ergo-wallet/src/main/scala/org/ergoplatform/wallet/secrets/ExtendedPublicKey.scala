@@ -1,13 +1,13 @@
 package org.ergoplatform.wallet.secrets
 
 import java.util
-
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.crypto.HmacSHA512
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.crypto.CryptoFacade
 import sigmastate.interpreter.CryptoConstants
 
 import scala.annotation.tailrec
@@ -24,7 +24,7 @@ final class ExtendedPublicKey(private[secrets] val keyBytes: Array[Byte],
   def selfReflection: ExtendedPublicKey = this
 
   def key: ProveDlog = ProveDlog(
-    CryptoConstants.dlogGroup.curve.decodePoint(keyBytes).asInstanceOf[CryptoConstants.EcPointType]
+    CryptoConstants.dlogGroup.ctx.decodePoint(keyBytes)
   )
 
   def child(idx: Int): ExtendedPublicKey = ExtendedPublicKey.deriveChildPublicKey(this, idx)
@@ -56,11 +56,17 @@ object ExtendedPublicKey {
       .hash(parentKey.chainCode, parentKey.keyBytes ++ Index.serializeIndex(idx))
       .splitAt(Constants.SecretKeyLength)
     val childKeyProtoDecoded = BigIntegers.fromUnsignedByteArray(childKeyProto)
-    val childKey = DLogProverInput(childKeyProtoDecoded).publicImage.value.add(parentKey.key.value)
-    if (childKeyProtoDecoded.compareTo(CryptoConstants.groupOrder) >= 0 || childKey.isInfinity) {
+    val childKey = CryptoFacade.multiplyPoints(
+      DLogProverInput(childKeyProtoDecoded).publicImage.value,
+      parentKey.key.value)
+    if (childKeyProtoDecoded.compareTo(CryptoConstants.groupOrder) >= 0 || CryptoFacade.isInfinityPoint(childKey)) {
       deriveChildPublicKey(parentKey, idx + 1)
     } else {
-      new ExtendedPublicKey(childKey.getEncoded(true), childChainCode, parentKey.path.extended(idx))
+      new ExtendedPublicKey(
+        keyBytes = CryptoFacade.encodePoint(childKey, compressed = true),
+        chainCode = childChainCode,
+        path = parentKey.path.extended(idx)
+      )
     }
   }
 

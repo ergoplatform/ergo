@@ -57,10 +57,10 @@ object FoundationBoxSigner extends App {
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
-  val action: ACTION = preSign
+  val action: ACTION = generateCommitment
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = Some("027f56a430c4fa14d34e1fabf219422ebd5a8f22e7880ed46d9ae94741c07a3b45")
+  val commitmentStringOpt: Option[String] = None
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignatureStringOpt: Option[String] = None
 
@@ -102,7 +102,7 @@ object FoundationBoxSigner extends App {
 
   //box and message to sign
   //copy "new out bytes" here
-  val gfBytes = Base16.decode("80fa81a185869501100e040004c094400580809cde91e7b0010580acc7f03704be944004808948058080c7b7e4992c0580b4c4c32104fe884804c0fd4f0580bcc1960b04befd4f05000400ea03d192c1b2a5730000958fa373019a73029c73037e997304a305958fa373059a73069c73077e997308a305958fa373099c730a7e99730ba305730cd193c2a7c2b2a5730d00d5040800f0fd3900010e6f98040483030808cd039bb5fe52359a64c99a60fd944fc5e388cbdc4d37ff091cc841c3ee79060b864708cd031fb52cf6e805f80d97cde289f4f757d49accf0c83fb864b27d2cf982c37f9a8b08cd0352ac2a471339b0d23b3d2c5ce0db0e81c969f77891b9edf0bda7fd39a78184e706da38ea30967b97204b6c38662bc1e8d4178f5a1ac478df20cc9502fea6e2ed00").get
+  val gfBytes = Base16.decode("80f89babab918f01100e040004c094400580809cde91e7b0010580acc7f03704be944004808948058080c7b7e4992c0580b4c4c32104fe884804c0fd4f0580bcc1960b04befd4f05000400ea03d192c1b2a5730000958fa373019a73029c73037e997304a305958fa373059a73069c73077e997308a305958fa373099c730a7e99730ba305730cd193c2a7c2b2a5730d00d504080080cc3a00010e6f98040483030808cd039bb5fe52359a64c99a60fd944fc5e388cbdc4d37ff091cc841c3ee79060b864708cd031fb52cf6e805f80d97cde289f4f757d49accf0c83fb864b27d2cf982c37f9a8b08cd0352ac2a471339b0d23b3d2c5ce0db0e81c969f77891b9edf0bda7fd39a78184e7ecb5043ec726e4e6b25ed97868e9722dd72c7c3855972fc1b4a3d2072dcbf5e300").get
   val gfBox = ErgoBoxSerializer.parseBytes(gfBytes)
 
   println("Spending: " + Base16.encode(gfBox.id))

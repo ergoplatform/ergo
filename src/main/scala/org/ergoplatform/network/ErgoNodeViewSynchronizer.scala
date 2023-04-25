@@ -39,16 +39,16 @@ import scorex.core.app.Version
 import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
+import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.utils.DefaultErgoLogger
+import scorex.core.serialization.ErgoSerializer
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success}
-import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
-import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.utils.DefaultErgoLogger
-import scorex.core.serialization.ErgoSerializer
 
 /**
   * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the
@@ -826,9 +826,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
 
+  /**
+    * Process information about snapshots got from another peer
+    */
   protected def processSnapshotsInfo(hr: ErgoHistory, snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
       log.debug(s"Got manifest $manifestId for height $height from $remote")
+      // add manifest to available manifests dictionary if it is not written there yet
       val existingOffers = availableManifests.getOrElse(height, Seq.empty)
       if (!existingOffers.exists(_._1 == remote)) {
         log.info(s"Found new manifest ${Algos.encode(manifestId)} for height $height at $remote")
@@ -1197,6 +1201,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val idsSet = records.map(_._2).map(Base16.encode).toSet
           if (idsSet.size > 1) {
             log.warn(s"Different manifests found at height $h: $idsSet")
+            availableManifests.remove(h)
             false
           } else {
             true

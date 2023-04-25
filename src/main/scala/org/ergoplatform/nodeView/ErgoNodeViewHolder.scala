@@ -286,7 +286,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           case Success(pp) =>
             log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
             history().utxoSnapshotApplied(height)
-            val newState = new UtxoState(pp, version = VersionTag @@ blockId, store, settings)
+            val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
             // todo: apply 10 headers before utxo set snapshot
             updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
           case Failure(_) => ???
@@ -759,9 +759,7 @@ object ErgoNodeViewHolder {
     val ChainProgress(lastMod, headersHeight, blockHeight, lastUpdate) = progress
     val chainUpdateDelay = System.currentTimeMillis() - lastUpdate
     val acceptableChainUpdateDelay = settings.nodeSettings.acceptableChainUpdateDelay
-
     def chainUpdateDelayed = chainUpdateDelay > acceptableChainUpdateDelay.toMillis
-
     def chainSynced =
       history.bestFullBlockOpt.map(_.id) == history.bestHeaderOpt.map(_.id)
 

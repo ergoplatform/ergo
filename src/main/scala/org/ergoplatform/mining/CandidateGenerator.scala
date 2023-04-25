@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
-import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, FullBlockApplied}
+import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, FullBlockApplied, NodeViewChange}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -29,6 +29,7 @@ import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.SType.ErgoBoxRType
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.CryptoFacade
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
@@ -183,7 +184,7 @@ class CandidateGenerator(
         if state.solvedBlock.isEmpty && state.cache.nonEmpty =>
       // Inject node pk if it is not externally set (in Autolykos 2)
       val solution =
-        if (preSolution.pk.isInfinity) {
+        if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
           AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
         } else {
           preSolution
@@ -506,7 +507,7 @@ object CandidateGenerator extends ScorexLogging {
         )
 
       val upcomingContext = state.stateContext.upcoming(
-        minerPk.h,
+        minerPk.value,
         timestamp,
         nBits,
         votes,

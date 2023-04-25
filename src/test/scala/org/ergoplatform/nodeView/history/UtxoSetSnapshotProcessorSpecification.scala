@@ -65,7 +65,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
       restoredProver.unauthenticatedLookup(box.id).isDefined shouldBe true
     }
     restoredProver.checkTree(postProof = false)
-    val restoredState = new UtxoState(restoredProver, version = VersionTag @@ blockId, store, settings)
+    val restoredState = new UtxoState(restoredProver, version = VersionTag @@@ blockId, store, settings)
     bh.sortedBoxes.foreach { box =>
       restoredState.boxById(box.id).isDefined shouldBe true
     }

@@ -4,6 +4,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{ErgoAlgos, ErgoSettings}
+import org.ergoplatform.utils.DefaultErgoLogger
 import org.ergoplatform.wallet.Constants
 import scorex.core.serialization.ManifestSerializer
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
@@ -20,7 +21,7 @@ import scala.util.{Failure, Success, Try}
   */
 class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
-  private val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
+  private val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash, DefaultErgoLogger)
 
   private val snapshotInfoKey: Array[Byte] = Array.fill(32)(0: Byte)
 

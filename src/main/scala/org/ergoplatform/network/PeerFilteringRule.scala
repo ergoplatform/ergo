@@ -86,8 +86,12 @@ object SyncV2Filter extends PeerFilteringRule {
 
 }
 
+/**
+  * Filter used to differentiate peers supporting UTXO state snapshots, so possibly
+  * storing and serving them, from peers do not supporting UTXO set snapshots related networking protocol
+  */
 object UtxoSetNetworkingFilter extends PeerFilteringRule {
-  val UtxoSnapsnotActivationVersion = Version(5, 0, 6) // todo: set proper version around release
+  val UtxoSnapsnotActivationVersion = Version(5, 0, 12) // todo: set proper version around release
 
   def condition(version: Version): Boolean = {
     // If neighbour version is >= `UtxoSnapsnotActivationVersion`, the neighbour supports utxo snapshots exchange

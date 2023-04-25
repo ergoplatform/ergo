@@ -298,7 +298,7 @@ object ChainGenerator extends ErgoTestHelpers {
     val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
     inOpt match {
       case Some(input) if cond =>
-        tokens += Tuple2(Digest32 @@ input.id, math.abs(Random.nextInt()))
+        tokens += Tuple2(Digest32 @@@ input.id, math.abs(Random.nextInt()))
       case Some(tokenBox) if !cond =>
         tokenBox.additionalTokens.toArray.foreach(tokens += _)
       case _ =>

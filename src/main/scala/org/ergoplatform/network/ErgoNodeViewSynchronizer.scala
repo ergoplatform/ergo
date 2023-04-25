@@ -47,6 +47,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success}
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.utils.DefaultErgoLogger
 import scorex.core.serialization.ErgoSerializer
 
 /**
@@ -860,7 +861,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer): Unit = {
     //todo : check that manifestBytes were requested
-    val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
+    val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash, DefaultErgoLogger)
     serializer.manifestFromBytes(manifestBytes, keyLength = 32) match {
       case Success(manifest) =>
         log.info(s"Got manifest ${Algos.encode(manifest.id)} from $remote")
@@ -886,7 +887,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                          hr: ErgoHistory,
                                          remote: ConnectedPeer): Unit = {
     //todo: check if subtree was requested, penalize remote is not so
-    val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
+    val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash, DefaultErgoLogger)
     serializer.subtreeFromBytes(serializedChunk, 32) match {
       case Success(subtree) =>
         deliveryTracker.setUnknown(ModifierId @@ Algos.encode(subtree.id), UtxoSnapshotChunkTypeId.value)

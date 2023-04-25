@@ -3,10 +3,11 @@ package org.ergoplatform.wallet.interpreter
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.wallet.protocol.Constants
 import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
-import org.ergoplatform.{ErgoLikeContext, ErgoBox, ErgoBoxCandidate, ErgoLikeInterpreter}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeContext, ErgoLikeInterpreter}
 import scorex.crypto.authds.ADDigest
+import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
-import sigmastate.interpreter.Interpreter.{VerificationResult, ScriptEnv}
+import sigmastate.interpreter.Interpreter.{ScriptEnv, VerificationResult}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
 
 import scala.util.Try
@@ -18,7 +19,15 @@ import scala.util.Try
   * @param params - current values of adjustable blockchain settings
   */
 class ErgoInterpreter(params: ErgoLikeParameters)
-  extends ErgoLikeInterpreter {
+  extends ErgoLikeInterpreter with ScorexLogging {
+
+  /** Override default logging for all Ergo interpreters. */
+  override protected def logMessage(msg: String): Unit = {
+    log.error(msg)
+  }
+  override protected def logMessage(msg: String, t: Throwable): Unit = {
+    log.error(msg, t)
+  }
 
   override type CTX = ErgoLikeContext
 

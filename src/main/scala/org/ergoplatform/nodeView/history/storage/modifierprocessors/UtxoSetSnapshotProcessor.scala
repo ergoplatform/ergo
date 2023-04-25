@@ -214,7 +214,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     val manifest = _manifest.get //todo: .get
     log.info("Starting UTXO set snapshot transfer into state database")
     val esc = ErgoStateReader.storageStateContext(stateStore, settings)
-    val metadata = UtxoState.metadata(VersionTag @@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
+    val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
     VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
       ldbStorage =>
         log.info("Finished UTXO set snapshot transfer into state database")

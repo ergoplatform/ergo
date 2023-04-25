@@ -77,7 +77,7 @@ trait Generators {
   val assetGen: Gen[(TokenId, Long)] = for {
     id <- boxIdGen
     amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
-  } yield Digest32 @@ id -> amt
+  } yield Digest32 @@@ id -> amt
 
   def additionalTokensGen(cnt: Int): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
 

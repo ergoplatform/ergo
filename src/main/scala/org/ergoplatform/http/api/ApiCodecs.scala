@@ -206,7 +206,7 @@ trait ApiCodecs extends JsonCodecs {
     sigma =>
       val op = sigma.opCode.toByte.asJson
       sigma match {
-        case dlog: ProveDlog => Map("op" -> op, "h" -> dlog.h.asJson).asJson
+        case dlog: ProveDlog => Map("op" -> op, "h" -> dlog.value.asJson).asJson
         case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
         case tp: TrivialProp => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
         case and: CAND =>

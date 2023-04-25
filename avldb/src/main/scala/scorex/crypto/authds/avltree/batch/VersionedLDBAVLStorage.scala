@@ -106,8 +106,8 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
         val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
         node match {
           case in: ProxyInternalNode[DigestType] =>
-            subtreeLoop(Digest32 @@ in.leftLabel, builder)
-            subtreeLoop(Digest32 @@ in.rightLabel, builder)
+            subtreeLoop(Digest32 @@@ in.leftLabel, builder)
+            subtreeLoop(Digest32 @@@ in.rightLabel, builder)
           case _ =>
         }
       }
@@ -125,8 +125,8 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
         val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
         node match {
           case in: ProxyInternalNode[DigestType] if level == manifestDepth =>
-            dumpSubtree(Digest32 @@ in.leftLabel)
-            dumpSubtree(Digest32 @@ in.rightLabel)
+            dumpSubtree(Digest32 @@@ in.leftLabel)
+            dumpSubtree(Digest32 @@@ in.rightLabel)
           case in: ProxyInternalNode[DigestType] =>
             manifestLoop(in.leftLabel, level + 1, manifestBuilder)
             manifestLoop(in.rightLabel, level + 1, manifestBuilder)

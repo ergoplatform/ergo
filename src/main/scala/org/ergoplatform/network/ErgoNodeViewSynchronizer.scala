@@ -59,8 +59,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                settings: ErgoSettings,
                                syncTracker: ErgoSyncTracker,
-                               deliveryTracker: DeliveryTracker
-                              )(implicit ex: ExecutionContext)
+                               deliveryTracker: DeliveryTracker)(implicit ex: ExecutionContext)
   extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
 
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
@@ -864,7 +863,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer): Unit = {
-    //todo : check that manifestBytes were requested
+    //todo : check that manifest was requested
     val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash, DefaultErgoLogger)
     serializer.manifestFromBytes(manifestBytes, keyLength = 32) match {
       case Success(manifest) =>
@@ -1192,7 +1191,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   // check if we have enough UTXO set snapshots for some height
   protected def checkUtxoSetManifests(historyReader: ErgoHistory): Unit = {
     val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
-    
+
     if (settings.nodeSettings.utxoSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&
           availableManifests.nonEmpty &&

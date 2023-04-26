@@ -22,6 +22,20 @@ object NetworkObjectTypeId {
 }
 
 /**
+  * Block section to be sent over the wire (header, transactions section, extension, UTXO set transformation proofs)
+  */
+sealed trait BlockSectionTypeId extends NetworkObjectTypeId {
+  require(value > 50, "Type id for block section must be > 0")
+}
+
+/**
+  * Non-block network objects: unconfirmed transactions, utxo set snapshot related data, nipopow related data etc
+  */
+sealed trait AuxiliaryTypeId extends NetworkObjectTypeId {
+  require(value < 50, "Type id for auxiliary network object must be < 0")
+}
+
+/**
   * Unconfirmed transactions sent outside blocks
   */
 object TransactionTypeId extends NetworkObjectTypeId {
@@ -31,14 +45,14 @@ object TransactionTypeId extends NetworkObjectTypeId {
 /**
   * Block header, section of a block PoW is done on top of. This section is committing to other sections
   */
-object HeaderTypeId extends NetworkObjectTypeId {
+object HeaderTypeId extends BlockSectionTypeId {
   override val value: Value = fromByte(101)
 }
 
 /**
   * Block transactions sections. Contains all the transactions for a block.
   */
-object BlockTransactionsTypeId extends NetworkObjectTypeId {
+object BlockTransactionsTypeId extends AuxiliaryTypeId {
   override val value: Value = fromByte(102)
 }
 
@@ -46,7 +60,7 @@ object BlockTransactionsTypeId extends NetworkObjectTypeId {
   * Block section which contains proofs of correctness for UTXO set transformations.
   * The section contains proofs for all the transformations (i.e. for all the block transactions)
   */
-object ProofsTypeId extends NetworkObjectTypeId {
+object ProofsTypeId extends BlockSectionTypeId {
   override val value: Value = fromByte(104)
 }
 
@@ -56,7 +70,7 @@ object ProofsTypeId extends NetworkObjectTypeId {
   * Interlinks vector (for nipopow proofs) written there, as well as current network parameters
   * (at the beginning of voting epoch), but miners can also put arbitrary data there.
   */
-object ExtensionTypeId extends NetworkObjectTypeId {
+object ExtensionTypeId extends BlockSectionTypeId {
   override val value: Value = fromByte(108)
 }
 
@@ -65,20 +79,20 @@ object ExtensionTypeId extends NetworkObjectTypeId {
   * got over the wire (header, transactions, extension in the "utxo" mode, those three sections plus proofs in
   * the "digest" mode).
   */
-object FullBlockTypeId extends NetworkObjectTypeId {
+object FullBlockTypeId extends AuxiliaryTypeId {
   override val value: Value = fromByte(-127)
 }
 
 /**
   * Not a block section, but a chunk of UTXO set
   */
-object UtxoSnapshotChunkTypeId extends NetworkObjectTypeId {
+object UtxoSnapshotChunkTypeId extends AuxiliaryTypeId {
   override val value: Value = fromByte(-126)
 }
 
 /**
   * Not a block section, but registry of UTXO set snapshots available
   */
-object SnapshotsInfoTypeId extends NetworkObjectTypeId {
+object SnapshotsInfoTypeId extends AuxiliaryTypeId {
   override val value: Value = fromByte(-125)
 }

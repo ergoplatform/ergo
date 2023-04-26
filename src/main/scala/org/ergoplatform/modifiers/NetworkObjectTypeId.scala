@@ -19,20 +19,35 @@ object NetworkObjectTypeId {
 
   @inline
   def fromByte(value: Byte): Value = Value @@ value
+
+  /**
+    * Threshold for block section type ids
+    * Block section could have ids >= this threshold only
+    * Other p2p network objects have type id below the threshold
+    */
+  val BlockSectionThreshold: Value = Value @@ 50.toByte
+
+  /**
+    * Whether network object type corresponding to block sections, returns true if so
+    */
+  def isBlockSection(typeId: Value): Boolean = {
+    typeId >= BlockSectionThreshold
+  }
+
 }
 
 /**
   * Block section to be sent over the wire (header, transactions section, extension, UTXO set transformation proofs)
   */
 sealed trait BlockSectionTypeId extends NetworkObjectTypeId {
-  require(value > 50, "Type id for block section must be > 0")
+  require(value >= BlockSectionThreshold, s"Type id for block section must be >= $BlockSectionThreshold")
 }
 
 /**
   * Non-block network objects: unconfirmed transactions, utxo set snapshot related data, nipopow related data etc
   */
 sealed trait AuxiliaryTypeId extends NetworkObjectTypeId {
-  require(value < 50, "Type id for auxiliary network object must be < 0")
+  require(value < BlockSectionThreshold, s"Type id for auxiliary network object must be < DistinguihsingValue")
 }
 
 /**

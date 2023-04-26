@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, hashErgoTree, txSegmentId}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoState, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings, UtxoSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestHelpers, HistoryTestHelpers}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
@@ -38,9 +38,9 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
   override protected implicit val addressEncoder: ErgoAddressEncoder = initSettings.chainSettings.addressEncoder
 
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
-    -1, utxoBootstrap = false, poPoWBootstrap = false, ChainGenerator.minimalSuffix, mining = false, ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, useExternalMiner = false,
+    -1, UtxoSettings(false, 0, 2), poPoWBootstrap = false, ChainGenerator.minimalSuffix, mining = false, ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, useExternalMiner = false,
     internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
-    200, 0, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
+    200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
     1000000, 100, adProofsSuffixLength = 112 * 1024, extraIndex = false)
 
   val HEIGHT: Int = 50

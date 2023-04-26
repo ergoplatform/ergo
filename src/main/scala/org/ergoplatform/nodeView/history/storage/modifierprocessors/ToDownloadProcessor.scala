@@ -83,7 +83,7 @@ trait ToDownloadProcessor
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
         val minHeight = Math.max(1, fb.header.height - 100)
         continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
-      case None if (nodeSettings.utxoBootstrap && !_utxoSnapshotApplied) =>
+      case None if (nodeSettings.utxoSettings.utxoBootstrap && !_utxoSnapshotApplied) =>
         // todo: can be requested multiple times, prevent it
         if (utxoSetSnapshotDownloadPlan().isEmpty) {
           Map(SnapshotsInfoTypeId.value -> Seq.empty)

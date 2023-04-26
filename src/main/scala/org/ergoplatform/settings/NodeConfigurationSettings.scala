@@ -20,6 +20,18 @@ trait CheckpointingSettingsReader extends ModifierIdReader {
   }
 }
 
+case class UtxoSettings(utxoBootstrap: Boolean, storingUtxoSnapshots: Int, p2pUtxoSnapshots: Int)
+
+trait UtxoSettingsReader {
+  implicit val utxoSettingsReader: ValueReader[UtxoSettings] = { (cfg, path) =>
+    UtxoSettings(
+      cfg.as[Boolean](s"$path.utxoBootstrap"),
+      cfg.as[Int](s"$path.storingUtxoSnapshots"),
+      cfg.as[Int](s"$path.p2pUtxoSnapshots")
+    )
+  }
+}
+
 /**
   * Configuration file for Ergo node regime
   *
@@ -28,7 +40,7 @@ trait CheckpointingSettingsReader extends ModifierIdReader {
 case class NodeConfigurationSettings(stateType: StateType,
                                      verifyTransactions: Boolean,
                                      blocksToKeep: Int,
-                                     utxoBootstrap: Boolean,
+                                     utxoSettings: UtxoSettings,
                                      poPoWBootstrap: Boolean,
                                      minimalSuffix: Int,
                                      mining: Boolean,
@@ -40,7 +52,6 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      miningPubKeyHex: Option[String],
                                      offlineGeneration: Boolean,
                                      keepVersions: Int,
-                                     storingUtxoSnapshots: Int,
                                      acceptableChainUpdateDelay: FiniteDuration,
                                      mempoolCapacity: Int,
                                      mempoolCleanupDuration: FiniteDuration,
@@ -58,10 +69,11 @@ case class NodeConfigurationSettings(stateType: StateType,
     */
   val isFullBlocksPruned: Boolean = blocksToKeep >= 0
 
-  val areSnapshotsStored = storingUtxoSnapshots > 0
+  val areSnapshotsStored = utxoSettings.storingUtxoSnapshots > 0
 }
 
-trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettingsReader with ModifierIdReader {
+trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettingsReader
+                                  with UtxoSettingsReader with ModifierIdReader {
 
   implicit val nodeConfigurationReader: ValueReader[NodeConfigurationSettings] = { (cfg, path) =>
     val stateTypeKey = s"$path.stateType"
@@ -70,7 +82,7 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       stateType,
       cfg.as[Boolean](s"$path.verifyTransactions"),
       cfg.as[Int](s"$path.blocksToKeep"),
-      cfg.as[Boolean](s"$path.utxoBootstrap"),
+      cfg.as[UtxoSettings](s"$path.utxoSettings"),
       cfg.as[Boolean](s"$path.PoPoWBootstrap"),
       cfg.as[Int](s"$path.minimalSuffix"),
       cfg.as[Boolean](s"$path.mining"),
@@ -82,7 +94,6 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       cfg.as[Option[String]](s"$path.miningPubKeyHex"),
       cfg.as[Boolean](s"$path.offlineGeneration"),
       cfg.as[Int](s"$path.keepVersions"),
-      cfg.as[Int](s"$path.storingUtxoSnapshots"),
       cfg.as[FiniteDuration](s"$path.acceptableChainUpdateDelay"),
       cfg.as[Int](s"$path.mempoolCapacity"),
       cfg.as[FiniteDuration](s"$path.mempoolCleanupDuration"),

@@ -1189,10 +1189,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  // check if we have enough UTXO set snapshots for some height
   protected def checkUtxoSetManifests(historyReader: ErgoHistory): Unit = {
     val MinSnapshots = 2 //todo: set to 3 after testing, or move to settings?
 
-    if (settings.nodeSettings.utxoBootstrap &&
+    if (settings.nodeSettings.utxoSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&
           availableManifests.nonEmpty &&
           historyReader.utxoSetSnapshotDownloadPlan().isEmpty) {

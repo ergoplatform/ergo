@@ -64,7 +64,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
         log.info("Started work within future")
         val ft0 = System.currentTimeMillis()
         dumpSnapshot(height, expectedRootHash)
-        snapshotsDb.pruneSnapshots(ergoSettings.nodeSettings.storingUtxoSnapshots)
+        snapshotsDb.pruneSnapshots(ergoSettings.nodeSettings.utxoSettings.storingUtxoSnapshots)
         val ft = System.currentTimeMillis()
         log.info("Work within future finished in: " + (ft - ft0) + " ms.")
       }

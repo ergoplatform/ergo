@@ -111,3 +111,10 @@ object UtxoSnapshotChunkTypeId extends AuxiliaryTypeId {
 object SnapshotsInfoTypeId extends AuxiliaryTypeId {
   override val value: Value = fromByte(-125)
 }
+
+/**
+  * Not a block section, but manifest of a UTXO set snapshot
+  */
+object ManifestTypeId extends AuxiliaryTypeId {
+  override val value: Value = fromByte(-124)
+}

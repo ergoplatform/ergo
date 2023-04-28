@@ -42,7 +42,7 @@ import scorex.util.encode.Base16
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.utils.DefaultErgoLogger
-import scorex.core.serialization.ErgoSerializer
+import scorex.core.serialization.{ErgoSerializer, SubtreeSerializer}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -889,26 +889,32 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def processUtxoSnapshotChunk(serializedChunk: Array[Byte],
                                          hr: ErgoHistory,
                                          remote: ConnectedPeer): Unit = {
-    //todo: check if subtree was requested, penalize remote is not so
-    val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash, DefaultErgoLogger)
-    serializer.subtreeFromBytes(serializedChunk, 32) match {
+    SubtreeSerializer.parseBytesTry(serializedChunk) match {
       case Success(subtree) =>
-        deliveryTracker.setUnknown(ModifierId @@ Algos.encode(subtree.id), UtxoSnapshotChunkTypeId.value)
-        log.info(s"Got utxo snapshot chunk, id: ${Algos.encode(subtree.id)}, size: ${serializedChunk.length}")  //todo: change to debug on release?
-        hr.registerDownloadedChunk(subtree.id, serializedChunk)
+        val chunkId = ModifierId @@ Algos.encode(subtree.id)
+        deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId) match {
+          case Some(ri) if ri.peer == remote =>
+            log.debug(s"Got utxo snapshot chunk, id: ${Algos.encode(subtree.id)}, size: ${serializedChunk.length}")
+            deliveryTracker.setUnknown(chunkId, UtxoSnapshotChunkTypeId.value)
+            hr.registerDownloadedChunk(subtree.id, serializedChunk)
 
-        val downloadPlanOpt = hr.utxoSetSnapshotDownloadPlan() // todo: match for optional result
-        if (downloadPlanOpt.map(_.fullyDownloaded).getOrElse(false)) {
-          if (!hr.isUtxoSnapshotApplied) {
-            val h = downloadPlanOpt.get.snapshotHeight // todo: .get
-            val blockId = hr.bestHeaderIdAtHeight(h).get // todo: .get
-            viewHolderRef ! InitStateFromSnapshot(h, blockId)
-          } else {
-            log.warn("UTXO set snapshot already applied, double application attemt")
-          }
-        } else{
-          requestMoreChunksIfNeeded(hr)
+            val downloadPlanOpt = hr.utxoSetSnapshotDownloadPlan() // todo: match for optional result
+            if (downloadPlanOpt.map(_.fullyDownloaded).getOrElse(false)) {
+              if (!hr.isUtxoSnapshotApplied) {
+                val h = downloadPlanOpt.get.snapshotHeight // todo: .get
+                val blockId = hr.bestHeaderIdAtHeight(h).get // todo: .get
+                viewHolderRef ! InitStateFromSnapshot(h, blockId)
+              } else {
+                log.warn("UTXO set snapshot already applied, double application attemt")
+              }
+            } else{
+              requestMoreChunksIfNeeded(hr)
+            }
+          case _ =>
+            log.info(s"Penalizing spamming peer $remote sent non-asked UTXO set snapshot $chunkId")
+            penalizeSpammingPeer(remote)
         }
+
       case Failure(e) =>
         log.info(s"Cant' restore snapshot chunk (got from $remote) from bytes ", e)
         penalizeMisbehavingPeer(remote)

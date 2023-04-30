@@ -23,7 +23,6 @@ import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
 import spire.implicits.cfor
 
-import java.nio.ByteBuffer
 import scala.concurrent.duration.{Duration, SECONDS}
 import scala.concurrent.{Await, Future}
 import scala.util.Success

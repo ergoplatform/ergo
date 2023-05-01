@@ -2,6 +2,7 @@ package scorex.core.network.peer
 
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization._
 
 import java.net.URL

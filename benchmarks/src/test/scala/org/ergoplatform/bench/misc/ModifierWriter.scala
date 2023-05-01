@@ -6,8 +6,8 @@ import org.ergoplatform.Utils._
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.NodeViewModifier
 import scorex.core.serialization.ErgoSerializer
+import scorex.core.NodeViewModifier
 
 object ModifierWriter {
 

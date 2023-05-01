@@ -913,8 +913,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 if (downloadPlan.fullyDownloaded) {
                   if (!hr.isUtxoSnapshotApplied) {
                     val h = downloadPlan.snapshotHeight
-                    val blockId = hr.bestHeaderIdAtHeight(h).get // todo: .get
-                    viewHolderRef ! InitStateFromSnapshot(h, blockId)
+                    hr.bestHeaderIdAtHeight(h) match{
+                      case Some(blockId) =>
+                        viewHolderRef ! InitStateFromSnapshot(h, blockId)
+                      case None =>
+                        // shouldn't happen in principle
+                        log.error("No best header found when all chunks are downloaded. Please contact developers.")
+                    }
+
                   } else {
                     log.warn("UTXO set snapshot already applied, double application attemt")
                   }

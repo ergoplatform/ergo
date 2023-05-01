@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.state
 
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 
@@ -25,7 +25,7 @@ object VotingData {
   val empty = VotingData(Array.empty)
 }
 
-object VotingDataSerializer extends ScorexSerializer[VotingData] {
+object VotingDataSerializer extends ErgoSerializer[VotingData] {
 
   override def serialize(obj: VotingData, w: Writer): Unit = {
     w.putUShort(obj.epochVotes.length)

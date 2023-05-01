@@ -75,7 +75,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultMinerSecret: DLogProverInput = defaultProver.hdKeys.head.privateInput
   val defaultMinerSecretNumber: BigInt = defaultProver.hdKeys.head.privateInput.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
-  val defaultMinerPkPoint: EcPointType = defaultMinerPk.h
+  val defaultMinerPkPoint: EcPointType = defaultMinerPk.value
 
   val defaultTimestamp: Long = 1552217190000L
   val defaultNBits: Long = settings.chainSettings.initialNBits

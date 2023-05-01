@@ -21,6 +21,7 @@ import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, ErgoBox, GlobalConstants, P2PKAddress}
 import scorex.core.VersionTag
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
+import org.ergoplatform.wallet.secrets.DerivationPath
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.Values.SigmaBoolean
@@ -151,6 +152,12 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case ReadPublicKeys(from, until) =>
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)
+
+    case ReadExtendedPublicKeys() =>
+      sender() ! state.storage.readAllKeys()
+
+    case GetPrivateKeyFromPath(path: DerivationPath) =>
+      sender() ! ergoWalletService.getPrivateKeyFromPath(state, path)
 
     case GetMiningPubKey =>
       state.walletVars.trackedPubKeys.headOption match {
@@ -618,6 +625,16 @@ object ErgoWalletActor extends ScorexLogging {
     * @param until
     */
   final case class ReadPublicKeys(from: Int, until: Int)
+
+  /**
+   * Read all wallet public keys
+   */
+  final case class ReadExtendedPublicKeys()
+
+  /**
+   * Get the private key from seed based on a given derivation path
+   */
+  final case class GetPrivateKeyFromPath(path: DerivationPath)
 
   /**
     * Read wallet either from mnemonic or from secret storage

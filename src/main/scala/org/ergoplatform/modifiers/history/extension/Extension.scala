@@ -6,7 +6,7 @@ import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.{ExtensionTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Digest32
@@ -28,7 +28,7 @@ case class Extension(headerId: ModifierId,
 
   override type M = Extension
 
-  override def serializer: ScorexSerializer[Extension] = ExtensionSerializer
+  override def serializer: ErgoSerializer[Extension] = ExtensionSerializer
 
   override def toString: String = {
     s"Extension(id: $id, headerId: ${Algos.encode(headerId)}, " +

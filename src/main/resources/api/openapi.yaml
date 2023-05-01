@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.9"
+  version: "5.0.10"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -4739,6 +4739,40 @@ paths:
                 $ref: '#/components/schemas/TransactionId'
         '400':
           description: Bad payment request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/getPrivateKey:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get the private key corresponding to a known address
+      operationId: walletGetPrivateKey
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErgoAddress"
+      responses:
+        '200':
+          description: Successfully retrieved secret key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DlogSecret'
+        '404':
+          description: Address not found in wallet database
           content:
             application/json:
               schema:

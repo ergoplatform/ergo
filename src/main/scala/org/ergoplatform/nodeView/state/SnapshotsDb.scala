@@ -2,13 +2,9 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
-import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{ErgoAlgos, ErgoSettings}
-import org.ergoplatform.utils.DefaultErgoLogger
-import org.ergoplatform.wallet.Constants
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.serialization.ManifestSerializer
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
-import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBFactory, LDBKVStore}
 import scorex.util.ScorexLogging
@@ -20,8 +16,6 @@ import scala.util.{Failure, Success, Try}
   * Interface for a (non-versioned) database storing UTXO set snapshots and metadata about them
   */
 class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
-
-  private val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash, DefaultErgoLogger)
 
   private val snapshotInfoKey: Array[Byte] = Array.fill(32)(0: Byte)
 
@@ -59,7 +53,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
       log.info(s"Pruning snapshot at height $h")
       val keysToRemove: Array[Array[Byte]] = store.get(manifestId) match {
         case Some(manifestBytes) =>
-          serializer.manifestFromBytes(manifestBytes, Constants.ModifierIdLength) match {
+          ManifestSerializer.defaultSerializer.parseBytesTry(manifestBytes) match {
             case Success(m) =>
               (m.subtreesIds += manifestId).toArray // todo: more efficient construction
             case Failure(e) =>

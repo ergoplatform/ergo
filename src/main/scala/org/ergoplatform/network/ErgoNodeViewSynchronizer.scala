@@ -4,14 +4,14 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
-import org.ergoplatform.settings.{Algos, Constants, ErgoAlgos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
@@ -23,7 +23,6 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoSetSnapshotPersistence, UtxoStateReader}
 import scorex.core.network.message._
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
-import org.ergoplatform.settings.Algos.HF
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
@@ -36,13 +35,11 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.app.Version
-import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.utils.DefaultErgoLogger
-import scorex.core.serialization.{ErgoSerializer, SubtreeSerializer}
+import scorex.core.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -560,6 +557,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
+    deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(manifestId), peer){ deliveryCheck =>
+      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+    }
     val msg = Message(GetManifestSpec, Right(manifestId), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
@@ -863,22 +863,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer): Unit = {
-    //todo : check that manifest was requested
-    val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash, DefaultErgoLogger)
-    serializer.manifestFromBytes(manifestBytes, keyLength = 32) match {
+    val serializer = ManifestSerializer.defaultSerializer
+    serializer.parseBytesTry(manifestBytes) match {
       case Success(manifest) =>
-        log.info(s"Got manifest ${Algos.encode(manifest.id)} from $remote")
-        val manifestRecords = availableManifests.filter(_._2.exists(_._2.sameElements(manifest.id)))
-        val heightOfManifest = manifestRecords.headOption.map(_._1)
-        val peersToDownload: Seq[ConnectedPeer] = manifestRecords.flatMap(_._2.map(_._1)).toSeq
-        heightOfManifest match {
-          case Some(height) =>
-            log.info(s"Going to download chunks for manifest ${Algos.encode(manifest.id)} at height $height from $peersToDownload")
-            hr.registerManifestToDownload(manifest, height, peersToDownload)
-            availableManifests.clear()
-            requestMoreChunksIfNeeded(hr)
-          case None =>
-            log.error(s"No height found for manifest ${Algos.encode(manifest.id)}")
+        val manifestId = ModifierId @@ Algos.encode(manifest.id)
+        log.info(s"Got manifest $manifestId from $remote")
+        deliveryTracker.getRequestedInfo(ManifestTypeId.value, manifestId) match {
+          case Some(ri) if ri.peer == remote =>
+            val manifestRecords = availableManifests.filter(_._2.exists(_._2.sameElements(manifest.id)))
+            val heightOfManifest = manifestRecords.headOption.map(_._1)
+            val peersToDownload: Seq[ConnectedPeer] = manifestRecords.flatMap(_._2.map(_._1)).toSeq
+            heightOfManifest match {
+              case Some(height) =>
+                log.info(s"Going to download chunks for manifest ${Algos.encode(manifest.id)} at height $height from $peersToDownload")
+                hr.registerManifestToDownload(manifest, height, peersToDownload)
+                availableManifests.clear()
+                requestMoreChunksIfNeeded(hr)
+              case None =>
+                log.error(s"No height found for manifest ${Algos.encode(manifest.id)}")
+            }
+          case _ =>
+            log.info(s"Penalizing spamming peer $remote sent non-asked manifest $manifestId")
+            penalizeSpammingPeer(remote)
         }
       case Failure(e) =>
         log.info(s"Cant' restore manifest (got from $remote) from bytes ", e)
@@ -894,7 +900,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val chunkId = ModifierId @@ Algos.encode(subtree.id)
         deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId) match {
           case Some(ri) if ri.peer == remote =>
-            log.debug(s"Got utxo snapshot chunk, id: ${Algos.encode(subtree.id)}, size: ${serializedChunk.length}")
+            log.debug(s"Got utxo snapshot chunk, id: $chunkId, size: ${serializedChunk.length}")
             deliveryTracker.setUnknown(chunkId, UtxoSnapshotChunkTypeId.value)
             hr.registerDownloadedChunk(subtree.id, serializedChunk)
 

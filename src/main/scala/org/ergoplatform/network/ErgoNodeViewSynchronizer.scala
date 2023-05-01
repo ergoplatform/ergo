@@ -842,16 +842,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def requestMoreChunksIfNeeded(hr: ErgoHistory): Unit = {
+    // we request more chunks if currently less than `ChunksInParallelMin` chunks are being downloading
+    // we request up to `ChunksInParallelMin`, so in extreme case may download almost 2 * `ChunksInParallelMin`
+    // we download new chunks from random peers, `ChunksPerPeer` chunks from a random peer (but we may ask the same
+    // peer twice as choice is truly random)
+    val ChunksInParallelMin = 16
+    val ChunksPerPeer = 4
     hr.utxoSetSnapshotDownloadPlan() match {
       case Some(downloadPlan) =>
-        if (downloadPlan.downloadingChunks < 16) {
-          (1 to 4).foreach { _ =>
-            val toRequest = hr.getChunkIdsToDownload(4)
+
+        if (downloadPlan.downloadingChunks < ChunksInParallelMin) {
+          (1 to ChunksPerPeer).foreach { _ =>
+            val toRequest = hr.getChunkIdsToDownload(howMany = ChunksInParallelMin / ChunksPerPeer)
             hr.randomPeerToDownloadChunks() match {
-              case Some(remote) => toRequest.foreach {
-                subtreeId =>
-                  requestUtxoSetChunk(subtreeId, remote)
-              }
+              case Some(remote) => toRequest.foreach(subtreeId => requestUtxoSetChunk(subtreeId, remote))
               case None =>
                 log.warn(s"No peers to download chunks from")
             }

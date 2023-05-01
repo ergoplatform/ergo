@@ -908,18 +908,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             deliveryTracker.setUnknown(chunkId, UtxoSnapshotChunkTypeId.value)
             hr.registerDownloadedChunk(subtree.id, serializedChunk)
 
-            val downloadPlanOpt = hr.utxoSetSnapshotDownloadPlan() // todo: match for optional result
-            if (downloadPlanOpt.map(_.fullyDownloaded).getOrElse(false)) {
-              if (!hr.isUtxoSnapshotApplied) {
-                val h = downloadPlanOpt.get.snapshotHeight // todo: .get
-                val blockId = hr.bestHeaderIdAtHeight(h).get // todo: .get
-                viewHolderRef ! InitStateFromSnapshot(h, blockId)
-              } else {
-                log.warn("UTXO set snapshot already applied, double application attemt")
-              }
-            } else{
-              requestMoreChunksIfNeeded(hr)
+            hr.utxoSetSnapshotDownloadPlan() match {
+              case Some(downloadPlan) =>
+                if (downloadPlan.fullyDownloaded) {
+                  if (!hr.isUtxoSnapshotApplied) {
+                    val h = downloadPlan.snapshotHeight
+                    val blockId = hr.bestHeaderIdAtHeight(h).get // todo: .get
+                    viewHolderRef ! InitStateFromSnapshot(h, blockId)
+                  } else {
+                    log.warn("UTXO set snapshot already applied, double application attemt")
+                  }
+                } else {
+                  requestMoreChunksIfNeeded(hr)
+                }
+              case None =>
+                log.warn(s"No download plan found when processing UTXO set snapshot chunk $chunkId")
             }
+
           case _ =>
             log.info(s"Penalizing spamming peer $remote sent non-asked UTXO set snapshot $chunkId")
             penalizeSpammingPeer(remote)

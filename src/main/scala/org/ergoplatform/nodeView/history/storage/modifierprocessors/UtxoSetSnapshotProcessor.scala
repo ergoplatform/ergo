@@ -19,6 +19,8 @@ import scala.util.{Random, Try}
 import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
 /**
+  * Parts of history processing and storage corresponding to UTXO set snapshot processing and storage
+  *
   * Stores:
   * - writes chunks
   * - writes data for incomplete snapshots
@@ -32,9 +34,12 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   private[history] var minimalFullBlockHeightVar: Int
 
-  var _utxoSnapshotApplied = false //todo: persistence?
+  private var _utxoSnapshotApplied = false //todo: persistence?
 
-  def isUtxoSnapshotApplied = _utxoSnapshotApplied
+  def isUtxoSnapshotApplied = {
+    _utxoSnapshotApplied
+  }
+
   def utxoSnapshotApplied(height: Height): Unit = {
     _utxoSnapshotApplied = true
     minimalFullBlockHeightVar = height + 1

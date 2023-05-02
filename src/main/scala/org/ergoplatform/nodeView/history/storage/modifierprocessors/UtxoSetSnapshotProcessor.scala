@@ -45,10 +45,9 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     minimalFullBlockHeightVar = height + 1
   }
 
- // private val expectedChunksPrefix = Blake2b256.hash("expected chunk").drop(4)
   private val downloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
 
-  private val downloadPlanKey = Blake2b256.hash("download plan")
+ // private val downloadPlanKey = Blake2b256.hash("download plan")
 
   private var _manifest: Option[BatchAVLProverManifest[Digest32]] = None
 
@@ -65,6 +64,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     _manifest = Some(manifest)
     _peersToDownload = peersToDownload
     updateUtxoSetSnashotDownloadPlan(plan)
+    plan
   }
 
   def utxoSetSnapshotDownloadPlan(): Option[UtxoSetSnapshotDownloadPlan] = {
@@ -146,15 +146,15 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
-  private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan) = {
+  private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {
     _cachedDownloadPlan = Some(plan)
-    historyStorage.insert(downloadPlanKey, plan.id)
-    writeDownloadPlanToTheDb(plan) // todo: not always write to db
-    plan
+   // historyStorage.insert(downloadPlanKey, plan.id)
+    // writeDownloadPlanToTheDb(plan) // todo: not always write to db
   }
 
+/*
   private def writeDownloadPlanToTheDb(plan: UtxoSetSnapshotDownloadPlan) = {
-   /* val w = new VLQByteBufferWriter(new ByteArrayBuilder())
+    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
     w.putULong(plan.startingTime)
     w.putULong(plan.latestUpdateTime)
     w.putUInt(plan.snapshotHeight)
@@ -172,10 +172,8 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
       historyStorage.insert(expectedChunksPrefix ++ idxBytes, chunkId)
       idx = idx + 1
     }
-*/
   }
 
-  /*
   private def readDownloadPlanFromDb(id: Digest32): Option[UtxoSetSnapshotDownloadPlan] = {
     historyStorage.get(id).map { bytes =>
       val r = new VLQByteBufferReader(ByteBuffer.wrap(bytes))

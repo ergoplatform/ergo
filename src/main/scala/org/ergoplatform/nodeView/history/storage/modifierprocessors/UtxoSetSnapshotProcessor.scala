@@ -47,15 +47,11 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   private val downloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
 
- // private val downloadPlanKey = Blake2b256.hash("download plan")
-
   private var _manifest: Option[BatchAVLProverManifest[Digest32]] = None
 
   private var _cachedDownloadPlan: Option[UtxoSetSnapshotDownloadPlan] = None
 
   private var _peersToDownload: Seq[ConnectedPeer] = Seq.empty //todo: move to ErgoNodeViewSynchronizer?
-
-  def pruneSnapshot(downloadPlan: UtxoSetSnapshotDownloadPlan) = ??? //todo: implement
 
   def registerManifestToDownload(manifest: BatchAVLProverManifest[Digest32],
                                  blockHeight: Height,
@@ -71,13 +67,6 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     _cachedDownloadPlan match {
       case s@Some(_) => s
       case None => None
-        /*
-        historyStorage.get(downloadPlanKey).flatMap { planId =>
-          val planOpt = readDownloadPlanFromDb(Digest32 @@ planId)
-          if (planOpt.isEmpty) log.warn(s"No download plan with id ${Algos.encode(planId)} found")
-          if (planOpt.nonEmpty) _cachedDownloadPlan = planOpt
-          planOpt
-        }*/
     }
   }
 
@@ -148,69 +137,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {
     _cachedDownloadPlan = Some(plan)
-   // historyStorage.insert(downloadPlanKey, plan.id)
-    // writeDownloadPlanToTheDb(plan) // todo: not always write to db
   }
-
-/*
-  private def writeDownloadPlanToTheDb(plan: UtxoSetSnapshotDownloadPlan) = {
-    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
-    w.putULong(plan.startingTime)
-    w.putULong(plan.latestUpdateTime)
-    w.putUInt(plan.snapshotHeight)
-    w.putBytes(plan.utxoSetRootHash)
-    w.put(plan.utxoSetTreeHeight)
-    w.putUInt(plan.expectedChunkIds.size)
-    w.putUInt(plan.downloadedChunkIds.size)
-    val metaDataBytes = w.result().toBytes
-
-    historyStorage.insert(plan.id, metaDataBytes)
-
-    var idx = 0
-    plan.expectedChunkIds.foreach { chunkId =>
-      val idxBytes = Ints.toByteArray(idx)
-      historyStorage.insert(expectedChunksPrefix ++ idxBytes, chunkId)
-      idx = idx + 1
-    }
-  }
-
-  private def readDownloadPlanFromDb(id: Digest32): Option[UtxoSetSnapshotDownloadPlan] = {
-    historyStorage.get(id).map { bytes =>
-      val r = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
-      val startingTime = r.getULong()
-      val latestChunkFetchTime = r.getULong()
-      val snapshotHeight = r.getUInt().toInt
-      val utxoSetRootHash = r.getBytes(Constants.HashLength)
-      val utxoSetTreeHeight = r.getByte()
-      val expectedChunksSize = r.getUInt().toInt
-      val downloadedChunksSize = r.getUInt().toInt
-
-      val expectedChunks = new mutable.ArrayBuffer[SubtreeId](initialSize = expectedChunksSize)
-      (0 until expectedChunksSize).foreach { idx =>
-        val idxBytes = Ints.toByteArray(idx)
-        historyStorage.get(expectedChunksPrefix ++ idxBytes) match {
-          case Some(chunkBytes) => expectedChunks += (Digest32 @@ chunkBytes)
-          case None => log.warn(s"Expected chunk #${id} not found in the database")
-        }
-      }
-      val downloadedChunks = new mutable.ArrayBuffer[Boolean](initialSize = downloadedChunksSize)
-      (0 until downloadedChunksSize).foreach { idx =>
-        val idxBytes = Ints.toByteArray(idx)
-        downloadedChunks += historyStorage.contains(downloadedChunksPrefix ++ idxBytes)
-      }
-
-      UtxoSetSnapshotDownloadPlan(
-        startingTime,
-        latestChunkFetchTime,
-        snapshotHeight,
-        Digest32 @@ utxoSetRootHash,
-        utxoSetTreeHeight,
-        expectedChunks,
-        downloadedChunks,
-        downloadingChunks = 0
-      )
-    }
-  }*/
 
   def createPersistentProver(stateStore: LDBVersionedStore,
                              blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = {

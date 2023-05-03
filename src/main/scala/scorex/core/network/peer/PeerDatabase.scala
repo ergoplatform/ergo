@@ -76,7 +76,7 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
       peerInfo.peerSpec.address.foreach { address =>
         log.debug(s"Updating peer info for $address")
         peers += address -> peerInfo
-        persistentStore.insert(Array((serialize(address), PeerInfoSerializer.toBytes(peerInfo))))
+        persistentStore.insert(serialize(address), PeerInfoSerializer.toBytes(peerInfo))
       }
     }
   }

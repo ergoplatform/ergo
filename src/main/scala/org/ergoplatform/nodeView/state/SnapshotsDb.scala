@@ -22,7 +22,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
   // helper method to write information about store UTXO set snapshots into the database
   /// private[nodeView] as used in some tests
   private[nodeView] def writeSnapshotsInfo(snapshotsInfo: SnapshotsInfo): Try[Unit] = {
-    store.insert(Array(snapshotInfoKey -> SnapshotsInfoSerializer.toBytes(snapshotsInfo)))
+    store.insert(snapshotInfoKey, SnapshotsInfoSerializer.toBytes(snapshotsInfo))
   }
 
   // helper method to read information about store UTXO set snapshots from the database

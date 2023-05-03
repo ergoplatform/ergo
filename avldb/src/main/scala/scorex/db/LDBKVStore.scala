@@ -57,9 +57,6 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
     */
   def insert(keys: Array[K], values: Array[V]): Try[Unit] = update(keys, values, Array.empty)
 
-  def insert(values: Array[(K, V)]): Try[Unit] = update(values.map(_._1), values.map(_._2), Array.empty)
-
-
   /**
     * `update` variant where we only remove values from this database
     */

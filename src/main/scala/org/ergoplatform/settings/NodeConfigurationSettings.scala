@@ -82,7 +82,7 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       stateType,
       cfg.as[Boolean](s"$path.verifyTransactions"),
       cfg.as[Int](s"$path.blocksToKeep"),
-      cfg.as[UtxoSettings](s"$path.utxoSettings"),
+      cfg.as[UtxoSettings](s"$path.utxo"),
       cfg.as[Boolean](s"$path.PoPoWBootstrap"),
       cfg.as[Int](s"$path.minimalSuffix"),
       cfg.as[Boolean](s"$path.mining"),

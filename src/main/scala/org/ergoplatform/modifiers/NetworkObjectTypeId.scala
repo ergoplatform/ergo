@@ -10,7 +10,7 @@ sealed trait NetworkObjectTypeId {
   /**
     * 1-byte ID of network object type
     */
-  val value: NetworkObjectTypeId.Value
+  def value: NetworkObjectTypeId.Value
 }
 
 object NetworkObjectTypeId {
@@ -39,23 +39,13 @@ object NetworkObjectTypeId {
 /**
   * Block section to be sent over the wire (header, transactions section, extension, UTXO set transformation proofs)
   */
-sealed trait BlockSectionTypeId extends NetworkObjectTypeId {
-  require(value >= BlockSectionThreshold, s"Type id for block section must be >= $BlockSectionThreshold")
-}
+sealed trait BlockSectionTypeId extends NetworkObjectTypeId
 
 /**
   * Non-block network objects: unconfirmed transactions, utxo set snapshot related data, nipopow related data etc
   */
-sealed trait AuxiliaryTypeId extends NetworkObjectTypeId {
-  require(value < BlockSectionThreshold, s"Type id for auxiliary network object must be < DistinguihsingValue")
-}
+sealed trait AuxiliaryTypeId extends NetworkObjectTypeId
 
-/**
-  * Unconfirmed transactions sent outside blocks
-  */
-object TransactionTypeId extends NetworkObjectTypeId {
-  override val value: Value = fromByte(2)
-}
 
 /**
   * Block header, section of a block PoW is done on top of. This section is committing to other sections
@@ -67,7 +57,7 @@ object HeaderTypeId extends BlockSectionTypeId {
 /**
   * Block transactions sections. Contains all the transactions for a block.
   */
-object BlockTransactionsTypeId extends AuxiliaryTypeId {
+object BlockTransactionsTypeId extends BlockSectionTypeId {
   override val value: Value = fromByte(102)
 }
 
@@ -87,6 +77,13 @@ object ProofsTypeId extends BlockSectionTypeId {
   */
 object ExtensionTypeId extends BlockSectionTypeId {
   override val value: Value = fromByte(108)
+}
+
+/**
+  * Unconfirmed transactions sent outside blocks
+  */
+object TransactionTypeId extends AuxiliaryTypeId {
+  override val value: Value = fromByte(2)
 }
 
 /**

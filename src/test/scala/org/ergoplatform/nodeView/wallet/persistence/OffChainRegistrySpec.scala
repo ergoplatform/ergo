@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, Scan, ScanWalletInteraction}
 import org.ergoplatform.utils.WalletTestOps
 import org.ergoplatform.utils.generators.WalletGenerators
@@ -73,7 +73,7 @@ class OffChainRegistrySpec
       val height = Random.nextInt(500) + 1
 
       //apply block to empty registry
-      val registry = OffChainRegistry.empty.updateOnBlock(height, boxes.toArray, boxes.map(EncodedBoxId @@@ _.boxId))
+      val registry = OffChainRegistry.empty.updateOnBlock(height, boxes.toArray, boxes.map(tb => encodedBoxId(tb.box.id)).to[TreeSet])
       val balance = balanceAmount(boxes.map(_.box))
       val assetsBalance = assetAmount(boxes.map(_.box))
       registry.height shouldEqual height

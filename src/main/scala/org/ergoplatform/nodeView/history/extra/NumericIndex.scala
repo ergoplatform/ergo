@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.extra
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 
@@ -17,7 +17,7 @@ case class NumericTxIndex(n: Long, m: ModifierId) extends ExtraIndex {
   override def serializedId: Array[Byte] = NumericTxIndex.indexToBytes(n)
 }
 
-object NumericTxIndexSerializer extends ScorexSerializer[NumericTxIndex] {
+object NumericTxIndexSerializer extends ErgoSerializer[NumericTxIndex] {
 
   override def serialize(ni: NumericTxIndex, w: Writer): Unit = {
     w.putLong(ni.n)
@@ -61,7 +61,7 @@ case class NumericBoxIndex(n: Long, m: ModifierId) extends ExtraIndex {
   override def serializedId: Array[Byte] = NumericBoxIndex.indexToBytes(n)
 }
 
-object NumericBoxIndexSerializer extends ScorexSerializer[NumericBoxIndex] {
+object NumericBoxIndexSerializer extends ErgoSerializer[NumericBoxIndex] {
 
   override def serialize(ni: NumericBoxIndex, w: Writer): Unit = {
     w.putLong(ni.n)

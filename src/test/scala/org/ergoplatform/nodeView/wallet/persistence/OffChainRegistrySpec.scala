@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
+import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, Scan, ScanWalletInteraction}
 import org.ergoplatform.utils.WalletTestOps
 import org.ergoplatform.utils.generators.WalletGenerators
@@ -36,7 +36,7 @@ class OffChainRegistrySpec
       registry.digest.walletAssetBalances.toMap shouldEqual assetsBalance.toMap
 
       //spend all the outputs
-      registry = registry.updateOnTransaction(Seq.empty, boxes.map(EncodedBoxId @@ _.boxId), Seq.empty)
+      registry = registry.updateOnTransaction(Seq.empty, boxes.map(EncodedBoxId @@@ _.boxId), Seq.empty)
       registry.digest.walletBalance shouldEqual 0
       registry.digest.walletAssetBalances shouldEqual Seq.empty
 
@@ -55,12 +55,12 @@ class OffChainRegistrySpec
         registry.digest.walletBalance shouldEqual fbalance
         registry.digest.walletAssetBalances.toMap shouldEqual fassetsBalance.toMap
 
-        registry = registry.updateOnTransaction(Seq.empty, filtered.map(EncodedBoxId @@ _.boxId), Seq(scan))
+        registry = registry.updateOnTransaction(Seq.empty, filtered.map(EncodedBoxId @@@ _.boxId), Seq(scan))
         registry.digest.walletBalance shouldEqual fbalance
         registry.digest.walletAssetBalances.toMap shouldEqual fassetsBalance.toMap
 
         val scan2 = Scan(scanId, "_", p, ScanWalletInteraction.Off, removeOffchain = true)
-        registry = registry.updateOnTransaction(Seq.empty, filtered.map(EncodedBoxId @@ _.boxId), Seq(scan2))
+        registry = registry.updateOnTransaction(Seq.empty, filtered.map(EncodedBoxId @@@ _.boxId), Seq(scan2))
         registry.digest.walletBalance shouldEqual 0
         registry.digest.walletAssetBalances shouldEqual Seq.empty
       }
@@ -73,7 +73,7 @@ class OffChainRegistrySpec
       val height = Random.nextInt(500) + 1
 
       //apply block to empty registry
-      val registry = OffChainRegistry.empty.updateOnBlock(height, boxes.toArray, boxes.map(tb => encodedBoxId(tb.box.id)).to[TreeSet])
+      val registry = OffChainRegistry.empty.updateOnBlock(height, boxes.toArray, boxes.map(EncodedBoxId @@@ _.boxId))
       val balance = balanceAmount(boxes.map(_.box))
       val assetsBalance = assetAmount(boxes.map(_.box))
       registry.height shouldEqual height

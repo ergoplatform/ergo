@@ -7,10 +7,11 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, f
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getFromSegments, getTxs}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
+import spire.ClassTag
 
 import scala.collection.mutable.ArrayBuffer
 import spire.syntax.all.cfor
@@ -214,10 +215,13 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @param txTarget  - remove transaction numbers above this number
     * @param boxTarget - remove box numbers above this number and revert the balance
     * @param _history  - history handle to update address in database
+    * @return modifier ids to remove
     */
-  private[extra] def rollback(txTarget: Long, boxTarget: Long, _history: ErgoHistory)(implicit segmentTreshold: Int): Unit = {
+  private[extra] def rollback(txTarget: Long, boxTarget: Long, _history: ErgoHistory)(implicit segmentTreshold: Int): Array[ModifierId] = {
 
-    if(txs.last <= txTarget && abs(boxes.last) <= boxTarget) return
+    if((txCount == 0 && boxCount == 0) || // address already rolled back
+       (txs.last <= txTarget && abs(boxes.last) <= boxTarget)) // no rollback needed
+      return Array.empty[ModifierId]
 
     def history: ErgoHistoryReader = _history.getReader
 
@@ -257,8 +261,8 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
     // Save changes
     _history.historyStorage.insertExtra(Array.empty, toSave.toArray)
-    _history.historyStorage.removeExtra(toRemove.toArray)
 
+    toRemove.toArray
   }
 
   /**
@@ -289,7 +293,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   }
 }
 
-object IndexedErgoAddressSerializer extends ScorexSerializer[IndexedErgoAddress] {
+object IndexedErgoAddressSerializer extends ErgoSerializer[IndexedErgoAddress] {
 
   /**
     * Compute the Blake2b hash of given ErgoTree
@@ -397,22 +401,25 @@ object IndexedErgoAddress {
     * @tparam T - type of desired indexes, either [[IndexedErgoTransaction]] or [[IndexedErgoBox]]
     * @return
     */
-  private def getFromSegments[T](history: ErgoHistoryReader,
-                                 treeHash: ModifierId,
-                                 offset: Int,
-                                 limit: Int,
-                                 segmentCount: Int,
-                                 array: ArrayBuffer[Long],
-                                 idOf: (ModifierId, Int) => ModifierId,
-                                 arraySelector: IndexedErgoAddress => ArrayBuffer[Long],
-                                 retreive: (ArrayBuffer[Long], ErgoHistoryReader) => Array[T])
-                                 (implicit segmentTreshold: Int): Array[T] = {
+  private def getFromSegments[T : ClassTag](history: ErgoHistoryReader,
+                                             treeHash: ModifierId,
+                                             offset: Int,
+                                             limit: Int,
+                                             segmentCount: Int,
+                                             array: ArrayBuffer[Long],
+                                             idOf: (ModifierId, Int) => ModifierId,
+                                             arraySelector: IndexedErgoAddress => ArrayBuffer[Long],
+                                             retreive: (ArrayBuffer[Long], ErgoHistoryReader) => Array[T])
+                                            (implicit segmentTreshold: Int): Array[T] = {
+    if(offset >= segmentTreshold * segmentCount + array.length)
+      return Array.empty[T] // return empty array if all elements are skipped
     if (offset + limit > array.length && segmentCount > 0) {
       val range: Array[Int] = getSegmentsForRange(offset, limit)
       val data: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
       cfor(0)(_ < range.length, _ + 1) { i =>
+        val id: ModifierId = idOf(treeHash, math.max(segmentCount - range(i), 0))
         arraySelector(
-          history.typedExtraIndexById[IndexedErgoAddress](idOf(treeHash, segmentCount - range(i))).get
+          history.typedExtraIndexById[IndexedErgoAddress](id).get
         ) ++=: data
       }
       retreive(sliceReversed(data ++= (if (offset < array.length) array else Nil), offset % segmentTreshold, limit), history)

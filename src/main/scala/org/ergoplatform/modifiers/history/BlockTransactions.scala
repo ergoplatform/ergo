@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
 import org.ergoplatform.modifiers.history.header.Header.Version
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
 import scorex.crypto.hash.Digest32
@@ -76,7 +76,7 @@ case class BlockTransactions(headerId: ModifierId,
 
   override type M = BlockTransactions
 
-  override lazy val serializer: ScorexSerializer[BlockTransactions] = BlockTransactionsSerializer
+  override lazy val serializer: ErgoSerializer[BlockTransactions] = BlockTransactionsSerializer
 
   override def toString: String = {
     val idStr = Algos.encode(id)
@@ -130,7 +130,7 @@ object BlockTransactions extends ApiCodecs {
   }
 }
 
-object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
+object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
   // See a comment in the parse() function
   val MaxTransactionsInBlock = 10000000
 

@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.NetworkObjectTypeId
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.core.NodeViewModifier
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
@@ -28,7 +28,7 @@ case class InvData(typeId: NetworkObjectTypeId.Value, ids: Seq[ModifierId])
   *
   * Payload of this message should be determined in underlying applications.
   */
-class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ScorexSerializer[SI]) extends MessageSpecV1[SI] {
+class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ErgoSerializer[SI]) extends MessageSpecV1[SI] {
 
   override val messageCode: MessageCode = 65: Byte
   override val messageName: String = "Sync"

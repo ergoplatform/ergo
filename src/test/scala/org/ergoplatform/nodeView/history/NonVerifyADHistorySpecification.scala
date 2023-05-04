@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
@@ -26,7 +26,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val useLastEpochs = 3
 
     val initDiff = BigInt(2)
-    val initDiffBits = RequiredDifficulty.encodeCompactBits(initDiff)
+    val initDiffBits = DifficultySerializer.encodeCompactBits(initDiff)
 
     var history = generateHistory(
       verifyTransactions = false,

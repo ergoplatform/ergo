@@ -1,14 +1,15 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.core.NodeViewModifier
+import scorex.crypto.authds.avltree.batch.AvlTreeParameters
 import sigmastate.Values
 import sigmastate.Values.ErgoTree
 
@@ -20,7 +21,7 @@ object Constants {
 
   val MaxTarget: BigInt = BigInt(1, Array.fill(HashLength)((-1).toByte))
   val InitialDifficulty: Difficulty = BigInt(1)
-  val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)
+  val InitialNBits: Long = DifficultySerializer.encodeCompactBits(InitialDifficulty)
   val ModifierIdSize: Int = HashLength
 
   val BlocksPerHour = 30
@@ -44,7 +45,12 @@ object Constants {
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
 
-  val modifierSerializers: Map[NetworkObjectTypeId.Value, ScorexSerializer[_ <: NodeViewModifier]] =
+  /**
+    * Serializers for block sections and transactions
+    *
+    * // todo: move to NodeViewSynchronizer, used only there
+    */
+  val modifierSerializers: Map[NetworkObjectTypeId.Value, ErgoSerializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       Extension.modifierTypeId -> ExtensionSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
@@ -64,4 +70,9 @@ object Constants {
   // Maximum extension size during bytes parsing
   val MaxExtensionSizeMax: Int = 1024 * 1024
 
+  /**
+    * AVL+ tree node parameters. The tree is used to authenticate UTXO set.
+    * Keys and hashes are 256-bits long, values are boxes, so value size is dynamic.
+    */
+  object StateTreeParameters extends AvlTreeParameters(keySize = HashLength, valueSize = None, labelSize = HashLength)
 }

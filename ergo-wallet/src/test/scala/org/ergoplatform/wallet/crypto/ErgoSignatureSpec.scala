@@ -18,7 +18,7 @@ class ErgoSignatureSpec extends AnyPropSpec with Matchers with Generators {
 
     val sig = sign(msg, secret.w)
 
-    verify(msg, sig, pk.h) shouldBe true
+    verify(msg, sig, pk.value) shouldBe true
   }
 
   property("always produce signature of fixed length") {

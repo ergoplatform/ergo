@@ -41,7 +41,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
         (seq :+ ebc) -> true
       } else {
         if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(t => !java.util.Arrays.equals(t._1, from.head.id))) {
-          (seq :+ modifyAsset(ebc, deltaFn, Digest32 @@ from.head.id)) -> true
+          (seq :+ modifyAsset(ebc, deltaFn, Digest32 @@@ from.head.id)) -> true
         } else {
           (seq :+ ebc) -> false
         }
@@ -96,7 +96,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     val minerPkHex = "0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942"
     val minerPk = Base16.decode(minerPkHex).map { point =>
       ProveDlog(
-        CryptoConstants.dlogGroup.curve.decodePoint(point).asInstanceOf[CryptoConstants.EcPointType]
+        CryptoConstants.dlogGroup.ctx.decodePoint(point)
       )
     }.get
     val inputs: IndexedSeq[Input] = IndexedSeq(

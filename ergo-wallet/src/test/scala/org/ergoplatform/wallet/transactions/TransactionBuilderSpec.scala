@@ -74,7 +74,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   property("token minting") {
     val inputBox = box(minBoxValue * 2)
-    val tokenId  = Digest32 @@ inputBox.id
+    val tokenId  = Digest32 @@@ inputBox.id
     val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
     val res = transaction(inputBox, outBox)
 
@@ -87,7 +87,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   property("token burning") {
     val inputBox = box(minBoxValue * 3, Seq(Digest32 @@ idToBytes(tid1) -> 1000L, Digest32 @@ idToBytes(tid2) -> 2000L))
-    val tokenId  = Digest32 @@ inputBox.id
+    val tokenId  = Digest32 @@@ inputBox.id
     val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
     val res = transaction(inputBox, outBox, burnTokens = Map(tid1 -> 400L, tid2 -> 800L))
 
@@ -105,7 +105,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   property("no fees") {
     val inputBox = box(minBoxValue)
-    val tokenId  = Digest32 @@ inputBox.id
+    val tokenId  = Digest32 @@@ inputBox.id
     val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
     val res = transaction(inputBox, outBox, fee = None)
 
@@ -117,7 +117,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   property("change goes to fee, but no outFee box") {
     val inputBox = box(minBoxValue + minBoxValue / 2)
-    val tokenId  = Digest32 @@ inputBox.id
+    val tokenId  = Digest32 @@@ inputBox.id
     val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
     val res = transaction(inputBox, outBox, fee = None)
 

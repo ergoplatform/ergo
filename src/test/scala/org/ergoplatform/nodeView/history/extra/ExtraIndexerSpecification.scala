@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.extra
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, P2PKAddress, UnsignedInput}
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
@@ -298,7 +298,7 @@ object ChainGenerator extends ErgoTestHelpers {
     val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
     inOpt match {
       case Some(input) if cond =>
-        tokens += Tuple2(Digest32 @@ input.id, math.abs(Random.nextInt()))
+        tokens += Tuple2(Digest32 @@@ input.id, math.abs(Random.nextInt()))
       case Some(tokenBox) if !cond =>
         tokenBox.additionalTokens.toArray.foreach(tokens += _)
       case _ =>
@@ -346,7 +346,7 @@ object ChainGenerator extends ErgoTestHelpers {
     val stateContext = state.stateContext
     val nBits: Long = lastHeaderOpt
       .map(parent => history.requiredDifficultyAfter(parent))
-      .map(d => RequiredDifficulty.encodeCompactBits(d))
+      .map(d => DifficultySerializer.encodeCompactBits(d))
       .getOrElse(settings.chainSettings.initialNBits)
 
     val interlinks = lastHeaderOpt

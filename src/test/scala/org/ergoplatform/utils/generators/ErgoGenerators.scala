@@ -2,7 +2,7 @@ package org.ergoplatform.utils.generators
 
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -145,7 +145,7 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
     stateRoot,
     transactionsRoot,
     timestamp,
-    RequiredDifficulty.encodeCompactBits(requiredDifficulty),
+    DifficultySerializer.encodeCompactBits(requiredDifficulty),
     height,
     extensionHash,
     powSolution,

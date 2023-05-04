@@ -35,7 +35,7 @@ class OffChainRegistrySpec
       registry.digest.walletAssetBalances.toMap shouldEqual assetsBalance.toMap
 
       //spend all the outputs
-      registry = registry.updateOnTransaction(Seq.empty, boxes.map(EncodedBoxId @@ _.boxId), Seq.empty)
+      registry = registry.updateOnTransaction(Seq.empty, boxes.map(EncodedBoxId @@@ _.boxId), Seq.empty)
       registry.digest.walletBalance shouldEqual 0
       registry.digest.walletAssetBalances shouldEqual Seq.empty
 
@@ -54,12 +54,12 @@ class OffChainRegistrySpec
         registry.digest.walletBalance shouldEqual fbalance
         registry.digest.walletAssetBalances.toMap shouldEqual fassetsBalance.toMap
 
-        registry = registry.updateOnTransaction(Seq.empty, filtered.map(EncodedBoxId @@ _.boxId), Seq(scan))
+        registry = registry.updateOnTransaction(Seq.empty, filtered.map(EncodedBoxId @@@ _.boxId), Seq(scan))
         registry.digest.walletBalance shouldEqual fbalance
         registry.digest.walletAssetBalances.toMap shouldEqual fassetsBalance.toMap
 
         val scan2 = Scan(scanId, "_", p, ScanWalletInteraction.Off, removeOffchain = true)
-        registry = registry.updateOnTransaction(Seq.empty, filtered.map(EncodedBoxId @@ _.boxId), Seq(scan2))
+        registry = registry.updateOnTransaction(Seq.empty, filtered.map(EncodedBoxId @@@ _.boxId), Seq(scan2))
         registry.digest.walletBalance shouldEqual 0
         registry.digest.walletAssetBalances shouldEqual Seq.empty
       }
@@ -72,7 +72,7 @@ class OffChainRegistrySpec
       val height = Random.nextInt(500) + 1
 
       //apply block to empty registry
-      val registry = OffChainRegistry.empty.updateOnBlock(height, boxes, boxes.map(EncodedBoxId @@ _.boxId))
+      val registry = OffChainRegistry.empty.updateOnBlock(height, boxes, boxes.map(EncodedBoxId @@@ _.boxId))
       val balance = balanceAmount(boxes.map(_.box))
       val assetsBalance = assetAmount(boxes.map(_.box))
       registry.height shouldEqual height

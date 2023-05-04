@@ -34,7 +34,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   private[history] var minimalFullBlockHeightVar: Int
 
-  private var _utxoSnapshotApplied = false //todo: persistence?
+  private var _utxoSnapshotApplied = false
 
   def isUtxoSnapshotApplied = {
     _utxoSnapshotApplied
@@ -51,14 +51,11 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   private var _cachedDownloadPlan: Option[UtxoSetSnapshotDownloadPlan] = None
 
-  private var _peersToDownload: Seq[ConnectedPeer] = Seq.empty //todo: move to ErgoNodeViewSynchronizer?
-
   def registerManifestToDownload(manifest: BatchAVLProverManifest[Digest32],
                                  blockHeight: Height,
                                  peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = {
-    val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight)
+    val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight, peersToDownload)
     _manifest = Some(manifest)
-    _peersToDownload = peersToDownload
     updateUtxoSetSnashotDownloadPlan(plan)
     plan
   }
@@ -71,8 +68,9 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   }
 
   def randomPeerToDownloadChunks(): Option[ConnectedPeer] = {
-    if (_peersToDownload.nonEmpty) {
-      Some(_peersToDownload(Random.nextInt(_peersToDownload.size)))
+    val peers = _cachedDownloadPlan.map(_.peersToDownload).getOrElse(Seq.empty)
+    if (peers.nonEmpty) {
+      Some(peers(Random.nextInt(peers.size)))
     } else {
       None
     }
@@ -161,7 +159,6 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   }
 }
 
-//todo: add peers to download from
 case class UtxoSetSnapshotDownloadPlan(startingTime: Long,
                                        latestUpdateTime: Long,
                                        snapshotHeight: Height,
@@ -169,7 +166,8 @@ case class UtxoSetSnapshotDownloadPlan(startingTime: Long,
                                        utxoSetTreeHeight: Byte,
                                        expectedChunkIds: IndexedSeq[SubtreeId],
                                        downloadedChunkIds: IndexedSeq[Boolean],
-                                       downloadingChunks: Int) {
+                                       downloadingChunks: Int,
+                                       peersToDownload: Seq[ConnectedPeer]) {
 
   def id: Digest32 = utxoSetRootHash
 
@@ -185,11 +183,15 @@ case class UtxoSetSnapshotDownloadPlan(startingTime: Long,
 
 object UtxoSetSnapshotDownloadPlan {
 
-  def fromManifest(manifest: BatchAVLProverManifest[Digest32], blockHeight: Height): UtxoSetSnapshotDownloadPlan = {
+  def fromManifest(manifest: BatchAVLProverManifest[Digest32],
+                   blockHeight: Height,
+                   peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = {
     val subtrees = manifest.subtreesIds
     val now = System.currentTimeMillis()
-    //todo: fix .toByte below by making height byte
-    UtxoSetSnapshotDownloadPlan(now, now, blockHeight, manifest.id, manifest.rootHeight.toByte, subtrees.toIndexedSeq, IndexedSeq.empty, 0)
+
+    // it is safe to call .toByte below, as the whole tree has height <= 127, and manifest even less
+    UtxoSetSnapshotDownloadPlan(now, now, blockHeight, manifest.id, manifest.rootHeight.toByte, subtrees.toIndexedSeq,
+                                IndexedSeq.empty, 0, peersToDownload)
   }
 
 }

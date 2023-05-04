@@ -1622,6 +1622,13 @@ object ErgoNodeViewSynchronizer {
       */
     case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
 
+    /**
+      * Signal for a central node view holder component to initialize UTXO state from UTXO set snapshot
+      * stored in the local database
+      *
+      * @param blockHeight - height of a block corresponding to the UTXO set snapshot
+      * @param blockId - id of a block corresponding to the UTXO set snapshot
+      */
     case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
   }
 

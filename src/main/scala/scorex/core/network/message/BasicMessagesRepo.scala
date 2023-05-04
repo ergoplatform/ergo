@@ -274,6 +274,7 @@ object GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
 
 /**
   * The `SnapshotsInfo` message is a reply to a `GetSnapshotsInfo` message.
+  * It contains information about UTXO set snapshots stored locally.
   */
 object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
   private val SizeLimit = 20000
@@ -301,6 +302,7 @@ object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
     }.toMap
     new SnapshotsInfo(manifests)
   }
+
 }
 
 /**
@@ -320,13 +322,15 @@ object GetManifestSpec extends MessageSpecV1[ManifestId] {
     require(r.remaining < SizeLimit, "Too big GetManifest message")
     Digest32 @@ r.getBytes(Constants.ModifierIdLength)
   }
+
 }
 
 /**
   * The `Manifest` message is a reply to a `GetManifest` message.
+  * It contains serialized manifest, top subtree of a tree authenticating UTXO set snapshot
   */
 object ManifestSpec extends MessageSpecV1[Array[Byte]] {
-  private val SizeLimit = 10000000
+  private val SizeLimit = 4000000
 
   override val messageCode: MessageCode = 79: Byte
 
@@ -343,10 +347,11 @@ object ManifestSpec extends MessageSpecV1[Array[Byte]] {
     val length = r.getUInt().toIntExact
     r.getBytes(length)
   }
+
 }
 
 /**
-  * The `GetManifest` sends send utxo subtree (BatchAVLProverSubtree) identifier
+  * The `GetUtxoSnapshotChunk` sends send utxo subtree (BatchAVLProverSubtree) identifier
   */
 object GetUtxoSnapshotChunkSpec extends MessageSpecV1[SubtreeId] {
   private val SizeLimit = 100
@@ -363,13 +368,14 @@ object GetUtxoSnapshotChunkSpec extends MessageSpecV1[SubtreeId] {
     require(r.remaining < SizeLimit, "Too big GetUtxoSnapshotChunk message")
     Digest32 @@ r.getBytes(Constants.ModifierIdLength)
   }
+
 }
 
 /**
-  * The `Manifest` message is a reply to a `GetManifest` message.
+  * The `UtxoSnapshotChunk` message is a reply to a `GetUtxoSnapshotChunk` message.
   */
 object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
-  private val SizeLimit = 10000000
+  private val SizeLimit = 4000000
 
   override val messageCode: MessageCode = 81: Byte
 
@@ -386,6 +392,7 @@ object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
     val length = r.getUInt().toIntExact
     r.getBytes(length)
   }
+
 }
 
 

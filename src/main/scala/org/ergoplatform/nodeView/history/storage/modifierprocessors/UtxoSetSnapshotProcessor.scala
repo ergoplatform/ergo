@@ -101,6 +101,9 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
+  /**
+    * Write serialized UTXO set snapshot chunk to the database
+    */
   def registerDownloadedChunk(chunkId: Array[Byte], chunkSerialized: Array[Byte]): Unit = {
     utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>

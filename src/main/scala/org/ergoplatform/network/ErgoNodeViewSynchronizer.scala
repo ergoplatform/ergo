@@ -165,6 +165,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var modifiersCacheSize: Int = 0
 
   /**
+    * UTXO set snapshot manifests found in the p2p are stored in this table. The table is cleared when a manifest
+    * if found which available for downloading from at least min number of peers required
+    */
+  private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
+
+  /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
   private def clearInterblockCost(): Unit = {
@@ -550,13 +556,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  def requestSnapshotsInfo(): Unit = {
+  /*
+   * Private helper methods to request UTXO set snapshots metadata and related data (manifests, chunks) from peers
+   */
+
+  private def requestSnapshotsInfo(): Unit = {
+    // ask all the peers supporting UTXO set snapshots for snapshots they have
     val msg = Message(GetSnapshotsInfoSpec, Right(()), None)
     val peers = UtxoSetNetworkingFilter.filter(syncTracker.knownPeers()).toSeq
     networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
   }
 
-  def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
+  private def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
     deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(manifestId), peer) { deliveryCheck =>
       context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
     }
@@ -564,7 +575,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
 
-  def requestUtxoSetChunk(subtreeId: SubtreeId, peer: ConnectedPeer): Unit = {
+  private def requestUtxoSetChunk(subtreeId: SubtreeId, peer: ConnectedPeer): Unit = {
     deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, ModifierId @@ Algos.encode(subtreeId), peer) { deliveryCheck =>
       context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
     }
@@ -572,7 +583,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
 
-  def onDownloadRequest(historyReader: ErgoHistory): Receive = {
+  private def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) =>
       log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
       if (modifiersToFetch.nonEmpty) {
@@ -619,6 +630,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           fetchMax(maxElementsToFetch)
         }
         if (fetched.size == 1 && fetched.head._1 == SnapshotsInfoTypeId.value) {
+          // special case when underlying logic in `fetchMax` is providing a request
+          // to start downloading UTXO set snapshots
           requestSnapshotsInfo()
         } else {
           val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched)
@@ -806,17 +819,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     modifiersByStatus.getOrElse(Requested, Map.empty)
   }
 
-  protected def sendSnapshotsInfo(usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
+  /*
+   * Private helper methods to send UTXO set snapshots related network messages
+   */
+
+  private def sendSnapshotsInfo(usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
     val snapshotsInfo = usr.getSnapshotInfo()
     log.debug(s"Sending snapshots info with ${snapshotsInfo.availableManifests.size} snapshots to $peer")
     val msg = Message(SnapshotsInfoSpec, Right(snapshotsInfo), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
 
-  protected def sendManifest(id: ManifestId, usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
+  private def sendManifest(id: ManifestId, usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
     usr.getManifestBytes(id) match {
-      case Some(manifest) => {
-        val msg = Message(ManifestSpec, Right(manifest), None)
+      case Some(manifestBytes) => {
+        val msg = Message(ManifestSpec, Right(manifestBytes), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
       }
       case _ => log.warn(s"No manifest ${Algos.encode(id)} available")
@@ -824,15 +841,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * UTXO set snapshot manifests found in the p2p are stored in this table. The table is cleared when manifest
-    * available for download from at least min number of peers required
-    */
-  private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
-
-  /**
     * Process information about snapshots got from another peer
     */
-  protected def processSnapshotsInfo(hr: ErgoHistory, snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
+  private def processSnapshotsInfo(hr: ErgoHistory, snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
       log.debug(s"Got manifest $manifestId for height $height from $remote")
       // add manifest to available manifests dictionary if it is not written there yet
@@ -924,7 +935,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                         // shouldn't happen in principle
                         log.error("No best header found when all chunks are downloaded. Please contact developers.")
                     }
-
                   } else {
                     log.warn("UTXO set snapshot already applied, double application attemt")
                   }
@@ -1116,11 +1126,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           deliveryTracker.clearStatusForModifier(modifierId, modifierTypeId, ModifiersStatus.Requested)
         } else {
           // A block section is not delivered on time.
-          log.info(s"Peer ${peer.toString} has not delivered modifier " +
+          log.info(s"Peer ${peer.toString} has not delivered network object " +
                    s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time")
 
-          // Number of block section delivery checks increased or initialized,
-          // except the case where we can have issues with connectivity,
+          // Number of delivery checks for a block section, utxo set snapshot chunk or manifest
+          // increased or initialized, except the case where we can have issues with connectivity,
           // which is currently defined by comparing request time with time the
           // node got last modifier (in future we may consider more precise method)
           val checksDone = deliveryTracker.getRequestedInfo(modifierTypeId, modifierId) match {
@@ -1220,7 +1230,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   // check if we have enough UTXO set snapshots for some height
-  protected def checkUtxoSetManifests(historyReader: ErgoHistory): Unit = {
+  // if so, request manifest from a random peer announced it
+  private def checkUtxoSetManifests(historyReader: ErgoHistory): Unit = {
     val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
 
     if (settings.nodeSettings.utxoSettings.utxoBootstrap &&
@@ -1376,7 +1387,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.reset()
   }
 
-  /** get handlers of messages coming from peers */
+  /** handlers of messages coming from peers */
   private def msgHandlers(hr: ErgoHistory,
                           mp: ErgoMemPool,
                           usrOpt: Option[UtxoStateReader],

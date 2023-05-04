@@ -5090,7 +5090,7 @@ paths:
 
   /utxo/getSnapshotsInfo:
     get:
-      summary: Get information about saved UTXO snapshots
+      summary: Get information about locally stored UTXO snapshots
       operationId: getSnapshotsInfo
       tags:
         - utxo

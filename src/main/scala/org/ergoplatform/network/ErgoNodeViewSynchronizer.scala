@@ -525,18 +525,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * A helper method to ask for block section from given peer
     *
     * @param modifierTypeId - block section type id
-    * @param modifierIds - ids of block section to download
-    * @param peer - peer to download from
-    * @param checksDone - how many times the block section was requested before
-    *                    (non-zero if we're re-requesting the block section, in this case, there should be only
-    *                     one id to request in `modifierIds`
+    * @param modifierIds    - ids of block section to download
+    * @param peer           - peer to download from
+    * @param checksDone     - how many times the block section was requested before
+    *                       (non-zero if we're re-requesting the block section, in this case, there should be only
+    *                       one id to request in `modifierIds`
     */
   def requestBlockSection(modifierTypeId: NetworkObjectTypeId.Value,
                           modifierIds: Seq[ModifierId],
                           peer: ConnectedPeer,
                           checksDone: Int = 0): Unit = {
     log.debug(s"Requesting block sections of type $modifierTypeId : $modifierIds")
-    if(checksDone > 0 && modifierIds.length > 1) {
+    if (checksDone > 0 && modifierIds.length > 1) {
       log.warn(s"Incorrect state, checksDone > 0 && modifierIds.length > 1 , for $modifierIds of type $modifierTypeId")
     }
     val msg = Message(RequestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
@@ -557,7 +557,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
-    deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(manifestId), peer){ deliveryCheck =>
+    deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(manifestId), peer) { deliveryCheck =>
       context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
     }
     val msg = Message(GetManifestSpec, Right(manifestId), None)
@@ -565,7 +565,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   def requestUtxoSetChunk(subtreeId: SubtreeId, peer: ConnectedPeer): Unit = {
-    deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, ModifierId @@ Algos.encode(subtreeId), peer){ deliveryCheck =>
+    deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, ModifierId @@ Algos.encode(subtreeId), peer) { deliveryCheck =>
       context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
     }
     val msg = Message(GetUtxoSnapshotChunkSpec, Right(subtreeId), None)
@@ -575,7 +575,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) =>
       log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
-      if(modifiersToFetch.nonEmpty) {
+      if (modifiersToFetch.nonEmpty) {
         requestDownload(
           maxModifiers = deliveryTracker.modifiersToDownload,
           minModifiersPerBucket,
@@ -600,7 +600,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Modifier download method that is given min/max constraints for modifiers to download from peers.
     * It sends requests for modifiers to given peers in optimally sized batches.
     *
-    * @param maxModifiers maximum modifiers to download
+    * @param maxModifiers          maximum modifiers to download
     * @param minModifiersPerBucket minimum modifiers to download per bucket
     * @param maxModifiersPerBucket maximum modifiers to download per bucket
     * @param getPeersOpt           optionally get peers to download from, all peers have the same PeerSyncState
@@ -608,9 +608,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
                                (getPeersOpt: => Option[Iterable[ConnectedPeer]])
-                               (fetchMax: Int => Map[NetworkObjectTypeId.Value, Seq[ModifierId]]): Unit =
-    getPeersOpt
-      .foreach { peers =>
+                               (fetchMax: Int => Map[NetworkObjectTypeId.Value, Seq[ModifierId]]): Unit = {
+    getPeersOpt match {
+      case Some(peers) if peers.nonEmpty =>
         val peersCount = peers.size
         val maxElementsToFetch = Math.min(maxModifiers, peersCount * maxModifiersPerBucket)
         val fetched = if (maxElementsToFetch <= 0) {
@@ -620,22 +620,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
         if (fetched.size == 1 && fetched.head._1 == SnapshotsInfoTypeId.value) {
           requestSnapshotsInfo()
+        } else {
+          val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched)
+          // collect and log useful downloading progress information, don't worry it does not run frequently
+          modifiersByBucket.headOption.foreach { _ =>
+            modifiersByBucket
+              .groupBy(_._1._2)
+              .mapValues(_.map(_._2.size))
+              .map { case (modType, batchSizes) =>
+                s"Downloading from peers : type[$modType] of ${batchSizes.size} batches each of ~ size: ${batchSizes.take(2).max}"
+              }.foreach(log.info(_))
+          }
+          // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
+          modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
+            requestBlockSection(modifierTypeId, modifierIds, peer)
+          }
         }
-        val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched)
-        // collect and log useful downloading progress information, don't worry it does not run frequently
-        modifiersByBucket.headOption.foreach { _ =>
-          modifiersByBucket
-            .groupBy(_._1._2)
-            .mapValues(_.map(_._2.size))
-            .map { case (modType, batchSizes) =>
-              s"Downloading from peers : type[$modType] of ${batchSizes.size} batches each of ~ size: ${batchSizes.take(2).max}"
-            }.foreach(log.info(_))
-        }
-        // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
-        modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
-          requestBlockSection(modifierTypeId, modifierIds, peer)
-        }
-      }
+      case _ =>
+        log.warn("No peers available in requestDownload")
+    }
+  }
 
   private def transactionsFromRemote(requestedModifiers: Map[ModifierId, Array[Byte]],
                                      mp: ErgoMemPool,

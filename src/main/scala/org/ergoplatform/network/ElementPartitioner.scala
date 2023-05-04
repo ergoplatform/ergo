@@ -10,12 +10,12 @@ object ElementPartitioner {
     *
     * @param buckets to distribute elements into
     * @param minElementsPerBucket minimum elements to distribute per bucket
+    * @param fetchedElems elements to distribute over the buckets
     * @return elements evenly grouped under unique bucket-type keys
     */
-  def distribute[B, T, I](
-    buckets: Iterable[B],
-    minElementsPerBucket: Int,
-    fetchedElems: Map[T, Seq[I]]): Map[(B, T), Seq[I]] = {
+  def distribute[B, T, I](buckets: Iterable[B],
+                          minElementsPerBucket: Int,
+                          fetchedElems: Map[T, Seq[I]]): Map[(B, T), Seq[I]] = {
 
     val bucketsCount = buckets.size
 

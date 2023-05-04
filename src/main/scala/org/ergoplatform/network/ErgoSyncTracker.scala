@@ -166,6 +166,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
     }
   }
 
+  /**
+    * @return all the peers ever sent sync message to the node and still connected
+    */
   def knownPeers(): Iterable[ConnectedPeer] = statuses.keys
 
   /**

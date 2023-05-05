@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoState}
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
@@ -27,19 +28,33 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   import org.ergoplatform.settings.ErgoAlgos.HF
 
+  // node config to read history-related settings here and in descendants
   protected val settings: ErgoSettings
+
+  // database to read history-related objects here and in descendants
   protected val historyStorage: HistoryStorage
 
+  // minimal height to applu full blocks from
+  // its value depends on node settings,
+  // if download with UTXO set snapshot is used, the value is being set to a first block after the snapshot,
+  // if blockToKeep > 0, the value is being set to a first block of blockchain suffix after headers downloaded
   private[history] var minimalFullBlockHeightVar: Int
 
-  private var _utxoSnapshotApplied = false
 
-  def isUtxoSnapshotApplied = {
-    _utxoSnapshotApplied
+  /**
+    * @return if UTXO set snapshot was applied during this session (stored in memory only).
+    *         This flag is needed to prevent double application of UTXO set snapshot.
+    *         After first full-block block application not needed anymore.
+    */
+  def isUtxoSnapshotApplied: Boolean = {
+    minimalFullBlockHeightVar > ErgoHistory.GenesisHeight
   }
 
+  /**
+    * Writes that UTXO set snapshot applied at height `height`. Starts full blocks applications since the next block
+    * after.
+    */
   def utxoSnapshotApplied(height: Height): Unit = {
-    _utxoSnapshotApplied = true
     minimalFullBlockHeightVar = height + 1
   }
 
@@ -157,8 +172,19 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   }
 }
 
-case class UtxoSetSnapshotDownloadPlan(startingTime: Long,
-                                       latestUpdateTime: Long,
+
+/**
+  * Entity which stores information about state of UTXO set snapshots downloading
+  * @param latestUpdateTime
+  * @param snapshotHeight
+  * @param utxoSetRootHash
+  * @param utxoSetTreeHeight
+  * @param expectedChunkIds
+  * @param downloadedChunkIds
+  * @param downloadingChunks
+  * @param peersToDownload
+  */
+case class UtxoSetSnapshotDownloadPlan(latestUpdateTime: Long,
                                        snapshotHeight: Height,
                                        utxoSetRootHash: Digest32,
                                        utxoSetTreeHeight: Byte,
@@ -169,8 +195,14 @@ case class UtxoSetSnapshotDownloadPlan(startingTime: Long,
 
   def id: Digest32 = utxoSetRootHash
 
+  /**
+    * @return how many chunks to download
+    */
   def totalChunks: Int = expectedChunkIds.size
 
+  /**
+    * @return whether UTXO set snapshot fully downloaded
+    */
   def fullyDownloaded: Boolean = {
     (expectedChunkIds.size == downloadedChunkIds.size) &&
       downloadingChunks == 0 &&
@@ -181,6 +213,10 @@ case class UtxoSetSnapshotDownloadPlan(startingTime: Long,
 
 object UtxoSetSnapshotDownloadPlan {
 
+  /**
+    * Create UTXO set snapshot download plan from manifest, height of a block corresponding to UTXO set
+    * manifest represents, and peers to download UTXO set snapshot from
+    */
   def fromManifest(manifest: BatchAVLProverManifest[Digest32],
                    blockHeight: Height,
                    peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = {
@@ -188,7 +224,7 @@ object UtxoSetSnapshotDownloadPlan {
     val now = System.currentTimeMillis()
 
     // it is safe to call .toByte below, as the whole tree has height <= 127, and manifest even less
-    UtxoSetSnapshotDownloadPlan(now, now, blockHeight, manifest.id, manifest.rootHeight.toByte, subtrees.toIndexedSeq,
+    UtxoSetSnapshotDownloadPlan(now, blockHeight, manifest.id, manifest.rootHeight.toByte, subtrees.toIndexedSeq,
                                 IndexedSeq.empty, 0, peersToDownload)
   }
 

@@ -21,9 +21,7 @@ import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLD
 /**
   * Parts of history processing and storage corresponding to UTXO set snapshot processing and storage
   *
-  * Stores:
-  * - writes chunks
-  * - writes data for incomplete snapshots
+  * Stores UTXO set snapshots manifests and chunks for incomplete snapshots.
   */
 trait UtxoSetSnapshotProcessor extends ScorexLogging {
 

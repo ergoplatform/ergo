@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoState}
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoAlgos, ErgoSettings}
 import scorex.core.VersionTag
 import scorex.core.network.ConnectedPeer
 import scorex.core.serialization.SubtreeSerializer
@@ -17,7 +17,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
 import scala.util.{Random, Try}
-import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
 /**
   * Parts of history processing and storage corresponding to UTXO set snapshot processing and storage
@@ -40,6 +40,11 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   // if blockToKeep > 0, the value is being set to a first block of blockchain suffix after headers downloaded
   private[history] var minimalFullBlockHeightVar: Int
 
+  private val downloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
+
+  private var _manifest: Option[BatchAVLProverManifest[Digest32]] = None
+
+  private var _cachedDownloadPlan: Option[UtxoSetSnapshotDownloadPlan] = None
 
   /**
     * @return if UTXO set snapshot was applied during this session (stored in memory only).
@@ -58,12 +63,13 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     minimalFullBlockHeightVar = height + 1
   }
 
-  private val downloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
-
-  private var _manifest: Option[BatchAVLProverManifest[Digest32]] = None
-
-  private var _cachedDownloadPlan: Option[UtxoSetSnapshotDownloadPlan] = None
-
+  /**
+    *
+    * @param manifest
+    * @param blockHeight
+    * @param peersToDownload
+    * @return
+    */
   def registerManifestToDownload(manifest: BatchAVLProverManifest[Digest32],
                                  blockHeight: Height,
                                  peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = {
@@ -73,6 +79,9 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     plan
   }
 
+  /**
+    * @return
+    */
   def utxoSetSnapshotDownloadPlan(): Option[UtxoSetSnapshotDownloadPlan] = {
     _cachedDownloadPlan match {
       case s@Some(_) => s
@@ -80,6 +89,9 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
+  /**
+    * @return
+    */
   def randomPeerToDownloadChunks(): Option[ConnectedPeer] = {
     val peers = _cachedDownloadPlan.map(_.peersToDownload).getOrElse(Seq.empty)
     if (peers.nonEmpty) {
@@ -164,69 +176,10 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
         log.info("Finished UTXO set snapshot transfer into state database")
         ldbStorage.restorePrunedProver().map { prunedAvlProver =>
           new PersistentBatchAVLProver[Digest32, HF] {
-            override var avlProver = prunedAvlProver
-            override val storage = ldbStorage
+            override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
+            override val storage: VersionedLDBAVLStorage = ldbStorage
           }
         }
     }
   }
-}
-
-
-/**
-  * Entity which stores information about state of UTXO set snapshots downloading
-  * @param latestUpdateTime - latest time when anything was updated for the state of UTXO set snapshot
-  * @param snapshotHeight - height of a block UTXO set snapshot is corresponding to (UTXO set if after the block applied)
-  * @param utxoSetRootHash - root hash of AVL+ tree which is authenticating UTXO set snasphot
-  * @param utxoSetTreeHeight - tree height of AVL+ tree which is authenticating UTXO set snasphot
-  * @param expectedChunkIds - ids of UTXO set snasphot chunks to be downloaded
-  * @param downloadedChunkIds - shapshot chunks already downloaded, in form of boolean map over
-  *                             `expectedChunkIds` (true = downloaded)
-  * @param downloadingChunks - number of UTXO set shapshot chunks the node is currently downloading
-  * @param peersToDownload - peers UTXO set snapshot chunks can be downloaded from
-  */
-case class UtxoSetSnapshotDownloadPlan(latestUpdateTime: Long,
-                                       snapshotHeight: Height,
-                                       utxoSetRootHash: Digest32,
-                                       utxoSetTreeHeight: Byte,
-                                       expectedChunkIds: IndexedSeq[SubtreeId],
-                                       downloadedChunkIds: IndexedSeq[Boolean],
-                                       downloadingChunks: Int,
-                                       peersToDownload: Seq[ConnectedPeer]) {
-
-  def id: Digest32 = utxoSetRootHash
-
-  /**
-    * @return how many chunks to download
-    */
-  def totalChunks: Int = expectedChunkIds.size
-
-  /**
-    * @return whether UTXO set snapshot fully downloaded
-    */
-  def fullyDownloaded: Boolean = {
-    (expectedChunkIds.size == downloadedChunkIds.size) &&
-      downloadingChunks == 0 &&
-      downloadedChunkIds.forall(_ == true)
-  }
-
-}
-
-object UtxoSetSnapshotDownloadPlan {
-
-  /**
-    * Create UTXO set snapshot download plan from manifest, height of a block corresponding to UTXO set
-    * manifest represents, and peers to download UTXO set snapshot from
-    */
-  def fromManifest(manifest: BatchAVLProverManifest[Digest32],
-                   blockHeight: Height,
-                   peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = {
-    val subtrees = manifest.subtreesIds
-    val now = System.currentTimeMillis()
-
-    // it is safe to call .toByte below, as the whole tree has height <= 127, and manifest even less
-    UtxoSetSnapshotDownloadPlan(now, blockHeight, manifest.id, manifest.rootHeight.toByte, subtrees.toIndexedSeq,
-                                IndexedSeq.empty, 0, peersToDownload)
-  }
-
 }

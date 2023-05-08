@@ -175,14 +175,15 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
 /**
   * Entity which stores information about state of UTXO set snapshots downloading
-  * @param latestUpdateTime
-  * @param snapshotHeight
-  * @param utxoSetRootHash
-  * @param utxoSetTreeHeight
-  * @param expectedChunkIds
-  * @param downloadedChunkIds
-  * @param downloadingChunks
-  * @param peersToDownload
+  * @param latestUpdateTime - latest time when anything was updated for the state of UTXO set snapshot
+  * @param snapshotHeight - height of a block UTXO set snapshot is corresponding to (UTXO set if after the block applied)
+  * @param utxoSetRootHash - root hash of AVL+ tree which is authenticating UTXO set snasphot
+  * @param utxoSetTreeHeight - tree height of AVL+ tree which is authenticating UTXO set snasphot
+  * @param expectedChunkIds - ids of UTXO set snasphot chunks to be downloaded
+  * @param downloadedChunkIds - shapshot chunks already downloaded, in form of boolean map over
+  *                             `expectedChunkIds` (true = downloaded)
+  * @param downloadingChunks - number of UTXO set shapshot chunks the node is currently downloading
+  * @param peersToDownload - peers UTXO set snapshot chunks can be downloaded from
   */
 case class UtxoSetSnapshotDownloadPlan(latestUpdateTime: Long,
                                        snapshotHeight: Height,

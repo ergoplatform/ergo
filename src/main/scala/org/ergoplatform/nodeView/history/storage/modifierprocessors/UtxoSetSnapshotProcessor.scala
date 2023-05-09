@@ -16,7 +16,7 @@ import scorex.db.LDBVersionedStore
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Try}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
 /**
@@ -63,12 +63,16 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     minimalFullBlockHeightVar = height + 1
   }
 
+  private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {
+    _cachedDownloadPlan = Some(plan)
+  }
+
   /**
-    *
-    * @param manifest
-    * @param blockHeight
-    * @param peersToDownload
-    * @return
+    * Register manifest as one to be downloaded and create download plan from it
+    * @param manifest - manifest corresponding to UTXO set snapshot to be downloaded
+    * @param blockHeight - height of a block corresponding to the manifest
+    * @param peersToDownload - peers to download chunks related to manifest from
+    * @return download plan
     */
   def registerManifestToDownload(manifest: BatchAVLProverManifest[Digest32],
                                  blockHeight: Height,
@@ -80,7 +84,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   }
 
   /**
-    * @return
+    * @return UTXO set snapshot download plan, if available
     */
   def utxoSetSnapshotDownloadPlan(): Option[UtxoSetSnapshotDownloadPlan] = {
     _cachedDownloadPlan match {
@@ -90,7 +94,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   }
 
   /**
-    * @return
+    * @return random peer from which UTXO snapshot chunks can be requested
     */
   def randomPeerToDownloadChunks(): Option[ConnectedPeer] = {
     val peers = _cachedDownloadPlan.map(_.peersToDownload).getOrElse(Seq.empty)
@@ -101,6 +105,9 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
+  /**
+    * @return up to `howMany` ids of UTXO set snapshot chunks to download
+    */
   def getChunkIdsToDownload(howMany: Int): Seq[SubtreeId] = {
     utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
@@ -114,7 +121,11 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
         log.info(s"Downloaded or waiting ${plan.downloadedChunkIds.size} chunks out of ${expected.size}, downloading ${toDownload.size} more")
         val newDownloaded = plan.downloadedChunkIds ++ toDownload.map(_ => false)
         val newDownloading = plan.downloadingChunks + toDownload.size
-        val updPlan = plan.copy(latestUpdateTime = System.currentTimeMillis(), downloadedChunkIds = newDownloaded, downloadingChunks = newDownloading)
+        val updPlan = plan.copy(
+          latestUpdateTime = System.currentTimeMillis(),
+          downloadedChunkIds = newDownloaded,
+          downloadingChunks = newDownloading
+        )
         _cachedDownloadPlan = Some(updPlan)
         toDownload
 
@@ -146,6 +157,9 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
+  /**
+    * @return iterator for chunks downloded. Reads them from database one-by-one when requested.
+    */
   def downloadedChunksIterator(): Iterator[BatchAVLProverSubtree[Digest32]] = {
     utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
@@ -156,30 +170,39 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
             .flatMap(bs => SubtreeSerializer.parseBytesTry(bs).toOption)
         }
       case None =>
-        log.error("todo: msg") // todo:
+        log.error("No download plan found in downloadedChunksIterator")
       Iterator.empty
     }
   }
 
-  private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {
-    _cachedDownloadPlan = Some(plan)
-  }
-
+  /**
+    * Create disk-persistent authenticated AVL+ tree prover
+    * @param stateStore - disk database where AVL+ tree will be after restoration
+    * @param blockId - id of a block corresponding to the tree (tree is on top of a state after the block)
+    * @return prover with initialized tree database
+    */
   def createPersistentProver(stateStore: LDBVersionedStore,
                              blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = {
-    val manifest = _manifest.get //todo: .get
-    log.info("Starting UTXO set snapshot transfer into state database")
-    val esc = ErgoStateReader.storageStateContext(stateStore, settings)
-    val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
-    VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
-      ldbStorage =>
-        log.info("Finished UTXO set snapshot transfer into state database")
-        ldbStorage.restorePrunedProver().map { prunedAvlProver =>
-          new PersistentBatchAVLProver[Digest32, HF] {
-            override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
-            override val storage: VersionedLDBAVLStorage = ldbStorage
-          }
+    _manifest match {
+      case Some(manifest) =>
+        log.info("Starting UTXO set snapshot transfer into state database")
+        val esc = ErgoStateReader.storageStateContext(stateStore, settings)
+        val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
+        VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
+          ldbStorage =>
+            log.info("Finished UTXO set snapshot transfer into state database")
+            ldbStorage.restorePrunedProver().map {
+              prunedAvlProver =>
+                new PersistentBatchAVLProver[Digest32, HF] {
+                  override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
+                  override val storage: VersionedLDBAVLStorage = ldbStorage
+                }
+            }
         }
+      case None =>
+        val msg = "No manifest available in createPersistentProver"
+        log.error(msg)
+        Failure(new Exception(msg))
     }
   }
 }

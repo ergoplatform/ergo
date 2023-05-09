@@ -113,9 +113,15 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
       }
     }
 
+  /**
+    * @return object with `id` if it is in the objects database
+    */
   def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(idToBytes(id)).orElse(extraStore.get(idToBytes(id)))
   def get(id: Array[Byte]): Option[Array[Byte]] = objectsStore.get(id).orElse(extraStore.get(id))
 
+  /**
+    * @return if object with `id` is in the objects database
+    */
   def contains(id: Array[Byte]): Boolean = get(id).isDefined
   def contains(id: ModifierId): Boolean = get(id).isDefined
 

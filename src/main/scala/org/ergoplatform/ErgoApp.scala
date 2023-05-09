@@ -59,15 +59,17 @@ class ErgoApp(args: Args) extends ScorexLogging {
     else None
   upnpGateway.foreach(_.addPort(scorexSettings.network.bindAddress.getPort))
 
-  //an address to send to peers
-  private val externalSocketAddress: Option[InetSocketAddress] =
-  scorexSettings.network.declaredAddress orElse {
-    upnpGateway.map(u =>
-      new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort)
-    )
+  // own address to send to peers
+  private val externalSocketAddress: Option[InetSocketAddress] = {
+    scorexSettings.network.declaredAddress orElse {
+      upnpGateway.map(u =>
+        new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort)
+      )
+    }
   }
 
-  private val basicSpecs = {
+  // descriptors of p2p networking protocol messages
+  private val p2pMessageSpecifications = {
     Seq(
       GetPeersSpec,
       new PeersSpec(scorexSettings.network.maxPeerSpecObjects),
@@ -85,7 +87,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   }
 
   private val scorexContext = ScorexContext(
-    messageSpecs        = basicSpecs,
+    messageSpecs        = p2pMessageSpecifications,
     upnpGateway         = upnpGateway,
     externalNodeAddress = externalSocketAddress
   )

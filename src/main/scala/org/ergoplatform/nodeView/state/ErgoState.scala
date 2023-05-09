@@ -78,9 +78,7 @@ object ErgoState extends ScorexLogging {
 
   type ModifierProcessing[T <: ErgoState[T]] = PartialFunction[BlockSection, Try[T]]
 
-  def stateDir(settings: ErgoSettings): File = {
-    new File(s"${settings.directory}/state")
-  }
+  def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
   /**
     * Resolves state changing operations from transactions. There could be invalid sequence

@@ -26,7 +26,7 @@ import scorex.util.ModifierId
 import scala.util.{Failure, Success, Try}
 
 /**
-  * Utxo set implementation
+  * Utxo set based state implementation
   *
   * @param persistentProver - persistent prover that builds authenticated AVL+ tree on top of utxo set
   * @param store            - storage of persistentProver that also keeps metadata
@@ -262,15 +262,16 @@ object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
-  // block-specific metadata to write into database (in addition to AVL+ tree)
 
   /**
+    * Block-specific metadata to write into database (in addition to AVL+ tree)
     *
     * @param modId - ID of a block (header) corresponding to UTXO set
     * @param stateRoot - UTXO set digest (hash and tree height) AFTER applying block `modId`
-    * @param currentEmissionBoxOpt
-    * @param context
-    * @return
+    * @param currentEmissionBoxOpt - current unspent emission script box
+    * @param context - current state context used in input scripts validation (for the next block)
+    *
+    * @return binary-serialized metadata
     */
   def metadata(modId: VersionTag,
                stateRoot: ADDigest,
@@ -286,6 +287,9 @@ object UtxoState {
     Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
+  /**
+    * @return UTXO set based state on top of existing database, or genesis state if the database is empty
+    */
   def create(dir: File, settings: ErgoSettings): UtxoState = {
     val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))

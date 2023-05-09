@@ -17,8 +17,8 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
   /**
     * Update this database atomically with a batch of insertion and removal operations
     *
-    * @param toInsertKeys - keys pf key-value pairs to insert into database
-    * @param toInsertValues - values pf key-value pairs to insert into database
+    * @param toInsertKeys - keys of key-value pairs to insert into database
+    * @param toInsertValues - values of key-value pairs to insert into database
     * @param toRemove - keys of key-value pairs to remove from the database
     * @return - error if it happens, or success status
     */

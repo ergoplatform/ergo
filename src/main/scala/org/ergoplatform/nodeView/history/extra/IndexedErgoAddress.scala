@@ -215,10 +215,13 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @param txTarget  - remove transaction numbers above this number
     * @param boxTarget - remove box numbers above this number and revert the balance
     * @param _history  - history handle to update address in database
+    * @return modifier ids to remove
     */
-  private[extra] def rollback(txTarget: Long, boxTarget: Long, _history: ErgoHistory)(implicit segmentTreshold: Int): Unit = {
+  private[extra] def rollback(txTarget: Long, boxTarget: Long, _history: ErgoHistory)(implicit segmentTreshold: Int): Array[ModifierId] = {
 
-    if(txs.last <= txTarget && abs(boxes.last) <= boxTarget) return
+    if((txCount == 0 && boxCount == 0) || // address already rolled back
+       (txs.last <= txTarget && abs(boxes.last) <= boxTarget)) // no rollback needed
+      return Array.empty[ModifierId]
 
     def history: ErgoHistoryReader = _history.getReader
 
@@ -258,8 +261,8 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
     // Save changes
     _history.historyStorage.insertExtra(Array.empty, toSave.toArray)
-    _history.historyStorage.removeExtra(toRemove.toArray)
 
+    toRemove.toArray
   }
 
   /**

@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
@@ -9,8 +8,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.{AssetUtils, Constants}
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.core.VersionTag
-import scorex.crypto.authds.ADKey
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
@@ -20,6 +18,7 @@ import scorex.db.LDBVersionedStore
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.wallet.transactions.TransactionBuilder
+import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 
 import scala.collection.mutable
@@ -32,17 +31,21 @@ import scala.collection.mutable
   * * boxes, spent or not
   *
   */
-class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
+class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
 
   private val keepHistory = ws.keepSpentBoxes
+
+  // Internal buffer that holds unspent boxes for fast retreival
+  private[persistence] val cache: mutable.HashMap[ModifierId,TrackedBox] = mutable.HashMap[ModifierId,TrackedBox]()
 
   /**
     * Close wallet registry storage
     */
   def close(): Unit = {
     store.close()
+    cache.clear()
   }
 
   /**
@@ -52,7 +55,20 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @return wallet related box if it is stored in the database, None otherwise
     */
   def getBox(id: BoxId): Option[TrackedBox] = {
-    store.get(boxKey(id)).flatMap(bs => TrackedBoxSerializer.parseBytesTry(bs).toOption)
+    cache.get(bytesToId(id)) match {
+      case Some(tb) => Some(tb)
+      case None =>
+        store.get(boxKey(id)) match {
+          case Some(bytes) =>
+            TrackedBoxSerializer.parseBytesTry(bytes).toOption match {
+              case Some(tb) =>
+                cache.put(tb.boxId, tb)
+                Some(tb)
+              case None => None
+            }
+          case None => None
+        }
+    }
   }
 
 
@@ -62,7 +78,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param ids - box identifier
     * @return wallet related boxes (optional result for each box)
     */
-  def getBoxes(ids: Seq[BoxId]): Seq[Option[TrackedBox]] = {
+  def getBoxes(ids: Array[BoxId]): Array[Option[TrackedBox]] = {
     ids.map(id => getBox(id))
   }
 
@@ -71,11 +87,8 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     *
     * @return sequences of all the unspent boxes from the database
     */
-  def allUnspentBoxes(): Seq[TrackedBox] = {
-    store.getRange(firstUnspentBoxKey, lastUnspentBoxKey)
-      .flatMap { case (_, boxId) =>
-        getBox(ADKey @@ boxId)
-      }
+  def allUnspentBoxes(): Array[TrackedBox] = {
+    store.getRange(firstUnspentBoxKey, lastUnspentBoxKey).flatMap(pair => getBox(ADKey @@ pair._2))
   }
 
   /**
@@ -84,7 +97,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param scanId - scan identifier
     * @return sequences of scan-related unspent boxes found in the database
     */
-  def unspentBoxes(scanId: ScanId, limit: Int = Int.MaxValue): Seq[TrackedBox] = {
+  def unspentBoxes(scanId: ScanId, limit: Int = Int.MaxValue): Array[TrackedBox] = {
     store
       .getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId), limit)
       .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
@@ -98,7 +111,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param heightTo - max inclusion height of unspent boxes
     * @return sequences of scan-related boxes found in the database
     */
-  def boxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+  def boxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Array[TrackedBox] =
     store
       .getRange(fromScanBoxSpaceKey(scanId, heightFrom), toScanBoxSpaceKey(scanId, heightTo))
       .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
@@ -111,7 +124,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param heightTo   - max inclusion height of unspent boxes
     * @return sequences of scan-related unspent boxes found in the database
     */
-  def unspentBoxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+  def unspentBoxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Array[TrackedBox] =
     boxesByInclusionHeight(scanId, heightFrom, heightTo).filter(_.spendingHeightOpt.isEmpty)
 
   /**
@@ -122,7 +135,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param heightTo   - max inclusion height of unspent boxes
     * @return sequences of scan-related spent boxes found in the database
     */
-  def spentBoxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+  def spentBoxesByInclusionHeight(scanId: ScanId, heightFrom: Height, heightTo: Height): Array[TrackedBox] =
     boxesByInclusionHeight(scanId, heightFrom, heightTo).filter(_.spendingHeightOpt.isDefined)
 
   /**
@@ -131,7 +144,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param scanId - scan identifier
     * @return sequences of scan-related spent boxes found in the database
     */
-  def spentBoxes(scanId: ScanId): Seq[TrackedBox] = {
+  def spentBoxes(scanId: ScanId): Array[TrackedBox] = {
     store.getRange(firstSpentScanBoxSpaceKey(scanId), lastSpentScanBoxSpaceKey(scanId))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
@@ -141,12 +154,12 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   /**
     * Unspent boxes belong to the wallet (payments scan)
     */
-  def walletUnspentBoxes(limit: Int = Int.MaxValue): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId, limit)
+  def walletUnspentBoxes(limit: Int = Int.MaxValue): Array[TrackedBox] = unspentBoxes(Constants.PaymentsScanId, limit)
 
   /**
     * Spent boxes belong to the wallet (payments scan)
     */
-  def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsScanId)
+  def walletSpentBoxes(): Array[TrackedBox] = spentBoxes(Constants.PaymentsScanId)
 
   /**
     * Read wallet boxes, both spent or not
@@ -154,7 +167,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param scanId scan identifier
     * @return sequence of scan-related boxes
     */
-  def confirmedBoxes(scanId: ScanId): Seq[TrackedBox] = {
+  def confirmedBoxes(scanId: ScanId): Array[TrackedBox] = {
     unspentBoxes(scanId) ++ spentBoxes(scanId)
   }
 
@@ -163,7 +176,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     *
     * @return sequence of (P2PK-payment)-related boxes
     */
-  def walletConfirmedBoxes(): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsScanId)
+  def walletConfirmedBoxes(): Array[TrackedBox] = confirmedBoxes(Constants.PaymentsScanId)
 
   /**
     * Read transaction with wallet-related metadata
@@ -180,7 +193,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     *
     * @return all the transactions for all the scans
     */
-  def allWalletTxs(): Seq[WalletTransaction] = {
+  def allWalletTxs(): Array[WalletTransaction] = {
     store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
       .flatMap { case (_, txBytes) =>
         WalletTransactionSerializer.parseBytesTry(txBytes).toOption
@@ -194,7 +207,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param heightTo - height to finish at (inclusive)
     * @return - wallet transactions for the heights range provided
     */
-  def walletTxsBetween(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[WalletTransaction] = {
+  def walletTxsBetween(scanId: ScanId, heightFrom: Height, heightTo: Height): Array[WalletTransaction] = {
     val firstKey = firstIncludedScanTransactionSpaceKey(scanId, heightFrom)
     val lastKey = lastIncludedScanTransactionSpaceKey(scanId, heightTo)
 
@@ -243,6 +256,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = {
 
     // first, put newly created outputs and related transactions into key-value bag
+    cache ++= scanResults.outputs.map(b => b.boxId -> b)
     val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
     val bag2 = putTxs(bag1, scanResults.relatedTransactions)
 
@@ -295,8 +309,10 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     }
   }
 
-  def rollback(version: VersionTag): Try[Unit] =
+  def rollback(version: VersionTag): Try[Unit] = {
+    cache.clear()
     store.rollbackTo(scorex.core.versionToBytes(version))
+  }
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
@@ -326,9 +342,12 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
         tb.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = spendingTxIdOpt)
       }
 
+      cache --= spentBoxes.map(_._2.boxId)
       val bagBeforePut = removeBoxes(bag, spentBoxes.map(_._2))
+      cache ++= updatedBoxes.map(b => b.boxId -> b)
       putBoxes(bagBeforePut, updatedBoxes)
     } else {
+      cache --= spentBoxes.map(_._2.boxId)
       removeBoxes(bag, spentBoxes.map(_._2))
     }
   }
@@ -353,12 +372,15 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
       case (false, false) =>
         // replace scans of the box by removing it along with indexes related to old scans,
         // and then adding the box with indexes related to the new scans
+        cache.update(oldBox.get.boxId, newBox)
         putBox(removeBox(bag0, oldBox.get), newBox)
       case (false, true) =>
         // if new scans are empty, remove the box along with indexes
+        cache.remove(oldBox.get.boxId)
         removeBox(bag0, oldBox.get)
       case (true, false) =>
         // if old scans are empty, add the box along with indexes
+        cache.put(newBox.boxId, newBox)
         putBox(bag0, newBox)
       case (true, true) =>
         //old and new scans are empty, can't do anything useful
@@ -542,7 +564,14 @@ object WalletRegistry {
 
   private def boxKey(trackedBox: TrackedBox): Array[Byte] = BoxKeyPrefix +: trackedBox.box.id
 
-  private def boxKey(id: BoxId): Array[Byte] = BoxKeyPrefix +: id
+  private def boxKey(id: BoxId): Array[Byte] = {
+    // exported from ArrayOps +: to avoid boxing
+    val currentLength = id.length
+    val result = new Array[Byte](currentLength + 1)
+    result(0) = BoxKeyPrefix
+    Array.copy(id, 0, result, 1, currentLength)
+    result
+  }
 
   private def txKey(id: ModifierId): Array[Byte] = TxKeyPrefix +: idToBytes(id)
 

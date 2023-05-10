@@ -53,14 +53,14 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
     TrackedBox(box, 2, Set(Constants.PaymentsScanId))
   }
 
-  val scanResults0 = ScanResults(boxes, Seq.empty, Seq.empty)
+  val scanResults0 = ScanResults(boxes.toArray, Array.empty, Array.empty)
   registry.updateOnBlock(scanResults0, ModifierId @@ Base16.encode(Array.fill(32)(0: Byte)), 1).get
   println("keys: " + walletVars.proverOpt.get.secretKeys.size)
 
   val bts0 = System.currentTimeMillis()
   val boxesRead = registry.unspentBoxes(Constants.PaymentsScanId)
   val bts = System.currentTimeMillis()
-  println("boxes read: " + boxesRead.size)
+  println("boxes read: " + boxesRead.length)
   println("boxes read time: " + (bts - bts0) + " ms")
 
   val stateContext = storage.readStateContext(parameters)
@@ -72,13 +72,13 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
     WalletTransaction(tx, 2, Seq(Constants.PaymentsScanId))
   }
 
-  val scanResults1 = ScanResults(Seq.empty, Seq.empty, txs)
+  val scanResults1 = ScanResults(Array.empty, Array.empty, txs.toArray)
   registry.updateOnBlock(scanResults1, ModifierId @@ Base16.encode(Array.fill(32)(1: Byte)), 2).get
 
   val tts0 = System.currentTimeMillis()
   val txsRead = registry.allWalletTxs()
   val tts = System.currentTimeMillis()
-  println("txs read: " + txsRead.size)
+  println("txs read: " + txsRead.length)
   println("txs read time: " + (tts - tts0) + " ms")
 
 }

@@ -94,7 +94,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     *
     * @param dumpStorage   - non-versioned storage to dump tree to
     * @param manifestDepth - depth of manifest tree
-    * @param expectedRootHash - expected UTXO set aunthenticating tree root hash
+    * @param expectedRootHash - expected UTXO set authenticating tree root hash
     * @return - hash of root node of tree, or failure if an error (e.g. in database) happened
     */
   def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Byte, expectedRootHash: Array[Byte]): Try[Array[Byte]] = {

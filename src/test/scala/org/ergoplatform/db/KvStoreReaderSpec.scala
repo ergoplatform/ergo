@@ -11,10 +11,10 @@ class KvStoreReaderSpec extends AnyPropSpec with Matchers with DBSpec {
       val keyEnd = byteString("Z")
       store.getRange(keyStart, keyEnd).length shouldBe 0
 
-      store.insert(Array(keyStart -> keyStart)).get
+      store.insert(keyStart, keyStart).get
       store.getRange(keyStart, keyEnd).length shouldBe 1
 
-      store.insert(Array(keyEnd -> keyEnd)).get
+      store.insert(keyEnd, keyEnd).get
       store.getRange(keyStart, keyEnd).length shouldBe 2
 
       // keys before the range

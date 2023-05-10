@@ -897,9 +897,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def validateAndSetStatus(hr: ErgoHistory, remote: ConnectedPeer, pmod: BlockSection): Boolean = {
     hr.applicableTry(pmod) match {
       case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
-        log.warn(s"Modifier ${pmod.encodedId} is permanently invalid", e)
-        deliveryTracker.setInvalid(pmod.id, pmod.modifierTypeId)
-        penalizeMisbehavingPeer(remote)
+        //todo: forget header if chain tip is far ahead
+        if (pmod.id == "30062163e80ba10bafd2f1b64253f0e1af1e239cc5a388d289e41db9e62ae05f"){
+          hr.forgetHeader(pmod.id)
+        } else {
+          log.warn(s"Modifier ${pmod.encodedId} is permanently invalid", e)
+          deliveryTracker.setInvalid(pmod.id, pmod.modifierTypeId)
+          penalizeMisbehavingPeer(remote)
+        }
         false
       case _ =>
         deliveryTracker.setReceived(pmod.id, pmod.modifierTypeId, remote)

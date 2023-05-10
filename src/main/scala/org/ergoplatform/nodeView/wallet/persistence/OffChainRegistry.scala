@@ -5,7 +5,6 @@ import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
-import scorex.crypto.hash.Digest32
 
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable
@@ -33,8 +32,7 @@ case class OffChainRegistry(height: Int,
     val tokensBalance = (offChainBalances ++ onChainBalances)
       .flatMap(_.assets)
       .foldLeft(mutable.LinkedHashMap.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-        val encodedId = encodedTokenId(Digest32 @@ id.toArray)
-        acc += encodedId -> (acc.getOrElse(encodedId, 0L) + amt)
+        acc += id -> (acc.getOrElse(id, 0L) + amt)
       }
     WalletDigest(height, balance, tokensBalance.toSeq)
   }

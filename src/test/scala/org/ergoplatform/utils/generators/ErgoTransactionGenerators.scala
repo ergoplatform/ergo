@@ -4,7 +4,6 @@ import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
@@ -20,7 +19,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
-import org.scalacheck.{Arbitrary, Gen}
+import org.scalacheck.Gen
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
@@ -36,7 +35,7 @@ import scala.util.Random
 
 trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
 
-  protected implicit val ergoAddressEncoder: ErgoAddressEncoder =
+  protected implicit val addressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue / 2)
@@ -291,11 +290,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     txs <- Gen.listOfN(txQty, invalidErgoTransactionGen(prop))
   } yield BlockTransactions(headerId, Header.InitialVersion, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
     if ((acc :+ tx).map(_.size).sum < (Parameters.MaxBlockSizeDefault - 150)) acc :+ tx else acc))
-
-  lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
-    index: Short <- Arbitrary.arbitrary[Short]
-    stateElements: Seq[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
-  } yield UTXOSnapshotChunk(stateElements, index)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- defaultHeaderGen

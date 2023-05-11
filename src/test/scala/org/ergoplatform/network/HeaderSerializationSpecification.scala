@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import java.nio.ByteBuffer
 
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.{AutolykosSolution, groupElemFromBytes}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.Algos
@@ -86,7 +86,7 @@ class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUti
 
     // read difficulty encoded in Bitcoin nBits format, https://bitco.in/en/developer-reference#target-nbits
     val nbits = getBytes(bb, 4) // 4 bytes
-    val difficulty = RequiredDifficulty.decodeCompactBits(RequiredDifficulty.readUint32BE(nbits))
+    val difficulty = DifficultySerializer.decodeCompactBits(DifficultySerializer.readUint32BE(nbits))
     difficulty shouldBe h.requiredDifficulty
 
     val heightParsed = getULong(bb) // up to 4 bytes
@@ -177,7 +177,7 @@ class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUti
 
     // read difficulty encoded in Bitcoin nBits format, https://bitco.in/en/developer-reference#target-nbits
     val nbits = getBytes(bb, 4) // 4 bytes
-    val difficulty = RequiredDifficulty.decodeCompactBits(RequiredDifficulty.readUint32BE(nbits))
+    val difficulty = DifficultySerializer.decodeCompactBits(DifficultySerializer.readUint32BE(nbits))
     difficulty shouldBe h.requiredDifficulty
 
     val heightParsed = getULong(bb) // up to 4 bytes

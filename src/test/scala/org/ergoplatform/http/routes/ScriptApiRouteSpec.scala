@@ -56,7 +56,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       val cost = json.hcursor.downField("cost").as[Int].right.get
       value shouldEqual -45
       condition shouldEqual true
-      cost shouldEqual 50
+      cost shouldEqual 6
     }
     val json = io.circe.parser.parse(req)
     Post(prefix + suffix, json) ~> route ~> check(assertion(responseAs[Json]))
@@ -67,7 +67,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     val assertion = (json: Json) => {
       status shouldBe StatusCodes.OK
       val addressStr = json.hcursor.downField("address").as[String].right.get
-      ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
+      addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
     }
     Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
     Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
@@ -97,9 +97,9 @@ class ScriptApiRouteSpec extends AnyFlatSpec
 
       val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(treeStr).get)
 
-      val addr = ergoAddressEncoder.fromProposition(tree).get
+      val addr = addressEncoder.fromProposition(tree).get
 
-      ergoAddressEncoder.toString(addr) shouldBe address
+      addressEncoder.toString(addr) shouldBe address
     }
 
     val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
@@ -111,7 +111,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
 
     val script = TrueLeaf
     val tree = ErgoTree.fromProposition(script)
-    val p2s = ergoAddressEncoder.toString(ergoAddressEncoder.fromProposition(tree).get)
+    val p2s = addressEncoder.toString(addressEncoder.fromProposition(tree).get)
     p2s shouldBe "Ms7smJwLGbUAjuWQ"
     Get(s"$prefix/$suffix/$p2s") ~> route ~> check(assertion(responseAs[Json], p2s))
   }
@@ -130,9 +130,9 @@ class ScriptApiRouteSpec extends AnyFlatSpec
 
       val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bs)
 
-      val addr = ergoAddressEncoder.fromProposition(tree).get
+      val addr = addressEncoder.fromProposition(tree).get
 
-      ergoAddressEncoder.toString(addr) shouldBe address
+      addressEncoder.toString(addr) shouldBe address
     }
 
     val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
@@ -144,7 +144,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
 
     val script = TrueLeaf
     val tree = ErgoTree.fromProposition(script)
-    val p2s = ergoAddressEncoder.toString(ergoAddressEncoder.fromProposition(tree).get)
+    val p2s = addressEncoder.toString(addressEncoder.fromProposition(tree).get)
     p2s shouldBe "Ms7smJwLGbUAjuWQ"
     Get(s"$prefix/$suffix/$p2s") ~> route ~> check(assertion(responseAs[Json], p2s))
   }

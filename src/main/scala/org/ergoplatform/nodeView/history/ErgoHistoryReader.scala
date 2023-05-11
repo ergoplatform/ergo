@@ -4,14 +4,13 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.{ModifierTypeId, NodeViewComponent}
+import scorex.core.NodeViewComponent
 import scorex.core.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
@@ -28,13 +27,11 @@ trait ErgoHistoryReader
   extends NodeViewComponent
     with ContainsModifiers[BlockSection]
     with HeadersProcessor
-    with PoPoWProofsProcessor
-    with UTXOSnapshotChunkProcessor
     with BlockSectionProcessor
     with ScorexLogging
     with ScorexEncoding {
 
-  type ModifierIds = Seq[(ModifierTypeId, ModifierId)]
+  type ModifierIds = Seq[(NetworkObjectTypeId.Value, ModifierId)]
 
   protected[history] val historyStorage: HistoryStorage
 
@@ -77,7 +74,7 @@ trait ErgoHistoryReader
     * @param id - modifier id
     * @return type and raw bytes of semantically valid ErgoPersistentModifier with the given id it is in history
     */
-   def modifierTypeAndBytesById(id: ModifierId): Option[(ModifierTypeId, Array[Byte])] =
+   def modifierTypeAndBytesById(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] =
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
       historyStorage.modifierTypeAndBytesById(id)
     } else {
@@ -99,12 +96,23 @@ trait ErgoHistoryReader
     *
     * @param id - modifier id
     * @tparam T - expected Type
-    * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
+    * @return semantically valid ErgoPersistentModifier of type T with the given id if it is in history
     */
   def typedModifierById[T <: BlockSection : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
     case Some(m: T) => Some(m)
     case _ => None
   }
+
+  /** Get index of expected type by its identifier
+    * @param id - index id
+    * @tparam T - expected Type
+    * @return index of type T with the given id if it is in history
+    */
+  def typedExtraIndexById[T <: ExtraIndex : ClassTag](id: ModifierId): Option[T] =
+    historyStorage.getExtraIndex(id) match {
+      case Some(m: T) => Some(m)
+      case _ => None
+    }
 
   override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
 
@@ -425,10 +433,6 @@ trait ErgoHistoryReader
         validate(header)
       case m: NonHeaderBlockSection =>
         validate(m)
-      case m: NipopowProofModifier =>
-        validate(m)
-      case chunk: UTXOSnapshotChunk =>
-        validate(chunk)
       case m: Any =>
         Failure(new MalformedModifierError(s"Modifier $m has incorrect type", modifier.id, modifier.modifierTypeId))
     }

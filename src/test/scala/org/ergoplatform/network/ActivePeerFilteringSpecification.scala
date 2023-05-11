@@ -12,7 +12,13 @@ class ActivePeerFilteringSpecification extends ErgoPropertyTest {
 
   private def newPeer(address: String, port: Int, lastHandshakeOffset: Long): (InetSocketAddress, PeerInfo) = {
     val addr = new InetSocketAddress(address, port)
-    (addr, PeerInfo(defaultPeerSpec.copy(declaredAddress = Some(addr)), System.currentTimeMillis() - lastHandshakeOffset))
+    val pi = PeerInfo(
+      defaultPeerSpec.copy(declaredAddress = Some(addr)),
+      System.currentTimeMillis() - lastHandshakeOffset,
+      None,
+      System.currentTimeMillis() - lastHandshakeOffset
+    )
+    (addr, pi)
   }
 
   private val knownPeers: Map[InetSocketAddress, PeerInfo] = Map(
@@ -31,6 +37,7 @@ class ActivePeerFilteringSpecification extends ErgoPropertyTest {
     val result: Seq[PeerInfo] =
       filter.choose(knownPeers, blacklistedPeers, null).sortBy(-_.lastHandshake) // sort to undo Random.shuffle
 
+    result.size shouldBe 2
     result shouldBe correct
   }
 

@@ -5,7 +5,8 @@ name := "avldb"
 libraryDependencies ++= Seq(
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "org.scorexfoundation" %% "scrypto" % "2.2.1"
+  "com.google.guava" % "guava" % "23.0",
+  "org.scorexfoundation" %% "scrypto" % "2.3.0"
 )
 
 libraryDependencies ++= Seq(
@@ -16,7 +17,8 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-  "org.ethereum" % "leveldbjni-all"     % "1.18.3"
+  "org.ethereum" % "leveldbjni-all"     % "1.18.3",
+  "org.typelevel" %% "spire" % "0.14.1"
 )
 
 testOptions in Test := Seq(Tests.Filter(t => !t.matches(".*Benchmark$")))

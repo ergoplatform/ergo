@@ -1,7 +1,6 @@
 package scorex.core.validation
 
-
-import scorex.core.ModifierTypeId
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoder
 import scorex.core.validation.ValidationResult._
@@ -29,33 +28,31 @@ object ModifierValidator {
   }
 
   /** report recoverable modifier error that could be fixed by later retries */
-  def error(error: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId): Invalid =
+  def error(error: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Invalid =
     invalid(new RecoverableModifierError(error, modifierId, modifierTypeId, None))
 
   /** report recoverable modifier error that could be fixed by later retries */
-  def error(error: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId, cause: Throwable): Invalid =
+  def error(error: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value, cause: Throwable): Invalid =
     invalid(new RecoverableModifierError(msg(error, cause), modifierId, modifierTypeId, Option(cause)))
 
   /** report recoverable modifier error that could be fixed by later retries */
-  def error(description: String, detail: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId): Invalid =
+  def error(description: String, detail: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Invalid =
     error(msg(description, detail), modifierId, modifierTypeId)
 
   /** report non-recoverable modifier error that could not be fixed by retries and requires modifier change */
-  def fatal(error: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId): Invalid =
+  def fatal(error: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Invalid =
     invalid(new MalformedModifierError(error, modifierId, modifierTypeId, None))
 
   /** report non-recoverable modifier error that could not be fixed by retries and requires modifier change */
-  def fatal(error: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId, cause: Throwable): Invalid =
+  def fatal(error: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value, cause: Throwable): Invalid =
     invalid(new MalformedModifierError(msg(error, cause), modifierId, modifierTypeId, Option(cause)))
 
   /** report non-recoverable modifier error that could not be fixed by retries and requires modifier change */
-  def fatal(description: String, detail: String, modifierId: ModifierId, modifierTypeId: ModifierTypeId): Invalid =
+  def fatal(description: String, detail: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Invalid =
     fatal(msg(description, detail), modifierId, modifierTypeId)
 
   /** unsuccessful validation with a given error; also logs the error as an exception */
-  def invalid(error: ModifierError): Invalid = {
-    Invalid(Seq(error))
-  }
+  def invalid(error: ModifierError): Invalid = Invalid(Seq(error))
 
   /** successful validation without payload */
   val success: Valid[Unit] = Valid(())
@@ -103,7 +100,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
   /** Validate the first argument equals the second. This should not be used with `ModifierId` of type `Array[Byte]`.
     * The `error` callback will be provided with detail on argument values for better reporting
     */
-  def validateEquals[A](id: Short, given: => A, expected: => A, modifierId: ModifierId, modifierTypeId: ModifierTypeId): ValidationState[T] = {
+  def validateEquals[A](id: Short, given: => A, expected: => A, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
     pass((given, expected) match {
       case _ if !settings.isActive(id) => result
       case (a: Array[_], b: Array[_]) if a sameElements[Any] b => result
@@ -115,7 +112,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
 
   /** Validate the `id`s are equal. The `error` callback will be provided with detail on argument values
     */
-  def validateEqualIds(id: Short, given: => ModifierId, expected: => ModifierId, modifierTypeId: ModifierTypeId): ValidationState[T] = {
+  def validateEqualIds(id: Short, given: => ModifierId, expected: => ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
     pass {
       if (!settings.isActive(id) || given == expected) result
       else settings.getError(id, InvalidModifier(s"Given: ${e.encodeId(given)}, expected ${e.encodeId(expected)}", given, modifierTypeId))
@@ -131,7 +128,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
   /** Validate the `condition` is `Success`. Otherwise the `error` callback will be provided with detail
     * on a failure exception
     */
-  def validateNoFailure(id: Short, condition: => Try[_], modifierId: ModifierId, modifierTypeId: ModifierTypeId): ValidationState[T] = {
+  def validateNoFailure(id: Short, condition: => Try[_], modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
     pass(if (!settings.isActive(id)) result else condition.fold(e => settings.getError(id, e, modifierId, modifierTypeId), _ => result))
   }
 
@@ -143,7 +140,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
     * @param modifierTypeId provide for a case when it cannot be resolved from a ModifierError
     * @return validation state
     */
-  def validateNoFailure(id: Short, condition: => Try[_], modifierTypeId: ModifierTypeId): ValidationState[T] = {
+  def validateNoFailure(id: Short, condition: => Try[_], modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
     pass {
       if (!settings.isActive(id)) {
         result
@@ -154,7 +151,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
           case Success(_) =>
             result
           case Failure(unexpectedEx) =>
-            settings.getError(id, unexpectedEx, ModifierId @@ bytesToId(Array.fill(32)(0.toByte)), modifierTypeId)
+            settings.getError(id, unexpectedEx, ModifierId @@@ bytesToId(Array.fill(32)(0.toByte)), modifierTypeId)
         }
       }
     }
@@ -163,7 +160,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
   /** Validate the `block` doesn't throw an Exception. Otherwise the `error` callback will be provided with detail
     * on the exception
     */
-  def validateNoThrow(id: Short, block: => Any, modifierId: ModifierId, modifierTypeId: ModifierTypeId): ValidationState[T] = {
+  def validateNoThrow(id: Short, block: => Any, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
     validateNoFailure(id, Try(block), modifierId, modifierTypeId)
   }
 
@@ -176,7 +173,8 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
 
   /** Validate `condition` against payload is `true` or else return the `error`
     */
-  def validateTryFlatten(id: Short, operation: T => Try[T], condition: T => Boolean, modifierId: ModifierId, modifierTypeId: ModifierTypeId): ValidationState[T] = {
+  def validateTryFlatten(id: Short, operation: T => Try[T], condition: T => Boolean,
+                         modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
     pass(result.toTry.flatMap(r => operation(r)) match {
       case Failure(ex) => settings.getError(id, ex, modifierId, modifierTypeId)
       case Success(v) if settings.isActive(id) && !condition(v) => settings.getError(id, InvalidModifier(modifierId, modifierId, modifierTypeId))
@@ -200,7 +198,8 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
     * If given option is `None` then pass the previous result as success.
     * Return `error` if option is `Some` amd condition is `false`
     */
-  def validateOrSkipFlatten[A](id: Short, option: => Option[A], condition: A => Boolean, modifierId: ModifierId, modifierTypeId: ModifierTypeId): ValidationState[T] = {
+  def validateOrSkipFlatten[A](id: Short, option: => Option[A], condition: A => Boolean,
+                               modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
     pass(option match {
       case Some(v) if settings.isActive(id) && !condition(v) => settings.getError(id, InvalidModifier(modifierId, modifierId, modifierTypeId))
       case _ => result

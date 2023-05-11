@@ -67,7 +67,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
         signTransactionR ~
         checkSeedR ~
         rescanWalletR ~
-        extractHintsR
+        extractHintsR ~
+        getPrivateKeyR
     }
   }
 
@@ -310,7 +311,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
       withWallet {
         _.walletBoxes(unspentOnly = true, considerUnconfirmed)
           .map {
-            _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
+            _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
           }
       }
   }
@@ -321,7 +322,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
       withWallet {
         _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
           .map {
-            _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
+            _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
           }
       }
   }
@@ -480,6 +481,19 @@ case class WalletApiRoute(readersHolder: ActorRef,
       val extDataInputsOpt = her.dataInputs.map(ErgoWalletService.stringsToBoxes)
 
       w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
+    }
+  }
+
+  def getPrivateKeyR: Route = (path("getPrivateKey") & post & p2pkAddress) { p2pk =>
+    withWalletOp(_.allExtendedPublicKeys()) { extKeys =>
+      extKeys.find(_.key.value.equals(p2pk.pubkey.value)).map(_.path) match {
+        case Some(path) =>
+          withWalletOp(_.getPrivateKeyFromPath(path)) {
+            case Success(secret) => ApiResponse(secret.w)
+            case Failure(f) => BadRequest(f.getMessage)
+          }
+        case None => NotExists("Address not found in wallet database.")
+      }
     }
   }
 

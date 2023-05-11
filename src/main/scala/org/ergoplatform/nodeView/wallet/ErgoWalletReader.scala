@@ -17,9 +17,11 @@ import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey}
 import scorex.core.NodeViewComponent
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
+import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -72,11 +74,17 @@ trait ErgoWalletReader extends NodeViewComponent {
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] =
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
 
+  def allExtendedPublicKeys(): Future[Seq[ExtendedPublicKey]] =
+    (walletActor ? ReadExtendedPublicKeys()).mapTo[Seq[ExtendedPublicKey]]
+
+  def getPrivateKeyFromPath(path: DerivationPath): Future[Try[DLogProverInput]] =
+    (walletActor ? GetPrivateKeyFromPath(path)).mapTo[Try[DLogProverInput]]
+
   def walletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 
-  def scanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean = false): Future[Seq[WalletBox]] =
-    (walletActor ? GetScanUnspentBoxes(scanId, considerUnconfirmed)).mapTo[Seq[WalletBox]]
+  def scanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Future[Seq[WalletBox]] =
+    (walletActor ? GetScanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight)).mapTo[Seq[WalletBox]]
 
   def scanSpentBoxes(scanId: ScanId): Future[Seq[WalletBox]] =
     (walletActor ? GetScanSpentBoxes(scanId)).mapTo[Seq[WalletBox]]

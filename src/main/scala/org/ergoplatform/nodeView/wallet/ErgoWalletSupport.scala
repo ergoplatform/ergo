@@ -80,7 +80,7 @@ trait ErgoWalletSupport extends ScorexLogging {
     } else {
       (masterKey +: sks, masterKey.publicKey +: pks)
     }
-    val prover = new ErgoProvingInterpreter(secrets, state.parameters, Some(pubKeys))(new RuntimeIRContext)
+    val prover = new ErgoProvingInterpreter(secrets, state.parameters, Some(pubKeys))
     log.info(s"Wallet unlock: ${prover.hdPubKeys.length} keys read")
     state.copy(walletVars = state.walletVars.withProver(prover))
   }
@@ -212,7 +212,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                   def minimalErgoAmount: Long =
                     BoxUtils.minimalErgoAmountSimulated(
                       lockWithAddress.script,
-                      Colls.fromItems((Digest32 @@ assetId) -> amount),
+                      Colls.fromItems((Digest32 @@@ assetId) -> amount),
                       nonMandatoryRegisters,
                       parameters
                     )
@@ -221,7 +221,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                     valueOpt.getOrElse(minimalErgoAmount),
                     lockWithAddress.script,
                     fullHeight,
-                    Colls.fromItems((Digest32 @@ assetId) -> amount),
+                    Colls.fromItems((Digest32 @@@ assetId) -> amount),
                     nonMandatoryRegisters
                   )
                 }
@@ -242,7 +242,13 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
 
     val dataInputs = dataInputBoxes.map(dataInputBox => DataInput(dataInputBox.id))
-    val changeBoxCandidates = selectionResult.changeBoxes.map { changeBoxAssets =>
+    val changeBoxCandidates = {
+      // EIP-27 output
+      selectionResult.payToReemissionBox.toSeq.map {eip27OutputAssets =>
+        val p2r = ergoSettings.chainSettings.reemission.reemissionRules.payToReemission
+        new ErgoBoxCandidate(eip27OutputAssets.value, p2r, walletHeight)
+      }
+    } ++ selectionResult.changeBoxes.map { changeBoxAssets =>
       changeBoxAssets match {
         case candidate: ErgoBoxCandidate =>
           candidate
@@ -254,7 +260,7 @@ trait ErgoWalletSupport extends ScorexLogging {
           new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
       }
     }
-    val inputBoxes = selectionResult.boxes.toIndexedSeq
+    val inputBoxes = selectionResult.inputBoxes.toIndexedSeq
     new UnsignedErgoTransaction(
       inputBoxes.map(tx => new UnsignedInput(tx.box.id)),
       dataInputs,
@@ -336,7 +342,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         val dataInputs = ErgoWalletService.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
-          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.boxes
+          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
         } match {
           case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
           case Left(e) => Failure(

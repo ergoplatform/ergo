@@ -18,7 +18,6 @@ import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.{DataInput, ErgoBox, ErgoScriptPredef}
 import scorex.core.app.Version
 import scorex.core.network.PeerSpec
-import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
@@ -47,7 +46,6 @@ trait ErgoTestConstants extends ScorexLogging {
     Parameters(0, Parameters.DefaultParameters ++ extension, ErgoValidationSettingsUpdate.empty)
   }
 
-  val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(Args(Some("src/test/resources/application.conf"), None))
 
   implicit val settings: ErgoSettings = initSettings
@@ -77,7 +75,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultMinerSecret: DLogProverInput = defaultProver.hdKeys.head.privateInput
   val defaultMinerSecretNumber: BigInt = defaultProver.hdKeys.head.privateInput.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
-  val defaultMinerPkPoint: EcPointType = defaultMinerPk.h
+  val defaultMinerPkPoint: EcPointType = defaultMinerPk.value
 
   val defaultTimestamp: Long = 1552217190000L
   val defaultNBits: Long = settings.chainSettings.initialNBits

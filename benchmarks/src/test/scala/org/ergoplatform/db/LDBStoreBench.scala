@@ -37,7 +37,7 @@ object LDBStoreBench
   }
 
   val txsWithDbGen: Gen[(Seq[BlockTransactions], LDBKVStore)] = txsGen.map { bts =>
-    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
+    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes).toArray
     val db = storeLDB()
     toInsert.grouped(5).foreach(db.insert(_).get)
     bts -> storeLDB
@@ -53,7 +53,7 @@ object LDBStoreBench
   private def randomVersion: Digest32 = Algos.hash(Longs.toByteArray(Random.nextLong()))
 
   private def benchWriteLDB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
+    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes).toArray
     val db = storeLDB()
     toInsert.grouped(5).foreach(db.insert(_).get)
   }

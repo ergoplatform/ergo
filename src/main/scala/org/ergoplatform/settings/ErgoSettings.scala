@@ -2,6 +2,8 @@ package org.ergoplatform.settings
 
 import java.io.{File, FileOutputStream}
 import java.nio.channels.Channels
+import ch.qos.logback.classic.{LoggerContext, Level}
+import org.slf4j.{Logger, LoggerFactory}
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
@@ -64,6 +66,9 @@ object ErgoSettings extends ScorexLogging
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
     val votingTargets = VotingTargets.fromConfig(config)
+
+    overrideLogLevel(scorexSettings.logging.level)
+
     if (nodeSettings.stateType == Digest && nodeSettings.mining) {
       log.error("Malformed configuration file was provided! Mining is not possible with digest state. Aborting!")
       ErgoApp.forceStopApplication()
@@ -216,4 +221,15 @@ object ErgoSettings extends ScorexLogging
     ErgoApp.forceStopApplication()
   }
 
+  /**
+    * Override the log level at runtime with values provided in config/user provided config.
+    */
+  private def overrideLogLevel(level: String) = level match {
+      case "TRACE" | "ERROR" | "INFO" | "WARN" | "DEBUG" =>
+        log.info(s"Log level set to $level")
+        val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
+        val root          = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
+        root.setLevel(Level.toLevel(level))
+      case _ => log.warn("No log level configuration provided")
+  }
 }

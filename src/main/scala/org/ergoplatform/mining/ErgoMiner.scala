@@ -9,7 +9,6 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{FirstSecretResponse, Ge
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
-import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
@@ -24,7 +23,6 @@ class ErgoMiner(
   ergoSettings: ErgoSettings,
   viewHolderRef: ActorRef,
   readersHolderRef: ActorRef,
-  timeProvider: NetworkTimeProvider,
   secretKeyOpt: Option[DLogProverInput]
 ) extends Actor
   with Stash
@@ -62,7 +60,6 @@ class ErgoMiner(
       publicKey,
       readersHolderRef,
       viewHolderRef,
-      timeProvider,
       ergoSettings
     )
     context.become(starting(MinerState(secretKeyOpt, publicKey, candidateGeneratorRef)))
@@ -116,7 +113,7 @@ class ErgoMiner(
 
   /** We need to ignore all historical blocks, mining is triggered by latest blocks only */
   private def shouldStartMine(b: Header): Boolean = {
-    b.isNew(timeProvider, ergoSettings.chainSettings.blockInterval * 2)
+    b.isNew(ergoSettings.chainSettings.blockInterval * 2)
   }
 
   /** Let's wait for a signal to start mining, either from ErgoApp or when a latest blocks get applied to blockchain */
@@ -201,12 +198,11 @@ object ErgoMiner extends ScorexLogging {
     ergoSettings: ErgoSettings,
     viewHolderRef: ActorRef,
     readersHolderRef: ActorRef,
-    timeProvider: NetworkTimeProvider,
     skOpt: Option[DLogProverInput] = None
   )(implicit context: ActorRefFactory): ActorRef =
     context.actorOf(
       Props(
-        new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, timeProvider, skOpt)
+        new ErgoMiner(ergoSettings, viewHolderRef, readersHolderRef, skOpt)
       )
     )
 }

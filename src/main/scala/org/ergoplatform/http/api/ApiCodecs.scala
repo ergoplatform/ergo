@@ -1,10 +1,9 @@
 package org.ergoplatform.http.api
 
 import java.math.BigInteger
-
 import io.circe._
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
@@ -29,6 +28,8 @@ import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.getAddress
+import org.ergoplatform.nodeView.history.extra.{BalanceInfo, IndexedErgoBox, IndexedErgoTransaction, IndexedToken}
 import org.ergoplatform.wallet.interface4j.SecretString
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.authds.merkle.MerkleProof
@@ -51,6 +52,8 @@ trait ApiCodecs extends JsonCodecs {
   implicit val digestEncoder: Encoder[Digest] = x => Base16.encode(x).asJson
 
   implicit val sideEncoder: Encoder[Side] = _.toByte.asJson
+
+  implicit val ergoAddressEncoder: ErgoAddressEncoder = null
 
   protected implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = { proof =>
     Json.obj(
@@ -201,7 +204,7 @@ trait ApiCodecs extends JsonCodecs {
     sigma =>
       val op = sigma.opCode.toByte.asJson
       sigma match {
-        case dlog: ProveDlog => Map("op" -> op, "h" -> dlog.h.asJson).asJson
+        case dlog: ProveDlog => Map("op" -> op, "h" -> dlog.value.asJson).asJson
         case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
         case tp: TrivialProp => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
         case and: CAND =>
@@ -468,6 +471,77 @@ trait ApiCodecs extends JsonCodecs {
         "cost" -> res.cost.asJson
       )
       fields.asJson
+  }
+
+  implicit val indexedBoxEncoder: Encoder[IndexedErgoBox] = { iEb =>
+    iEb.box.asJson.deepMerge(Json.obj(
+      "globalIndex" -> iEb.globalIndex.asJson,
+      "inclusionHeight" -> iEb.inclusionHeight.asJson,
+      "address" -> ergoAddressEncoder.toString(getAddress(iEb.box.ergoTree)).asJson,
+      "spentTransactionId" -> iEb.spendingTxIdOpt.asJson
+    ))
+  }
+
+  implicit val indexedBoxSeqEncoder: Encoder[(Seq[IndexedErgoBox],Long)] = { iEbSeq =>
+    Json.obj(
+      "items" -> iEbSeq._1.asJson,
+      "total" -> iEbSeq._2.asJson
+    )
+  }
+
+  implicit val indexedTxEncoder: Encoder[IndexedErgoTransaction] = { iEt =>
+    Json.obj(
+      "id" -> iEt.txid.asJson,
+      "blockId" -> iEt.blockId.asJson,
+      "inclusionHeight" -> iEt.inclusionHeight.asJson,
+      "timestamp" -> iEt.timestamp.asJson,
+      "index" -> iEt.index.asJson,
+      "globalIndex" -> iEt.globalIndex.asJson,
+      "numConfirmations" -> iEt.numConfirmations.asJson,
+      "inputs" -> iEt.inputs.asJson,
+      "dataInputs" -> iEt.dataInputs.asJson,
+      "outputs" -> iEt.outputs.asJson,
+      "size" -> iEt.txSize.asJson
+    )
+  }
+
+  implicit val indexedTxSeqEncoder: Encoder[(Seq[IndexedErgoTransaction],Long)] = { iEtSeq =>
+    Json.obj(
+      "items" -> iEtSeq._1.asJson,
+      "total" -> iEtSeq._2.asJson
+    )
+  }
+
+  implicit val IndexedTokenEncoder: Encoder[IndexedToken] = { token =>
+    Json.obj(
+      "id" -> token.tokenId.asJson,
+      "boxId" -> token.boxId.asJson,
+      "emissionAmount" -> token.amount.asJson,
+      "name" -> token.name.asJson,
+      "description" -> token.description.asJson,
+      "decimals" -> token.decimals.asJson
+    )
+  }
+
+  implicit val BalanceInfoEncoder: Encoder[BalanceInfo] = { bal =>
+    Json.obj(
+      "nanoErgs" -> bal.nanoErgs.asJson,
+      "tokens" -> bal.tokens.map(token => {
+        Json.obj(
+          "tokenId" -> token._1.asJson,
+          "amount" -> token._2.asJson,
+          "decimals" -> bal.additionalTokenInfo(token._1)._2.asJson,
+          "name" -> bal.additionalTokenInfo(token._1)._1.asJson
+        )
+      }).asJson
+    )
+  }
+
+  implicit val TotalBalanceInfoEncoder: Encoder[(BalanceInfo,BalanceInfo)] = { tBal =>
+    Json.obj(
+      "confirmed" -> tBal._1.asJson,
+      "unconfirmed" -> tBal._2.asJson
+    )
   }
 
 }

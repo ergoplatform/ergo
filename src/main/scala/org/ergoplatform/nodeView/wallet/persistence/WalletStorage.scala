@@ -31,6 +31,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
 
   import WalletStorage._
 
+  private var cachedStateContext: Option[ErgoStateContext] = None
+
   //todo: used now only for importing pre-3.3.0 wallet database, remove after while
   def readPaths(): Seq[DerivationPath] = store
     .get(SecretPathsKey)
@@ -50,7 +52,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   /**
     * Remove pre-3.3.0 derivation paths
     */
-  def removePaths(): Try[Unit] = store.remove(Seq(SecretPathsKey))
+  def removePaths(): Try[Unit] = store.remove(Array(SecretPathsKey))
 
   /**
     * Store wallet-related public key in the database
@@ -61,7 +63,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     store.insert {
       publicKeys.map { publicKey =>
         pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)
-      }
+      }.toArray
     }
   }
 
@@ -96,21 +98,29 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     }
   }
 
+  def getStateContext(parameters: Parameters): ErgoStateContext = cachedStateContext.getOrElse(readStateContext(parameters))
+
   /**
     * Write state context into the database
     * @param ctx - state context
     */
-  def updateStateContext(ctx: ErgoStateContext): Try[Unit] = store
-    .insert(Seq(StateContextKey -> ctx.bytes))
+  def updateStateContext(ctx: ErgoStateContext): Try[Unit] = {
+    cachedStateContext = Some(ctx)
+    store.insert(Array(StateContextKey -> ctx.bytes))
+  }
 
   /**
     * Read state context from the database
     * @return state context read
     */
-  def readStateContext(parameters: Parameters): ErgoStateContext = store
-    .get(StateContextKey)
-    .flatMap(r => ErgoStateContextSerializer(settings).parseBytesTry(r).toOption)
-    .getOrElse(ErgoStateContext.empty(settings, parameters))
+  def readStateContext(parameters: Parameters): ErgoStateContext = {
+    cachedStateContext = Some(store
+      .get(StateContextKey)
+      .flatMap(r => ErgoStateContextSerializer(settings).parseBytesTry(r).toOption)
+      .getOrElse(ErgoStateContext.empty(settings, parameters))
+    )
+    cachedStateContext.get
+  }
 
   /**
     * Update address used by the wallet for change outputs
@@ -118,7 +128,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     */
   def updateChangeAddress(address: P2PKAddress): Try[Unit] = {
     val bytes = settings.chainSettings.addressEncoder.toString(address).getBytes(Constants.StringEncoding)
-    store.insert(Seq(ChangeAddressKey -> bytes))
+    store.insert(Array(ChangeAddressKey -> bytes))
   }
 
   /**
@@ -150,7 +160,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     */
   def addScan(scan: Scan): Try[Unit] =
     store.insert(
-      Seq(
+      Array(
         scanPrefixKey(scan.scanId) -> ScanSerializer.toBytes(scan),
         lastUsedScanIdKey -> Ints.toByteArray(scan.scanId)
       )
@@ -166,7 +176,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     val writer = new VLQByteBufferWriter(new ByteArrayBuilder())
     ScanSerializer.legacySerialize(scan, writer)
     store.insert(
-      Seq(
+      Array(
         scanPrefixKey -> writer.result().toBytes,
       )
     )
@@ -177,7 +187,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @param id scan identifier
     */
   def removeScan(id: ScanId): Try[Unit] =
-    store.remove(Seq(scanPrefixKey(id)))
+    store.remove(Array(scanPrefixKey(id)))
 
   /**
     * Legacy method for removing an scan from the database
@@ -186,7 +196,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     */
   def removeLegacyScan(scanId: Short): Try[Unit] = {
     val scanPrefixKey = LegacyScanPrefixArray ++ Shorts.toByteArray(scanId)
-    store.remove(Seq(scanPrefixKey))
+    store.remove(Array(scanPrefixKey))
   }
 
   /**

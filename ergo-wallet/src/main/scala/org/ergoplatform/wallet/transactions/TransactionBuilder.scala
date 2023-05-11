@@ -234,7 +234,7 @@ object TransactionBuilder {
 
     // add burnTokens to target assets so that they are excluded from the change outputs
     // thus total outputs assets will be reduced which is interpreted as _token burning_
-    val tokensOutWithBurned = AssetUtils.mergeAssets(tokensOutNoMinted, burnTokens)
+    val tokensOutWithBurned = AssetUtils.mergeAssets(tokensOutNoMinted.toMap, burnTokens)
 
     val selection = boxSelector.select(inputs.toIterator, outputTotal, tokensOutWithBurned) match {
       case Left(err) => throw new IllegalArgumentException(
@@ -242,7 +242,7 @@ object TransactionBuilder {
       case Right(v) => v
     }
     // although we're only interested in change boxes, make sure selection contains exact inputs
-    assert(selection.boxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.boxes}")
+    assert(selection.inputBoxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.inputBoxes}")
     val changeBoxes = selection.changeBoxes
     val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty)
 

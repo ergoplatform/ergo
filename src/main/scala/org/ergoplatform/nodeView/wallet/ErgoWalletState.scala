@@ -42,7 +42,7 @@ case class ErgoWalletState(
     */
   val walletFilter: FilterFn = (trackedBox: TrackedBox) => {
     val preStatus = if (trackedBox.chainStatus.onChain) {
-      offChainRegistry.onChainBalances.exists(_.id == trackedBox.boxId)
+      offChainRegistry.onChainBalances.exists(x => java.util.Arrays.equals(x.id, trackedBox.box.id))
     } else {
       true
     }
@@ -73,7 +73,7 @@ case class ErgoWalletState(
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them).
   // The state context is being updated by listening to state updates.
-  def stateContext: ErgoStateContext = storage.readStateContext(parameters)
+  def stateContext: ErgoStateContext = storage.getStateContext(parameters)
 
   /**
     * @return height of the last block scanned by the wallet

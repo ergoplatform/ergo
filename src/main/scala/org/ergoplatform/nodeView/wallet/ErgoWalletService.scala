@@ -23,6 +23,7 @@ import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.SigmaBoolean
+import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import java.io.FileNotFoundException
 import scala.util.{Failure, Success, Try}
@@ -111,12 +112,14 @@ trait ErgoWalletService {
   def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
 
   /**
-    * @param state current wallet state
-    * @param scanId to get boxes for
+    * @param state               current wallet state
+    * @param scanId              to get boxes for
     * @param considerUnconfirmed whether to look for boxes in off-chain registry
+    * @param minHeight           min inclusion height of unspent boxes
+    * @param maxHeight           max inclusion height of unspent boxes
     * @return Unspent wallet boxes corresponding to `scanId`
     */
-  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox]
+  def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox]
 
   /**
     * @param state current wallet state
@@ -157,6 +160,14 @@ trait ErgoWalletService {
     * @return Try of pay-to-public-key-address and new wallet state
     */
   def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String, addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)]
+
+  /**
+   * Get the secret key for a give derivation path.
+   * @param state current wallet state
+   * @param path derivation path from the master key
+   * @return Try of private key
+   */
+  def getPrivateKeyFromPath(state: ErgoWalletState, path: DerivationPath): Try[DLogProverInput]
 
   /**
     * Derive next key from master key
@@ -405,16 +416,16 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
-  override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean): Seq[WalletBox] = {
+  override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox] = {
     val unconfirmed = if (considerUnconfirmed) {
       state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
     } else {
-      Seq.empty
+      Array.empty
     }
 
     val currentHeight = state.fullHeight
-    val boxes = state.registry.unspentBoxes(scanId)  ++ unconfirmed
-    boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+    val unspentBoxes = state.registry.unspentBoxesByInclusionHeight(scanId, minHeight, maxHeight)
+    (unspentBoxes ++ unconfirmed).map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
   override def getScanSpentBoxes(state: ErgoWalletState, scanId: ScanId): Seq[WalletBox] = {
@@ -441,7 +452,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       .select(inputBoxes.iterator, state.walletFilter, targetBalance, assetsMap)
       .leftMap(m => new Exception(m.message))
       .map { res =>
-        val ergoBoxes = res.boxes.map(_.box)
+        val ergoBoxes = res.inputBoxes.map(_.box)
         val changeBoxes = res.changeBoxes.map(b => ChangeBox(b.value, b.tokens))
         CollectedBoxes(ergoBoxes, changeBoxes)
       }.toTry
@@ -541,6 +552,18 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       case None =>
         Failure(new Exception("Unable to derive key from path, wallet is not initialized"))
     }
+
+  override def getPrivateKeyFromPath(state: ErgoWalletState, path: DerivationPath): Try[DLogProverInput] =
+    state.secretStorageOpt match {
+      case Some(secretStorage) if !secretStorage.isLocked =>
+        val rootSecret = secretStorage.secret.get // unlocked means Some(secret)
+        Success(rootSecret.derive(path.toPrivateBranch).privateInput)
+      case Some(_) =>
+        Failure(new Exception("Unable to derive key from path, wallet is locked"))
+      case None =>
+        Failure(new Exception("Unable to derive key from path, wallet is not initialized"))
+    }
+
 
   override def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean): Try[(DeriveNextKeyResult, ErgoWalletState)] =
     state.secretStorageOpt match {

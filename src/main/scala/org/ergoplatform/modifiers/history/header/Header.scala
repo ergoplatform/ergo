@@ -3,18 +3,16 @@ package org.ergoplatform.modifiers.history.header
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, PreHeader}
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, HeaderTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.serialization.ScorexSerializer
-import scorex.core.utils.NetworkTimeProvider
-import scorex.core.ModifierTypeId
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
@@ -60,9 +58,9 @@ case class Header(override val version: Header.Version,
 
   override type M = Header
 
-  override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
+  override val modifierTypeId: NetworkObjectTypeId.Value = Header.modifierTypeId
 
-  lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
+  lazy val requiredDifficulty: Difficulty = DifficultySerializer.decodeCompactBits(nBits)
 
   lazy val ADProofsId: ModifierId = NonHeaderBlockSection.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
 
@@ -73,16 +71,24 @@ case class Header(override val version: Header.Version,
   override def minerPk: EcPointType = powSolution.pk
 
   /**
-    * Expected identifiers of the block sections
+    * Expected identifiers of the block sections corresponding to this header
     */
-  lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq(
-    (ADProofs.modifierTypeId, ADProofsId),
-    (BlockTransactions.modifierTypeId, transactionsId),
-    (Extension.modifierTypeId, extensionId))
+  lazy val sectionIds: Seq[(NetworkObjectTypeId.Value, ModifierId)] =
+    Array(
+      (ADProofs.modifierTypeId, ADProofsId),
+      (BlockTransactions.modifierTypeId, transactionsId),
+      (Extension.modifierTypeId, extensionId)
+    )
+
+  /**
+    * Expected identifiers of the block sections corresponding to this header,
+    * except of state transformations proof section id
+    */
+  lazy val sectionIdsWithNoProof: Seq[(NetworkObjectTypeId.Value, ModifierId)] = sectionIds.tail
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
-  override lazy val serializer: ScorexSerializer[Header] = HeaderSerializer
+  override lazy val serializer: ErgoSerializer[Header] = HeaderSerializer
 
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 
@@ -94,8 +100,8 @@ case class Header(override val version: Header.Version,
   /**
     * Estimate that this header is recent enough to possibly be the best header
     */
-  def isNew(timeProvider: NetworkTimeProvider, timeDiff: FiniteDuration): Boolean = {
-    timeProvider.time() - timestamp < timeDiff.toMillis
+  def isNew(timeDiff: FiniteDuration): Boolean = {
+    System.currentTimeMillis() - timestamp < timeDiff.toMillis
   }
 
   /**
@@ -149,7 +155,7 @@ object Header extends ApiCodecs {
       votes = header.votes.toColl
     )
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
+  val modifierTypeId: NetworkObjectTypeId.Value = HeaderTypeId.value
 
   lazy val GenesisParentId: ModifierId = bytesToId(Array.fill(Constants.HashLength)(0: Byte))
 

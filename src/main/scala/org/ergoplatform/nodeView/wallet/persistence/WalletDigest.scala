@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.settings.Constants
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import scala.collection.mutable
@@ -27,7 +27,7 @@ object WalletDigest {
 
 }
 
-object WalletDigestSerializer extends ScorexSerializer[WalletDigest] {
+object WalletDigestSerializer extends ErgoSerializer[WalletDigest] {
 
   override def serialize(obj: WalletDigest, w: Writer): Unit = {
     w.putUInt(obj.height)

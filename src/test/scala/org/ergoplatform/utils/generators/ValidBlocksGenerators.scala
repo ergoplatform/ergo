@@ -202,7 +202,7 @@ trait ValidBlocksGenerators
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
-    val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(timeProvider.time())
+    val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(System.currentTimeMillis())
     val interlinks = parentOpt.toSeq.flatMap { block =>
       nipopowAlgos.updateInterlinks(block.header, NipopowAlgos.unpackInterlinks(block.extension.fields).get)
     }
@@ -231,7 +231,7 @@ trait ValidBlocksGenerators
 
     val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
 
-    val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
+    val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(System.currentTimeMillis())
     val interlinksExtension = nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
     val extension: ExtensionCandidate = parameters.toExtensionCandidate ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)

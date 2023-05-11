@@ -2,8 +2,7 @@ package org.ergoplatform.mining.difficulty
 
 import org.ergoplatform.utils.ErgoPropertyTest
 
-class RequiredDifficultySerializerSpecification extends ErgoPropertyTest {
-
+class DifficultySerializerSpecification extends ErgoPropertyTest {
 
   property("external vectors from BitcoinJ") {
     val longs = Seq(0x180130e0, 0x18019eaf, 0x1802cc47, 0x1806f0a8, 0x187c3053, 0x1a05db8b, 0x1b0404cb, 0x1c20bca7, 0x1d00ffff, 0x181bc330,
@@ -25,7 +24,7 @@ class RequiredDifficultySerializerSpecification extends ErgoPropertyTest {
       "92340000",
       "-12345600",
       "12345600")
-    val calculated: Seq[String] = longs.map(nBits => RequiredDifficulty.decodeCompactBits(nBits).toString(16))
+    val calculated: Seq[String] = longs.map(nBits => DifficultySerializer.decodeCompactBits(nBits).toString(16))
 
     calculated shouldEqual expected
   }

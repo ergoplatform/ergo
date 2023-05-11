@@ -6,6 +6,7 @@ logLevel := Level.Debug
 // this values should be in sync with ergo-wallet/build.sbt
 val scala211 = "2.11.12"
 val scala212 = "2.12.10"
+val scala213 = "2.13.8"
 
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
@@ -36,7 +37,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "5.0.1"
+val sigmaStateVersion = "5.0.7"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -61,7 +62,6 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-parsing" % akkaHttpVersion,
   "com.typesafe.akka" %% "akka-stream" % akkaVersion,
   "org.bitlet" % "weupnp" % "0.1.4",
-  "commons-net" % "commons-net" % "3.6",
   
   // api dependencies 
   "io.circe" %% "circe-core" % circeVersion,
@@ -77,7 +77,7 @@ libraryDependencies ++= Seq(
   
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "com.iheart" %% "ficus" % "1.4.7",
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "ch.qos.logback" % "logback-classic" % "1.3.5",
   "com.google.guava" % "guava" % "21.0",
   "com.github.ben-manes.caffeine" % "caffeine" % "2.9.3", // use 3.x only for java 11+
   "com.github.scopt" %% "scopt" % "4.0.1",
@@ -265,7 +265,7 @@ lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
 lazy val ergoWallet = (project in file("ergo-wallet"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
-    crossScalaVersions := Seq(scalaVersion.value, scala211),
+    crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
     commonSettings,
     name := "ergo-wallet",
     libraryDependencies ++= Seq(

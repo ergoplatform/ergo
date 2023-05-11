@@ -1,11 +1,9 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
-import scorex.core.ModifierTypeId
-import scorex.core.utils.NetworkTimeProvider
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -15,8 +13,6 @@ import scala.annotation.tailrec
   */
 trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   import ToDownloadProcessor._
-
-  protected val timeProvider: NetworkTimeProvider
 
   protected val settings: ErgoSettings
 
@@ -42,12 +38,12 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   /**
     * Get modifier ids to download to synchronize full blocks
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
-    * @param condition filter only ModifierIds that pass this condition
+    * @param condition only ModifierIds which pass filter are included into results
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
   def nextModifiersToDownload(howManyPerType: Int,
                               estimatedTip: Option[Int],
-                              condition: (ModifierTypeId, ModifierId) => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
+                              condition: (NetworkObjectTypeId.Value, ModifierId) => Boolean): Map[NetworkObjectTypeId.Value, Seq[ModifierId]] = {
 
     val FullBlocksToDownloadAhead = 192 // how many full blocks to download forwards during active sync
 
@@ -56,8 +52,8 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
     @tailrec
     def continuation(height: Int,
-                     acc: Map[ModifierTypeId, Vector[ModifierId]],
-                     maxHeight: Int = Int.MaxValue): Map[ModifierTypeId, Vector[ModifierId]] = {
+                     acc: Map[NetworkObjectTypeId.Value, Vector[ModifierId]],
+                     maxHeight: Int = Int.MaxValue): Map[NetworkObjectTypeId.Value, Vector[ModifierId]] = {
       if (height > maxHeight) {
         acc
       } else {
@@ -81,7 +77,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
     bestFullBlockOpt match {
       case _ if !isHeadersChainSynced || !nodeSettings.verifyTransactions =>
-        // do not download full blocks if no headers-chain synced yet and suffix enabled or SPV mode
+        // do not download full blocks if no headers-chain synced yet or SPV mode
         Map.empty
       case Some(fb) if farAwayFromBeingSynced(fb) =>
         // when far away from blockchain tip
@@ -100,14 +96,14 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   /**
     * Checks whether it's time to download full chain, and returns toDownload modifiers
     */
-  protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
+  protected def toDownload(header: Header): Seq[(NetworkObjectTypeId.Value, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
       Nil
     } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
-    } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * headerChainDiff)) {
+    } else if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
       // Headers chain is synced after this header. Start downloading full blocks
       pruningProcessor.updateBestFullBlock(header)
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
@@ -117,13 +113,16 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     }
   }
 
-  def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
+  /**
+    * @return block sections needed to be downloaded after header `h` , and defined by the header
+    */
+  def requiredModifiersForHeader(h: Header): Seq[(NetworkObjectTypeId.Value, ModifierId)] = {
     if (!nodeSettings.verifyTransactions) {
-      Nil
+      Nil // no block sections to be downloaded in SPV mode
     } else if (nodeSettings.stateType.requireProofs) {
-      h.sectionIds
+      h.sectionIds // download block transactions, extension and UTXO set transformations proofs in "digest" mode
     } else {
-      h.sectionIds.tail // do not download UTXO set transformation proofs if UTXO set is stored
+      h.sectionIdsWithNoProof // do not download UTXO set transformation proofs if UTXO set is stored
     }
   }
 

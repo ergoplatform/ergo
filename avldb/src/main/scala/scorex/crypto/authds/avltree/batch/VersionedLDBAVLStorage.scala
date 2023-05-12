@@ -231,13 +231,20 @@ object VersionedLDBAVLStorage {
     * Calculate tree digest, given root node label(hash) and root node height, by appending height to the hash
     */
   def digest[D <: hash.Digest](rootNodeLabel: D, rootNodeHeight: Int): ADDigest = {
-    assert(rootNodeHeight >= 0 && rootNodeHeight < 256)
+    assert(rootNodeHeight >= 0 && rootNodeHeight <= 127)
     // rootNodeHeight should never be more than 255, so the toByte conversion is safe (though it may cause an incorrect
     // sign on the signed byte if rootHeight>127, but we handle that case correctly on decoding the byte back to int in the
     // verifier, by adding 256 if it's negative).
     // The reason rootNodeHeight should never be more than 255 is that if height is more than 255,
     // then the AVL tree has at least  2^{255/1.4405} = 2^177 leaves, which is more than the number of atoms on planet Earth.
     ADDigest @@ (rootNodeLabel :+ rootNodeHeight.toByte)
+  }
+
+  /**
+    * splits 33-byte digest into 32-bytes hash and 1-byte tree height
+    */
+  def splitDigest(digest: ADDigest): (Array[Byte], Byte) = {
+    digest.dropRight(1) -> digest.takeRight(1).head
   }
 
 }

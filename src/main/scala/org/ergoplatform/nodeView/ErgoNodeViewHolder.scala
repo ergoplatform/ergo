@@ -277,6 +277,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     processingOutcome
   }
 
+  /**
+    * signal to pull Utxo set snapshot from database and recreate UTXO set from it
+    */
   def processStateSnapshot: Receive = {
     case InitStateFromSnapshot(height, blockId) =>
       if (!history().isUtxoSnapshotApplied) {

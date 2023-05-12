@@ -20,8 +20,14 @@ trait CheckpointingSettingsReader extends ModifierIdReader {
   }
 }
 
+/**
+  * Settings related to bootstrapping with UTXO set snapshots. See ergo.node.utxo section for settings description.
+  */
 case class UtxoSettings(utxoBootstrap: Boolean, storingUtxoSnapshots: Int, p2pUtxoSnapshots: Int)
 
+/**
+  * Custom settings reader for `UtxoSettings`
+  */
 trait UtxoSettingsReader {
   implicit val utxoSettingsReader: ValueReader[UtxoSettings] = { (cfg, path) =>
     UtxoSettings(
@@ -72,6 +78,9 @@ case class NodeConfigurationSettings(stateType: StateType,
   val areSnapshotsStored = utxoSettings.storingUtxoSnapshots > 0
 }
 
+/**
+  * Custom config reader for ergo.node settings section
+  */
 trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettingsReader
                                   with UtxoSettingsReader with ModifierIdReader {
 

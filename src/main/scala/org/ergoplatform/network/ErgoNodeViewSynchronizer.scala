@@ -36,11 +36,10 @@ import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.app.Version
 import scorex.crypto.hash.Digest32
-import scorex.util.encode.Base16
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
 import scorex.core.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
-
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
@@ -58,6 +57,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncTracker: ErgoSyncTracker,
                                deliveryTracker: DeliveryTracker)(implicit ex: ExecutionContext)
   extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
+
+  type EncodedManifestId = ModifierId
 
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
     maxNrOfRetries = 10,
@@ -166,9 +167,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
     * UTXO set snapshot manifests found in the p2p are stored in this table. The table is cleared when a manifest
-    * if found which available for downloading from at least min number of peers required
+    * if found which available for downloading from at least min number of peers required (the min is provided in
+    * ergo.node.utxo.p2pUtxoSnapshots setting)
     */
-  private val availableManifests = mutable.Map[Height, Seq[(ConnectedPeer, ManifestId)]]()
+  private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
   /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
@@ -851,24 +853,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  /**
-    * Process information about snapshots got from another peer
-    */
-  private def processSnapshotsInfo(hr: ErgoHistory, snapshotsInfo: SnapshotsInfo, remote: ConnectedPeer): Unit = {
-    snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
-      log.debug(s"Got manifest $manifestId for height $height from $remote")
-      // add manifest to available manifests dictionary if it is not written there yet
-      val existingOffers = availableManifests.getOrElse(height, Seq.empty)
-      if (!existingOffers.exists(_._1 == remote)) {
-        log.info(s"Found new manifest ${Algos.encode(manifestId)} for height $height at $remote")
-        availableManifests.put(height, existingOffers :+ (remote -> manifestId))
-      } else {
-        log.warn(s"Got manifest $manifestId twice from $remote")
-      }
-    }
-    checkUtxoSetManifests(hr) // check if we got enough manifests for the height to download manifests and chunks
-  }
-
   private def requestMoreChunksIfNeeded(hr: ErgoHistory): Unit = {
     // we request more chunks if currently less than `ChunksInParallelMin` chunks are being downloading
     // we request up to `ChunksInParallelMin`, so in extreme case may download almost 2 * `ChunksInParallelMin`
@@ -894,6 +878,32 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+    * Process information about snapshots got from another peer
+    */
+  private def processSnapshotsInfo(hr: ErgoHistory,
+                                   snapshotsInfo: SnapshotsInfo,
+                                   remote: ConnectedPeer): Unit = {
+    snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
+      val encodedManifestId = ModifierId @@ Algos.encode(manifestId)
+      val ownId = hr.bestHeaderAtHeight(height).map(_.stateRoot).map(stateDigest => splitDigest(stateDigest)._1)
+      if (ownId.getOrElse(Array.emptyByteArray).sameElements(manifestId)) {
+        log.debug(s"Got manifest $encodedManifestId for height $height from $remote")
+        // add manifest to available manifests dictionary if it is not written there yet
+        val existingOffers = availableManifests.getOrElse(encodedManifestId, (height -> Seq.empty))
+        if (!existingOffers._2.contains(remote)) {
+          log.info(s"Found new manifest ${Algos.encode(manifestId)} for height $height at $remote")
+          availableManifests.put(encodedManifestId, height -> (existingOffers._2 :+ remote))
+        } else {
+          log.warn(s"Got manifest $manifestId twice from $remote")
+        }
+      } else {
+        log.error(s"Got wrong manifest id $encodedManifestId from $remote")
+      }
+    }
+    checkUtxoSetManifests(hr) // check if we got enough manifests for the height to download manifests and chunks
+  }
+
   // process serialized manifest got from another peer
   private def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer): Unit = {
     ManifestSerializer.defaultSerializer.parseBytesTry(manifestBytes) match {
@@ -903,15 +913,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         deliveryTracker.getRequestedInfo(ManifestTypeId.value, manifestId) match {
           case Some(ri) if ri.peer == remote =>
             deliveryTracker.setUnknown(manifestId, ManifestTypeId.value)
-            val manifestRecords = availableManifests.filter(_._2.exists(_._2.sameElements(manifest.id)))
-            val heightOfManifest = manifestRecords.headOption.map(_._1)
-            val peersToDownload: Seq[ConnectedPeer] = manifestRecords.flatMap(_._2.map(_._1)).toSeq
-            heightOfManifest match {
-              case Some(height) =>
-                log.info(s"Going to download chunks for manifest ${Algos.encode(manifest.id)} at height $height from $peersToDownload")
-                hr.registerManifestToDownload(manifest, height, peersToDownload)
-                availableManifests.clear()
-                requestMoreChunksIfNeeded(hr)
+            val manifestRecordOpt = availableManifests.get(manifestId)
+            manifestRecordOpt match {
+              case Some(manifestRecord) =>
+                val height = manifestRecord._1
+                val peersToDownload = manifestRecord._2
+
+                // check if manifest is valid against root hash and height of AVL+ tree found in a header
+                val manifestVerified = hr
+                  .bestHeaderAtHeight(height)
+                  .map(_.stateRoot)
+                  .map(splitDigest)
+                  .exists { case (expRoot, expHeight) => manifest.verify(Digest32 @@ expRoot, expHeight) }
+
+                if(manifestVerified) {
+                  log.info(s"Going to download chunks for manifest ${Algos.encode(manifest.id)} at height $height from $peersToDownload")
+                  hr.registerManifestToDownload(manifest, height, peersToDownload)
+                  availableManifests.clear()
+                  requestMoreChunksIfNeeded(hr)
+                } else {
+                  log.error(s"Got invalid manifest from $remote")
+                  penalizeMaliciousPeer(remote)
+                }
               case None =>
                 log.error(s"No height found for manifest ${Algos.encode(manifest.id)}")
             }
@@ -1243,25 +1266,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           historyReader.fullBlockHeight == 0 &&
           availableManifests.nonEmpty &&
           historyReader.utxoSetSnapshotDownloadPlan().isEmpty) {
-      val res = availableManifests.filter { case (h, records) =>
-        if (records.length >= MinSnapshots) {
-          val idsSet = records.map(_._2).map(Base16.encode).toSet
-          if (idsSet.size > 1) {
-            log.warn(s"Different manifests found at height $h: $idsSet")
-            availableManifests.remove(h)
-            false
-          } else {
-            true
-          }
-        } else {
-          false
-        }
-      }
+      val res = availableManifests.filter { case (_, (_, peers)) => peers.length >= MinSnapshots }
       if (res.nonEmpty) {
-        val(height, records) = res.maxBy(_._1)
-        log.info(s"Downloading manifest for height $height from ${records.size} peers")
-        val manifestId = records.head._2
-        val peers = records.map(_._1)
+        val(encModifierId, (height, peers)) = res.maxBy(_._2._1)
+        log.info(s"Downloading manifest for height $height from ${peers.size} peers")
+        val manifestId = Digest32 @@ Algos.decode(encModifierId).get
         val randomPeer = peers(Random.nextInt(peers.length))
         requestManifest(manifestId, randomPeer)
       } else {

@@ -15,6 +15,9 @@ import sigmastate.Values.ErgoTree
 
 
 object Constants {
+  /**
+    * Length of hash function output used around the Ergo code
+    */
   val HashLength: Int = scorex.crypto.authds.avltree.batch.Constants.HashLength
 
   val CoinsInOneErgo: Long = 1000000000

@@ -95,9 +95,10 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     *
     * @param dumpStorage   - non-versioned storage to dump tree to
     * @param manifestDepth - depth of manifest tree
+    * @param expectedRootHash - expected UTXO set authenticating tree root hash
     * @return - hash of root node of tree, or failure if an error (e.g. in database) happened
     */
-  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Int): Try[Array[Byte]] = {
+  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Int, expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
     store.processSnapshot { dbReader =>
 
       def subtreeLoop(label: DigestType, builder: mutable.ArrayBuilder[Byte]): Unit = {
@@ -137,6 +138,8 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
 
       val rootNodeLabel = dbReader.get(topNodeHashKey)
       val rootNodeHeight = Ints.fromByteArray(dbReader.get(topNodeHeightKey))
+
+      require(rootNodeLabel.sameElements(expectedRootHash), "Root node hash changed")
 
       val manifestBuilder = mutable.ArrayBuilder.make[Byte]()
       manifestBuilder.sizeHint(200000)

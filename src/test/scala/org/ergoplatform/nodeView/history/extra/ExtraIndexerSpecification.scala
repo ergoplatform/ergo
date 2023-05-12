@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, hashErgoTree, txSegmentId}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UtxoState, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoState, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestHelpers, HistoryTestHelpers}
 import scorex.crypto.hash.Digest32
@@ -38,9 +38,9 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
   override protected implicit val addressEncoder: ErgoAddressEncoder = initSettings.chainSettings.addressEncoder
 
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
-    -1, poPoWBootstrap = false, ChainGenerator.minimalSuffix, mining = false, ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, useExternalMiner = false,
+    -1, utxoBootstrap = false, poPoWBootstrap = false, ChainGenerator.minimalSuffix, mining = false, ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, useExternalMiner = false,
     internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
-    200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
+    200, 0, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
     1000000, 100, adProofsSuffixLength = 112 * 1024, extraIndex = false)
 
   val HEIGHT: Int = 50
@@ -251,7 +251,7 @@ object ChainGenerator extends ErgoTestHelpers {
   def generate(length: Int, dir: File)(history: ErgoHistory): Unit = {
     val stateDir = new File(s"${dir.getAbsolutePath}/state")
     stateDir.mkdirs()
-    val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(initSettings))
+    val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, initSettings)
     System.out.println(s"Going to generate a chain at ${dir.getAbsolutePath} starting from ${history.bestFullBlockOpt}")
     startTime = System.currentTimeMillis() - (blockInterval * (length - 1)).toMillis
     val chain = loop(state, None, None, Seq())(history)

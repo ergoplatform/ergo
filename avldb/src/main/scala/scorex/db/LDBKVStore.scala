@@ -14,13 +14,20 @@ import spire.syntax.all.cfor
   */
 class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging {
 
-  def update(toInsert: Array[(K, V)], toRemove: Array[K]): Try[Unit] = {
+  /**
+    * Update this database atomically with a batch of insertion and removal operations
+    *
+    * @param toInsertKeys - keys of key-value pairs to insert into database
+    * @param toInsertValues - values of key-value pairs to insert into database
+    * @param toRemove - keys of key-value pairs to remove from the database
+    * @return - error if it happens, or success status
+    */
+  def update(toInsertKeys: Array[K], toInsertValues: Array[V], toRemove: Array[K]): Try[Unit] = {
     val batch = db.createWriteBatch()
-    val insertLen = toInsert.length
-    val removeLen = toRemove.length
     try {
-      cfor(0)(_ < insertLen, _ + 1) { i => batch.put(toInsert(i)._1, toInsert(i)._2)}
-      cfor(0)(_ < removeLen, _ + 1) { i => batch.delete(toRemove(i))}
+      require(toInsertKeys.length == toInsertValues.length)
+      cfor(0)(_ < toInsertKeys.length, _ + 1) { i => batch.put(toInsertKeys(i), toInsertValues(i))}
+      cfor(0)(_ < toRemove.length, _ + 1) { i => batch.delete(toRemove(i))}
       db.write(batch)
       Success(())
     } catch {
@@ -45,9 +52,18 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
     }
   }
 
-  def insert(values: Array[(K, V)]): Try[Unit] = update(values, Array.empty)
+  /**
+    * `update` variant where we only insert values into this database
+    */
+  def insert(keys: Array[K], values: Array[V]): Try[Unit] = update(keys, values, Array.empty)
 
-  def remove(keys: Array[K]): Try[Unit] = update(Array.empty, keys)
+  def insert(values: Array[(K, V)]): Try[Unit] = update(values.map(_._1), values.map(_._2), Array.empty)
+
+
+  /**
+    * `update` variant where we only remove values from this database
+    */
+  def remove(keys: Array[K]): Try[Unit] = update(Array.empty, Array.empty, keys)
 
   /**
     * Get last key within some range (inclusive) by used comparator.

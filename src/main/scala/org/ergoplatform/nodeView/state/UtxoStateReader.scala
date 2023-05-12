@@ -19,7 +19,7 @@ import scorex.crypto.hash.Digest32
 import scala.util.{Failure, Success, Try}
 
 /**
-  * State reader (i.e. state functions not modifyting underlying data) with specialization towards UTXO set as a
+  * State reader (i.e. state functions not modifying underlying data) with specialization towards UTXO set as a
   * state representation (so functions to generate UTXO set modifiction proofs, do stateful transaction validation,
   * get UTXOs are there
   */

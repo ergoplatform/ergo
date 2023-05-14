@@ -2,12 +2,9 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
-import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{ErgoAlgos, ErgoSettings}
-import org.ergoplatform.wallet.Constants
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.serialization.ManifestSerializer
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
-import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBFactory, LDBKVStore}
 import scorex.util.ScorexLogging
@@ -20,14 +17,12 @@ import scala.util.{Failure, Success, Try}
   */
 class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
-  private val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
-
   private val snapshotInfoKey: Array[Byte] = Array.fill(32)(0: Byte)
 
   // helper method to write information about store UTXO set snapshots into the database
   /// private[nodeView] as used in some tests
   private[nodeView] def writeSnapshotsInfo(snapshotsInfo: SnapshotsInfo): Try[Unit] = {
-    store.insert(Array(snapshotInfoKey -> SnapshotsInfoSerializer.toBytes(snapshotsInfo)))
+    store.insert(snapshotInfoKey, SnapshotsInfoSerializer.toBytes(snapshotsInfo))
   }
 
   // helper method to read information about store UTXO set snapshots from the database
@@ -58,7 +53,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
       log.info(s"Pruning snapshot at height $h")
       val keysToRemove: Array[Array[Byte]] = store.get(manifestId) match {
         case Some(manifestBytes) =>
-          serializer.manifestFromBytes(manifestBytes, Constants.ModifierIdLength) match {
+          ManifestSerializer.defaultSerializer.parseBytesTry(manifestBytes) match {
             case Success(m) =>
               (m.subtreesIds += manifestId).toArray // todo: more efficient construction
             case Failure(e) =>
@@ -89,8 +84,9 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     */
   def writeSnapshot(pullFrom: VersionedLDBAVLStorage,
                     height: Height,
-                    expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
-    pullFrom.dumpSnapshot(store, ManifestSerializer.MainnetManifestDepth, expectedRootHash).map { manifestId =>
+                    expectedRootHash: Array[Byte],
+                    manifestDepth: Byte = ManifestSerializer.MainnetManifestDepth): Try[Array[Byte]] = {
+    pullFrom.dumpSnapshot(store, manifestDepth, expectedRootHash).map { manifestId =>
       val si = readSnapshotsInfo.withNewManifest(height, Digest32 @@ manifestId)
       writeSnapshotsInfo(si)
       manifestId
@@ -118,8 +114,8 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 object SnapshotsDb {
 
   // internal method to open or init snapshots database in given folder
-  // private[state] to use it in tests also
-  private[state] def create(dir: String): SnapshotsDb = {
+  // private[nodeView] to use it in tests also
+  private[nodeView] def create(dir: String): SnapshotsDb = {
     val store = LDBFactory.createKvDb(dir)
     new SnapshotsDb(store)
   }

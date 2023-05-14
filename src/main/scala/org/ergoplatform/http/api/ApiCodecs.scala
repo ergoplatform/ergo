@@ -30,6 +30,8 @@ import io.circe.syntax._
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.getAddress
 import org.ergoplatform.nodeView.history.extra.{BalanceInfo, IndexedErgoBox, IndexedErgoTransaction, IndexedToken}
+import org.ergoplatform.nodeView.state.SnapshotsInfo
+import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.wallet.interface4j.SecretString
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.authds.merkle.MerkleProof
@@ -403,6 +405,20 @@ trait ApiCodecs extends JsonCodecs {
       secretHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("secretHints"))
       publicHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("publicHints"))
     } yield TransactionHintsBag(secretHints.mapValues(HintsBag.apply), publicHints.mapValues(HintsBag.apply))
+  }
+
+  implicit val SnapshotInfoEncoder: Encoder[SnapshotsInfo] = { si =>
+    Json.obj(
+      "availableManifests" -> si.availableManifests.map { case (height, manifest) =>
+        height -> manifest
+      }.asJson
+    )
+  }
+
+  implicit val SnapshotInfoDecoder: Decoder[SnapshotsInfo] = { cursor =>
+    for {
+      availableManifests <- Decoder.decodeMap[Int, ManifestId].tryDecode(cursor.downField("availableManifests"))
+    } yield new SnapshotsInfo(availableManifests)
   }
 
   implicit val transactionSigningRequestEncoder: Encoder[TransactionSigningRequest] = { tsr =>

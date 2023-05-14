@@ -20,8 +20,8 @@ import scala.util.{Failure, Success, Try}
 
 /**
   * State reader (i.e. state functions not modifying underlying data) with specialization towards UTXO set as a
-  * state representation (so functions to generate UTXO set modification proofs, do stateful transaction validation,
-  * get UTXOs) are there
+  * state representation (so functions to generate UTXO set modifiction proofs, do stateful transaction validation,
+  * get UTXOs are there
   */
 trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence with TransactionValidation {
 

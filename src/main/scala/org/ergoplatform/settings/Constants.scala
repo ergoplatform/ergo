@@ -7,15 +7,18 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSeriali
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scorex.core.serialization.ErgoSerializer
 import scorex.core.NodeViewModifier
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.avltree.batch.AvlTreeParameters
 import sigmastate.Values
 import sigmastate.Values.ErgoTree
 
 
 object Constants {
-  val HashLength: Int = 32
+  /**
+    * Length of hash function output used around the Ergo code
+    */
+  val HashLength: Int = scorex.crypto.authds.avltree.batch.Constants.HashLength
 
   val CoinsInOneErgo: Long = 1000000000
 

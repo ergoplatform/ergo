@@ -8,6 +8,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import org.ergoplatform.settings.Constants.MakeSnapshotEvery
 import org.ergoplatform.settings.ErgoSettings
+import scorex.core.serialization.ManifestSerializer
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -24,9 +25,11 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
 
   // Dump current UTXO set snapshot to persistent snapshots database
   // private[nodeView] as used in tests also
-  private[nodeView] def dumpSnapshot(height: Height, expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
+  private[nodeView] def dumpSnapshot(height: Height,
+                                     expectedRootHash: Array[Byte],
+                                     manifestDepth: Byte = ManifestSerializer.MainnetManifestDepth): Try[Array[Byte]] = {
     val storage = persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage]
-    snapshotsDb.writeSnapshot(storage, height, expectedRootHash)
+    snapshotsDb.writeSnapshot(storage, height, expectedRootHash, manifestDepth)
   }
 
   /**
@@ -61,7 +64,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
         log.info("Started work within future")
         val ft0 = System.currentTimeMillis()
         dumpSnapshot(height, expectedRootHash)
-        snapshotsDb.pruneSnapshots(ergoSettings.nodeSettings.storingUtxoSnapshots)
+        snapshotsDb.pruneSnapshots(ergoSettings.nodeSettings.utxoSettings.storingUtxoSnapshots)
         val ft = System.currentTimeMillis()
         log.info("Work within future finished in: " + (ft - ft0) + " ms.")
       }

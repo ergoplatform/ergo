@@ -46,9 +46,9 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
     val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      utxoBootstrap = false, poPoWBootstrap = PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
+      UtxoSettings(false, 0, 2), poPoWBootstrap = PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None,
-      offlineGeneration = false, 200, 0, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
+      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
       rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false
 )
     val scorexSettings: ScorexSettings = null

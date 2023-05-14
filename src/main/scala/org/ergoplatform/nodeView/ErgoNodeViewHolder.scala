@@ -278,6 +278,28 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   /**
+    * signal to pull Utxo set snapshot from database and recreate UTXO set from it
+    */
+  def processStateSnapshot: Receive = {
+    case InitStateFromSnapshot(height, blockId) =>
+      if (!history().isUtxoSnapshotApplied) {
+        val store = minimalState().store
+        history().createPersistentProver(store, blockId) match {
+          //todo: pass metadata?
+          case Success(pp) =>
+            log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
+            history().utxoSnapshotApplied(height)
+            val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
+            // todo: apply 10 headers before utxo set snapshot?
+            updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+          case Failure(t) =>
+            log.error("UTXO set snapshot application failed: ", t)
+        }
+      }
+
+  }
+
+  /**
     * Process new modifiers from remote.
     * Put all candidates to modifiersCache and then try to apply as much modifiers from cache as possible.
     * Clear cache if it's size exceeds size limit.
@@ -669,6 +691,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       transactionsProcessing orElse
       getCurrentInfo orElse
       getNodeViewChanges orElse
+      processStateSnapshot orElse
       handleHealthCheck orElse {
         case a: Any => log.error("Strange input: " + a)
       }

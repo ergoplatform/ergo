@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId}
+import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
@@ -11,17 +12,16 @@ import scala.annotation.tailrec
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
-trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
-  import ToDownloadProcessor._
+trait ToDownloadProcessor
+  extends FullBlockPruningProcessor with UtxoSetSnapshotProcessor with BasicReaders with ScorexLogging {
+
+  import scorex.core.utils.MapPimp
 
   protected val settings: ErgoSettings
 
   // A node is considering that the chain is synced if sees a block header with timestamp no more
   // than headerChainDiff blocks on average from future
   private lazy val headerChainDiff = settings.nodeSettings.headerChainDiff
-
-  protected[history] lazy val pruningProcessor: FullBlockPruningProcessor =
-    new FullBlockPruningProcessor(nodeSettings, chainSettings)
 
   protected def nodeSettings: NodeConfigurationSettings = settings.nodeSettings
 
@@ -31,29 +31,28 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   def isInBestChain(id: ModifierId): Boolean
 
-  /** Returns true if we estimate that our chain is synced with the network. Start downloading full blocks after that
+  /**
+    * @return estimated height of a best chain found in the network
     */
-  def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
+  def estimatedTip(): Option[Height]
 
   /**
-    * Get modifier ids to download to synchronize full blocks
+    * Get network object ids to download to synchronize full blocks or start UTXO set snapshot downlood
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
     * @param condition only ModifierIds which pass filter are included into results
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
   def nextModifiersToDownload(howManyPerType: Int,
-                              estimatedTip: Option[Int],
                               condition: (NetworkObjectTypeId.Value, ModifierId) => Boolean): Map[NetworkObjectTypeId.Value, Seq[ModifierId]] = {
 
     val FullBlocksToDownloadAhead = 192 // how many full blocks to download forwards during active sync
 
-    
-    def farAwayFromBeingSynced(fb: ErgoFullBlock) = fb.height < (estimatedTip.getOrElse(0) - 128)
+    def farAwayFromBeingSynced(fb: ErgoFullBlock): Boolean = fb.height < (estimatedTip().getOrElse(0) - 128)
 
     @tailrec
     def continuation(height: Int,
                      acc: Map[NetworkObjectTypeId.Value, Vector[ModifierId]],
-                     maxHeight: Int = Int.MaxValue): Map[NetworkObjectTypeId.Value, Vector[ModifierId]] = {
+                     maxHeight: Int): Map[NetworkObjectTypeId.Value, Vector[ModifierId]] = {
       if (height > maxHeight) {
         acc
       } else {
@@ -86,10 +85,16 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         // when blockchain is about to be synced,
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
         val minHeight = Math.max(1, fb.header.height - 100)
-        continuation(minHeight, Map.empty)
-      case _ =>
+        continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
+      case None if (nodeSettings.utxoSettings.utxoBootstrap && !isUtxoSnapshotApplied) =>
+        if (utxoSetSnapshotDownloadPlan().isEmpty) {
+          Map(SnapshotsInfoTypeId.value -> Seq.empty)
+        } else {
+          Map.empty
+        }
+      case None =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
-        continuation(pruningProcessor.minimalFullBlockHeight, Map.empty)
+        continuation(minimalFullBlockHeight, Map.empty, maxHeight = Int.MaxValue)
     }
   }
 
@@ -100,12 +105,12 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
       Nil
-    } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
+    } else if (shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
     } else if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
       // Headers chain is synced after this header. Start downloading full blocks
-      pruningProcessor.updateBestFullBlock(header)
+      updateBestFullBlock(header)
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
       Nil
     } else {
@@ -126,16 +131,4 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     }
   }
 
-}
-
-object ToDownloadProcessor {
-  implicit class MapPimp[K, V](underlying: Map[K, V]) {
-    /**
-      * One liner for updating a Map with the possibility to handle case of missing Key
-      * @param k map key
-      * @param f function that is passed Option depending on Key being present or missing, returning new Value
-      * @return new Map with value updated under given key
-      */
-    def adjust(k: K)(f: Option[V] => V): Map[K, V] = underlying.updated(k, f(underlying.get(k)))
-  }
 }

@@ -2,18 +2,23 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.ErgoSettings
 
 /**
   * A class that keeps and calculates minimal height for full blocks starting from which we need to download these full
   * blocks from the network and keep them in our history.
   */
-class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSettings: ChainSettings) {
+trait FullBlockPruningProcessor {
+
+  protected def settings: ErgoSettings
+
+  private def nodeConfig = settings.nodeSettings
+  private def chainSettings = settings.chainSettings
+
+  private def VotingEpochLength = chainSettings.voting.votingLength
 
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
   @volatile private[history] var minimalFullBlockHeightVar: Int = ErgoHistory.GenesisHeight
-
-  private val VotingEpochLength = chainSettings.voting.votingLength
 
   private def extensionWithParametersHeight(height: Int): Int = {
     require(height >= VotingEpochLength)

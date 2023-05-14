@@ -13,6 +13,7 @@ import spire.syntax.all.cfor
   * Both keys and values are var-sized byte arrays.
   */
 class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging {
+  private val emptyArrayOfByteArray = Array.empty[Array[Byte]]
 
   /**
     * Update this database atomically with a batch of insertion and removal operations
@@ -55,15 +56,16 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
   /**
     * `update` variant where we only insert values into this database
     */
-  def insert(keys: Array[K], values: Array[V]): Try[Unit] = update(keys, values, Array.empty)
-
-  def insert(values: Array[(K, V)]): Try[Unit] = update(values.map(_._1), values.map(_._2), Array.empty)
-
+  def insert(keys: Array[K], values: Array[V]): Try[Unit] = {
+    update(keys, values, emptyArrayOfByteArray)
+  }
 
   /**
     * `update` variant where we only remove values from this database
     */
-  def remove(keys: Array[K]): Try[Unit] = update(Array.empty, Array.empty, keys)
+  def remove(keys: Array[K]): Try[Unit] = {
+    update(emptyArrayOfByteArray, emptyArrayOfByteArray, keys)
+  }
 
   /**
     * Get last key within some range (inclusive) by used comparator.

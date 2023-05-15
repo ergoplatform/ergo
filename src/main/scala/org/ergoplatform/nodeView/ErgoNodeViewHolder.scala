@@ -295,6 +295,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           case Failure(t) =>
             log.error("UTXO set snapshot application failed: ", t)
         }
+      } else {
+        log.warn("InitStateFromSnapshot arrived when state already initialized")
       }
 
   }

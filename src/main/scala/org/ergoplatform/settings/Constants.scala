@@ -73,8 +73,11 @@ object Constants {
   // Maximum extension size during bytes parsing
   val MaxExtensionSizeMax: Int = 1024 * 1024
 
-  // UTXO set snapshot to be taken every this number of blocks
-  val MakeSnapshotEvery = 51200
+  // todo: change before deployment
+  /**
+    * UTXO set snapshot to be taken every this number of blocks
+    */
+  val MakeSnapshotEvery = 53
 
   /**
     * AVL+ tree node parameters. The tree is used to authenticate UTXO set.

@@ -77,7 +77,7 @@ object Constants {
   /**
     * UTXO set snapshot to be taken every this number of blocks
     */
-  val MakeSnapshotEvery = 42
+  val MakeSnapshotEvery = 43
 
   /**
     * AVL+ tree node parameters. The tree is used to authenticate UTXO set.

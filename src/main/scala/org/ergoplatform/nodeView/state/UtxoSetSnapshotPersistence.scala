@@ -47,11 +47,11 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
     def timeToTakeSnapshot(height: Int): Boolean = {
       height % MakeSnapshotEvery == MakeSnapshotEvery - 1
     }
-
+    log.info(s"checking snapshot for $height, simple check: " + timeToTakeSnapshot(height))
     if (ergoSettings.nodeSettings.areSnapshotsStored &&
         timeToTakeSnapshot(height) &&
         estimatedTip.nonEmpty &&
-        estimatedTip.get - height <= MakeSnapshotEvery * ergoSettings.nodeSettings.utxoSettings.storingUtxoSnapshots) {
+        estimatedTip.get - height <= MakeSnapshotEvery) {
 
       val ms0 = System.currentTimeMillis()
 

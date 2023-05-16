@@ -13,6 +13,8 @@ info:
     url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
 
 servers:
+  - url: http://localhost:9052
+    description: Local full node
   - url: /
     description: Local full node
   - url: http://213.239.193.208:9053
@@ -291,12 +293,12 @@ components:
       type: object
       description: Token indexed with extra information
       required:
-        -id
-        -boxId
-        -emissionAmount
-        -name
-        -description
-        -decimals
+        - id
+        - boxId
+        - emissionAmount
+        - name
+        - description
+        - decimals
       properties:
         id:
           description: Id of the token
@@ -1529,6 +1531,10 @@ components:
             $ref: '#/components/schemas/BlockHeader'
 
     BlockHeader:
+      description: Header of a block.
+        It authenticates link to a previous block, other block sections
+        (transactions, UTXO set transformation proofs, extension), UTXO set, votes for blockchain parameters
+        to be changed and proof-of-work related data.
       type: object
       required:
         - id
@@ -1546,27 +1552,37 @@ components:
         - votes
       properties:
         id:
+          description: Block id
           $ref: '#/components/schemas/ModifierId'
         timestamp:
+          description: Block generation time reported by a miner
           $ref: '#/components/schemas/Timestamp'
         version:
+          description: Protocol version used to generate the block
           $ref: '#/components/schemas/Version'
         adProofsRoot:
+            description: Digest of UTXO set transformation proofs
           $ref: '#/components/schemas/Digest32'
         stateRoot:
+          description: AVL+ tree digest of UTXO set (after the block is applied)
           $ref: '#/components/schemas/ADDigest'
         transactionsRoot:
+          description: Merkle tree digest of transactions in the block (BlockTransactions section)
           $ref: '#/components/schemas/Digest32'
         nBits:
+          description: Proof-of-work target (difficulty encoded)
           type: integer
           format: int64
           minimum: 0
           example: 19857408
         extensionHash:
+          description: Merkle tree digest of the extension section of the block
           $ref: '#/components/schemas/Digest32'
         powSolutions:
+          description: Solution for the proof-of-work puzzle
           $ref: '#/components/schemas/PowSolutions'
         height:
+          description: Height of the block (genesis block height == 1)
           type: integer
           format: int32
           minimum: 0
@@ -1577,16 +1593,20 @@ components:
         parentId:
           $ref: '#/components/schemas/ModifierId'
         votes:
+          description: Votes for changing system parameters
           $ref: '#/components/schemas/Votes'
         size:
-          description: Size in bytes
+          description: Size of the header in bytes
           type: integer
           format: int32
         extensionId:
+          description: Hash of the extension section of the block == hash(modifier type id, header id, extensionHash)
           $ref: '#/components/schemas/ModifierId'
         transactionsId:
+          description: Hash of the transactions section of the block == hash(modifier type id, header id, transactionsRoot)
           $ref: '#/components/schemas/ModifierId'
         adProofsId:
+          description: Hash of the UTXO set transformation proofs section of the block == hash(modifier type id, header id, adProofsRoot)
           $ref: '#/components/schemas/ModifierId'
 
     BlockTransactions:
@@ -2461,6 +2481,7 @@ components:
           type: string
 
     ApiError:
+      description: Error response from API
       type: object
       required:
         - error
@@ -2473,7 +2494,7 @@ components:
           example: 500
         reason:
           type: string
-          description: String error code
+          description: Error message explaining the reason of the error
           example: 'Internal server error'
         detail:
           type: string
@@ -2483,7 +2504,8 @@ components:
 paths:
   /blocks:
     get:
-      summary: Get the Array of header ids
+      summary: Get an array of header ids (hex encoded) for the given range of blockchain block heights.
+        Returns a page of the whole list starting from `offset` and containing `limit` items.
       operationId: getHeaderIds
       tags:
         - blocks
@@ -2501,7 +2523,7 @@ paths:
         - in: query
           name: offset
           required: false
-          description: The number of items in list to skip
+          description: The first block height to include in the list
           schema:
             type: integer
             format: int32
@@ -2548,7 +2570,7 @@ paths:
 
   /blocks/at/{blockHeight}:
     get:
-      summary: Get the header ids at a given height
+      summary: Get header ids at the given height
       operationId: getFullBlockAt
       tags:
         - blocks
@@ -2556,7 +2578,7 @@ paths:
         - in: path
           name: blockHeight
           required: true
-          description: Height of a wanted block
+          description: Height of a block to retrive header ids
           schema:
             type: integer
             format: int32
@@ -2587,7 +2609,7 @@ paths:
 
   /blocks/chainSlice:
     get:
-      summary: Get headers in a specified range
+      summary: Get headers in a specified range of heights
       operationId: getChainSlice
       tags:
         - blocks
@@ -2595,7 +2617,7 @@ paths:
         - in: query
           name: fromHeight
           required: false
-          description: Min header height
+          description: Min header height (start of the range)
           schema:
             type: integer
             format: int32
@@ -2603,7 +2625,7 @@ paths:
         - in: query
           name: toHeight
           required: false
-          description: Max header height (best header height by default)
+          description: Max header height of the range (last header height then omitted)
           schema:
             type: integer
             format: int32
@@ -2627,7 +2649,7 @@ paths:
 
   /blocks/{headerId}:
     get:
-      summary: Get the full block info by a given signature
+      summary: Get the full block info by a given header id
       operationId: getFullBlockById
       tags:
         - blocks
@@ -2636,12 +2658,12 @@ paths:
         - in: path
           name: headerId
           required: true
-          description: ID of a wanted block
+          description: ID of the header the wanted block
           schema:
             type: string
       responses:
         '200':
-          description: Block object
+          description: Block object representing the full block data
           content:
             application/json:
               schema:

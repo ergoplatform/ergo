@@ -1,0 +1,18 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Ergo Node Plugin (no auth)",
+  "name_for_model": "ergonode",
+  "description_for_human": "Plugin for interacting with Ergo node.",
+  "description_for_model": "Plugin for interacting with Ergo node, you can request blocks, transactions, UTXO boxes and other related information",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "http://localhost:9052/openapi.yaml",
+    "is_user_authenticated": false
+  },
+  "logo_url": "https://cryptologos.cc/logos/ergo-erg-logo.png",
+  "contact_email": "legal@example.com",
+  "legal_info_url": "http://example.com/legal"
+}

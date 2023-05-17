@@ -191,7 +191,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     _manifest match {
       case Some(manifest) =>
         log.info("Starting UTXO set snapshot transfer into state database")
-        ErgoStateReader.reconstructStateContextBeforeEpoch(stateStore, historyReader, height, settings) match {
+        ErgoStateReader.reconstructStateContextBeforeEpoch(historyReader, height, settings) match {
           case Success(esc) =>
             val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
             VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {

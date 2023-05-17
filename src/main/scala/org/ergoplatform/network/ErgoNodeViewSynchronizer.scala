@@ -172,6 +172,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
+  //
+  private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
+
   /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
@@ -562,11 +565,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * Private helper methods to request UTXO set snapshots metadata and related data (manifests, chunks) from peers
    */
 
+  /*
+   // todo: register?
+
+   val snapshotsInfoId = ModifierId @@ Algos.encode(Algos.hash("snapshots info"))
+   deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(snapshotsInfoId), peer) { deliveryCheck =>
+        context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+      }
+   */
+
   private def requestSnapshotsInfo(): Unit = {
     // ask all the peers supporting UTXO set snapshots for snapshots they have
     val msg = Message(GetSnapshotsInfoSpec, Right(()), None)
     val peers = UtxoSetNetworkingFilter.filter(syncTracker.knownPeers()).toSeq
-    networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+    val peersCount = peers.size
+    if (peersCount >= MinSnapshots) {
+      networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+    } else {
+      log.info(s"Less UTXO-snapshot supporting peers found than required mininum ($peersCount < $MinSnapshots)")
+    }
   }
 
   private def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
@@ -1260,7 +1277,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   // check if we have enough UTXO set snapshots for some height
   // if so, request manifest from a random peer announced it
   private def checkUtxoSetManifests(historyReader: ErgoHistory): Unit = {
-    val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
 
     if (settings.nodeSettings.utxoSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&

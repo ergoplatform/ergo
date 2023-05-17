@@ -211,6 +211,8 @@ object ErgoSettings extends ScorexLogging
     } else if (settings.scorexSettings.restApi.publicUrl.exists(invalidRestApiUrl)) {
       failWithError(s"scorex.restApi.publicUrl should not contain query, path or fragment and should not " +
         s"be local or loopback address : ${settings.scorexSettings.restApi.publicUrl.get}")
+    } else if (settings.nodeSettings.utxoSettings.p2pUtxoSnapshots <= 0) {
+      failWithError(s"p2pUtxoSnapshots <= 0, must be 1 at least")
     } else {
       settings
     }

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoState}
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
@@ -16,7 +16,7 @@ import scorex.db.LDBVersionedStore
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
-import scala.util.{Failure, Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
 /**
@@ -178,26 +178,36 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   /**
     * Create disk-persistent authenticated AVL+ tree prover
     * @param stateStore - disk database where AVL+ tree will be after restoration
+    * @param historyReader - history readed to get headers to restore state context
+    * @param height - height for which prover will be created (prover state will correspond to a
+    *                 moment after application of a block at this height)
     * @param blockId - id of a block corresponding to the tree (tree is on top of a state after the block)
     * @return prover with initialized tree database
     */
   def createPersistentProver(stateStore: LDBVersionedStore,
+                             historyReader: ErgoHistoryReader,
+                             height: Height,
                              blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = {
     _manifest match {
       case Some(manifest) =>
         log.info("Starting UTXO set snapshot transfer into state database")
-        val esc = ErgoStateReader.storageStateContext(stateStore, settings)
-        val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
-        VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
-          ldbStorage =>
-            log.info("Finished UTXO set snapshot transfer into state database")
-            ldbStorage.restorePrunedProver().map {
-              prunedAvlProver =>
-                new PersistentBatchAVLProver[Digest32, HF] {
-                  override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
-                  override val storage: VersionedLDBAVLStorage = ldbStorage
+        ErgoStateReader.reconstructStateContextBeforeEpoch(stateStore, historyReader, height, settings) match {
+          case Success(esc) =>
+            val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
+            VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
+              ldbStorage =>
+                log.info("Finished UTXO set snapshot transfer into state database")
+                ldbStorage.restorePrunedProver().map {
+                  prunedAvlProver =>
+                    new PersistentBatchAVLProver[Digest32, HF] {
+                      override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
+                      override val storage: VersionedLDBAVLStorage = ldbStorage
+                    }
                 }
             }
+          case Failure(e) =>
+            log.warn("Can't reconstruct state context in createPersistentProver ", e)
+            Failure(e)
         }
       case None =>
         val msg = "No manifest available in createPersistentProver"

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
-import org.ergoplatform.nodeView.state.UtxoState
+import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.VersionTag
@@ -16,17 +16,32 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
 
   private val s = settings
 
+  val epochLength = 20
+
   val utxoSetSnapshotProcessor = new UtxoSetSnapshotProcessor {
-    override protected val settings: ErgoSettings = s
+    override protected val settings: ErgoSettings = s.copy(chainSettings =
+      s.chainSettings.copy(voting = s.chainSettings.voting.copy(votingLength = epochLength)))
     override protected val historyStorage: HistoryStorage = HistoryStorage(settings)
     override private[history] var minimalFullBlockHeightVar = ErgoHistory.GenesisHeight
   }
+
+  var history = generateHistory(
+    verifyTransactions = true,
+    StateType.Utxo,
+    PoPoWBootstrap = false,
+    blocksToKeep = -1,
+    epochLength = epochLength,
+    useLastEpochs = 2,
+    initialDiffOpt = None)
+
+  val chain = genHeaderChain(epochLength + 1, history, diffBitsOpt = None, useRealTs = false)
+  history = applyHeaderChain(history, chain)
 
   property("registerManifestToDownload + getUtxoSetSnapshotDownloadPlan + getChunkIdsToDownload") {
     val bh     = boxesHolderGenOfSize(32 * 1024).sample.get
     val us     = createUtxoState(bh, parameters)
 
-    val snapshotHeight = 1
+    val snapshotHeight = epochLength - 1
     val serializer = ManifestSerializer.defaultSerializer
 
     us.dumpSnapshot(snapshotHeight, us.rootDigest.dropRight(1))
@@ -60,12 +75,13 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
 
     val dir = createTempDir
     val store = new LDBVersionedStore(dir, initialKeepVersions = 100)
-    val restoredProver = utxoSetSnapshotProcessor.createPersistentProver(store, blockId).get
+    val restoredProver = utxoSetSnapshotProcessor.createPersistentProver(store, history, snapshotHeight, blockId).get
     bh.sortedBoxes.foreach { box =>
       restoredProver.unauthenticatedLookup(box.id).isDefined shouldBe true
     }
     restoredProver.checkTree(postProof = false)
     val restoredState = new UtxoState(restoredProver, version = VersionTag @@@ blockId, store, settings)
+    restoredState.stateContext.currentHeight shouldBe (epochLength - 1)
     bh.sortedBoxes.foreach { box =>
       restoredState.boxById(box.id).isDefined shouldBe true
     }

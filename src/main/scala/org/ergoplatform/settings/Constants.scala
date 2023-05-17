@@ -73,10 +73,13 @@ object Constants {
   // Maximum extension size during bytes parsing
   val MaxExtensionSizeMax: Int = 1024 * 1024
 
-  // todo: change before deployment
   /**
-    * UTXO set snapshot to be taken every this number of blocks
+    * UTXO set snapshot to be taken every this number of blocks.
+    * The value MUST be divisible by voting epoch length (chainSettings.voting.votingLength),
+    * so after snapshot the state is corresponding to a moment before applying first block of a voting epoch,
+    * and then the first block sets current validation parameters.
     */
+  // todo: change before deployment
   val MakeSnapshotEvery = 30
 
   /**

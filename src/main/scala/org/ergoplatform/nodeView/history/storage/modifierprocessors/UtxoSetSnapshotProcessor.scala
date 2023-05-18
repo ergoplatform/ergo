@@ -60,6 +60,20 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     * after.
     */
   def utxoSnapshotApplied(height: Height): Unit = {
+    // remove downloaded utxo set snapshots chunks
+    val ts0 = System.currentTimeMillis()
+    _cachedDownloadPlan.foreach { plan =>
+      val chunkIdsToRemove = downloadedChunkIdsIterator(plan.totalChunks)
+        .map(chunkId => ModifierId @@ Algos.encode(chunkId))
+        .toArray
+      historyStorage.remove(Array.empty, chunkIdsToRemove)
+    }
+    _manifest = None
+    _cachedDownloadPlan = None
+    val ts = System.currentTimeMillis()
+    log.info(s"Imported UTXO set snapshots chunks removed in ${ts - ts0} ms")
+
+    // set height of first full block to be downloaded
     minimalFullBlockHeightVar = height + 1
   }
 
@@ -157,16 +171,22 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
+  private def downloadedChunkIdsIterator(totalChunks: Int): Iterator[Array[Byte]] = {
+    Iterator.range(0, totalChunks).map { idx =>
+      val idxBytes = Ints.toByteArray(idx)
+      downloadedChunksPrefix ++ idxBytes
+    }
+  }
+
   /**
-    * @return iterator for chunks downloded. Reads them from database one-by-one when requested.
+    * @return iterator for chunks downloaded. Reads them from database one-by-one when requested.
     */
   def downloadedChunksIterator(): Iterator[BatchAVLProverSubtree[Digest32]] = {
     utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
-        Iterator.range(0, plan.totalChunks).flatMap{idx =>
-          val idxBytes = Ints.toByteArray(idx)
+        downloadedChunkIdsIterator(plan.totalChunks).flatMap { chunkId =>
           historyStorage
-            .get(downloadedChunksPrefix ++ idxBytes)
+            .get(chunkId)
             .flatMap(bs => SubtreeSerializer.parseBytesTry(bs).toOption)
         }
       case None =>

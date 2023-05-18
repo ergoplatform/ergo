@@ -610,7 +610,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           maxModifiers = deliveryTracker.modifiersToDownload,
           minModifiersPerBucket,
           maxModifiersPerBucket
-        )(getPeersForDownloadingBlocks) { howManyPerType =>
+        )(getPeersForDownloadingBlocks) { _ =>
           // leave block section ids only not touched before
           modifiersToFetch.flatMap { case (tid, mids) =>
             val updMids = mids.filter { mid =>

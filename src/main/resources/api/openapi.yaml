@@ -14,7 +14,8 @@ info:
 
 servers:
   - url: http://localhost:9052
-    description: Local full node
+    description: Ergo full node API.
+                   
   - url: /
     description: Local full node
   - url: http://213.239.193.208:9053
@@ -353,31 +354,32 @@ components:
 
     ErgoTransaction:
       type: object
-      description: Ergo transaction
+      description: ErgoTransaction is an atomic operation which changes UTXO state.
       required:
         - inputs
         - dataInputs
         - outputs
       properties:
         id:
+          description: Id of the transaction
           $ref: '#/components/schemas/TransactionId'
         inputs:
-          description: Inputs of the transaction
+          description: Inputs, that will be spent by this transaction
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionInput'
         dataInputs:
-          description: Data inputs of the transaction
+          description: Read-only inputs, that are not going to be spent by transaction.
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionDataInput'
         outputs:
-          description: Outputs of the transaction
+          description: Outputs of the transaction, i.e. box candidates to be created by this transaction.
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionOutput'
         size:
-          description: Size in bytes
+          description: Size of ErgoTransacton in bytes
           type: integer
           format: int32
 
@@ -1561,7 +1563,7 @@ components:
           description: Protocol version used to generate the block
           $ref: '#/components/schemas/Version'
         adProofsRoot:
-            description: Digest of UTXO set transformation proofs
+          description: Digest of UTXO set transformation proofs
           $ref: '#/components/schemas/Digest32'
         stateRoot:
           description: AVL+ tree digest of UTXO set (after the block is applied)
@@ -1610,6 +1612,7 @@ components:
           $ref: '#/components/schemas/ModifierId'
 
     BlockTransactions:
+      description: Section of a block which contains transactions.
       type: object
       required:
         - headerId
@@ -1617,11 +1620,13 @@ components:
         - size
       properties:
         headerId:
+          description: Identifier of a header of a corresponding block
           $ref: '#/components/schemas/ModifierId'
         transactions:
+          description: Transactions of the block
           $ref: '#/components/schemas/Transactions'
         size:
-          description: Size in bytes
+          description: Size in bytes of all block transactions
           type: integer
           format: int32
 
@@ -1634,10 +1639,13 @@ components:
         - size
       properties:
         headerId:
+          description: Identifier of a header of the block which contains the proofs
           $ref: '#/components/schemas/ModifierId'
         proofBytes:
+          description: Serialized bytes of the authenticated dictionary proof
           $ref: '#/components/schemas/SerializedAdProof'
         digest:
+          description: Hash of the proofBytes
           $ref: '#/components/schemas/Digest32'
         size:
           description: Size in bytes
@@ -1645,6 +1653,7 @@ components:
           format: int32
 
     Extension:
+      description: Section of a block which contains extension data.
       type: object
       required:
         - headerId
@@ -1652,8 +1661,10 @@ components:
         - fields
       properties:
         headerId:
+          description: Identifier of a header of a corresponding block
           $ref: '#/components/schemas/ModifierId'
         digest:
+          description: Root hash (aka digest) merkelized list of key-value records
           $ref: '#/components/schemas/Digest32'
         fields:
           description: List of key-value records
@@ -1663,6 +1674,7 @@ components:
             $ref: '#/components/schemas/KeyValueItem'
 
     KeyValueItem:
+      description: Key-value record represented as a pair of hex strings in an array.
       type: array
       items:
         $ref: '#/components/schemas/HexString'
@@ -2056,6 +2068,10 @@ components:
             description: Blacklisted node address
 
     NodeInfo:
+      description: Data container for /info API request output. 
+        Contains information about node's state and configuration.
+        Contains data about best block, best header, state, etc.
+        Best block is the block with the maximum height.
       type: object
       required:
         - name
@@ -2081,76 +2097,89 @@ components:
         - parameters
       properties:
         name:
+          description: Node's (peer) self-chosen name from config
           type: string
           example: my-node-1
         appVersion:
+          description: Node's application version
           type: string
           example: 0.0.1
         fullHeight:
           type: integer
           format: int32
-          description: Can be 'null' if state is empty (no full block is applied since node launch)
+          description: Height of the best block known to the node. 
+            Can be 'null' if state is empty (no full block is applied since node launch)
           minimum: 0
           example: 667
           nullable: true
         headersHeight:
           type: integer
           format: int32
-          description: Can be 'null' if state is empty (no header applied since node launch)
+          description: The height of the best header (i.e. the one with the maximum height).
+            Can be 'null' if state is empty (no header applied since node launch)
           minimum: 0
           example: 667
           nullable: true
         maxPeerHeight:
           type: integer
           format: int32
-          description: Maximum block height of connected peers. Can be 'null' if state is empty (no peer connected since node launch)
+          description: Maximum block height of connected peers.
+            Can be 'null' if state is empty (no peer connected since node launch)
           minimum: 0
           example: 706162
           nullable: true
         bestFullHeaderId:
           type: string
-          description: Can be 'null' if no full block is applied since node launch
+          description: Best full-block id (header id of such block).
+            Can be 'null' if no full block is applied since node launch.
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ModifierId'
         previousFullHeaderId:
           type: string
-          description: Can be 'null' if no full block is applied since node launch
+          description: Header id of the parent block of the best full-block (i.e. previous block in the blockchain).
+            Can be 'null' if no full block is applied since node launch
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ModifierId'
         bestHeaderId:
           type: string
-          description: Can be 'null' if no header applied since node launch
+          description: Best header ID (hex representation). 
+            Can be 'null' if no header applied since node launch.
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ModifierId'
         stateRoot:
           type: string
           nullable: true
-          description: Can be 'null' if state is empty (no full block is applied since node launch)
+          description: Current UTXO set digest. 
+            Can be 'null' if state is empty (no full block is applied since node launch)
           example: 'dab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
         stateType:
+          description: Whether the node is storing UTXO set or only its digest.
+            Equals `digest` if only digest is stored, `utxo` if full UTXO set is stored.
           type: string
           enum:
             - digest
             - utxo
         stateVersion:
-          description: Can be 'null' if no full block is applied since node launch
+          description: Id of a block where UTXO set digest is taken from.
+            Can be 'null' if no full block is applied since node launch.
           type: string
           example: 'fab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
           nullable: true
         isMining:
+          description: Whether the node is mining (i.e. generating blocks).
           type: boolean
           example: true
         peersCount:
           type: integer
-          description: Number of connected peers
+          description: Number of peers this node is connected with.
           format: int32
           minimum: 0
           example: 327
         unconfirmedCount:
-          description: Current unconfirmed transactions count
+          description: Number of unconfirmed transactions in the mempool.
           type: integer
           format: int32
           minimum: 0
@@ -2161,8 +2190,8 @@ components:
           minimum: 0
           nullable: true
           example: 667
-          description: >
-            Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch.
+          description: Difficulty on current bestFullHeaderId. 
+            Can be 'null' if no full block is applied since node launch.
             Difficulty is a BigInt integer.
         currentTime:
           type: integer
@@ -2171,26 +2200,28 @@ components:
             - $ref: '#/components/schemas/Timestamp'
         launchTime:
           type: integer
-          description: Time when the node was started
+          description: When the node was launched (in Java time format, UNIX time * 1000).
           allOf:
             - $ref: '#/components/schemas/Timestamp'
         headersScore:
           type: integer
-          description: Can be 'null' if no headers is applied since node launch. headersScore is a BigInt integer.
+          description: Cumulative difficulty of best headers-chain.
+            Can be 'null' if no headers is applied since node launch. headersScore is a BigInt integer.
           nullable: true
         fullBlocksScore:
           type: integer
-          description: Can be 'null' if no full block is applied since node launch. fullBlocksScore is a BigInt integer.
+          description: Cumulative difficulty of best full blocks chain.
+            Can be 'null' if no full block is applied since node launch. fullBlocksScore is a BigInt integer.
           nullable: true
         genesisBlockId:
           type: string
-          description: Can be 'null' if genesis blocks is not produced yet
+          description: Header id of genesis block. Can be 'null' if genesis blocks is not produced yet.
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ModifierId'
         parameters:
           type: object
-          description: current parameters
+          description: System parameters which could be readjusted via collective miners decision.
           $ref: '#/components/schemas/Parameters'
         eip27Supported:
           type: boolean
@@ -2202,6 +2233,7 @@ components:
           description: Publicly accessible url of node which exposes restApi in firewall
 
     Parameters:
+      description: System parameters which could be readjusted via collective miners decision.
       type: object
       required:
         - height
@@ -2315,7 +2347,7 @@ components:
           example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
 
     Transactions:
-      description: Ergo transaction objects
+      description: List of ErgoTransaction objects
       type: array
       items:
         $ref: '#/components/schemas/ErgoTransaction'
@@ -2683,7 +2715,7 @@ paths:
 
   /blocks/{headerId}/header:
     get:
-      summary: Get the block header info by a given signature
+      summary: Get the block header info by a given header id
       operationId: getBlockHeaderById
       tags:
         - blocks
@@ -2793,7 +2825,7 @@ paths:
         - in: path
           name: count
           required: true
-          description: count of a wanted block headers
+          description: a number of block headers to return
           schema:
             type: number
       responses:
@@ -5706,7 +5738,7 @@ paths:
 
   /blockchain/indexedHeight:
     get:
-      summary: Get current block height the indexer is at
+      summary: Get current indexed block height. (The indexer has processed all blocks up to this height.)
       operationId: getIndexedHeight
       tags:
         - blockchain

@@ -26,7 +26,7 @@ case class InfoApiRoute(statsCollector: ActorRef,
       getFromResource(".well-known/ai-plugin.json", ContentTypes.`application/json`)
     } ~
     (path("openapi.yaml") & get) {
-      getFromResource("api/openapi.yaml", ContentTypes.`text/plain(UTF-8)`)
+      getFromResource("api/openapi-ai.yaml", ContentTypes.`text/plain(UTF-8)`)
     }
   }
 

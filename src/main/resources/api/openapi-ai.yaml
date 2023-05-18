@@ -87,7 +87,7 @@ components:
 
     BalanceInfo:
       type: object
-      description: Balance information
+      description: Represents a balance information (e.g. for an address)
       required:
         - nanoErgs
         - tokens
@@ -98,17 +98,17 @@ components:
           description: Balance of nanoERGs
         tokens:
           type: array
-          description: Balance of tokens
+          description: List of assets (aks tokens) with balances
           items:
             type: object
             properties:
               tokenId:
                 $ref: '#/components/schemas/ModifierId'
-                description: Identifier of the token
+                description: Identifier of the asset (aka token)
               amount:
                 type: integer
                 format: int64
-                description: Amount of the token
+                description: Amount of the asset (aka token)
               decimals:
                 type: integer
                 description: Number of decimals of the token
@@ -940,7 +940,7 @@ components:
 paths:
   /blocks/chainSlice:
     get:
-      summary: Get headers in a specified range of heights
+      description: Get headers in a specified range of heights
       operationId: getChainSlice
       tags:
         - blocks
@@ -978,43 +978,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blocks/{headerId}:
-    get:
-      summary: Get the full block info by a given header id
-      operationId: getFullBlockById
-      tags:
-        - blocks
-      parameters:
-        # todo move out after full support aos3.0 was added to swagger-codegen
-        - in: path
-          name: headerId
-          required: true
-          description: ID of the header the wanted block
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Block object representing the full block data
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FullBlock'
-        '404':
-          description: Block with this id doesn't exist
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
   /info:
     get:
-      summary: Get the basic information about the stat of Ergo Node.
+      description: Get the basic information about the stat of Ergo Node.
       operationId: getNodeInfo
       tags:
         - info
@@ -1032,45 +998,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /transactions/unconfirmed:
-    parameters:
-      - in: query
-        name: limit
-        required: false
-        description: The number of items in list to return
-        schema:
-          type: integer
-          format: int32
-          minimum: 10
-          maximum: 100
-          default: 50
-      - in: query
-        name: offset
-        required: false
-        description: The number of items in list to skip
-        schema:
-          type: integer
-          format: int32
-          default: 0
-    get:
-      summary: Get current pool of the unconfirmed transactions pool
-      operationId: getUnconfirmedTransactions
-      tags:
-        - transactions
-      responses:
-        '200':
-          description: Array with Ergo transactions
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Transactions'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
   /transactions/unconfirmed/byTransactionId/{txId}:
     parameters:
       - in: path
@@ -1080,7 +1007,7 @@ paths:
         schema:
           type: string
     get:
-      summary: Get unconfirmed transaction from the mempool
+      description: Get unconfirmed transaction from the mempool
       operationId: getUnconfirmedTransactionById
       tags:
         - transactions
@@ -1119,7 +1046,7 @@ paths:
           minimum: 0
           default: 60000
     get:
-      summary: Get histogram (waittime, (n_trans, sum(fee)) for transactions in mempool.
+      description: Get histogram (waittime, (n_trans, sum(fee)) for transactions in mempool.
         It contains "bins"+1 bins, where i-th elements corresponds to transaction with wait time [i*maxtime/bins, (i+1)*maxtime/bins),
         and last bin corresponds to the transactions with wait time >= maxtime.
       operationId: getFeeHistogram
@@ -1141,7 +1068,7 @@ paths:
 
   /peers/connected:
     get:
-      summary: Get current connected peers
+      description: Get current connected peers
       operationId: getConnectedPeers
       tags:
         - peers
@@ -1163,7 +1090,7 @@ paths:
 
   /peers/blacklisted:
     get:
-      summary: Get blacklisted peers
+      description: Get blacklisted peers
       operationId: getBlacklistedPeers
       tags:
         - peers
@@ -1184,7 +1111,7 @@ paths:
 
   /utils/address/{address}:
     get:
-      summary: Check address validity (prefer POST request as addresses can be too big)
+      description: Check address validity (prefer POST request as addresses can be too big)
       operationId: CheckAddressValidityWithGet
       tags:
         - utils
@@ -1209,37 +1136,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /utils/ergoTreeToAddress/{ergoTreeHex}:
-    get:
-      summary: Generate Ergo address from hex-encoded ErgoTree (prefer POST request as ErgoTree can be too big)
-      operationId: ErgoTreeToAddressWithGet
-      tags:
-        - utils
-      parameters:
-        - in: path
-          name: ergoTreeHex
-          required: true
-          description: ErgoTree to derive an address from
-          schema:
-            type: string
-            example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
-      responses:
-        '200':
-          description: Ergo address
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErgoAddress'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
   /utils/hash/blake2b:
     post:
-      summary: Return Blake2b hash of specified message
+      description: Return Blake2b hash of specified message
       operationId: hashBlake2b
       tags:
         - utils
@@ -1267,7 +1166,7 @@ paths:
 
   /blockchain/indexedHeight:
     get:
-      summary: Get current indexed block height. (The indexer has processed all blocks up to this height.)
+      description: Get current indexed block height. (The indexer has processed all blocks up to this height.)
       operationId: getIndexedHeight
       tags:
         - blockchain
@@ -1288,7 +1187,7 @@ paths:
 
   /blockchain/transaction/byId/{txId}:
     get:
-      summary: Retrieve a transaction by its id
+      description: Retrieve a transaction by its id
       operationId: getTxById
       tags:
         - blockchain
@@ -1321,7 +1220,7 @@ paths:
 
   /blockchain/transaction/byAddress:
     post:
-      summary: Retrieve transactions by their associated address
+      description: Retrieve transactions by their associated address
       operationId: getTxsByAddress
       tags:
         - blockchain
@@ -1380,7 +1279,7 @@ paths:
 
   /blockchain/box/byId/{boxId}:
     get:
-      summary: Retrieve a box by its id
+      description: Retrieve a box by its id
       operationId: getBoxById
       tags:
         - blockchain
@@ -1413,17 +1312,10 @@ paths:
 
   /blockchain/box/byAddress:
     post:
-      summary: Retrieve boxes by their associated address
+      description: Retrieve boxes by their associated address
       operationId: getBoxesByAddress
       tags:
         - blockchain
-      requestBody:
-        required: true
-        content:
-          application/json:
-            description: adderess associated with boxes
-            schema:
-              $ref: '#/components/schemas/ErgoAddress'
       parameters:
         - in: query
           name: offset
@@ -1472,7 +1364,7 @@ paths:
 
   /blockchain/box/unspent/byAddress:
     post:
-      summary: Retrieve unspent boxes by their associated address
+      description: Retrieve unspent boxes by their associated address
       operationId: getBoxesByAddressUnspent
       tags:
         - blockchain
@@ -1532,7 +1424,7 @@ paths:
 
   /blockchain/token/byId/{tokenId}:
     get:
-      summary: Retrieve minting information about a token
+      description: Retrieve minting information about a token
       operationId: getTokenById
       tags:
         - blockchain
@@ -1563,19 +1455,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/balance:
-    post:
-      summary: Retrieve confirmed and unconfirmed balance of an address
-      operationId: getAddressBalanceTotal
+  /blockchain/balanceForAddress/{address}:
+    get:
+      description: Retrieve balance information of an Ergo address. 
+        Separately return confirmed and unconfirmed balance information.
+      operationId: getBalanceForAddress
       tags:
         - blockchain
-      requestBody:
-        required: true
-        content:
-          application/json:
-            description: adderess with balance
-            schema:
-              $ref: '#/components/schemas/ErgoAddress'
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to retrieve balance information for
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
       responses:
         '200':
           description: balance information
@@ -1585,8 +1478,10 @@ paths:
                 type: object
                 properties:
                   confirmed:
+                    description: confirmed balance of the address
                     $ref: '#/components/schemas/BalanceInfo'
                   unconfirmed:
+                    description: unconfirmed balance of the address
                     $ref: '#/components/schemas/BalanceInfo'
         default:
           description: Error

@@ -76,7 +76,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getBoxesByErgoTreeR ~
       getBoxesByErgoTreeUnspentR ~
       getTokenInfoByIdR ~
-      getAddressBalanceTotalR
+      getAddressBalanceTotalR ~
+      getAddressBalanceTotalR_v2
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
@@ -308,6 +309,13 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getAddressBalanceTotalR: Route = (post & pathPrefix("balance") & ergoAddress) { address =>
     ApiResponse(getAddressBalanceTotal(address))
   }
+
+  val addressParam: Directive1[ErgoAddress] = pathPrefix(Segment).flatMap(handleErgoAddress)
+
+  private def getAddressBalanceTotalR_v2: Route =
+    (pathPrefix("balanceForAddress") & get & addressParam) { address =>
+      ApiResponse(getAddressBalanceTotal(address))
+    }
 
 }
 

@@ -1310,13 +1310,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/box/byAddress:
+  /blockchain/box/byAddress/{address}:
     post:
       description: Retrieve boxes by their associated address
       operationId: getBoxesByAddress
       tags:
         - blockchain
       parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to retrieve boxes for
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
         - in: query
           name: offset
           required: false

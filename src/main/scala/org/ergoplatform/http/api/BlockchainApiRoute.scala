@@ -72,6 +72,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getBoxByIndexR ~
       getBoxesByAddressR ~
       getBoxesByAddressUnspentR ~
+      getBoxesByAddressUnspentR_get ~
       getBoxRangeR ~
       getBoxesByErgoTreeR ~
       getBoxesByErgoTreeUnspentR ~
@@ -213,15 +214,30 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByAddressUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir) { (address, offset, limit, dir) =>
-    if(limit > MaxItems) {
+  private def validateAndGetBoxesByAddressUnspent(address: ErgoAddress,
+                                                  offset: Int,
+                                                  limit: Int,
+                                                  dir: Direction): Route = {
+    if (limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
-    }else if(dir == SortDirection.INVALID) {
+    } else if (dir == SortDirection.INVALID) {
       BadRequest("Invalid parameter for sort direction, valid values are \"ASC\" and \"DESC\"")
-    }else {
+    } else {
       ApiResponse(getBoxesByAddressUnspent(address, offset, limit, dir))
     }
   }
+
+  private def getBoxesByAddressUnspentR: Route =
+    (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir) {
+      (address, offset, limit, dir) =>
+        validateAndGetBoxesByAddressUnspent(address, offset, limit, dir)
+    }
+
+  private def getBoxesByAddressUnspentR_get: Route =
+    (pathPrefix("box" / "unspent" / "byAddress") & addressPass & paging & sortDir) {
+      (address, offset, limit, dir) =>
+        validateAndGetBoxesByAddressUnspent(address, offset, limit, dir)
+    }
 
   private def getBoxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
     getHistory.map { history =>
@@ -310,10 +326,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getAddressBalanceTotal(address))
   }
 
-  val addressParam: Directive1[ErgoAddress] = pathPrefix(Segment).flatMap(handleErgoAddress)
+  val addressPass: Directive1[ErgoAddress] = pathPrefix(Segment).flatMap(handleErgoAddress)
 
   private def getAddressBalanceTotalR_v2: Route =
-    (pathPrefix("balanceForAddress") & get & addressParam) { address =>
+    (pathPrefix("balanceForAddress") & get & addressPass) { address =>
       ApiResponse(getAddressBalanceTotal(address))
     }
 

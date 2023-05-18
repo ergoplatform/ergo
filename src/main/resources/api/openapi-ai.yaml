@@ -1362,20 +1362,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/box/unspent/byAddress:
-    post:
+  /blockchain/box/unspent/byAddress/{address}:
+    get:
       description: Retrieve unspent boxes by their associated address
       operationId: getBoxesByAddressUnspent
       tags:
         - blockchain
-      requestBody:
-        required: true
-        content:
-          application/json:
-            description: adderess associated with unspent boxes
-            schema:
-              $ref: '#/components/schemas/ErgoAddress'
       parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to retrieve boxes for
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
         - in: query
           name: offset
           required: false

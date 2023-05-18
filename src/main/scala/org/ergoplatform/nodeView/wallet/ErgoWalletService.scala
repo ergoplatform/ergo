@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGen
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.boxes.{BoxSelector, ErgoBoxSerializer}
+import org.ergoplatform.wallet.boxes.{BoxSelector, ErgoBoxSerializer, TrackedBox}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
@@ -417,14 +417,15 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   }
 
   override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox] = {
-    val unconfirmed = if (considerUnconfirmed) {
-      state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
-    } else {
-      Array.empty
-    }
+    val unconfirmed: Array[TrackedBox] =
+      if (considerUnconfirmed) {
+        state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
+      } else {
+        Array.empty[TrackedBox]
+      }
 
     val currentHeight = state.fullHeight
-    val unspentBoxes = state.registry.unspentBoxesByInclusionHeight(scanId, minHeight, maxHeight)
+    val unspentBoxes: Array[TrackedBox] = state.registry.unspentBoxesByInclusionHeight(scanId, minHeight, maxHeight)
     (unspentBoxes ++ unconfirmed).map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 

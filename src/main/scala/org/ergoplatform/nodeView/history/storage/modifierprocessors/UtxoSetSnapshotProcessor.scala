@@ -157,8 +157,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
       case Some(plan) =>
         cfor(0)(_ < plan.downloadedChunkIds.size, _ + 1) { idx =>
           if (!plan.downloadedChunkIds(idx) && plan.expectedChunkIds(idx).sameElements(chunkId)) {
-            val idxBytes = Ints.toByteArray(idx)
-            historyStorage.insert(downloadedChunksPrefix ++ idxBytes, chunkSerialized)
+            historyStorage.insert(chunkIdFromIndex(idx), chunkSerialized)
             val updDownloaded = plan.downloadedChunkIds.updated(idx, true)
             val updDownloading = plan.downloadingChunks - 1
             val updPlan = plan.copy(latestUpdateTime = System.currentTimeMillis(), downloadedChunkIds = updDownloaded, downloadingChunks = updDownloading)
@@ -171,11 +170,13 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
+  private def chunkIdFromIndex(index: Int): Array[Byte] = {
+    val idxBytes = Ints.toByteArray(index)
+    downloadedChunksPrefix ++ idxBytes
+  }
+
   private def downloadedChunkIdsIterator(totalChunks: Int): Iterator[Array[Byte]] = {
-    Iterator.range(0, totalChunks).map { idx =>
-      val idxBytes = Ints.toByteArray(idx)
-      downloadedChunksPrefix ++ idxBytes
-    }
+    Iterator.range(0, totalChunks).map(chunkIdFromIndex)
   }
 
   /**
@@ -235,4 +236,5 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
         Failure(new Exception(msg))
     }
   }
+
 }

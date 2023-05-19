@@ -3,7 +3,20 @@ openapi: "3.0.2"
 info:
   version: "5.0.10"
   title: Ergo Node API
-  description: API docs for Ergo Node. Models are shared between all Ergo products
+  description: Specification of Ergo Node API for ChatGPT plugin.
+    The following endpoints supported 
+      - /blocks/chainSlice - Get headers in a specified range of heights
+      - /info - Get the basic information about the status of Ergo Node. 
+      - /transactions/unconfirmed/byTransactionId - Get unconfirmed transaction from the mempool
+      - /transactions/poolHistogram - Get histogram (waittime, (n_trans, sum(fee)) for transactions in mempool.
+      - /blockchain/indexedHeight - Get current indexed block height. (The indexer has processed all blocks up to this height.)
+      - /blockchain/transaction/byId - Retrieve a transaction by its id
+      - /blockchain/transaction/byAddress - Retrieve a list of transactions by their associated address
+      - /blockchain/box/byId - Retrieve a box by its id
+      - /blockchain/box/byAddress - Retrieve boxes by their associated 
+      - /blockchain/box/unspent/byAddress - Retrieve unspent boxes by their associated address
+      - /blockchain/token/byId - Retrieve minting information about a token
+      - /blockchain/balanceForAddress - Retrieve balance information of an Ergo address.
 
 servers:
   - url: http://localhost:9052
@@ -980,7 +993,7 @@ paths:
 
   /info:
     get:
-      description: Get the basic information about the stat of Ergo Node.
+      description: Get the basic information about the status of Ergo Node.
       operationId: getNodeInfo
       tags:
         - info
@@ -1068,7 +1081,7 @@ paths:
 
   /peers/connected:
     get:
-      description: Get current connected peers
+      description: Get a list of current connected peers
       operationId: getConnectedPeers
       tags:
         - peers
@@ -1090,7 +1103,7 @@ paths:
 
   /peers/blacklisted:
     get:
-      description: Get blacklisted peers
+      description: Get a list of blacklisted peers
       operationId: getBlacklistedPeers
       tags:
         - peers
@@ -1111,7 +1124,7 @@ paths:
 
   /utils/address/{address}:
     get:
-      description: Check address validity (prefer POST request as addresses can be too big)
+      description: Check address validity
       operationId: CheckAddressValidityWithGet
       tags:
         - utils
@@ -1129,34 +1142,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AddressValidity'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /utils/hash/blake2b:
-    post:
-      description: Return Blake2b hash of specified message
-      operationId: hashBlake2b
-      tags:
-        - utils
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: string
-              example: '"7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV"'
-      responses:
-        '200':
-          description: Base16-encoded 32 byte hash
-          content:
-            application/json:
-              schema:
-                type: string
-                example: '"6ed54addddaf10fe8fcda330bd443a57914fbce38a9fa27248b07e361cc76a41"'
         default:
           description: Error
           content:
@@ -1220,7 +1205,7 @@ paths:
 
   /blockchain/transaction/byAddress/{address}:
     post:
-      description: Retrieve transactions by their associated address
+      description: Retrieve a list of transactions by their associated address
       operationId: getTxsByAddress
       tags:
         - blockchain

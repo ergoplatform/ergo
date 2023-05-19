@@ -12,6 +12,8 @@ import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.util.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.{LDBFactory, LDBVersionedStore}
+import scorex.util.ByteArrayBuilder
+import scorex.util.serialization.VLQByteBufferWriter
 import scorex.utils.{Random => RandomBytes}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -343,6 +345,7 @@ class VersionedLDBAVLStorageSpecification
 
   property("dumping snapshot") {
     val manifestDepth: Byte = 6
+    val manifestSerializer = new ManifestSerializer(manifestDepth)
     val prover = createPersistentProver()
     blockchainWorkflowTest(prover)
 
@@ -352,7 +355,14 @@ class VersionedLDBAVLStorageSpecification
     val rootNodeLabel = storage.dumpSnapshot(store, manifestDepth, prover.digest.dropRight(1)).get
     rootNodeLabel.sameElements(prover.digest.dropRight(1)) shouldBe true
     val manifestBytes = store.get(rootNodeLabel).get
-    val manifest = new ManifestSerializer(manifestDepth).parseBytesTry(manifestBytes).get
+    val manifest = manifestSerializer.parseBytesTry(manifestBytes).get
+
+    val writer = new VLQByteBufferWriter(new ByteArrayBuilder())
+    manifestSerializer.serialize(prover.prover().topNode, prover.prover().rootNodeHeight.toByte, writer)
+    val altManifestBytes = writer.result().toBytes
+
+    manifestBytes.sameElements(altManifestBytes) shouldBe true
+
     val subtreeIds = manifest.subtreesIds
     subtreeIds.foreach { sid =>
       val chunkBytes = store.get(sid).get

@@ -905,14 +905,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val encodedManifestId = ModifierId @@ Algos.encode(manifestId)
       val ownId = hr.bestHeaderAtHeight(height).map(_.stateRoot).map(stateDigest => splitDigest(stateDigest)._1)
       if (ownId.getOrElse(Array.emptyByteArray).sameElements(manifestId)) {
-        log.debug(s"Got manifest $encodedManifestId for height $height from $remote")
+        log.debug(s"Discovered manifest $encodedManifestId for height $height from $remote")
         // add manifest to available manifests dictionary if it is not written there yet
         val existingOffers = availableManifests.getOrElse(encodedManifestId, (height -> Seq.empty))
         if (!existingOffers._2.contains(remote)) {
           log.info(s"Found new manifest ${Algos.encode(manifestId)} for height $height at $remote")
           availableManifests.put(encodedManifestId, height -> (existingOffers._2 :+ remote))
         } else {
-          log.warn(s"Got manifest $manifestId twice from $remote")
+          log.warn(s"Double manifest declaration for $manifestId from $remote")
         }
       } else {
         log.error(s"Got wrong manifest id $encodedManifestId from $remote")

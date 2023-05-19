@@ -67,6 +67,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getTxByIdR ~
       getTxByIndexR ~
       getTxsByAddressR ~
+      getTxsByAddressR_get ~
       getTxRangeR ~
       getBoxByIdR ~
       getBoxByIndexR ~
@@ -141,12 +142,22 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getTxsByAddressR: Route = (post & pathPrefix("transaction" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
-    if(limit > MaxItems) {
+  private def validateAndGetTxsByAddress(address: ErgoAddress,
+                                         offset: Int,
+                                         limit: Int): Route = {
+    if (limit > MaxItems) {
       BadRequest(s"No more than $MaxItems transactions can be requested")
-    }else {
+    } else {
       ApiResponse(getTxsByAddress(address, offset, limit))
     }
+  }
+
+  private def getTxsByAddressR: Route = (post & pathPrefix("transaction" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
+    validateAndGetTxsByAddress(address, offset, limit)
+  }
+
+  private def getTxsByAddressR_get: Route = (pathPrefix("transaction" / "byAddress") & get & addressPass & paging) { (address, offset, limit) =>
+    validateAndGetTxsByAddress(address, offset, limit)
   }
 
   private def getTxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
@@ -213,7 +224,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     validateAndGetBoxesByAddress(address, offset, limit)
   }
 
-  private def getBoxesByAddressR_get: Route = (pathPrefix("box" / "byAddress") & addressPass & paging) { (address, offset, limit) =>
+  private def getBoxesByAddressR_get: Route = (pathPrefix("box" / "byAddress") & get & addressPass & paging) { (address, offset, limit) =>
     validateAndGetBoxesByAddress(address, offset, limit)
   }
 
@@ -245,7 +256,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
 
   private def getBoxesByAddressUnspentR_get: Route =
-    (pathPrefix("box" / "unspent" / "byAddress") & addressPass & paging & sortDir) {
+    (pathPrefix("box" / "unspent" / "byAddress") & get & addressPass & paging & sortDir) {
       (address, offset, limit, dir) =>
         validateAndGetBoxesByAddressUnspent(address, offset, limit, dir)
     }

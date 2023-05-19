@@ -1218,20 +1218,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/transaction/byAddress:
+  /blockchain/transaction/byAddress/{address}:
     post:
       description: Retrieve transactions by their associated address
       operationId: getTxsByAddress
       tags:
         - blockchain
-      requestBody:
-        required: true
-        content:
-          application/json:
-            description: adderess associated with transactions
-            schema:
-              $ref: '#/components/schemas/ErgoAddress'
       parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to retrieve associated transactions
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
         - in: query
           name: offset
           required: false
@@ -1250,7 +1249,7 @@ paths:
             default: 5
       responses:
         '200':
-          description: transactions associated with wanted address
+          description: transactions associated with the given address
           content:
             application/json:
               schema:
@@ -1263,7 +1262,7 @@ paths:
                       $ref: '#/components/schemas/IndexedErgoTransaction'
                   total:
                     type: integer
-                    description: Total count of retreived transactions
+                    description: Total count of retrieved transactions
         '404':
           description: No transactions found for wanted address
           content:

@@ -60,8 +60,15 @@ object UtxoSetSnapshotDownloadPlan {
     val now = System.currentTimeMillis()
 
     // it is safe to call .toByte below, as the whole tree has height <= 127, and manifest even less
-    UtxoSetSnapshotDownloadPlan(now, blockHeight, manifest.id, manifest.rootHeight.toByte, subtrees.toIndexedSeq,
-      IndexedSeq.empty, 0, peersToDownload)
+    UtxoSetSnapshotDownloadPlan(
+      latestUpdateTime = now,
+      snapshotHeight = blockHeight,
+      utxoSetRootHash = manifest.id,
+      utxoSetTreeHeight = manifest.rootHeight.toByte,
+      expectedChunkIds = subtrees.toIndexedSeq,
+      downloadedChunkIds = IndexedSeq.empty,
+      downloadingChunks = 0,
+      peersToDownload = peersToDownload)
   }
 
 }

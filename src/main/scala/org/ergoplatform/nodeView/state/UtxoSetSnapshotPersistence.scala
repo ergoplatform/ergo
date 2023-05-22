@@ -68,7 +68,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
         log.info("Work within future finished in: " + (ft - ft0) + " ms.")
       }(scala.concurrent.ExecutionContext.Implicits.global)
       val ms = System.currentTimeMillis()
-      log.info("Main thread time to dump utxo set snapshot: " + (ms - ms0))
+      log.info("Main thread time to dump utxo set snapshot: " + (ms - ms0) + " ms.")
     }
   }
 

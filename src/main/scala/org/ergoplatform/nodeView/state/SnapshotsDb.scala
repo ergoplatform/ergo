@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.serialization.ManifestSerializer
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
 import scorex.crypto.hash.Digest32
@@ -10,6 +10,8 @@ import scorex.db.{LDBFactory, LDBKVStore}
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -39,48 +41,69 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
     // sort manifests by height to prune oldest ones after
     val manifests = readSnapshotsInfo.availableManifests.toSeq.sortBy(_._1)
+    val manifestSerializer = ManifestSerializer.defaultSerializer
 
-    val (toPrune, toLeave) = if (manifests.size > toStore) {
-      val tp = manifests.dropRight(toStore)
-      val tl = manifests.takeRight(toStore)
-      tp -> tl
-    } else {
-      log.info("No snapshots to prune")
-      return
-    }
+    if (manifests.size > toStore) {
 
-    toPrune.foreach { case (h, manifestId) =>
-      log.info(s"Pruning snapshot at height $h")
-      val keysToRemove: Array[Array[Byte]] = store.get(manifestId) match {
-        case Some(manifestBytes) =>
-          ManifestSerializer.defaultSerializer.parseBytesTry(manifestBytes) match {
-            case Success(m) =>
-              (m.subtreesIds += manifestId).toArray // todo: more efficient construction
-            case Failure(e) =>
-              log.error(s"Can't parse manifest ${Base16.encode(manifestId)} :", e)
-              Array.empty
-          }
-        case None =>
-          log.error(s"Manifest ${Base16.encode(manifestId)} not found:")
-          Array.empty
+      val lastManifestBytes = manifests.last._2
+      val lastManifestSubtrees =
+        manifestSerializer
+          .parseBytesTry(lastManifestBytes)
+          .map(_.subtreesIds)
+          .getOrElse(ArrayBuffer.empty)
+          .map(Algos.encode)
+          .toSet
+
+      val toPrune = manifests.dropRight(toStore)
+      val toLeave = manifests.takeRight(toStore)
+
+      toPrune.foreach { case (h, manifestId) =>
+        val pt0 = System.currentTimeMillis()
+        val keysToRemove: Array[Array[Byte]] = store.get(manifestId) match {
+          case Some(manifestBytes) =>
+            manifestSerializer.parseBytesTry(manifestBytes) match {
+              case Success(m) =>
+                val keys = mutable.ArrayBuilder.make[Array[Byte]]()
+                val subtrees = m.subtreesIds
+                keys.sizeHint(subtrees.size + 1)
+                keys += manifestId
+                // filter out subtrees which are the same in the latest version of tree snapshot
+                subtrees.foreach { subtreeId =>
+                  if (!lastManifestSubtrees.contains(Algos.encode(subtreeId))) {
+                    keys += subtreeId
+                  }
+                }
+                keys.result()
+              case Failure(e) =>
+                log.error(s"Can't parse manifest ${Base16.encode(manifestId)} :", e)
+                Array.empty
+            }
+          case None =>
+            log.error(s"Manifest ${Base16.encode(manifestId)} not found when should be pruned")
+            Array.empty
+        }
+        store.remove(keysToRemove)
+        val pt = System.currentTimeMillis()
+        log.info(s"Pruning snapshot at height $h done in ${pt - pt0} ms.")
       }
-      store.remove(keysToRemove)
+
+      val updInfo = new SnapshotsInfo(toLeave.toMap)
+      writeSnapshotsInfo(updInfo)
+
+      log.info("Snapshots pruning finished")
+    } else {
+      log.debug("No snapshots to prune")
     }
-
-    val updInfo = new SnapshotsInfo(toLeave.toMap)
-    writeSnapshotsInfo(updInfo)
-
-    log.info("Snapshots pruning finished")
   }
 
   /**
     * Lazily read current UTXO set snapshot from versioned AVL+ tree database and store it in this snapshots database
     *
-    * @param pullFrom - versioned AVL+ tree database to pull snapshot from
-    * @param height - height of a block snapshot is corresponding to
+    * @param pullFrom         - versioned AVL+ tree database to pull snapshot from
+    * @param height           - height of a block snapshot is corresponding to
     * @param expectedRootHash - expected tree root hash in `pullFrom` database
     * @return - id of the snapshot (root hash of its authenticating AVL+ tree),
-    *           or error happened during read-write process
+    *         or error happened during read-write process
     */
   def writeSnapshot(pullFrom: VersionedLDBAVLStorage,
                     height: Height,
@@ -95,6 +118,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
   /**
     * Read manifest bytes without deserializing it. Useful when manifest is to be sent over the wir
+    *
     * @param id - manifest id
     */
   def readManifestBytes(id: ManifestId): Option[Array[Byte]] = {
@@ -103,6 +127,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
   /**
     * Read subtree bytes without deserializing it. Useful when subtree is to be sent over the wir
+    *
     * @param id - subtree id
     */
   def readSubtreeBytes(id: SubtreeId): Option[Array[Byte]] = {

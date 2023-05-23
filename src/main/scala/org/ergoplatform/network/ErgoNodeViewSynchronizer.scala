@@ -971,7 +971,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Success(subtree) =>
         val chunkId = ModifierId @@ Algos.encode(subtree.id)
         deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId) match {
-          case Some(ri) if ri.peer == remote =>
+          case Some(_) =>
             log.debug(s"Got utxo snapshot chunk, id: $chunkId, size: ${serializedChunk.length}")
             deliveryTracker.setUnknown(chunkId, UtxoSnapshotChunkTypeId.value)
             hr.registerDownloadedChunk(subtree.id, serializedChunk)
@@ -1000,8 +1000,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 log.warn(s"No download plan found when processing UTXO set snapshot chunk $chunkId")
             }
 
-          case _ =>
-            log.info(s"Penalizing spamming peer $remote sent non-asked UTXO set snapshot $chunkId")
+          case None =>
+            log.info(s"Penalizing spamming peer $remote sent non-asked UTXO set snapshot chunk $chunkId")
             penalizeSpammingPeer(remote)
         }
 

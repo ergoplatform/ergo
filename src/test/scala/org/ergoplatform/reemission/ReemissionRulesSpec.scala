@@ -1,15 +1,15 @@
 package org.ergoplatform.reemission
 
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoScriptPredef, Input}
 import org.ergoplatform.settings.{MonetarySettings, ReemissionSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestConstants}
+import org.ergoplatform._
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.ModifierId
 import sigmastate.AvlTreeData
 import sigmastate.TrivialProp.TrueProp
-import sigmastate.eval.{Colls, Digest32RType, IRContext, RuntimeCosting}
-import sigmastate.helpers.{ContextEnrichingTestProvingInterpreter, ErgoLikeContextTesting, ErgoLikeTestInterpreter}
+import sigmastate.eval.{Colls, Digest32RType}
 import sigmastate.helpers.TestingHelpers.testBox
+import sigmastate.helpers.{ContextEnrichingTestProvingInterpreter, ErgoLikeContextTesting, ErgoLikeTestInterpreter}
 import sigmastate.interpreter.Interpreter.emptyEnv
 
 import scala.util.{Failure, Success, Try}
@@ -30,9 +30,7 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
 
   private val rr = new ReemissionRules(rs)
 
-  private val reemissionBoxAssets = Colls.fromMap[Digest32, Long](
-    Map((Digest32 @@ rs.reemissionNftIdBytes) -> 1L)
-  )
+  private val reemissionBoxAssets = Colls.fromItems((Digest32 @@ rs.reemissionNftIdBytes) -> 1L)
 
   private val fakeMessage = Blake2b256("Hello World")
 
@@ -60,12 +58,6 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
         throw new Exception("Unexpected exception thrown: ", e)
       case _ =>
     }
-  }
-
-  class TestingIRContext extends IRContext with RuntimeCosting
-
-  private implicit lazy val IR: TestingIRContext = new TestingIRContext {
-    override val okPrintEvaluatedEntries: Boolean = false
   }
 
   ignore("reemission rules test vectors") {
@@ -192,8 +184,8 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
     checkRewardsTx(currentHeight, pkBytes, inputBoxes, spendingTransaction5, false)
 
     // pay-2-reemission box can be spent only with a box with reemission NFT as input #0
-    val reemissionBoxAssets6 = Colls.fromMap[Digest32, Long](
-      Map((Digest32 @@ rs.reemissionNftIdBytes.reverse) -> 1L)
+    val reemissionBoxAssets6 = Colls.fromItems(
+      (Digest32 @@ rs.reemissionNftIdBytes.reverse) -> 1L
     )
     val newReemissionBox6 = new ErgoBoxCandidate(reemissionBox.value + mergedValue - feeValue, prop, currentHeight, reemissionBoxAssets6)
     val spendingTransaction6 = ErgoLikeTransaction(inputs, IndexedSeq(newReemissionBox6, feeBox))

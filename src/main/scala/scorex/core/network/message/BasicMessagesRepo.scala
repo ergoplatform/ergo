@@ -1,20 +1,28 @@
 package scorex.core.network.message
 
 
+import org.ergoplatform.modifiers.NetworkObjectTypeId
+import org.ergoplatform.nodeView.state.SnapshotsInfo
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
+import org.ergoplatform.wallet.Constants
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
-import scorex.core.serialization.ScorexSerializer
-import scorex.core.{ModifierTypeId, NodeViewModifier}
+import scorex.core.serialization.ErgoSerializer
+import scorex.core.NodeViewModifier
+import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
 import scala.collection.immutable
 
-case class ModifiersData(typeId: ModifierTypeId, modifiers: Map[ModifierId, Array[Byte]])
+/**
+  * Wrapper for block sections of the same type. Used to send multiple block sections at once ove the wire.
+  */
+case class ModifiersData(typeId: NetworkObjectTypeId.Value, modifiers: Map[ModifierId, Array[Byte]])
 
-case class InvData(typeId: ModifierTypeId, ids: Seq[ModifierId])
+case class InvData(typeId: NetworkObjectTypeId.Value, ids: Seq[ModifierId])
 
 /**
   * The `SyncInfo` message requests an `Inv` message that provides modifier ids
@@ -24,7 +32,7 @@ case class InvData(typeId: ModifierTypeId, ids: Seq[ModifierId])
   *
   * Payload of this message should be determined in underlying applications.
   */
-class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ScorexSerializer[SI]) extends MessageSpecV1[SI] {
+class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ErgoSerializer[SI]) extends MessageSpecV1[SI] {
 
   override val messageCode: MessageCode = 65: Byte
   override val messageName: String = "Sync"
@@ -63,7 +71,7 @@ object InvSpec extends MessageSpecV1[InvData] {
   }
 
   override def parse(r: Reader): InvData = {
-    val typeId = ModifierTypeId @@ r.getByte()
+    val typeId = NetworkObjectTypeId.fromByte(r.getByte())
     val count = r.getUInt().toIntExact
     require(count > 0, "empty inv list")
     require(count <= maxInvObjects, s"$count elements in a message while limit is $maxInvObjects")
@@ -142,7 +150,7 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
   }
 
   override def parse(r: Reader): ModifiersData = {
-    val typeId = ModifierTypeId @@ r.getByte() // 1 byte
+    val typeId = NetworkObjectTypeId.fromByte(r.getByte()) // 1 byte
     val count = r.getUInt().toIntExact // 8 bytes
     require(count > 0, s"Illegal message with 0 modifiers of type $typeId")
     val resMap = immutable.Map.newBuilder[ModifierId, Array[Byte]]
@@ -244,3 +252,147 @@ object HandshakeSerializer extends MessageSpecV1[Handshake] {
   }
 
 }
+
+
+/**
+  * The `GetSnapshotsInfo` message requests an `SnapshotsInfo` message from the receiving node
+  */
+object GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
+  private val SizeLimit = 100
+
+  override val messageCode: MessageCode = 76: Byte
+
+  override val messageName: String = "GetSnapshotsInfo"
+
+  override def serialize(obj: Unit, w: Writer): Unit = {
+  }
+
+  override def parse(r: Reader): Unit = {
+    require(r.remaining < SizeLimit, "Too big GetSnapshotsInfo message")
+  }
+}
+
+/**
+  * The `SnapshotsInfo` message is a reply to a `GetSnapshotsInfo` message.
+  * It contains information about UTXO set snapshots stored locally.
+  */
+object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
+  private val SizeLimit = 20000
+
+  override val messageCode: MessageCode = 77: Byte
+
+  override val messageName: String = "SnapshotsInfo"
+
+  override def serialize(si: SnapshotsInfo, w: Writer): Unit = {
+    w.putUInt(si.availableManifests.size)
+    for ((height, manifest) <- si.availableManifests) {
+      w.putInt(height)
+      w.putBytes(manifest)
+    }
+  }
+
+  override def parse(r: Reader): SnapshotsInfo = {
+    require(r.remaining <= SizeLimit, s"Too big SnapshotsInfo message: ${r.remaining} bytes found, $SizeLimit max expected.")
+
+    val length = r.getUInt().toIntExact
+    val manifests = (0 until length).map { _ =>
+      val height = r.getInt()
+      val manifest = Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+      height -> manifest
+    }.toMap
+    new SnapshotsInfo(manifests)
+  }
+
+}
+
+/**
+  * The `GetManifest` sends manifest (BatchAVLProverManifest) identifier
+  */
+object GetManifestSpec extends MessageSpecV1[ManifestId] {
+  private val SizeLimit = 100
+
+  override val messageCode: MessageCode = 78: Byte
+  override val messageName: String = "GetManifest"
+
+  override def serialize(id: ManifestId, w: Writer): Unit = {
+    w.putBytes(id)
+  }
+
+  override def parse(r: Reader): ManifestId = {
+    require(r.remaining < SizeLimit, "Too big GetManifest message")
+    Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+  }
+
+}
+
+/**
+  * The `Manifest` message is a reply to a `GetManifest` message.
+  * It contains serialized manifest, top subtree of a tree authenticating UTXO set snapshot
+  */
+object ManifestSpec extends MessageSpecV1[Array[Byte]] {
+  private val SizeLimit = 4000000
+
+  override val messageCode: MessageCode = 79: Byte
+
+  override val messageName: String = "Manifest"
+
+  override def serialize(manifestBytes: Array[Byte], w: Writer): Unit = {
+    w.putUInt(manifestBytes.length)
+    w.putBytes(manifestBytes)
+  }
+
+  override def parse(r: Reader): Array[Byte] = {
+    require(r.remaining <= SizeLimit, s"Too big Manifest message.")
+
+    val length = r.getUInt().toIntExact
+    r.getBytes(length)
+  }
+
+}
+
+/**
+  * The `GetUtxoSnapshotChunk` sends send utxo subtree (BatchAVLProverSubtree) identifier
+  */
+object GetUtxoSnapshotChunkSpec extends MessageSpecV1[SubtreeId] {
+  private val SizeLimit = 100
+
+  override val messageCode: MessageCode = 80: Byte
+
+  override val messageName: String = "GetUtxoSnapshotChunk"
+
+  override def serialize(id: SubtreeId, w: Writer): Unit = {
+    w.putBytes(id)
+  }
+
+  override def parse(r: Reader): SubtreeId = {
+    require(r.remaining < SizeLimit, "Too big GetUtxoSnapshotChunk message")
+    Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+  }
+
+}
+
+/**
+  * The `UtxoSnapshotChunk` message is a reply to a `GetUtxoSnapshotChunk` message.
+  */
+object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
+  private val SizeLimit = 4000000
+
+  override val messageCode: MessageCode = 81: Byte
+
+  override val messageName: String = "UtxoSnapshotChunk"
+
+  override def serialize(subtree: Array[Byte], w: Writer): Unit = {
+    w.putUInt(subtree.length)
+    w.putBytes(subtree)
+  }
+
+  override def parse(r: Reader): Array[Byte] = {
+    require(r.remaining <= SizeLimit, s"Too big UtxoSnapshotChunk message.")
+
+    val length = r.getUInt().toIntExact
+    r.getBytes(length)
+  }
+
+}
+
+

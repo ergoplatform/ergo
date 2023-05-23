@@ -52,7 +52,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -60,7 +60,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        timeProvider,
         defaultSettings
       )
     ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
@@ -75,7 +74,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -83,7 +82,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        timeProvider,
         defaultSettings
       )
 
@@ -119,7 +117,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -127,7 +125,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        timeProvider,
         defaultSettings
       )
 
@@ -159,7 +156,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
   ) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings, timeProvider)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -167,7 +164,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        timeProvider,
         defaultSettings
       )
 

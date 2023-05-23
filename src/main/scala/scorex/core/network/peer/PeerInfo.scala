@@ -3,7 +3,7 @@ package scorex.core.network.peer
 import java.net.InetSocketAddress
 import scorex.core.app.Version
 import scorex.core.network.{ConnectionDirection, Incoming, Outgoing, PeerSpec, PeerSpecSerializer}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -14,10 +14,12 @@ import scorex.util.serialization.{Reader, Writer}
   * @param peerSpec       - general information about the peer
   * @param lastHandshake  - timestamp when last handshake was done
   * @param connectionType - type of connection (Incoming/Outgoing) established to this peer if any
+  * @param lastStoredActivityTime - timestamp when peer was last seen active
   */
 case class PeerInfo(peerSpec: PeerSpec,
                     lastHandshake: Long,
-                    connectionType: Option[ConnectionDirection] = None)
+                    connectionType: Option[ConnectionDirection] = None,
+                    lastStoredActivityTime: Long = 0L)
 
 /**
   * Information about P2P layer status
@@ -43,7 +45,7 @@ object PeerInfo {
 /**
   * Serializer of [[scorex.core.network.peer.PeerInfo]]
   */
-object PeerInfoSerializer extends ScorexSerializer[PeerInfo] {
+object PeerInfoSerializer extends ErgoSerializer[PeerInfo] {
 
   override def serialize(obj: PeerInfo, w: Writer): Unit = {
     w.putLong(obj.lastHandshake)

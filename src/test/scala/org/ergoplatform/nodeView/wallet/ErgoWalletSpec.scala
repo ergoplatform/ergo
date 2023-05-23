@@ -242,7 +242,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
   property("whitelist set, preserve tokens from auto-burn") {
     val inputs = {
       val x = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
-      Seq(encodedTokenId(Digest32 @@ x.head.boxId))
+      Seq(encodedTokenId(Digest32 @@@ x.head.boxId))
     }
 
     implicit val ww: WalletFixture = new WalletFixture(settings

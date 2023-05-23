@@ -44,7 +44,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   val dataInput = DataInput(input.boxId)
 
   val absentModifierId = "0000000000000000000000000000000000000000000000000000000000000000"
-  val tokens = List[(TokenId, Long)](Digest32 @@ inputBox.id -> 10)
+  val tokens = List[(TokenId, Long)](Digest32 @@@ inputBox.id -> 10)
   val registers =
     Map(
       ErgoBox.R4 -> ByteArrayConstant("name".getBytes("UTF-8")),
@@ -60,7 +60,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
 
   val chainedRoute: Route = {
     //constructing memory pool and node view  with the transaction tx included
-    val mp2 = memPool.put(UnconfirmedTransaction(tx, None)).get
+    val mp2 = memPool.put(UnconfirmedTransaction(tx, None))
     class UtxoReadersStub2 extends Actor {
       def receive: PartialFunction[Any, Unit] = {
         case GetReaders => sender() ! Readers(history, utxoState, mp2, wallet)

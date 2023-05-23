@@ -4,8 +4,6 @@ import akka.Done
 import akka.actor.{ActorRef, ActorSystem, CoordinatedShutdown}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.Http.ServerBinding
-import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.LoggerContext
 import org.ergoplatform.http._
 import org.ergoplatform.http.api._
 import org.ergoplatform.local._
@@ -13,8 +11,8 @@ import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.slf4j.{Logger, LoggerFactory}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
@@ -24,13 +22,16 @@ import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
-import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 
 import java.net.InetSocketAddress
 import scala.concurrent.{ExecutionContext, Future}
-import scala.io.Source
+import scala.io.{Codec, Source}
 
+/**
+  * Ergo reference protocol client application runnable from command line
+  * @param args parsed command line arguments
+  */
 class ErgoApp(args: Args) extends ScorexLogging {
 
   log.info(s"Running with args: $args")
@@ -46,63 +47,74 @@ class ErgoApp(args: Args) extends ScorexLogging {
   log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")
 
   implicit private def scorexSettings: ScorexSettings = ergoSettings.scorexSettings
-
-  overrideLogLevel()
-
+  
   implicit private val actorSystem: ActorSystem = ActorSystem(
     scorexSettings.network.agentName
   )
+  
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
-
-  private val timeProvider = new NetworkTimeProvider(scorexSettings.ntp)
 
   private val upnpGateway: Option[UPnPGateway] =
     if (scorexSettings.network.upnpEnabled) UPnP.getValidGateway(scorexSettings.network)
     else None
   upnpGateway.foreach(_.addPort(scorexSettings.network.bindAddress.getPort))
 
-  //an address to send to peers
-  private val externalSocketAddress: Option[InetSocketAddress] =
-  scorexSettings.network.declaredAddress orElse {
-    upnpGateway.map(u =>
-      new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort)
-    )
+  // own address to send to peers
+  private val externalSocketAddress: Option[InetSocketAddress] = {
+    scorexSettings.network.declaredAddress orElse {
+      upnpGateway.map(u =>
+        new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort)
+      )
+    }
   }
 
-  private val basicSpecs = {
+  // descriptors of p2p networking protocol messages
+  private val p2pMessageSpecifications = {
     Seq(
       GetPeersSpec,
       new PeersSpec(scorexSettings.network.maxPeerSpecObjects),
+      ErgoSyncInfoMessageSpec,
       InvSpec,
       RequestModifierSpec,
-      ModifiersSpec
+      ModifiersSpec,
+      GetSnapshotsInfoSpec,
+      SnapshotsInfoSpec,
+      GetManifestSpec,
+      ManifestSpec,
+      GetUtxoSnapshotChunkSpec,
+      UtxoSnapshotChunkSpec
     )
   }
 
-  private val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-
   private val scorexContext = ScorexContext(
-    messageSpecs        = basicSpecs ++ additionalMessageSpecs,
+    messageSpecs        = p2pMessageSpecifications,
     upnpGateway         = upnpGateway,
-    timeProvider        = timeProvider,
     externalNodeAddress = externalSocketAddress
   )
 
   private val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
-  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
   // Create an instance of ErgoMiner actor if "mining = true" in config
   private val minerRefOpt: Option[ActorRef] =
     if (ergoSettings.nodeSettings.mining) {
-      Some(ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider))
+      Some(ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef))
     } else {
       None
     }
 
-  private val syncTracker = ErgoSyncTracker(scorexSettings.network, timeProvider)
+  if(ergoSettings.nodeSettings.extraIndex)
+    require(
+      ergoSettings.nodeSettings.stateType.holdsUtxoSet && !ergoSettings.nodeSettings.isFullBlocksPruned,
+      "Node must store full UTXO set and all blocks to run extra indexer."
+    )
+  // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
+  private val indexer: ActorRef = ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings)
+
+  private val syncTracker = ErgoSyncTracker(scorexSettings.network)
 
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
 
@@ -111,7 +123,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
     nodeViewHolderRef,
     ErgoSyncInfoMessageSpec,
     ergoSettings,
-    timeProvider,
     syncTracker,
     deliveryTracker
   )
@@ -125,7 +136,14 @@ class ErgoApp(args: Args) extends ScorexLogging {
         InvSpec.messageCode                 -> ergoNodeViewSynchronizerRef,
         RequestModifierSpec.messageCode     -> ergoNodeViewSynchronizerRef,
         ModifiersSpec.messageCode           -> ergoNodeViewSynchronizerRef,
-        ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef
+        ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef,
+        // utxo set snapshot exchange related messages
+        GetSnapshotsInfoSpec.messageCode    -> ergoNodeViewSynchronizerRef,
+        SnapshotsInfoSpec.messageCode       -> ergoNodeViewSynchronizerRef,
+        GetManifestSpec.messageCode         -> ergoNodeViewSynchronizerRef,
+        ManifestSpec.messageCode            -> ergoNodeViewSynchronizerRef,
+        GetUtxoSnapshotChunkSpec.messageCode-> ergoNodeViewSynchronizerRef,
+        UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef
       )
       // Launching PeerSynchronizer actor which is then registering itself at network controller
       if (ergoSettings.scorexSettings.network.peerDiscovery) {
@@ -156,30 +174,30 @@ class ErgoApp(args: Args) extends ScorexLogging {
     readersHolderRef,
     networkControllerRef,
     syncTracker,
-    ergoSettings,
-    timeProvider
+    ergoSettings
   )
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
-      EmissionApiRoute(ergoSettings),
-      ErgoUtilsApiRoute(ergoSettings),
-      ErgoPeersApiRoute(
-        peerManagerRef,
-        networkControllerRef,
-        syncTracker,
-        deliveryTracker,
-        scorexSettings.restApi
-      ),
-      InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
-      BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-      NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-      TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-      WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-      UtxoApiRoute(readersHolderRef, scorexSettings.restApi),
-      ScriptApiRoute(readersHolderRef, ergoSettings),
-      ScanApiRoute(readersHolderRef, ergoSettings),
-      NodeApiRoute(ergoSettings)
-    ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
+    EmissionApiRoute(ergoSettings),
+    ErgoUtilsApiRoute(ergoSettings),
+    BlockchainApiRoute(readersHolderRef, ergoSettings, indexer),
+    ErgoPeersApiRoute(
+      peerManagerRef,
+      networkControllerRef,
+      syncTracker,
+      deliveryTracker,
+      scorexSettings.restApi
+    ),
+    InfoApiRoute(statsCollectorRef, scorexSettings.restApi),
+    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
+    NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
+    WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
+    UtxoApiRoute(readersHolderRef, scorexSettings.restApi),
+    ScriptApiRoute(readersHolderRef, ergoSettings),
+    ScanApiRoute(readersHolderRef, ergoSettings),
+    NodeApiRoute(ergoSettings)
+  ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
 
   private val swaggerRoute = SwaggerRoute(scorexSettings.restApi, swaggerConfig)
   private val panelRoute   = NodePanelRoute()
@@ -214,18 +232,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
     MempoolAuditorRef(nodeViewHolderRef, networkControllerRef, ergoSettings)
   }
 
-  /**
-    * Override the log level at runtime with values provided in config/user provided config.
-    */
-  private def overrideLogLevel() {
-    val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
-    val root          = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
-
-    root.setLevel(Level.toLevel(ergoSettings.scorexSettings.logging.level))
-  }
-
   private def swaggerConfig: String =
-    Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
+    Source.fromResource("api/openapi.yaml")(Codec.UTF8).getLines.mkString("\n")
 
   private def run(): Future[ServerBinding] = {
     require(scorexSettings.network.agentName.length <= ErgoApp.ApplicationNameLimit)

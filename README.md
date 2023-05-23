@@ -21,9 +21,20 @@ heavy validation attacks
 A [White Paper](https://ergoplatform.org/docs/whitepaper.pdf) with a brief description is available. A Yellow Paper with detailed specification is underway and will be available shortly. At the moment, there are [drafts of the Yellow Paper](https://github.com/ergoplatform/ergo/tree/master/papers/yellow) available,
 and currently the reference implementation code should be considered as the specification.
 
+## Security assumptions
+
+This client relies on some assumptions in regards with its environment:
+
+* execution environment is trusted. While seed is stored in encrypted files, and the client's 
+  wallet tries to remove secret key from memory as soon as possible when it is not needed, the
+  client has no protection from side-channel attacks, memory scans etc.
+* clocks should be more or less synchronized. If timestamp of a block is more than 20 minutes
+  in future, the block will be temporarily rejected. The client does not use NTP or other time
+  syncing protocols.
+
 ## Building and Running Node and UI
 
-See [documentation](https://docs.ergoplatform.com/node/install/install/)
+See [documentation](https://docs.ergoplatform.com/node/install/)
 
 ## Testing
 

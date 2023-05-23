@@ -14,12 +14,12 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
 import org.scalatest.Assertion
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 
 class SerializationTests extends ErgoPropertyTest with WalletGenerators with scorex.testkit.SerializationTests {
 
   def checkSerializationRoundtripAndSize[A <: ErgoNodeViewModifier](generator: Gen[A],
-                                                                    serializer: ScorexSerializer[A]): Assertion = {
+                                                                    serializer: ErgoSerializer[A]): Assertion = {
     forAll(generator) { b: A =>
       val recovered = serializer.parseBytes(serializer.toBytes(b))
       val bytes = serializer.toBytes(b)

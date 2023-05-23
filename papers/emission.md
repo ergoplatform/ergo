@@ -97,12 +97,6 @@ second one is to pay mining fee supposedly (its value can be 0.01 ERG at most)
 
     val correctNftId = EQ(firstTokenId, ByteArrayConstant(reemissionNftId))
     
-    // output of the reemission contract
-    val reemissionOut = ByIndex(Outputs, IntConstant(0))
-    
-    // output to pay miner
-    val minerOut = ByIndex(Outputs, IntConstant(1))
-    
     // miner's output must have script which is time-locking reward for miner's pubkey
     // box height must be the same as block height
     val correctMinerOutput = AND(

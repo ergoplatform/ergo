@@ -13,17 +13,18 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.utils.{ErgoPropertyTest, MempoolTestHelpers, WalletTestOps}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
 import org.ergoplatform.wallet.crypto.ErgoSignature
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
+import sigmastate.ErgoTreeBenchmarks.traversableColl
 import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
 import sigmastate.helpers.TestingHelpers.testBox
 import sigmastate.{SType, Values}
@@ -98,7 +99,7 @@ class ErgoWalletServiceSpec
 
     forAll(ergoBoxCandidateGen, ergoBoxCandidateGen, validErgoTransactionGen, proveDlogGen) {
       case (outputCandidate, outputChangeCandidate, (ergoBoxes, _), proveDlog) =>
-        val selectionResult = BoxSelectionResult(inputBoxes, Seq(outputChangeCandidate))
+        val selectionResult = new BoxSelectionResult(inputBoxes, Seq(outputChangeCandidate), None)
         val tx = prepareUnsignedTransaction(Seq(outputCandidate), startHeight, selectionResult, ergoBoxes, Option(proveDlog)).get
         tx.inputs shouldBe inputBoxes.map(_.box.id).map(id => new UnsignedInput(id))
         tx.dataInputs shouldBe ergoBoxes.map(dataInputBox => DataInput(dataInputBox.id))
@@ -258,7 +259,7 @@ class ErgoWalletServiceSpec
         val walletService = new ErgoWalletServiceImpl(settings)
         val signedTx = walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, sign = true).get.asInstanceOf[ErgoTransaction]
 
-        ErgoSignature.verify(signedTx.messageToSign, signedTx.inputs.head.spendingProof.proof, pks.head.pubkey.h) shouldBe true
+        ErgoSignature.verify(signedTx.messageToSign, signedTx.inputs.head.spendingProof.proof, pks.head.pubkey.value) shouldBe true
         signedTx.inputs.size shouldBe 1
         signedTx.outputs.size shouldBe 2
 
@@ -316,6 +317,27 @@ class ErgoWalletServiceSpec
         finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
         finalUnlockedState.storage.readAllKeys().size shouldBe 1
         finalUnlockedState.walletVars.proverOpt shouldNot be(empty)
+      }
+    }
+  }
+
+  property("it should derive private key correctly") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+
+        val pass = SecretString.create(Random.nextString(10))
+        val mnemonic = "edge talent poet tortoise trumpet dose"
+
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val ws1 = initialState(store, versionedStore)
+        val ws2 = walletService.initWallet(ws1, settings, pass, Some(SecretString.create(mnemonic))).get._2
+        ws2.secretStorageOpt.get.unlock(pass)
+
+        val path = DerivationPath.fromEncoded("m/44/1/1/0/0").get
+        val sk = ws2.secretStorageOpt.get.secret.get
+        val pk = sk.derive(path).publicKey
+
+        walletService.getPrivateKeyFromPath(ws2, pk.path).get.w shouldBe sk.derive(path).privateInput.w
       }
     }
   }

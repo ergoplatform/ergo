@@ -1,24 +1,26 @@
 package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.ErgoNodeViewModifier
+import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
+import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.EphemerealNodeViewModifier
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.EphemerealNodeViewModifier
+import scorex.core.serialization.ErgoSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
@@ -28,8 +30,8 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
-import sigmastate.utxo.CostTable
 
+import java.util
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -98,7 +100,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   /**
     * Same as `validateStateless`, but result is returned as Try[Unit]
-    **/
+    * */
   def statelessValidity(): Try[Unit] = {
     validateStateless().result.toTry
   }
@@ -118,7 +120,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val input = inputs(inputIndex)
 
     // Just in case, should always be true if client implementation is correct.
-    if(!box.id.sameElements(input.boxId)) {
+    if (!box.id.sameElements(input.boxId)) {
       log.error("Critical client error: box is not inputs(inputIndex)")
     }
 
@@ -225,10 +227,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
       lazy val reemissionRules = reemissionSettings.reemissionRules
 
-      lazy val reemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
+      lazy val reemissionTokenId = ModifierId @@@ reemissionSettings.reemissionTokenId
       lazy val reemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
 
-      lazy val emissionNftId = ModifierId @@ reemissionSettings.emissionNftId
+      lazy val emissionNftId = ModifierId @@@ reemissionSettings.emissionNftId
       lazy val emissionNftIdBytes = reemissionSettings.emissionNftIdBytes
 
       lazy val chainSettings = stateContext.ergoSettings.chainSettings
@@ -359,13 +361,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        accumulatedCost: Long)
                       (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
 
-    verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
     val initialCost: Long = addExact(
-      CostTable.interpreterInitCost,
+      ErgoInterpreter.interpreterInitCost,
       multiplyExact(boxesToSpend.size, stateContext.currentParameters.inputCost),
       multiplyExact(dataBoxes.size, stateContext.currentParameters.dataInputCost),
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
@@ -379,7 +380,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     // Before 5.0 soft-fork (v3 block version), we are checking only that
     // creation height in outputs is not negative
     // After, we are checking that it is not less that max creation height in inputs
-    val maxCreationHeightInInputs = if (blockVersion <= Header.HardeningVersion) {
+    def maxCreationHeightInInputs: Int = if (blockVersion <= Header.HardeningVersion) {
       0
     } else {
       boxesToSpend.map(_.creationHeight).max
@@ -397,15 +398,31 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txPositiveAssets,
         outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)),
         InvalidModifier(s"$id: ${outputCandidates.map(_.additionalTokens)}", id, modifierTypeId))
+      // Just to be sure, check that all the input boxes to spend (and to read) are presented.
+      // Normally, this check should always pass, if the client is implemented properly
+      // so it is not part of the protocol really.
+      .validate(
+        txBoxesToSpend,
+        boxesToSpend.size == inputs.size,
+        InvalidModifier(
+          s"$id: ${boxesToSpend.size} == ${inputs.size}. Missing inputs: ${unresolvedIndices(inputs.map(_.boxId), boxesToSpend).mkString(", ")}",
+          id,
+          modifierTypeId
+        )
+      )
+      .validate(
+        txDataBoxes,
+        dataBoxes.size == dataInputs.size,
+        InvalidModifier(
+          s"$id: ${dataBoxes.size} == ${dataInputs.size}. Missing data inputs: ${unresolvedIndices(dataInputs.map(_.boxId), dataBoxes).mkString(", ")}",
+          id,
+          modifierTypeId
+        )
+      )
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
         verifyOutput(validationState, out, stateContext, maxCreationHeightInInputs)
       }
-      // Just to be sure, check that all the input boxes to spend (and to read) are presented.
-      // Normally, this check should always pass, if the client is implemented properly
-      // so it is not part of the protocol really.
-      .validate(txBoxesToSpend, boxesToSpend.size == inputs.size, InvalidModifier(s"$id: ${boxesToSpend.size} == ${inputs.size}", id, modifierTypeId))
-      .validate(txDataBoxes, dataBoxes.size == dataInputs.size, InvalidModifier(s"$id: ${dataBoxes.size} == ${dataInputs.size}", id, modifierTypeId))
       // Check that there are no overflow in input and output values
       .validate(txInputsSum, inputSumTry.isSuccess, InvalidModifier(s"$id as invalid Inputs Sum", id, modifierTypeId))
       // Check that transaction is not creating money out of thin air.
@@ -417,14 +434,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val currentTxCost = validation.result.payload.get
         verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
-       }
+      }
       .validate(txReemission, !stateContext.ergoSettings.chainSettings.reemission.checkReemissionRules ||
-                                verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifier(id, id, modifierTypeId))
+        verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifier(id, id, modifierTypeId))
   }
 
   /**
     * Same as `validateStateful`, but result is returned as Try[Long]
-    **/
+    * */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
@@ -435,7 +452,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override type M = ErgoTransaction
 
-  override def serializer: ScorexSerializer[ErgoTransaction] = ErgoTransactionSerializer
+  override def serializer: ErgoSerializer[ErgoTransaction] = ErgoTransactionSerializer
 
   override def toString: String = {
     import ErgoTransaction._
@@ -457,15 +474,19 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
 
+  val modifierTypeId: NetworkObjectTypeId.Value = TransactionTypeId.value
+
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction =
     ErgoTransaction(inputs, IndexedSeq.empty, outputCandidates, None)
 
   def apply(tx: ErgoLikeTransaction): ErgoTransaction =
     ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
 
+  private def unresolvedIndices(inputs: IndexedSeq[BoxId], resolvedInputs: IndexedSeq[ErgoBox]): IndexedSeq[Int] =
+    inputs.zipWithIndex.filterNot(i => resolvedInputs.exists(bx => util.Arrays.equals(bx.id, i._1))).map(_._2)
 }
 
-object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
+object ErgoTransactionSerializer extends ErgoSerializer[ErgoTransaction] {
 
   override def serialize(tx: ErgoTransaction, w: Writer): Unit = {
     val elt = new ErgoLikeTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)

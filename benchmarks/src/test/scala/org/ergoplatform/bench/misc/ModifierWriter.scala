@@ -1,18 +1,17 @@
 package org.ergoplatform.bench.misc
 
 import java.io.{InputStream, OutputStream}
-
 import com.google.common.primitives.Ints
 import org.ergoplatform.Utils._
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.serialization.ScorexSerializer
-import scorex.core.{ModifierTypeId, NodeViewModifier}
+import scorex.core.serialization.ErgoSerializer
+import scorex.core.NodeViewModifier
 
 object ModifierWriter {
 
-  val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: BlockSection]] =
+  val modifierSerializers: Map[NetworkObjectTypeId.Value, ErgoSerializer[_ <: BlockSection]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofsSerializer)
@@ -34,9 +33,9 @@ object ModifierWriter {
     mod <- modifierSerializers(typeId).parseBytesTry(bytes).toOption
   } yield mod
 
-  private def readModId(implicit fis: InputStream): Option[ModifierTypeId] = {
+  private def readModId(implicit fis: InputStream): Option[NetworkObjectTypeId.Value] = {
     val int = fis.read()
-    if (int == -1) { None } else { Some(ModifierTypeId @@ int.toByte) }
+    if (int == -1) { None } else { Some(NetworkObjectTypeId.fromByte(int.toByte)) }
   }
 
 }

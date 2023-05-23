@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.app.Version
 import scorex.core.consensus.PeerChainStatus
 import scorex.core.network.ConnectedPeer
-import scorex.core.utils.TimeProvider.Time
+import org.ergoplatform.nodeView.history.ErgoHistory.Time
 
 /**
   * Container for status of another peer

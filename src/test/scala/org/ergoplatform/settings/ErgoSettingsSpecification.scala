@@ -24,6 +24,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       StateType.Utxo,
       verifyTransactions = true,
       1000,
+      utxoSettings = UtxoSettings(false, 0, 2),
       poPoWBootstrap = false,
       10,
       mining = true,
@@ -42,21 +43,18 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
-      adProofsSuffixLength                      = 112*1024
+      adProofsSuffixLength                      = 112*1024,
+      extraIndex                                = false
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       ),
       MempoolCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       )
@@ -76,6 +74,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       StateType.Utxo,
       verifyTransactions = true,
       12,
+      utxoSettings = UtxoSettings(false, 0, 2),
       poPoWBootstrap = false,
       10,
       mining = true,
@@ -94,21 +93,18 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
-      adProofsSuffixLength                      = 112*1024
+      adProofsSuffixLength                      = 112*1024,
+      extraIndex                                = false
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       ),
       MempoolCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       )
@@ -121,6 +117,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       StateType.Utxo,
       verifyTransactions = true,
       13,
+      utxoSettings = UtxoSettings(false, 0, 2),
       poPoWBootstrap = false,
       10,
       mining = true,
@@ -139,21 +136,18 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
-      adProofsSuffixLength                      = 112*1024
+      adProofsSuffixLength                      = 112*1024,
+      extraIndex                                = false
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       ),
       MempoolCacheSettings(
-        invalidModifiersBloomFilterCapacity       = 10000000,
-        invalidModifiersBloomFilterExpirationRate = 0.1,
         invalidModifiersCacheSize                 = 10000,
         invalidModifiersCacheExpiration           = 6.hours,
       )

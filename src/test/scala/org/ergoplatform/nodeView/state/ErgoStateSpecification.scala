@@ -20,7 +20,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   property("applyModifier() - double spending") {
     forAll(boxesHolderGen, Gen.choose(1: Byte, 2: Byte)) { case (bh, version) =>
       val us = createUtxoState(bh, parameters)
-      val ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootHash, parameters)
+      val ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootDigest)
 
       val validBlock = validFullBlock(None, us, bh)
       val dsTxs = validBlock.transactions ++ validBlock.transactions
@@ -51,8 +51,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       s1.genesisStateDigest shouldBe s2.genesisStateDigest
     }
 
-    var (us, bh) = createUtxoState(parameters)
-    var ds = createDigestState(us.version, us.rootHash, parameters)
+    var (us, bh) = createUtxoState(settings)
+    var ds = createDigestState(us.version, us.rootDigest)
     var lastBlocks: Seq[ErgoFullBlock] = Seq()
     forAll { seed: Int =>
       val blBh = validFullBlockWithBoxHolder(lastBlocks.headOption, us, bh, new RandomWrapper(Some(seed)))
@@ -68,13 +68,13 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   property("generateGenesisUtxoState & generateGenesisDigestState are compliant") {
     val settings = ErgoSettings.read(Args.empty)
     val dir = createTempDir
-    val rootHash = createUtxoState(parameters)._1.rootHash
-    val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings).rootHash
+    val rootHash = createUtxoState(settings)._1.rootDigest
+    val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings).rootDigest
     rootHash shouldBe expectedRootHash
   }
 
   property("ErgoState.boxChanges() should generate operations in the same order") {
-    var (us, bh) = createUtxoState(parameters)
+    var (us, bh) = createUtxoState(settings)
     var parentOpt: Option[ErgoFullBlock] = None
 
     forAll { seed: Int =>
@@ -92,7 +92,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   }
 
   property("ErgoState.boxChanges() double spend attempt") {
-    val (_, bh) = createUtxoState(parameters)
+    val (_, bh) = createUtxoState(settings)
     val emissionBox = genesisBoxes.head
 
     forAll { seed: Int =>
@@ -116,7 +116,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   }
 
   property("ErgoState.stateChanges()") {
-    val bh = createUtxoState(parameters)._2
+    val bh = createUtxoState(settings)._2
     val emissionBox = genesisBoxes.head
 
     forAll { seed: Int =>
@@ -160,16 +160,16 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     val txs = generateTxs
     val boxes = bh.boxes
     val stateContext = emptyStateContext
-    val expectedCost = 535995
+    val expectedCost = 185160
 
     // successful validation
     ErgoState.execTransactions(txs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe Valid(expectedCost)
 
     // cost limit exception expected when crossing MaxBlockCost
-    val tooManyTxs = txs ++ generateTxs
+    val tooManyTxs = (1 to 10).flatMap(_ => generateTxs)
     assert(
       ErgoState.execTransactions(tooManyTxs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))).errors.head.message.contains(
-        "Estimated execution cost 23533 exceeds the limit 23009"
+        "Accumulated cost of block transactions should not exceed <maxBlockCost>"
       )
     )
 

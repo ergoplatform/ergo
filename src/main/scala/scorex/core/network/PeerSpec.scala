@@ -5,7 +5,7 @@ import org.ergoplatform.settings.PeerFeatureDescriptors
 import java.net.{InetAddress, InetSocketAddress, URL}
 import scorex.core.app.{ApplicationVersionSerializer, Version}
 import scorex.core.network.peer.{LocalAddressPeerFeature, RestApiUrlPeerFeature}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.Extensions._
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
@@ -41,7 +41,7 @@ case class PeerSpec(agentName: String,
 
 }
 
-object PeerSpecSerializer extends ScorexSerializer[PeerSpec] with ScorexLogging {
+object PeerSpecSerializer extends ErgoSerializer[PeerSpec] with ScorexLogging {
 
   override def serialize(obj: PeerSpec, w: Writer): Unit = {
     w.putShortString(obj.agentName)

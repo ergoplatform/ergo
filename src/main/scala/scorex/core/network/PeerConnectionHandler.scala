@@ -72,7 +72,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 
       val peerInfo = PeerInfo(
         receivedHandshake.peerSpec,
-        scorexContext.timeProvider.time(),
+        System.currentTimeMillis(),
         Some(direction)
       )
       val peer = ConnectedPeer(connectionDescription.connectionId, self, 0, Some(peerInfo))
@@ -243,7 +243,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
         ownSocketAddress,
         localFeatures
       ),
-      scorexContext.timeProvider.time()
+      System.currentTimeMillis()
     )
   }
 

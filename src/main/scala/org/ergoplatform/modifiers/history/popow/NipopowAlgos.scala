@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.history.popow
 
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.header.Header
@@ -77,7 +77,7 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
     */
   def maxLevelOf(header: Header): Int =
     if (!header.isGenesis) {
-      val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
+      val requiredTarget = org.ergoplatform.mining.q / DifficultySerializer.decodeCompactBits(header.nBits)
       val realTarget = powScheme.powHit(header).doubleValue
       val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
       level.toInt

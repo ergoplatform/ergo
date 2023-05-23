@@ -44,7 +44,7 @@ trait ErgoWalletSupport extends ScorexLogging {
 
   protected def addSecretToStorage(state: ErgoWalletState, secret: ExtendedSecretKey): Try[ErgoWalletState] =
     state.walletVars.withExtendedKey(secret).flatMap { newWalletVars =>
-      state.storage.addPublicKeys(secret.publicKey).flatMap { _ =>
+      state.storage.addPublicKey(secret.publicKey).flatMap { _ =>
         newWalletVars.stateCacheOpt.get.withNewPubkey(secret.publicKey).map { updCache =>
           state.copy(walletVars = newWalletVars.copy(stateCacheProvided = Some(updCache))(newWalletVars.settings))
         }
@@ -80,7 +80,7 @@ trait ErgoWalletSupport extends ScorexLogging {
     } else {
       (masterKey +: sks, masterKey.publicKey +: pks)
     }
-    val prover = new ErgoProvingInterpreter(secrets, state.parameters, Some(pubKeys))(new RuntimeIRContext)
+    val prover = new ErgoProvingInterpreter(secrets, state.parameters, Some(pubKeys))
     log.info(s"Wallet unlock: ${prover.hdPubKeys.length} keys read")
     state.copy(walletVars = state.walletVars.withProver(prover))
   }
@@ -94,7 +94,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         path => masterKey.derive(path)
       }
       val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
-      oldPubKeys.foreach(storage.addPublicKeys(_).get)
+      oldPubKeys.foreach(storage.addPublicKey(_).get)
       storage.removePaths().get
     }
   }
@@ -135,7 +135,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         if (usePreEip3Derivation) {
           // If usePreEip3Derivation flag is set in the wallet settings, the first key is the master key
           val masterPubKey = masterKey.publicKey
-          state.storage.addPublicKeys(masterPubKey).map { _ =>
+          state.storage.addPublicKey(masterPubKey).map { _ =>
             log.info("Wallet unlock finished using usePreEip3Derivation")
             updatePublicKeys(state, masterKey, Vector(masterPubKey))
           }
@@ -150,7 +150,7 @@ trait ErgoWalletSupport extends ScorexLogging {
           deriveNextKeyForMasterKey(sp, masterKey, usePreEip3Derivation).flatMap { case (derivationResult, newState) =>
             derivationResult.result.flatMap { case (_, _, firstSk) =>
               val firstPk = firstSk.publicKey
-              newState.storage.addPublicKeys(firstPk).flatMap { _ =>
+              newState.storage.addPublicKey(firstPk).flatMap { _ =>
                 newState.storage.updateChangeAddress(P2PKAddress(firstPk.key)(addressEncoder)).map { _ =>
                   log.info("Wallet unlock finished")
                   updatePublicKeys(newState, masterKey, Vector(firstPk))
@@ -169,7 +169,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         }
         // Add master key's public key to the storage to track payments to it when the wallet is locked
         if (!state.storage.containsPublicKey(masterKey.path.toPublicBranch)) {
-          state.storage.addPublicKeys(masterKey.publicKey)
+          state.storage.addPublicKey(masterKey.publicKey)
         }
         log.info("Wallet unlock finished using existing keys in storage")
         Try(updatePublicKeys(state, masterKey, pubKeys))
@@ -212,7 +212,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                   def minimalErgoAmount: Long =
                     BoxUtils.minimalErgoAmountSimulated(
                       lockWithAddress.script,
-                      Colls.fromItems((Digest32 @@ assetId) -> amount),
+                      Colls.fromItems((Digest32 @@@ assetId) -> amount),
                       nonMandatoryRegisters,
                       parameters
                     )
@@ -221,7 +221,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                     valueOpt.getOrElse(minimalErgoAmount),
                     lockWithAddress.script,
                     fullHeight,
-                    Colls.fromItems((Digest32 @@ assetId) -> amount),
+                    Colls.fromItems((Digest32 @@@ assetId) -> amount),
                     nonMandatoryRegisters
                   )
                 }
@@ -242,7 +242,13 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
 
     val dataInputs = dataInputBoxes.map(dataInputBox => DataInput(dataInputBox.id))
-    val changeBoxCandidates = selectionResult.changeBoxes.map { changeBoxAssets =>
+    val changeBoxCandidates = {
+      // EIP-27 output
+      selectionResult.payToReemissionBox.toSeq.map {eip27OutputAssets =>
+        val p2r = ergoSettings.chainSettings.reemission.reemissionRules.payToReemission
+        new ErgoBoxCandidate(eip27OutputAssets.value, p2r, walletHeight)
+      }
+    } ++ selectionResult.changeBoxes.map { changeBoxAssets =>
       changeBoxAssets match {
         case candidate: ErgoBoxCandidate =>
           candidate
@@ -254,7 +260,7 @@ trait ErgoWalletSupport extends ScorexLogging {
           new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
       }
     }
-    val inputBoxes = selectionResult.boxes.toIndexedSeq
+    val inputBoxes = selectionResult.inputBoxes.toIndexedSeq
     new UnsignedErgoTransaction(
       inputBoxes.map(tx => new UnsignedInput(tx.box.id)),
       dataInputs,
@@ -336,7 +342,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         val dataInputs = ErgoWalletService.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
-          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.boxes
+          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
         } match {
           case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
           case Left(e) => Failure(

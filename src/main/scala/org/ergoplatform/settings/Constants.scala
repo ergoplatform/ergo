@@ -83,7 +83,7 @@ object Constants {
     * 1024 is divisible by 128 also.
     */
   // todo: change before deployment to 51200
-  val MakeSnapshotEvery = 500
+  val MakeSnapshotEvery = 1024
 
   /**
     * AVL+ tree node parameters. The tree is used to authenticate UTXO set.

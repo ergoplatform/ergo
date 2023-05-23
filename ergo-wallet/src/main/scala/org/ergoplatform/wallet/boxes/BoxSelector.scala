@@ -1,8 +1,8 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder}
+import org.ergoplatform.{ErgoBoxAssetsHolder, ErgoBoxAssets}
 import org.ergoplatform.SigmaConstants.MaxBoxSize
-import org.ergoplatform.wallet.TokensMap
+import org.ergoplatform.sdk.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectionResult}
 import scorex.util.ScorexLogging
 

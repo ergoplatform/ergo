@@ -8,12 +8,14 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
 import sigmastate.helpers.TestingHelpers._
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.{idToBytes, bytesToId, ModifierId}
 import org.scalatest.EitherValues
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughErgsError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughTokensError
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
+import sigmastate.eval.Digest32Coll
+import sigmastate.eval.Extensions.ArrayOps
 
 import scala.util.Random
 
@@ -28,7 +30,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
   private val StartHeight: Int = 0
 
   private def genTokens(count: Int) = {
-    (0 until count).map { i => Digest32 @@ idToBytes(bytesToId(Blake2b256(i.toString))) -> i.toLong }
+    (0 until count).map { i => Digest32Coll @@ idToBytes(bytesToId(Blake2b256(i.toString))).toColl -> i.toLong }
   }
 
   private val selector = new DefaultBoxSelector(None)
@@ -98,9 +100,9 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val assetId2 = bytesToId(Blake2b256("world"))
 
     val parentTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
-    val box1 = testBox(1 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 1))
-    val box2 = testBox(10 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId2) -> 10))
-    val box3 = testBox(100 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 100))
+    val box1 = testBox(1 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32Coll @@ idToBytes(assetId1).toColl -> 1))
+    val box2 = testBox(10 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32Coll @@ idToBytes(assetId2).toColl -> 10))
+    val box3 = testBox(100 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32Coll @@ idToBytes(assetId1).toColl -> 100))
 
     val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
     val uBox2 = TrackedBox(parentTx, 1, None, box2, Set(PaymentsScanId))
@@ -147,16 +149,16 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val assetId8 = bytesToId(Blake2b256("8"))
 
     val box1 = testBox(1 * MinBoxValue, TrueLeaf, StartHeight,
-      Seq(Digest32 @@ idToBytes(assetId1) -> 1, Digest32 @@ idToBytes(assetId2) -> 1,
-        Digest32 @@ idToBytes(assetId3) -> 1, Digest32 @@ idToBytes(assetId4) -> 1))
+      Seq(Digest32Coll @@ idToBytes(assetId1).toColl -> 1, Digest32Coll @@ idToBytes(assetId2).toColl -> 1,
+        Digest32Coll @@ idToBytes(assetId3).toColl -> 1, Digest32Coll @@ idToBytes(assetId4).toColl -> 1))
 
     val box2 = testBox(10 * MinBoxValue, TrueLeaf, StartHeight,
-      Seq(Digest32 @@ idToBytes(assetId5) -> 10, Digest32 @@ idToBytes(assetId6) -> 10,
-        Digest32 @@ idToBytes(assetId7) -> 10, Digest32 @@ idToBytes(assetId8) -> 10))
+      Seq(Digest32Coll @@ idToBytes(assetId5).toColl -> 10, Digest32Coll @@ idToBytes(assetId6).toColl -> 10,
+        Digest32Coll @@ idToBytes(assetId7).toColl -> 10, Digest32Coll @@ idToBytes(assetId8).toColl -> 10))
 
     val box3 = testBox(100 * MinBoxValue, TrueLeaf, StartHeight,
-      Seq(Digest32 @@ idToBytes(assetId3) -> 100, Digest32 @@ idToBytes(assetId4) -> 100,
-        Digest32 @@ idToBytes(assetId5) -> 100, Digest32 @@ idToBytes(assetId6) -> 100))
+      Seq(Digest32Coll @@ idToBytes(assetId3).toColl -> 100, Digest32Coll @@ idToBytes(assetId4).toColl -> 100,
+        Digest32Coll @@ idToBytes(assetId5).toColl -> 100, Digest32Coll @@ idToBytes(assetId6).toColl -> 100))
 
     val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
     val uBox2 = TrackedBox(parentTx, 1, None, box2, Set(PaymentsScanId))
@@ -193,7 +195,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
   property("Size of a box with MaxAssetsPerBox tokens should not cross MaxBoxSize") {
     val tokens = (0 until MaxAssetsPerBox).map { _ =>
-      (Digest32 @@ scorex.util.Random.randomBytes(TokenId.size), Random.nextInt(100000000).toLong)
+      (Digest32Coll @@ scorex.util.Random.randomBytes(TokenId.size).toColl, Random.nextInt(100000000).toLong)
     }
     val box = testBox(1 * MinBoxValue, TrueLeaf, StartHeight, tokens)
     assert(box.bytes.length <= MaxBoxSize.value)
@@ -222,7 +224,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val tokenData = genTokens(3).last
     tokenData._2 shouldBe 2
 
-    val tokenId = ModifierId @@@ bytesToId(tokenData._1)
+    val tokenId = ModifierId @@@ bytesToId(tokenData._1.toArray)
 
     val ergValue = 10 * MinBoxValue
 
@@ -254,7 +256,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val ts = genTokens(2)
     val reemissionNftId = ts(0)._1
     val reemissionTokenId = ts(1)._1
-    val selector = new DefaultBoxSelector(Some(ReemissionData(bytesToId(reemissionNftId), bytesToId(reemissionTokenId))))
+    val selector = new DefaultBoxSelector(Some(ReemissionData(bytesToId(reemissionNftId.toArray), bytesToId(reemissionTokenId.toArray))))
 
     val fullValue = 2000000000L
     val reemissionAmt = fullValue / 2

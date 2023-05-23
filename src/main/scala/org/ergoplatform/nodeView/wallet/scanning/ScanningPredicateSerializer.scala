@@ -3,12 +3,13 @@ package org.ergoplatform.nodeView.wallet.scanning
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import scorex.core.serialization.ErgoSerializer
-import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
 import sigmastate.serialization.ValueSerializer
 import scorex.util.Extensions._
+import sigmastate.eval.Digest32Coll
+import sigmastate.eval.Extensions.ArrayOps
 
 
 object ScanningPredicateSerializer extends ErgoSerializer[ScanningPredicate] {
@@ -34,7 +35,7 @@ object ScanningPredicateSerializer extends ErgoSerializer[ScanningPredicate] {
       w.putBytes(valueBytes)
     case a: ContainsAssetPredicate =>
       w.put(ContainsAssetPrefix)
-      w.putBytes(a.assetId)
+      w.putBytes(a.assetId.toArray)
     case AndScanningPredicate(subPredicates@_*) =>
       w.put(AndPrefix)
       w.putInt(subPredicates.length)
@@ -72,7 +73,7 @@ object ScanningPredicateSerializer extends ErgoSerializer[ScanningPredicate] {
         ContainsScanningPredicate(reg, bs)
       case b: Byte if b == ContainsAssetPrefix =>
         val bs = r.getBytes(32)
-        ContainsAssetPredicate(Digest32 @@ bs)
+        ContainsAssetPredicate(Digest32Coll @@ bs.toColl)
       case b: Byte if b == AndPrefix =>
         AndScanningPredicate(parseArgs(r) :_*)
       case b: Byte if b == OrPrefix =>

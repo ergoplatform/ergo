@@ -8,20 +8,21 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
+import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeStateContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
-import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
+import scorex.core.serialization.{ErgoSerializer, BytesSerializable}
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationState}
+import scorex.core.validation.{ValidationState, ModifierValidator, InvalidModifier}
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.basics.CryptoConstants.EcPointType
+import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.eval.SigmaDsl
-import sigmastate.interpreter.CryptoConstants.EcPointType
 import special.collection.Coll
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 /**
   * State context with predicted header.
@@ -84,10 +85,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
-  override def previousStateDigest: ADDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
-    ADDigest @@ sigmaLastHeaders.toArray.head.stateRoot.digest.toArray
+  override def previousStateDigest: Coll[Byte] = if (sigmaLastHeaders.toArray.nonEmpty) {
+    sigmaLastHeaders.toArray.head.stateRoot.digest
   } else {
-    genesisStateDigest
+    genesisStateDigest.toColl
   }
 
   /* NOHF PROOF:
@@ -275,7 +276,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }.flatten
 
   override def toString: String =
-    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
+    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest.toArray)}, $lastHeaders, $currentParameters)"
 
 
   /**

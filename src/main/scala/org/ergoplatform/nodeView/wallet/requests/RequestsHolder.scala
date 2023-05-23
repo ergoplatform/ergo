@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, HCursor, Json}
+import io.circe.{HCursor, Encoder, Json, Decoder}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoScriptPredef, Pay2SAddress}
+import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress, ErgoAddress, ErgoTreePredef}
 
 
 case class RequestsHolder(requests: Seq[TransactionGenerationRequest],
@@ -17,7 +17,7 @@ case class RequestsHolder(requests: Seq[TransactionGenerationRequest],
 
   // Add separate payment request with fee.
   def withFee(): Seq[TransactionGenerationRequest] = {
-    val address = Pay2SAddress(ErgoScriptPredef.feeProposition(minerRewardDelay))
+    val address = Pay2SAddress(ErgoTreePredef.feeProposition(minerRewardDelay))
     val feeRequests = feeOpt
         .map(PaymentRequest(address, _, assets = Seq.empty, registers = Map.empty))
         .toSeq

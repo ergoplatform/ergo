@@ -3,29 +3,29 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R1}
 import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{UnconfirmedTransaction, ErgoTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, OffChainRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, AssetIssueRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, EqualsScanningPredicate, ScanWalletInteraction}
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedSecretKey, DerivationPath}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
-import org.ergoplatform.utils.{ErgoPropertyTest, MempoolTestHelpers, WalletTestOps}
+import org.ergoplatform.utils.{WalletTestOps, MempoolTestHelpers, ErgoPropertyTest}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
+import org.ergoplatform.wallet.boxes.{TrackedBox, ErgoBoxSerializer, ReplaceCompactCollectBoxSelector}
 import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
-import sigmastate.ErgoTreeBenchmarks.traversableColl
-import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
+import sigmastate.Values.{EvaluatedValue, ByteArrayConstant}
+import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.helpers.TestingHelpers.testBox
 import sigmastate.{SType, Values}
 
@@ -148,7 +148,7 @@ class ErgoWalletServiceSpec
             ErgoBox.R5 -> ByteArrayConstant("test-description".getBytes("UTF-8")),
             ErgoBox.R6 -> ByteArrayConstant("4".getBytes("UTF-8")),
           )
-        validCandidate.additionalTokens.toMap shouldBe Map(ergoBox.id -> 1)
+        validCandidate.additionalTokens.toArray.toMap shouldBe Map(ergoBox.id.toColl -> 1)
         validCandidate.creationHeight shouldBe startHeight
         validCandidate.ergoTree shouldBe pks.head.script
     }

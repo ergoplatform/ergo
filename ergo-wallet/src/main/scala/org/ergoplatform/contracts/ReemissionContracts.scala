@@ -1,7 +1,7 @@
 package org.ergoplatform.contracts
 
 import org.ergoplatform.ErgoBox.{R2, STokensRegType}
-import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
+import org.ergoplatform.ErgoTreePredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
 import org.ergoplatform.{Height, MinerPubkey, Outputs, Self}
 import org.ergoplatform.settings.MonetarySettings
 import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SBox, SCollection, STuple}

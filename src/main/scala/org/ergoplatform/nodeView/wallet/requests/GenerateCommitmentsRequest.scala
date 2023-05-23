@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet.requests
 
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
-import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, DhtSecretKey}
 
 /**
   * A request to generate commitments for unsigned transaction, useful for multi-party signing.

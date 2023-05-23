@@ -6,34 +6,35 @@ import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}
+import org.ergoplatform.modifiers.{TransactionTypeId, ErgoNodeViewModifier, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
+import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
-import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import org.ergoplatform.wallet.protocol.context.InputContext
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import scorex.core.EphemerealNodeViewModifier
 import scorex.core.serialization.ErgoSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
+import scorex.core.validation.{ValidationState, ModifierValidator, ValidationResult, InvalidModifier}
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util.{ScorexLogging, bytesToId, ModifierId}
 import sigmastate.serialization.ConstantStore
-import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
+import sigmastate.utils.{SigmaByteWriter, SigmaByteReader}
 
 import java.util
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 /**
   * ErgoTransaction is an atomic state transition operation. It destroys Boxes from the state
@@ -273,11 +274,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
               val firstEmissionBoxTokenId = emissionOut.additionalTokens.apply(0)._1
               val secondEmissionBoxTokenId = emissionOut.additionalTokens.apply(1)._1
               require(
-                firstEmissionBoxTokenId.sameElements(emissionNftIdBytes),
+                firstEmissionBoxTokenId.toArray.sameElements(emissionNftIdBytes),
                 "No emission box NFT in the emission box"
               )
               require(
-                secondEmissionBoxTokenId.sameElements(reemissionTokenIdBytes),
+                secondEmissionBoxTokenId.toArray.sameElements(reemissionTokenIdBytes),
                 "No re-emission token in the emission box"
               )
 

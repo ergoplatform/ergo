@@ -230,7 +230,7 @@ object ErgoState extends ScorexLogging {
     val protection = AtLeast(IntConstant(2), pks)
     val protectionBytes = ValueSerializer.serialize(protection)
     val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
-    val prop = ErgoScriptPredef.foundationScript(settings.monetary)
+    val prop = ErgoTreePredef.foundationScript(settings.monetary)
     createGenesisBox(value, prop, Seq.empty, Map(R4 -> ByteArrayConstant(protectionBytes)))
   }
 

@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet
 
-import org.ergoplatform.wallet.secrets.DerivationPath
+import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import supertagged.TaggedType
 
 object Constants {

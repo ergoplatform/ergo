@@ -1,29 +1,30 @@
 package org.ergoplatform.http.api
 
-import akka.actor.{ActorRef, ActorRefFactory}
+import akka.actor.{ActorRefFactory, ActorRef}
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
+import akka.http.scaladsl.server.{Directive1, ValidationRejection, Directive, Route}
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.modifiers.mempool.{ErgoTransactionSerializer, UnconfirmedTransaction, ErgoTransaction}
+import org.ergoplatform.nodeView.ErgoReadersHolder.{Readers, GetReaders}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
-import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{UtxoStateReader, ErgoStateReader}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.{ApiError, ApiResponse}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
+import sigmastate.eval.Digest32Coll
+import sigmastate.eval.Extensions.ArrayOps
 
 import scala.concurrent.Future
-import scala.util.{Failure, Success}
+import scala.util.{Success, Failure}
 
 case class TransactionsApiRoute(readersHolder: ActorRef,
                                 nodeViewActorRef: ActorRef,
@@ -48,9 +49,9 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   val tokenId: Directive1[TokenId] = pathPrefix(Segment).flatMap(handleTokenId)
 
   private def handleTokenId(value: String): Directive1[TokenId] = {
-    Digest32 @@ Algos.decode(value) match {
+    Algos.decode(value) match {
       case Success(tokenId) =>
-        provide(tokenId)
+        provide(Digest32Coll @@ tokenId.toColl)
       case _ =>
         reject(ValidationRejection(s"tokenId $value is invalid, it should be 64 chars long hex string"))
     }
@@ -244,7 +245,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   def getUnconfirmedOutputByTokenIdR: Route =
     (pathPrefix("unconfirmed" / "outputs" / "byTokenId") & get & tokenId) { tokenId =>
       ApiResponse(
-        getMemPool.map(_.getAll.flatMap(_.transaction.outputs.filter(_.additionalTokens.exists(_._1.sameElements(tokenId)))))
+        getMemPool.map(_.getAll.flatMap(_.transaction.outputs.filter(_.additionalTokens.exists(_._1.toArray.sameElements(tokenId.toArray)))))
       )
     }
 

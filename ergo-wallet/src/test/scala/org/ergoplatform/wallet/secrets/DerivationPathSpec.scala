@@ -1,5 +1,6 @@
 package org.ergoplatform.wallet.secrets
 
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.ergoplatform.wallet.mnemonic.Mnemonic

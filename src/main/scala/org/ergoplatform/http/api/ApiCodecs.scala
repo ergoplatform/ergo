@@ -3,11 +3,11 @@ package org.ergoplatform.http.api
 import java.math.BigInteger
 import io.circe._
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
+import org.ergoplatform.{UnsignedErgoLikeTransaction, ErgoAddressEncoder, ErgoLikeTransaction, ErgoLikeContext, ErgoBox, JsonCodecs}
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{UnsignedErgoTransaction, ErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.ErgoAlgos
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
@@ -16,28 +16,28 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import scorex.core.validation.ValidationResult
 import scorex.util.encode.Base16
-import sigmastate.{CAND, COR, CTHRESHOLD, NodePosition, SigSerializer, TrivialProp}
+import sigmastate.{SigSerializer, COR, TrivialProp, CAND, NodePosition, CTHRESHOLD}
 import sigmastate.Values.SigmaBoolean
-import sigmastate.basics.DLogProtocol.{DLogProverInput, FirstDLogProverMessage, ProveDlog}
+import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput, FirstDLogProverMessage}
 import sigmastate.basics.VerifierMessage.Challenge
 import sigmastate.basics._
 import sigmastate.interpreter._
-import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
-import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
+import org.ergoplatform.http.api.requests.{ExecuteRequest, CryptoResult, HintExtractionRequest}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.getAddress
-import org.ergoplatform.nodeView.history.extra.{BalanceInfo, IndexedErgoBox, IndexedErgoTransaction, IndexedToken}
+import org.ergoplatform.nodeView.history.extra.{BalanceInfo, IndexedErgoTransaction, IndexedErgoBox, IndexedToken}
+import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.wallet.interface4j.SecretString
-import scorex.crypto.authds.{LeafData, Side}
+import scorex.crypto.authds.{Side, LeafData}
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest
+import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.serialization.OpCodes
 import special.sigma.AnyValue
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 
 trait ApiCodecs extends JsonCodecs {

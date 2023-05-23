@@ -120,17 +120,17 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedVa
   */
 case class ContainsAssetPredicate(assetId: ErgoBox.TokenId) extends ScanningPredicate {
   override def filter(box: ErgoBox): Boolean = {
-    box.additionalTokens.exists(_._1.sameElements(assetId))
+    box.additionalTokens.exists(_._1 == assetId)
   }
 
   override def equals(obj: Any): Boolean = obj match {
-    case other: ContainsAssetPredicate => other.assetId.sameElements(assetId)
+    case other: ContainsAssetPredicate => other.assetId == assetId
     case _ => false
   }
 
-  override def hashCode(): Int = assetId.toSeq.hashCode()
+  override def hashCode(): Int = assetId.hashCode()
 
-  override def toString: String = s"ContainsAssetPredicate(${Base16.encode(assetId)})"
+  override def toString: String = s"ContainsAssetPredicate(${Base16.encode(assetId.toArray)})"
 }
 
 

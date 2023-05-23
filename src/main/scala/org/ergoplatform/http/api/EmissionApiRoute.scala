@@ -3,7 +3,7 @@ package org.ergoplatform.http.api
 import akka.actor.ActorRefFactory
 import akka.http.scaladsl.server.Route
 import io.circe.{Encoder, Json}
-import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef, Pay2SAddress}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoTreePredef, Pay2SAddress}
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.settings.{ErgoSettings, ReemissionSettings}
 import scorex.core.api.http.ApiResponse
@@ -43,7 +43,7 @@ case class EmissionApiRoute(ergoSettings: ErgoSettings)
 
     ApiResponse(
       Json.obj(
-        "emission" -> Pay2SAddress(ErgoScriptPredef.emissionBoxProp(ms)).toString().asJson,
+        "emission" -> Pay2SAddress(ErgoTreePredef.emissionBoxProp(ms)).toString().asJson,
         "reemission" -> Pay2SAddress(reemissionSettings.reemissionRules.reemissionBoxProp(ms)).toString().asJson,
         "pay2Reemission" -> Pay2SAddress(reemissionSettings.reemissionRules.payToReemission).toString().asJson
       )

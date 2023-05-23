@@ -1,25 +1,20 @@
 package org.ergoplatform.wallet.transactions
 
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.DataInput
-import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.ErgoAddress
-import org.ergoplatform.ErgoScriptPredef
-import org.ergoplatform.UnsignedErgoLikeTransaction
-import org.ergoplatform.UnsignedInput
+import org.ergoplatform.{UnsignedErgoLikeTransaction, UnsignedInput, ErgoBox, ErgoAddress, ErgoTreePredef, DataInput, ErgoBoxCandidate, ErgoScriptPredef}
 import sigmastate.eval.Extensions._
 
 import scala.util.Try
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.{idToBytes, bytesToId, ModifierId}
 import special.collection.Coll
 import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.sdk.wallet.{TokensMap, AssetUtils}
 import scorex.crypto.hash.Digest32
-import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
+
 import scala.collection.JavaConverters._
 
 object TransactionBuilder {
@@ -52,7 +47,7 @@ object TransactionBuilder {
                               currentHeight: Int): UnsignedErgoLikeTransaction = {
     val feeBox = new ErgoBoxCandidate(
       feeAmt,
-      ErgoScriptPredef.feeProposition(),
+      ErgoTreePredef.feeProposition(),
       currentHeight,
       Seq.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
@@ -123,7 +118,7 @@ object TransactionBuilder {
     )
     val fee = new ErgoBoxCandidate(
       feeAmt,
-      ErgoScriptPredef.feeProposition(),
+      ErgoTreePredef.feeProposition(),
       currentHeight,
       Seq.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
@@ -164,10 +159,10 @@ object TransactionBuilder {
   }
 
   def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
-    tokens.toArray.map(t => bytesToId(t._1) -> t._2).toMap
+    tokens.toArray.map(t => bytesToId(t._1.toArray) -> t._2).toMap
 
   def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
-    tokens.toSeq.map {t => (Digest32 @@ idToBytes(t._1)) -> t._2}.toArray.toColl
+    tokens.toSeq.map {t => (Digest32Coll @@ idToBytes(t._1).toColl) -> t._2}.toArray.toColl
 
   private def validateStatelessChecks(inputs: IndexedSeq[ErgoBox], dataInputs: IndexedSeq[DataInput],
     outputCandidates: Seq[ErgoBoxCandidate]): Unit = {
@@ -258,7 +253,7 @@ object TransactionBuilder {
       val actualFee = if (changeGoesToFee) fee + changeAmt else fee
       new ErgoBoxCandidate(
         actualFee,
-        ErgoScriptPredef.feeProposition(minerRewardDelay),
+        ErgoTreePredef.feeProposition(minerRewardDelay),
         currentHeight
       )
     }

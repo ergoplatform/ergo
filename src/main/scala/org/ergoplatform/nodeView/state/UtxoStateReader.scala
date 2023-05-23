@@ -88,7 +88,9 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
         // after EIP-27 we search for emission box NFT for efficiency's sake
         tx.outputs.size == 2 &&
           !tx.outputs.head.additionalTokens.isEmpty &&
-          java.util.Arrays.equals(tx.outputs.head.additionalTokens(0)._1, constants.settings.chainSettings.reemission.emissionNftIdBytes)
+          java.util.Arrays.equals(
+            tx.outputs.head.additionalTokens(0)._1.toArray,
+            constants.settings.chainSettings.reemission.emissionNftIdBytes)
       } else {
         tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition
       }

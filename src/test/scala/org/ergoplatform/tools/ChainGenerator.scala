@@ -44,7 +44,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val prover = defaultProver
   val minerPk = prover.hdKeys.head.publicImage
   val selfAddressScript = P2PKAddress(minerPk).script
-  val minerProp = ErgoScriptPredef.rewardOutputScript(RewardDelay, minerPk)
+  val minerProp = ErgoTreePredef.rewardOutputScript(RewardDelay, minerPk)
 
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute

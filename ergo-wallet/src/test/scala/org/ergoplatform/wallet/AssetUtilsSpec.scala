@@ -1,11 +1,12 @@
 package org.ergoplatform.wallet
 
+import org.ergoplatform.sdk.wallet.{TokensMap, AssetUtils}
 import org.ergoplatform.wallet.utils.WalletTestHelpers
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 class AssetUtilsSpec extends WalletTestHelpers with Matchers with TableDrivenPropertyChecks {
-  import AssetUtils._
+  import org.ergoplatform.sdk.wallet.AssetUtils._
 
   val tid1 = stringToId("t1")
   val tid2 = stringToId("t2")

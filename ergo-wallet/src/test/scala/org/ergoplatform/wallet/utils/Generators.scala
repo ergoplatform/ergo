@@ -4,27 +4,22 @@ import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.mnemonic.{Mnemonic, WordList}
-import org.ergoplatform.wallet.secrets.ExtendedPublicKey
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, SecretKey}
-import org.ergoplatform.wallet.settings.EncryptionSettings
 import org.scalacheck.Arbitrary.arbByte
-import org.scalacheck.{Arbitrary, Gen}
+import org.scalacheck.{Gen, Arbitrary}
 import scorex.crypto.authds.ADKey
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
+import sigmastate.Values.{TrueLeaf, CollectionConstant, ByteArrayConstant, ErgoTree, FalseLeaf, EvaluatedValue}
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.{SByte, SType}
-import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
+import sigmastate.{SType, SByte}
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.util._
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.ErgoScriptPredef
-import org.ergoplatform.UnsignedErgoLikeTransaction
-import org.ergoplatform.UnsignedInput
+import org.ergoplatform.{UnsignedErgoLikeTransaction, UnsignedInput, ErgoBox, ErgoTreePredef, ErgoBoxCandidate, ErgoScriptPredef}
 import sigmastate.eval.Extensions._
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{bytesToId, ModifierId}
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
 import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey, ExtendedPublicKey, SecretKey, Index}
+import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
 import scorex.crypto.hash.Digest32
 
 
@@ -77,7 +72,7 @@ trait Generators {
   val assetGen: Gen[(TokenId, Long)] = for {
     id <- boxIdGen
     amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
-  } yield Digest32 @@@ id -> amt
+  } yield Digest32Coll @@@ id.toColl -> amt
 
   def additionalTokensGen(cnt: Int): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
 
@@ -189,7 +184,7 @@ trait Generators {
       h <- Gen.posNum[Int]
       out = new ErgoBoxCandidate(
         value,
-        ErgoScriptPredef.feeProposition(),
+        ErgoTreePredef.feeProposition(),
         h,
         Seq.empty[(ErgoBox.TokenId, Long)].toColl,
         Map.empty

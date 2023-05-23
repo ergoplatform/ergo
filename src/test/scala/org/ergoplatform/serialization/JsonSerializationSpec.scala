@@ -1,25 +1,25 @@
 package org.ergoplatform.serialization
 
 import io.circe.syntax._
-import io.circe.{ACursor, Decoder, Encoder, Json}
+import io.circe.{Encoder, ACursor, Json, Decoder}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
-import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.http.api.ApiEncoderOption.{ShowDetails, Detalization}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
+import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, DhtSecretKey}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.scalatest.Inspectors
 import sigmastate.SType
-import sigmastate.Values.{ErgoTree, EvaluatedValue}
+import sigmastate.Values.{EvaluatedValue, ErgoTree}
 
 import scala.util.Random
 

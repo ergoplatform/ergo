@@ -123,7 +123,7 @@ object IndexedToken {
         case None => 0
       }
 
-    IndexedToken(bytesToId(box.additionalTokens(tokenIndex)._1),
+    IndexedToken(bytesToId(box.additionalTokens(tokenIndex)._1.toArray),
                  bytesToId(box.id),
                  box.additionalTokens(tokenIndex)._2,
                  name,

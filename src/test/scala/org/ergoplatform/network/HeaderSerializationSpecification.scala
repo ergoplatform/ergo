@@ -1,9 +1,8 @@
 package org.ergoplatform.network
 
 import java.nio.ByteBuffer
-
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.mining.{AutolykosSolution, groupElemFromBytes}
+import org.ergoplatform.mining.{groupElemFromBytes, AutolykosSolution}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -11,7 +10,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
-import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.basics.CryptoConstants.EcPointType
 
 class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUtils {
 

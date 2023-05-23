@@ -2,8 +2,10 @@ package org.ergoplatform.nodeView
 
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import org.ergoplatform.wallet.protocol.context.InputContext
 import org.ergoplatform.ErgoLikeContext
+import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
+import scorex.crypto.authds.ADDigest
 
 /**
   * Context to be used during transaction verification
@@ -13,7 +15,7 @@ class ErgoContext(val stateContext: ErgoStateContext,
                   inputContext: InputContext,
                   override val costLimit: Long,
                   override val initCost: Long)
-  extends ErgoLikeContext(ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
+  extends ErgoLikeContext(ErgoInterpreter.avlTreeFromDigest(ADDigest @@ stateContext.previousStateDigest.toArray),
     stateContext.sigmaLastHeaders,
     stateContext.sigmaPreHeader,
     transactionContext.dataBoxes,

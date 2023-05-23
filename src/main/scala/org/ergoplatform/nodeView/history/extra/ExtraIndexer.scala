@@ -208,7 +208,7 @@ trait ExtraIndexerBase extends ScorexLogging {
 
         // check if box is creating new tokens, if yes record them
         cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
-          if (!tokens.exists(x => java.util.Arrays.equals(x._1, box.additionalTokens(j)._1)))
+          if (!tokens.exists(x => x._1 == box.additionalTokens(j)._1))
             general += IndexedToken.fromBox(box, j)
         }
 

@@ -9,6 +9,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.encode.Base58
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedSecretKey, Index, DerivationPath}
 
 class ExtendedSecretKeySpec
   extends AnyPropSpec

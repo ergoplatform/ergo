@@ -8,13 +8,13 @@ import sigmastate.helpers.TestingHelpers._
 import sigmastate.utils.Helpers._
 import org.ergoplatform._
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.wallet.TokensMap
+import org.ergoplatform.sdk.wallet.TokensMap
+import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 
-import scala.util.{Success, Try}
+import scala.util.{Try, Success}
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.interface4j.SecretString
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.utils.WalletTestHelpers
 import org.scalatest.matchers.should.Matchers
@@ -74,7 +74,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   property("token minting") {
     val inputBox = box(minBoxValue * 2)
-    val tokenId  = Digest32 @@@ inputBox.id
+    val tokenId  = Digest32Coll @@@ inputBox.id.toColl
     val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
     val res = transaction(inputBox, outBox)
 
@@ -86,8 +86,8 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
   }
 
   property("token burning") {
-    val inputBox = box(minBoxValue * 3, Seq(Digest32 @@ idToBytes(tid1) -> 1000L, Digest32 @@ idToBytes(tid2) -> 2000L))
-    val tokenId  = Digest32 @@@ inputBox.id
+    val inputBox = box(minBoxValue * 3, Seq(Digest32Coll @@ idToBytes(tid1).toColl -> 1000L, Digest32Coll @@ idToBytes(tid2).toColl -> 2000L))
+    val tokenId  = Digest32Coll @@@ inputBox.id.toColl
     val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
     val res = transaction(inputBox, outBox, burnTokens = Map(tid1 -> 400L, tid2 -> 800L))
 
@@ -105,7 +105,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   property("no fees") {
     val inputBox = box(minBoxValue)
-    val tokenId  = Digest32 @@@ inputBox.id
+    val tokenId  = Digest32Coll @@@ inputBox.id.toColl
     val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
     val res = transaction(inputBox, outBox, fee = None)
 
@@ -117,7 +117,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   property("change goes to fee, but no outFee box") {
     val inputBox = box(minBoxValue + minBoxValue / 2)
-    val tokenId  = Digest32 @@@ inputBox.id
+    val tokenId  = Digest32Coll @@@ inputBox.id.toColl
     val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
     val res = transaction(inputBox, outBox, fee = None)
 

@@ -1,16 +1,16 @@
 package org.ergoplatform.http.api
 
-import akka.actor.{ActorRef, ActorRefFactory}
+import akka.actor.{ActorRefFactory, ActorRef}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner}
+import org.ergoplatform.mining.{AutolykosSolution, ErgoMiner, CandidateGenerator}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddress, ErgoScriptPredef, Pay2SAddress}
+import org.ergoplatform.{Pay2SAddress, ErgoAddress, ErgoTreePredef}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import sigmastate.basics.DLogProtocol.ProveDlog
@@ -68,7 +68,7 @@ case class MiningApiRoute(miner: ActorRef,
       miner.askWithStatus(ErgoMiner.ReadMinerPk)
         .mapTo[ProveDlog]
         .map { pk =>
-          val script = ErgoScriptPredef.rewardOutputScript(ergoSettings.chainSettings.monetary.minerRewardDelay, pk)
+          val script = ErgoTreePredef.rewardOutputScript(ergoSettings.chainSettings.monetary.minerRewardDelay, pk)
           Pay2SAddress(script)(ergoSettings.addressEncoder)
         }
 

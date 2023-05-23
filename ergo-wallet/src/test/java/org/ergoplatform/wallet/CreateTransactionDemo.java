@@ -2,8 +2,8 @@ package org.ergoplatform.wallet;
 
 import io.circe.Json;
 import org.ergoplatform.*;
+import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey;
 import org.ergoplatform.wallet.interface4j.crypto.ErgoUnsafeProver;
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey;
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper;
 import org.ergoplatform.wallet.transactions.TransactionBuilder;
 import org.ergoplatform.wallet.transactions.TransactionBuilder.Payment;

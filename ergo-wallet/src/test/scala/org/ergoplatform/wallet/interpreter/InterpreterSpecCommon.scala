@@ -1,10 +1,11 @@
 package org.ergoplatform.wallet.interpreter
 
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
+import org.ergoplatform.sdk.wallet.protocol.context.{ErgoLikeStateContext, ErgoLikeParameters}
 import scorex.crypto.authds.ADDigest
 import scorex.util.encode.Base16
-import sigmastate.eval.{CGroupElement, CPreHeader, Colls}
-import sigmastate.interpreter.CryptoConstants
+import sigmastate.basics.CryptoConstants
+import sigmastate.eval.Extensions.ArrayOps
+import sigmastate.eval.{Colls, CGroupElement, CPreHeader}
 import special.collection.Coll
 import special.sigma.{Header, PreHeader}
 
@@ -39,8 +40,8 @@ trait InterpreterSpecCommon {
 
     override def sigmaLastHeaders: Coll[Header] = Colls.emptyColl
 
-    override def previousStateDigest: ADDigest = Base16.decode("a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302")
-      .map(ADDigest @@ _)
+    override def previousStateDigest = Base16.decode("a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302")
+      .map(_.toColl)
       .getOrElse(throw new Error(s"Failed to parse genesisStateDigest"))
 
     override def sigmaPreHeader: PreHeader = CPreHeader(

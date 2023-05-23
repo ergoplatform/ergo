@@ -4,9 +4,10 @@ import io.circe.parser._
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
-import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
+import sigmastate.eval.Digest32Coll
+import sigmastate.eval.Extensions.ArrayOps
 
 import scala.language.implicitConversions
 
@@ -19,13 +20,13 @@ class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with Wal
   private val complexOr = OrScanningPredicate(
     ContainsScanningPredicate(ErgoBox.R1, ByteArrayConstant(Array.fill(32)(1: Byte))),
     EqualsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array.fill(32)(0: Byte))),
-    ContainsAssetPredicate(Digest32 @@ Array.fill(32)(0: Byte))
+    ContainsAssetPredicate(Digest32Coll @@ Array.fill(32)(0: Byte).toColl)
   )
 
   private val complexAnd = AndScanningPredicate(
     ContainsScanningPredicate(ErgoBox.R1, ByteArrayConstant(Array.fill(32)(1: Byte))),
     EqualsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array.fill(32)(1: Byte))),
-    ContainsAssetPredicate(Digest32 @@ Array.fill(32)(1: Byte))
+    ContainsAssetPredicate(Digest32Coll @@ Array.fill(32)(1: Byte).toColl)
   )
 
   property("json roundtrip for generated predicate") {
@@ -57,7 +58,7 @@ class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with Wal
     val bs = Base16.decode("02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7").get
     scanningPredicateDecoder.decodeJson(j).toTry.get == AndScanningPredicate(
       ContainsScanningPredicate(ErgoBox.R1, bs),
-      ContainsAssetPredicate(Digest32 @@ bs)
+      ContainsAssetPredicate(Digest32Coll @@ bs.toColl)
     )
   }
 
@@ -71,7 +72,7 @@ class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with Wal
     val bs = Base16.decode("02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7").get
     scanningPredicateDecoder.decodeJson(j).toTry.get == AndScanningPredicate(
       ContainsScanningPredicate(ErgoBox.R4, bs),
-      ContainsAssetPredicate(Digest32 @@ bs)
+      ContainsAssetPredicate(Digest32Coll @@ bs.toColl)
     )
   }
 

@@ -4,8 +4,8 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
 import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.ergoplatform.utils.generators.WalletGenerators
-import org.ergoplatform.wallet.secrets.{DerivationPathSerializer, DerivationPath}
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers

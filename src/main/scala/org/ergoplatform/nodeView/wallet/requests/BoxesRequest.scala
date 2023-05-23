@@ -3,8 +3,9 @@ package org.ergoplatform.nodeView.wallet.requests
 import io.circe.generic.decoding.DerivedDecoder.deriveDecoder
 import io.circe.{Decoder, KeyDecoder}
 import org.ergoplatform.ErgoBox
-import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
+import sigmastate.eval.Digest32Coll
+import sigmastate.eval.Extensions.ArrayOps
 
 /**
   * A request for boxes with given balance and assets
@@ -14,7 +15,7 @@ case class BoxesRequest(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, 
 object BoxesRequest {
 
   implicit val keyDecoder: KeyDecoder[ErgoBox.TokenId] =
-    KeyDecoder.instance(s => Base16.decode(s).toOption.map(Digest32 @@ _))
+    KeyDecoder.instance(s => Base16.decode(s).toOption.map(Digest32Coll @@ _.toColl))
 
   implicit val decoder: Decoder[BoxesRequest] =
     cursor =>

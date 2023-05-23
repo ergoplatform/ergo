@@ -1,25 +1,25 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, P2PKAddress, UnsignedInput}
+import org.ergoplatform.{ErgoAddressEncoder, UnsignedInput, P2PKAddress, ErgoBox, ErgoTreePredef, ErgoBoxCandidate}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
+import org.ergoplatform.mining.{CandidateBlock, AutolykosPowScheme, CandidateGenerator}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{UnsignedErgoTransaction, ErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, hashErgoTree, txSegmentId}
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, txSegmentId, hashErgoTree}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UtxoState, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings}
-import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestHelpers, HistoryTestHelpers}
-import scorex.crypto.hash.Digest32
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.nodeView.state.{StateConstants, UtxoStateReader, ErgoStateContext, StateType, UtxoState, ErgoState}
+import org.ergoplatform.settings.{NodeConfigurationSettings, NetworkType, ErgoSettings}
+import org.ergoplatform.utils.{HistoryTestHelpers, ErgoPropertyTest, ErgoTestHelpers}
+import scorex.util.{bytesToId, ModifierId}
 import sigmastate.Values
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.eval._
 import special.collection.Coll
 import spire.implicits.cfor
@@ -239,7 +239,7 @@ object ChainGenerator extends ErgoTestHelpers {
   val MaxTxsPerBlock: Int = 10
   val minerPk: ProveDlog = defaultProver.hdKeys.head.publicImage
   val selfAddressScript: Values.ErgoTree = P2PKAddress(minerPk).script
-  val minerProp: Values.ErgoTree = ErgoScriptPredef.rewardOutputScript(RewardDelay, minerPk)
+  val minerProp: Values.ErgoTree = ErgoTreePredef.rewardOutputScript(RewardDelay, minerPk)
   val votingEpochLength: Height = votingSettings.votingLength
   val protocolVersion: Byte = initSettings.chainSettings.protocolVersion
   val minimalSuffix = 2
@@ -298,7 +298,7 @@ object ChainGenerator extends ErgoTestHelpers {
     val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
     inOpt match {
       case Some(input) if cond =>
-        tokens += Tuple2(Digest32 @@@ input.id, math.abs(Random.nextInt()))
+        tokens += Tuple2(Digest32Coll @@@ input.id.toColl, math.abs(Random.nextInt()))
       case Some(tokenBox) if !cond =>
         tokenBox.additionalTokens.toArray.foreach(tokens += _)
       case _ =>

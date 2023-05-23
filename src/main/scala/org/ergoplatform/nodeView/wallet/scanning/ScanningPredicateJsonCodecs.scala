@@ -19,7 +19,7 @@ object ScanningPredicateJsonCodecs extends ApiCodecs {
     case ep: EqualsScanningPredicate =>
       Json.obj("predicate" -> "equals".asJson, "register" -> ep.regId.asJson, "value" -> ep.value.asJson)
     case cap: ContainsAssetPredicate =>
-      Json.obj("predicate" -> "containsAsset".asJson, "assetId" -> Base16.encode(cap.assetId).asJson)
+      Json.obj("predicate" -> "containsAsset".asJson, "assetId" -> Base16.encode(cap.assetId.toArray).asJson)
     case and: AndScanningPredicate =>
       Json.obj("predicate" -> "and".asJson, "args" -> and.subPredicates.asJson)
     case or: OrScanningPredicate =>

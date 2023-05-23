@@ -1,18 +1,19 @@
 package org.ergoplatform.reemission
 
 import org.ergoplatform.settings.{MonetarySettings, ReemissionSettings}
-import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestConstants}
+import org.ergoplatform.utils.{ErgoTestConstants, ErgoPropertyTest}
 import org.ergoplatform._
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import sigmastate.AvlTreeData
 import sigmastate.TrivialProp.TrueProp
-import sigmastate.eval.{Colls, Digest32RType}
+import sigmastate.eval.Extensions.ArrayOps
+import sigmastate.eval.{Colls, Digest32Coll}
 import sigmastate.helpers.TestingHelpers.testBox
-import sigmastate.helpers.{ContextEnrichingTestProvingInterpreter, ErgoLikeContextTesting, ErgoLikeTestInterpreter}
+import sigmastate.helpers.{ErgoLikeTestInterpreter, ContextEnrichingTestProvingInterpreter, ErgoLikeContextTesting}
 import sigmastate.interpreter.Interpreter.emptyEnv
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 // done similarly to ErgoScriptPredefSpec in sigma repo
 class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
@@ -30,7 +31,7 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
 
   private val rr = new ReemissionRules(rs)
 
-  private val reemissionBoxAssets = Colls.fromItems((Digest32 @@ rs.reemissionNftIdBytes) -> 1L)
+  private val reemissionBoxAssets = Colls.fromItems((Digest32Coll @@ rs.reemissionNftIdBytes.toColl) -> 1L)
 
   private val fakeMessage = Blake2b256("Hello World")
 
@@ -67,7 +68,7 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
   property("reemissionBoxProp - spending path") {
     val minerPk = prover.dlogSecrets.head.publicImage
     val pkBytes = minerPk.pkBytes
-    val minerProp = ErgoScriptPredef.rewardOutputScript(ms.minerRewardDelay, minerPk)
+    val minerProp = ErgoTreePredef.rewardOutputScript(ms.minerRewardDelay, minerPk)
 
     val currentHeight = rs.reemissionStartHeight
     val nextHeight = currentHeight + 1
@@ -122,7 +123,7 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
     checkRewardsTx(nextHeight, pkBytes6, inputBoxes, spendingTransaction, false)
 
     // we modify reward delay here, not PK
-    val minerProp7 = ErgoScriptPredef.rewardOutputScript(ms.minerRewardDelay - 1, minerPk)
+    val minerProp7 = ErgoTreePredef.rewardOutputScript(ms.minerRewardDelay - 1, minerPk)
     val minerBox7 = new ErgoBoxCandidate(reemissionReward, minerProp7, nextHeight)
     val spendingTransaction7 = ErgoLikeTransaction(inputs, IndexedSeq(newReemissionBox, minerBox7))
     checkRewardsTx(nextHeight, pkBytes, inputBoxes, spendingTransaction7, false)
@@ -185,9 +186,11 @@ class ReemissionRulesSpec extends ErgoPropertyTest with ErgoTestConstants {
 
     // pay-2-reemission box can be spent only with a box with reemission NFT as input #0
     val reemissionBoxAssets6 = Colls.fromItems(
-      (Digest32 @@ rs.reemissionNftIdBytes.reverse) -> 1L
+      (Digest32Coll @@ rs.reemissionNftIdBytes.reverse.toColl) -> 1L
     )
-    val newReemissionBox6 = new ErgoBoxCandidate(reemissionBox.value + mergedValue - feeValue, prop, currentHeight, reemissionBoxAssets6)
+    val newReemissionBox6 = new ErgoBoxCandidate(
+      reemissionBox.value + mergedValue - feeValue,
+      prop, currentHeight, reemissionBoxAssets6)
     val spendingTransaction6 = ErgoLikeTransaction(inputs, IndexedSeq(newReemissionBox6, feeBox))
 
     val ctx = ErgoLikeContextTesting(

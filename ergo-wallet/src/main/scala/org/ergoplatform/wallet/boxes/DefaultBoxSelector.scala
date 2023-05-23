@@ -1,10 +1,11 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.contracts.ReemissionContracts
+import org.ergoplatform.sdk.wallet.{TokensMap, AssetUtils}
 import scorex.util.ModifierId
-import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder, ErgoBoxCandidate}
+import org.ergoplatform.{ErgoBoxAssetsHolder, ErgoBoxCandidate, ErgoBoxAssets}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
-import org.ergoplatform.wallet.{AssetUtils, TokensMap}
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import org.ergoplatform.wallet.transactions.TransactionBuilder._

@@ -3,31 +3,31 @@ package org.ergoplatform.nodeView.wallet
 import cats.implicits._
 import cats.Traverse
 import org.ergoplatform.ErgoBox.{BoxId, R4, R5, R6}
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoBox, ErgoBoxAssets, ErgoBoxCandidate, P2PKAddress, UnsignedInput}
+import org.ergoplatform.{ErgoBoxAssets, UnsignedInput, P2PKAddress, ErgoBox, ErgoAddress, DataInput, ErgoBoxCandidate}
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.nodeView.wallet.requests._
+import org.ergoplatform.sdk.wallet.{TokensMap, AssetUtils}
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedSecretKey, ExtendedPublicKey, DerivationPath}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.wallet.{AssetUtils, Constants, TokensMap}
+import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
+import org.ergoplatform.wallet.boxes.{TrackedBox, BoxSelector}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
-import scorex.crypto.hash.Digest32
 import scorex.util.{ScorexLogging, idToBytes}
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 
 trait ErgoWalletSupport extends ScorexLogging {
 
@@ -212,7 +212,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                   def minimalErgoAmount: Long =
                     BoxUtils.minimalErgoAmountSimulated(
                       lockWithAddress.script,
-                      Colls.fromItems((Digest32 @@@ assetId) -> amount),
+                      Colls.fromItems((Digest32Coll @@@ assetId.toColl) -> amount),
                       nonMandatoryRegisters,
                       parameters
                     )
@@ -221,7 +221,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                     valueOpt.getOrElse(minimalErgoAmount),
                     lockWithAddress.script,
                     fullHeight,
-                    Colls.fromItems((Digest32 @@@ assetId) -> amount),
+                    Colls.fromItems((Digest32Coll @@@ assetId.toColl) -> amount),
                     nonMandatoryRegisters
                   )
                 }
@@ -255,7 +255,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         case changeBox: ErgoBoxAssets =>
           // todo: is this extra check needed ?
           val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
-          val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+          val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => Digest32Coll @@ idToBytes(t._1).toColl -> t._2).toIndexedSeq
 
           new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
       }

@@ -1,6 +1,6 @@
 package org.ergoplatform.mining
 
-import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
+import akka.actor.{ActorRefFactory, ActorRef, Actor, Props}
 import akka.pattern.StatusReply
 import com.google.common.primitives.Longs
 import org.ergoplatform.ErgoBox.TokenId
@@ -11,22 +11,22 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{UnconfirmedTransaction, ErgoTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
-import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, FullBlockApplied, NodeViewChange}
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import ReceivableMessages.{ChangedMempool, NodeViewChange, ChangedHistory, ChangedState, FullBlockApplied}
+import org.ergoplatform.nodeView.ErgoReadersHolder.{Readers, GetReaders}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
+import org.ergoplatform.nodeView.state.{UtxoStateReader, StateType, ErgoState, ErgoStateContext}
+import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters, ErgoSettings}
 import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
+import org.ergoplatform.{Input, ErgoBox, ErgoTreePredef, ErgoBoxCandidate}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ScorexLogging, ModifierId}
 import sigmastate.SType.ErgoBoxRType
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.crypto.CryptoFacade
@@ -37,7 +37,7 @@ import special.collection.Coll
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Random, Try, Success, Failure}
 
 /** Responsible for generating block candidates and validating solutions.
   * It is observing changes of history, utxo state, mempool and newly applied blocks
@@ -666,11 +666,11 @@ object CandidateGenerator extends ScorexLogging {
     val reemissionRules = reemissionSettings.reemissionRules
 
     val eip27ActivationHeight = reemissionSettings.activationHeight
-    val reemissionTokenId = Digest32 @@ reemissionSettings.reemissionTokenIdBytes
+    val reemissionTokenId = Digest32Coll @@ reemissionSettings.reemissionTokenIdBytes.toColl
 
     val nextHeight = currentHeight + 1
     val minerProp =
-      ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
+      ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop           = emissionBox.ergoTree

@@ -1,24 +1,24 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
-import org.ergoplatform.wallet.{AssetUtils, Constants}
+import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import scorex.util.{ScorexLogging, idToBytes, ModifierId}
 import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.PreGenesisHeader
 import scorex.db.LDBVersionedStore
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Try, Success, Failure}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
+import org.ergoplatform.sdk.wallet.AssetUtils
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.util.encode.Base16
 

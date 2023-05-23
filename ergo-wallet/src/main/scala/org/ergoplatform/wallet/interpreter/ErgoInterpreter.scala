@@ -1,13 +1,13 @@
 package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeParameters
 import org.ergoplatform.wallet.protocol.Constants
-import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeContext, ErgoLikeInterpreter}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeInterpreter, ErgoLikeContext}
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
-import sigmastate.interpreter.Interpreter.{ScriptEnv, VerificationResult}
+import sigmastate.interpreter.Interpreter.{VerificationResult, ScriptEnv}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
 
 import scala.util.Try

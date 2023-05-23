@@ -45,10 +45,10 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
     if (manifests.size > toStore) {
 
-      val lastManifestBytes = manifests.last._2
+      val lastManifestBytesOpt = store.get(manifests.last._2)
       val lastManifestSubtrees =
-        manifestSerializer
-          .parseBytesTry(lastManifestBytes)
+        lastManifestBytesOpt
+          .flatMap(bs => manifestSerializer.parseBytesTry(bs).toOption)
           .map(_.subtreesIds)
           .getOrElse(ArrayBuffer.empty)
           .map(Algos.encode)

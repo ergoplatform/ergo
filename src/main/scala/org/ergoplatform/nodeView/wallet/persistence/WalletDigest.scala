@@ -4,12 +4,12 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.ErgoSerializer
-import scorex.util.serialization.{Reader, Writer}
-
-import scala.collection.mutable
 import scorex.util.Extensions._
+import scorex.util.serialization.{Reader, Writer}
 import sigmastate.eval.Digest32Coll
 import sigmastate.eval.Extensions.ArrayOps
+
+import scala.collection.mutable
 
 /**
   * Holds aggregate wallet data (including off-chain) with no need fo re-processing it on each request.

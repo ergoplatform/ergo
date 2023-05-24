@@ -1,16 +1,16 @@
 package org.ergoplatform.http.api
 
-import akka.actor.{ActorRefFactory, ActorRef}
+import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, ErgoMiner, CandidateGenerator}
+import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{Pay2SAddress, ErgoAddress, ErgoTreePredef}
+import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import sigmastate.basics.DLogProtocol.ProveDlog

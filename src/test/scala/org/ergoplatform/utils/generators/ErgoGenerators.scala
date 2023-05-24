@@ -3,29 +3,29 @@ package org.ergoplatform.utils.generators
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.mining.{genPk, q, AutolykosSolution}
+import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.popow.{PoPowParams, NipopowProof}
+import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowParams}
 import org.ergoplatform.network.ModePeerFeature
-import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfo, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, ValidationRules, Constants, ErgoValidationSettings}
+import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
 import org.ergoplatform.utils.ErgoTestConstants
-import org.ergoplatform.validation.{ReplacedRule, ChangedRule, DisabledRule, EnabledRule}
+import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Arbitrary.arbByte
-import org.scalacheck.{Gen, Arbitrary}
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.matchers.should.Matchers
-import scorex.crypto.authds.{SerializedAdProof, ADDigest}
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.CryptoConstants.EcPointType
-import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
-import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple, CryptoConstants}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.{CryptoConstants, DiffieHellmanTupleProverInput, ProveDHTuple}
 import sigmastate.interpreter.ProverResult
 
 import scala.util.Random

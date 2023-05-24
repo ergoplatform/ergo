@@ -1,13 +1,13 @@
 package org.ergoplatform.modifiers.history.header
 
 import io.circe.syntax._
-import io.circe.{HCursor, Encoder, Decoder}
+import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.AutolykosSolution
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
-import org.ergoplatform.modifiers.history.{ADProofs, PreHeader, BlockTransactions}
-import org.ergoplatform.modifiers.{HeaderTypeId, BlockSection, NonHeaderBlockSection, NetworkObjectTypeId}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, PreHeader}
+import org.ergoplatform.modifiers.{BlockSection, HeaderTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
@@ -18,7 +18,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util._
 import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.eval.Extensions._
-import sigmastate.eval.{CGroupElement, CBigInt, CHeader, CAvlTree}
+import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
 
 import scala.concurrent.duration.FiniteDuration
 

@@ -2,18 +2,18 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoAddressEncoder.TestnetNetworkPrefix
 import org.ergoplatform.ErgoTreePredef.boxCreationHeight
-import org.ergoplatform.{Self, ErgoBox, Height, ErgoTreePredef}
-import org.ergoplatform.nodeView.state.{UtxoState, ErgoState, BoxHolder}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
+import org.ergoplatform.{ErgoBox, ErgoTreePredef, Height, Self}
 import scorex.crypto.authds.avltree.batch.Remove
-import sigmastate._
 import sigmastate.Values._
+import sigmastate._
 import sigmastate.basics.CryptoConstants.dlogGroup
-import sigmastate.lang.Terms._
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.{IRContext, CompiletimeIRContext}
-import sigmastate.lang.{TransformingSigmaBuilder, CompilerSettings, SigmaCompiler}
+import sigmastate.eval.{CompiletimeIRContext, IRContext}
+import sigmastate.lang.Terms._
+import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
 
 import scala.util.Try
 

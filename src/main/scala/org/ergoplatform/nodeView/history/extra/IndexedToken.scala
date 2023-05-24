@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, f
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.{ByteColl, uniqueId}
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.ErgoSerializer
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ByteArrayOps, ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.CollectionConstant
 import sigmastate.SByte
@@ -124,7 +124,7 @@ object IndexedToken {
       }
 
     IndexedToken(bytesToId(box.additionalTokens(tokenIndex)._1.toArray),
-                 bytesToId(box.id),
+                 box.id.toModifierId,
                  box.additionalTokens(tokenIndex)._2,
                  name,
                  description,

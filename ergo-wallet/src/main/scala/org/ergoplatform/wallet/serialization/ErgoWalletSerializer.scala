@@ -26,6 +26,8 @@ trait ErgoWalletSerializer[T] extends Serializer[T, T, Reader, Writer] {
 }
 
 object ErgoWalletSerializer {
+
+  /** Creates a new serializer which delegates to the given [[SigmaSerializer]]. */
   def fromSigmaSerializer[T](ss: SigmaSerializer[T, T]): ErgoWalletSerializer[T] = new ErgoWalletSerializer[T] {
     override def serialize(obj: T, w: Writer): Unit = {
       val sw = new SigmaByteWriter(w, None)

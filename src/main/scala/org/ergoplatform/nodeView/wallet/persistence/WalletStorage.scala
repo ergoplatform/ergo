@@ -1,20 +1,19 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import com.google.common.primitives.{Ints, Shorts}
-import org.ergoplatform.nodeView.state.{ErgoStateContextSerializer, ErgoStateContext}
-import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanSerializer, Scan}
-import org.ergoplatform.settings.{Parameters, ErgoSettings, Constants}
 import org.ergoplatform.P2PKAddress
-import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKeySerializer, ExtendedPublicKey, DerivationPath, DerivationPathSerializer}
-import scorex.crypto.hash.Blake2b256
+import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
+import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
+import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
-import scorex.db.{LDBKVStore, LDBFactory}
-
-import java.io.File
+import scorex.crypto.hash.Blake2b256
+import scorex.db.{LDBFactory, LDBKVStore}
 import scorex.util.ScorexLogging
 import sigmastate.serialization.SigmaSerializer
 
-import scala.util.{Try, Success, Failure}
+import java.io.File
+import scala.util.{Failure, Success, Try}
 
 /**
   * Persists version-agnostic wallet actor's mutable state (which is not a subject to rollbacks in case of forks)
@@ -39,8 +38,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
       val qty = Ints.fromByteArray(r.take(4))
       (0 until qty).foldLeft((Seq.empty[DerivationPath], r.drop(4))) { case ((acc, bytes), _) =>
         val length = Ints.fromByteArray(bytes.take(4))
-        val pathBytes = SigmaSerializer.startReader(bytes.slice(4, 4 + length))
-        val pathTry = DerivationPathSerializer.parseTry(pathBytes)
+        val r = SigmaSerializer.startReader(bytes.slice(4, 4 + length))
+        val pathTry = DerivationPathSerializer.parseTry(r)
         val newAcc = pathTry.map(acc :+ _).getOrElse(acc)
         val bytesTail = bytes.drop(4 + length)
         newAcc -> bytesTail

@@ -6,27 +6,26 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
-import sigmastate.eval.Digest32Coll
-import sigmastate.eval.Extensions.ArrayOps
+import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.language.implicitConversions
 
 class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with WalletGenerators {
 
-  import ScanningPredicateJsonCodecs.{scanningPredicateEncoder, scanningPredicateDecoder}
+  import ScanningPredicateJsonCodecs.{scanningPredicateDecoder, scanningPredicateEncoder}
 
   private implicit def bacFromBytes(bs: Array[Byte]) = ByteArrayConstant(bs)
 
   private val complexOr = OrScanningPredicate(
     ContainsScanningPredicate(ErgoBox.R1, ByteArrayConstant(Array.fill(32)(1: Byte))),
     EqualsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array.fill(32)(0: Byte))),
-    ContainsAssetPredicate(Digest32Coll @@ Array.fill(32)(0: Byte).toColl)
+    ContainsAssetPredicate(Array.fill(32)(0: Byte).toTokenId)
   )
 
   private val complexAnd = AndScanningPredicate(
     ContainsScanningPredicate(ErgoBox.R1, ByteArrayConstant(Array.fill(32)(1: Byte))),
     EqualsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array.fill(32)(1: Byte))),
-    ContainsAssetPredicate(Digest32Coll @@ Array.fill(32)(1: Byte).toColl)
+    ContainsAssetPredicate(Array.fill(32)(1: Byte).toTokenId)
   )
 
   property("json roundtrip for generated predicate") {
@@ -58,7 +57,7 @@ class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with Wal
     val bs = Base16.decode("02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7").get
     scanningPredicateDecoder.decodeJson(j).toTry.get == AndScanningPredicate(
       ContainsScanningPredicate(ErgoBox.R1, bs),
-      ContainsAssetPredicate(Digest32Coll @@ bs.toColl)
+      ContainsAssetPredicate(bs.toTokenId)
     )
   }
 
@@ -72,7 +71,7 @@ class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with Wal
     val bs = Base16.decode("02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7").get
     scanningPredicateDecoder.decodeJson(j).toTry.get == AndScanningPredicate(
       ContainsScanningPredicate(ErgoBox.R4, bs),
-      ContainsAssetPredicate(Digest32Coll @@ bs.toColl)
+      ContainsAssetPredicate(bs.toTokenId)
     )
   }
 

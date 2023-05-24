@@ -2,10 +2,10 @@ package org.ergoplatform.wallet.secrets
 
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.wallet.Constants
-import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
-import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.interface4j.SecretString
+import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.utils.Generators
+import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks

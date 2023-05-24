@@ -3,22 +3,21 @@ package org.ergoplatform.utils.generators
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.mempool.{UnsignedErgoTransaction, ErgoTransaction}
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionSigningRequest}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction}
+import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.Parameters._
-import org.ergoplatform.settings.{Parameters, Constants}
-import org.ergoplatform.utils.{RandomLike, RandomWrapper, BoxUtils}
+import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.utils.{BoxUtils, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.Constants.{MaxAssetsPerBox, ScanId}
-import org.ergoplatform.UnsignedInput
-import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, DhtSecretKey}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.utils.Generators
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoAddress, DataInput, ErgoBoxCandidate, P2PKAddress, Input}
+import org.ergoplatform._
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
 import scorex.db.ByteArrayWrapper
@@ -195,7 +194,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     }
 
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
-      val normalizedTokens = tokens.toSeq.map(t => (Digest32Coll @@ t._1.data.toColl) -> t._2)
+      val normalizedTokens = tokens.toSeq.map(t => t._1.data.toTokenId -> t._2)
       testBox(amt, outputsProposition, 0, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
@@ -223,7 +222,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {
     val tokensDistribution = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
     (1 to tokensCount).foreach { i =>
-      val (id, amt) = Digest32Coll @@ Blake2b256(s"$i" + Random.nextString(5)).toColl -> (Random.nextInt(Int.MaxValue).toLong + 100)
+      val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)).toTokenId -> (Random.nextInt(Int.MaxValue).toLong + 100)
       val idx = i % tokensDistribution.size
       val s = tokensDistribution(idx)
       tokensDistribution(idx) = s :+ (id -> amt)

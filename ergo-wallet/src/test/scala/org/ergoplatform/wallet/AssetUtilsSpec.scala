@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet
 
-import org.ergoplatform.sdk.wallet.{TokensMap, AssetUtils}
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.wallet.utils.WalletTestHelpers
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks

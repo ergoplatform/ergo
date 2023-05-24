@@ -8,25 +8,25 @@ import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.{ErgoTestConstants, ErgoPropertyTest}
+import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestConstants}
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
-import org.ergoplatform.wallet.interpreter.{TransactionHintsBag, ErgoInterpreter}
+import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.protocol.context.InputContext
-import org.ergoplatform.{Input, ErgoBox, ErgoBoxCandidate}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import scalan.util.BenchmarkUtil
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
-import scorex.util.{bytesToId, ModifierId}
 import scorex.util.encode.Base16
+import scorex.util.{ModifierId, bytesToId}
 import sigmastate.AND
-import sigmastate.Values.{TrueLeaf, SigmaPropConstant, ByteArrayConstant, IntConstant, ByteConstant, LongArrayConstant}
+import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant, TrueLeaf}
 import sigmastate.basics.CryptoConstants
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.helpers.TestingHelpers._
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.{Random, Try}
 

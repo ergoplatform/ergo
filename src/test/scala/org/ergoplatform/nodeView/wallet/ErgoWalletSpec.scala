@@ -1,26 +1,26 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{UnsignedErgoTransaction, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
-import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, PaymentRequest, BurnTokensRequest, AssetIssueRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
 import org.ergoplatform.sdk.wallet.secrets.PrimitiveSecretKey
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils._
 import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform.wallet.interpreter.{TransactionHintsBag, ErgoInterpreter}
-import scorex.util.encode.Base16
-import sigmastate.eval._
-import sigmastate.eval.Extensions._
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
+import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import scorex.util.ModifierId
-import sigmastate.{CTHRESHOLD, CAND}
+import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.eval.Extensions._
+import sigmastate.eval._
+import sigmastate.{CAND, CTHRESHOLD}
 
 import scala.concurrent.duration._
 
@@ -240,7 +240,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
   property("whitelist set, preserve tokens from auto-burn") {
     val inputs = {
       val x = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
-      Seq(encodedTokenId(Digest32Coll @@@ x.head.boxId.toColl))
+      Seq(encodedTokenId(x.head.boxId.toTokenId))
     }
 
     implicit val ww: WalletFixture = new WalletFixture(settings

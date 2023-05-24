@@ -1,21 +1,20 @@
 package org.ergoplatform.wallet.transactions
 
-import org.ergoplatform.{UnsignedErgoLikeTransaction, UnsignedInput, ErgoBox, ErgoAddress, ErgoTreePredef, DataInput, ErgoBoxCandidate, ErgoScriptPredef}
-import sigmastate.eval.Extensions._
-
-import scala.util.Try
-import scorex.util.{idToBytes, bytesToId, ModifierId}
-import special.collection.Coll
-import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.sdk.wallet.{TokensMap, AssetUtils}
-import scorex.crypto.hash.Digest32
-import org.ergoplatform.wallet.boxes.BoxSelector
-import org.ergoplatform.wallet.boxes.DefaultBoxSelector
+import org.ergoplatform._
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
+import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
+import scorex.util.{ModifierId, bytesToId}
+import sigmastate.eval.Extensions._
+import sigmastate.eval._
+import sigmastate.utils.Extensions._
+import special.collection.Coll
+import special.collection.Extensions._
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 object TransactionBuilder {
 
@@ -159,10 +158,10 @@ object TransactionBuilder {
   }
 
   def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
-    tokens.toArray.map(t => bytesToId(t._1.toArray) -> t._2).toMap
+    tokens.toArray.map(t => t._1.toModifierId -> t._2).toMap
 
   def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
-    tokens.toSeq.map {t => (Digest32Coll @@ idToBytes(t._1).toColl) -> t._2}.toArray.toColl
+    tokens.toArray.map {t => t._1.toTokenId -> t._2}.toColl
 
   private def validateStatelessChecks(inputs: IndexedSeq[ErgoBox], dataInputs: IndexedSeq[DataInput],
     outputCandidates: Seq[ErgoBoxCandidate]): Unit = {

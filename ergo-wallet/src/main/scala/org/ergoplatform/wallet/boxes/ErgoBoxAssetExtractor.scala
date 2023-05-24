@@ -1,8 +1,8 @@
 package org.ergoplatform.wallet.boxes
 
+import java7.compat.Math
 import org.ergoplatform.ErgoBoxCandidate
 import special.collection.Extensions._
-import java7.compat.Math
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.collection.mutable

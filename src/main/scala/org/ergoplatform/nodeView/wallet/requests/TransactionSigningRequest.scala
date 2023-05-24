@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet.requests
 
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
-import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, DhtSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 
 /**

@@ -1,9 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
-import com.google.common.hash.{Funnels, BloomFilter}
+import com.google.common.hash.{BloomFilter, Funnels}
 import org.ergoplatform.sdk.wallet.secrets.ExtendedPublicKey
-import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress, ErgoTreePredef}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.{ErgoAddressEncoder, ErgoTreePredef, P2PKAddress}
 import sigmastate.Values
 import sigmastate.eval._
 

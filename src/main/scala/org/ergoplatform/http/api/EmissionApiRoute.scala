@@ -2,13 +2,13 @@ package org.ergoplatform.http.api
 
 import akka.actor.ActorRefFactory
 import akka.http.scaladsl.server.Route
+import io.circe.syntax._
 import io.circe.{Encoder, Json}
-import org.ergoplatform.{ErgoAddressEncoder, ErgoTreePredef, Pay2SAddress}
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.settings.{ErgoSettings, ReemissionSettings}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoTreePredef, Pay2SAddress}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import io.circe.syntax._
 
 case class EmissionApiRoute(ergoSettings: ErgoSettings)
                            (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {

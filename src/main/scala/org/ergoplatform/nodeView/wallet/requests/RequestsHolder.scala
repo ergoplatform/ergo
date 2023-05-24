@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.syntax._
-import io.circe.{HCursor, Encoder, Json, Decoder}
+import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress, ErgoAddress, ErgoTreePredef}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoTreePredef, Pay2SAddress}
 
 
 case class RequestsHolder(requests: Seq[TransactionGenerationRequest],

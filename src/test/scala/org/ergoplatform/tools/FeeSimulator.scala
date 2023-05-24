@@ -1,15 +1,15 @@
 package org.ergoplatform.tools
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.{Input, ErgoBoxCandidate}
+import org.ergoplatform.settings.Constants._
+import org.ergoplatform.settings.LaunchParameters._
+import org.ergoplatform.{ErgoBoxCandidate, Input}
 import scorex.crypto.authds.ADKey
 import scorex.utils.Random
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.eval.Extensions.ArrayByteOps
 import sigmastate.eval._
-import org.ergoplatform.settings.LaunchParameters._
-import org.ergoplatform.settings.Constants._
-import sigmastate.eval.Extensions.ArrayOps
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 
 object FeeSimulator extends App {
@@ -23,7 +23,9 @@ object FeeSimulator extends App {
   val input = Input(ADKey @@ Random.randomBytes(32), ProverResult(Random.randomBytes(65), ContextExtension(Map())))
   val creationHeight: Int = 100000
 
-  val box1 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k1, creationHeight, Colls.fromItems((Digest32Coll @@ Random.randomBytes(32).toColl) -> scala.util.Random.nextLong()))
+  val box1 = new ErgoBoxCandidate(
+    scala.util.Random.nextLong(), k1, creationHeight,
+    Colls.fromItems(Random.randomBytes(32).toTokenId -> scala.util.Random.nextLong()))
   val box2 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k2, creationHeight)
 
   val simpleTx = ErgoTransaction(IndexedSeq(input, input), IndexedSeq(box1, box2))

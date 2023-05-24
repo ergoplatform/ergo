@@ -1,26 +1,23 @@
 package org.ergoplatform.wallet.utils
 
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
+import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.sdk.wallet.secrets._
+import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.mnemonic.{Mnemonic, WordList}
+import org.ergoplatform._
 import org.scalacheck.Arbitrary.arbByte
-import org.scalacheck.{Gen, Arbitrary}
+import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.ADKey
-import sigmastate.Values.{TrueLeaf, CollectionConstant, ByteArrayConstant, ErgoTree, FalseLeaf, EvaluatedValue}
-import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.{SType, SByte}
-import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.util._
-import org.ergoplatform.{UnsignedErgoLikeTransaction, UnsignedInput, ErgoBox, ErgoTreePredef, ErgoBoxCandidate, ErgoScriptPredef}
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
+import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
-import scorex.util.{bytesToId, ModifierId}
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
-import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey, ExtendedPublicKey, SecretKey, Index}
-import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
-import scorex.crypto.hash.Digest32
+import sigmastate.{SByte, SType}
 
 
 trait Generators {
@@ -72,7 +69,7 @@ trait Generators {
   val assetGen: Gen[(TokenId, Long)] = for {
     id <- boxIdGen
     amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
-  } yield Digest32Coll @@@ id.toColl -> amt
+  } yield id.toTokenId -> amt
 
   def additionalTokensGen(cnt: Int): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
 

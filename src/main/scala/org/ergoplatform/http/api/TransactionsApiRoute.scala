@@ -20,8 +20,7 @@ import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
-import sigmastate.eval.Digest32Coll
-import sigmastate.eval.Extensions.ArrayOps
+import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
@@ -51,7 +50,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   private def handleTokenId(value: String): Directive1[TokenId] = {
     Algos.decode(value) match {
       case Success(tokenId) =>
-        provide(Digest32Coll @@ tokenId.toColl)
+        provide(tokenId.toTokenId)
       case _ =>
         reject(ValidationRejection(s"tokenId $value is invalid, it should be 64 chars long hex string"))
     }

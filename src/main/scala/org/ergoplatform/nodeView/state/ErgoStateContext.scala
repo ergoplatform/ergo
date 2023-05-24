@@ -84,7 +84,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
-  override def previousStateDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
+  override def previousStateDigest: ADDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
     ADDigest @@ sigmaLastHeaders.toArray.head.stateRoot.digest.toArray
   } else {
     genesisStateDigest
@@ -275,7 +275,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }.flatten
 
   override def toString: String =
-    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest.toArray)}, $lastHeaders, $currentParameters)"
+    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
 
 
   /**

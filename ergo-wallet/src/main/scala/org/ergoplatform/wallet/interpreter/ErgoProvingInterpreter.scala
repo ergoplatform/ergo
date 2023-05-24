@@ -196,7 +196,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       val inputBox = boxesToSpend(inpIndex)
 
       val context = new ErgoLikeContext(
-        ErgoInterpreter.avlTreeFromDigest(ADDigest @@ stateContext.previousStateDigest.toArray),
+        ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
         stateContext.sigmaLastHeaders,
         stateContext.sigmaPreHeader,
         dataBoxes,

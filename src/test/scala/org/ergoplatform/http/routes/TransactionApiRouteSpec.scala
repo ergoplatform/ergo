@@ -44,7 +44,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   val dataInput = DataInput(input.boxId)
 
   val absentModifierId = "0000000000000000000000000000000000000000000000000000000000000000"
-  val tokens = List[(TokenId, Long)](Digest32Coll @@@ inputBox.id.toColl -> 10)
+  val tokens = List[(TokenId, Long)](inputBox.id.toTokenId -> 10)
   val registers =
     Map(
       ErgoBox.R4 -> ByteArrayConstant("name".getBytes("UTF-8")),

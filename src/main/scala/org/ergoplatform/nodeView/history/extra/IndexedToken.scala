@@ -10,6 +10,7 @@ import scorex.util.{ByteArrayOps, ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.CollectionConstant
 import sigmastate.SByte
+import special.collection.Extensions._
 
 /**
   * Index of a token containing creation information.
@@ -123,7 +124,7 @@ object IndexedToken {
         case None => 0
       }
 
-    IndexedToken(bytesToId(box.additionalTokens(tokenIndex)._1.toArray),
+    IndexedToken(box.additionalTokens(tokenIndex)._1.toModifierId,
                  box.id.toModifierId,
                  box.additionalTokens(tokenIndex)._2,
                  name,

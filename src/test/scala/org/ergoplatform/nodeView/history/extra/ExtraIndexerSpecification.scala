@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform._
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -15,11 +16,10 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestHelpers, HistoryTestHelpers}
-import org.ergoplatform._
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.Extensions.ArrayOps
+import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import special.collection.Coll
 import spire.implicits.cfor
@@ -298,7 +298,7 @@ object ChainGenerator extends ErgoTestHelpers {
     val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
     inOpt match {
       case Some(input) if cond =>
-        tokens += Tuple2(Digest32Coll @@@ input.id.toColl, math.abs(Random.nextInt()))
+        tokens += Tuple2(input.id.toTokenId, math.abs(Random.nextInt()))
       case Some(tokenBox) if !cond =>
         tokenBox.additionalTokens.toArray.foreach(tokens += _)
       case _ =>

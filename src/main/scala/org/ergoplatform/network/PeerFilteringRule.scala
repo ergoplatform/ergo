@@ -86,17 +86,6 @@ object SyncV2Filter extends PeerFilteringRule {
 
 }
 
-/**
-  * If peer's version is >= 4.0.16, the peer is supporting sync V2
-  */
-object SyncV3Filter extends PeerFilteringRule {
-  private val syncV3Version = Version(5, 0, 10) // todo: set before release
-
-  override def condition(version: Version): Boolean = {
-    version.compare(syncV3Version) >= 0
-  }
-
-}
 
 /**
   * Filter used to differentiate peers supporting UTXO state snapshots, so possibly
@@ -109,4 +98,16 @@ object UtxoSetNetworkingFilter extends PeerFilteringRule {
     // If neighbour version is >= `UtxoSnapsnotActivationVersion`, the neighbour supports utxo snapshots exchange
     version.compare(UtxoSnapsnotActivationVersion) >= 0
   }
+}
+
+/**
+  * If peer's version is >= 5.0.12, the peer is supporting sync V3
+  */
+object SyncV3Filter extends PeerFilteringRule {
+  private val syncV3Version = Version(5, 0, 12) // todo: set before release
+
+  override def condition(version: Version): Boolean = {
+    version.compare(syncV3Version) >= 0
+  }
+
 }

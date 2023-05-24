@@ -1,5 +1,6 @@
 package org.ergoplatform.wallet.boxes
 
+import org.ergoplatform.sdk.wallet
 import org.ergoplatform.sdk.wallet.TokensMap
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
@@ -122,10 +123,10 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
   }
 
   override def parse(r: Reader): TrackedBox = {
-    val creationTxId = bytesToId(r.getBytes(Constants.ModifierIdLength))
+    val creationTxId = bytesToId(r.getBytes(wallet.Constants.ModifierIdLength))
     val creationOutIndex = r.getShort()
     val inclusionHeightOpt = r.getOption(r.getInt())
-    val spendingTxIdOpt = r.getOption(r.getBytes(Constants.ModifierIdLength)).map(bytesToId)
+    val spendingTxIdOpt = r.getOption(r.getBytes(wallet.Constants.ModifierIdLength)).map(bytesToId)
     val spendingHeightOpt = r.getOption(r.getInt())
 
     val appsCount = r.getShort()

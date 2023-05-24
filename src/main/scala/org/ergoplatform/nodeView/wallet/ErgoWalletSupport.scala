@@ -12,7 +12,6 @@ import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey, E
 import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
@@ -161,7 +160,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         }
       } else {
         if (pubKeys.size == 1 &&
-              pubKeys.head.path == Constants.eip3DerivationPath.toPublicBranch &&
+              pubKeys.head.path == sdk.wallet.Constants.eip3DerivationPath.toPublicBranch &&
               state.storage.readChangeAddress.isEmpty) {
           val changeAddress = P2PKAddress(pubKeys.head.key)(addressEncoder)
           log.info(s"Update change address to $changeAddress")

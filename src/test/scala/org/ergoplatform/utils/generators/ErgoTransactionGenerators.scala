@@ -14,10 +14,11 @@ import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils.{BoxUtils, RandomLike, RandomWrapper}
-import org.ergoplatform.wallet.Constants.{MaxAssetsPerBox, ScanId}
+import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform._
+import org.ergoplatform.wallet.Constants.ScanId
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
 import scorex.db.ByteArrayWrapper

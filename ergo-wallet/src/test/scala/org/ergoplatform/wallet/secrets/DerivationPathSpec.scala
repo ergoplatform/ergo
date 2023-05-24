@@ -1,7 +1,7 @@
 package org.ergoplatform.wallet.secrets
 
+import org.ergoplatform.sdk.wallet
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
-import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.utils.Generators
@@ -95,7 +95,7 @@ class DerivationPathSpec
 
   property("equality of old derivation") {
     // Check that hardcoded path from old codebase corresponds to the new string form (Constants.usePreEip3Derivation)
-    DerivationPath(Array(0, 1), publicBranch = false) shouldBe Constants.preEip3DerivationPath
+    DerivationPath(Array(0, 1), publicBranch = false) shouldBe wallet.Constants.preEip3DerivationPath
   }
 
   property("master key derivation") {
@@ -121,12 +121,12 @@ class DerivationPathSpec
   }
 
   property("isEip3 correctly distinguishing") {
-    Constants.eip3DerivationPath.isEip3 shouldBe true
-    Constants.eip3DerivationPath.toPublicBranch.isEip3 shouldBe true
+    wallet.Constants.eip3DerivationPath.isEip3 shouldBe true
+    wallet.Constants.eip3DerivationPath.toPublicBranch.isEip3 shouldBe true
     DerivationPath.fromEncoded("m/44'/429'/0'/0/1").get.isEip3 shouldBe true
     DerivationPath.fromEncoded("M/44'/429'/0'/0/1").get.isEip3 shouldBe true
     DerivationPath.fromEncoded("m/44'/429'/0'/1/1").get.isEip3 shouldBe true
-    Constants.preEip3DerivationPath.isEip3 shouldBe false
+    wallet.Constants.preEip3DerivationPath.isEip3 shouldBe false
     DerivationPath.fromEncoded("m/44'/429'/1'/0/1").get.isEip3 shouldBe false
   }
 

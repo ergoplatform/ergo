@@ -3,7 +3,8 @@ package org.ergoplatform.wallet.boxes
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.ErgoLikeTransaction
 import org.ergoplatform.SigmaConstants.MaxBoxSize
-import org.ergoplatform.wallet.Constants.{MaxAssetsPerBox, PaymentsScanId}
+import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
+import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{NotEnoughErgsError, NotEnoughTokensError}
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers

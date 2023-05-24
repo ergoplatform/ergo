@@ -55,12 +55,11 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private val ergoAddress: Directive1[ErgoAddress] = entity(as[String]).flatMap(handleErgoAddress)
 
-  private def handleErgoAddress(value: String): Directive1[ErgoAddress] = {
-    ergoAddressEncoder.fromString(value) match {
+  private def handleErgoAddress(value: String): Directive1[ErgoAddress] =
+    ergoAddressEncoder.fromString(fromJsonOrPlain(value)) match {
       case Success(addr) => provide(addr)
       case _ => reject(ValidationRejection("Wrong address format"))
     }
-  }
 
   override val route: Route =
   if(ergoSettings.nodeSettings.extraIndex)

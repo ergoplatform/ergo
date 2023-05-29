@@ -70,6 +70,15 @@ object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLo
                            // but for all imaginable evolutions 1000 bytes would be enough
 
   override def serialize(obj: ErgoSyncInfo, w: Writer): Unit = {
+    def writeLastHeaders(w: Writer, lastHeaders: Seq[Header]): Unit = {
+      w.putUByte(lastHeaders.length) // number of headers peer is announcing
+      lastHeaders.foreach { h =>
+        val headerBytes = h.bytes
+        w.putUShort(headerBytes.length)
+        w.putBytes(headerBytes)
+      }
+    }
+
     obj match {
       case v1: ErgoSyncInfoV1 =>
         // in sync message we just write number of last header ids and then ids themselves
@@ -78,22 +87,11 @@ object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLo
       case v2: ErgoSyncInfoV2 =>
         w.putUShort(0) // to stop sync v1 parser
         w.put(v2HeaderMode) // signal that v2 message started
-        w.putUByte(v2.lastHeaders.length) // number of headers peer is announcing
-        v2.lastHeaders.foreach { h =>
-          val headerBytes = h.bytes
-          w.putUShort(headerBytes.length)
-          w.putBytes(headerBytes)
-        }
+        writeLastHeaders(w, v2.lastHeaders)
       case v3: ErgoSyncInfoV3 =>
         w.putUShort(0) // to stop sync v1 parser
         w.put(v3HeaderMode) // signal that v2 message started
-        w.putUByte(v3.lastHeaders.length) // number of headers peer is announcing
-        // write last headers
-        v3.lastHeaders.foreach { h =>
-          val headerBytes = h.bytes
-          w.putUShort(headerBytes.length)
-          w.putBytes(headerBytes)
-        }
+        writeLastHeaders(w, v3.lastHeaders)
         // write headers available
         // todo: limit max number of records, add checks
         val headerRangesCount = v3.headersRanges.length.toByte

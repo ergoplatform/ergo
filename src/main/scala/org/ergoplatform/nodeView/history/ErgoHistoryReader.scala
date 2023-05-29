@@ -377,7 +377,7 @@ trait ErgoHistoryReader
     if (isEmpty) {
       ErgoSyncInfoV1(Nil)
     } else {
-      ErgoSyncInfoV1(lastHeaderIds(ErgoSyncInfo.MaxBlockIds))
+      ErgoSyncInfoV1(lastHeaderIds(ErgoSyncInfoV1.MaxBlockIds))
     }
   }
 

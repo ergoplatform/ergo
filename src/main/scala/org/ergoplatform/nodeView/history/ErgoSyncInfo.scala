@@ -33,6 +33,10 @@ case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {
   override val nonEmpty: Boolean = lastHeaderIds.nonEmpty
 }
 
+object ErgoSyncInfoV1 {
+  val MaxBlockIds = 1000
+}
+
 trait HeadersBasedSyncInfo extends ErgoSyncInfo {
   val lastHeaders: Seq[Header]
 
@@ -53,9 +57,6 @@ case class ErgoSyncInfoV3(lastHeaders: Seq[Header],
                           headersRanges: Seq[(Height, Height)],
                           fullBlocksRanges: Seq[(Height, Height)]) extends ErgoSyncInfo with HeadersBasedSyncInfo
 
-object ErgoSyncInfo {
-  val MaxBlockIds = 1000
-}
 
 object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLogging {
 
@@ -66,7 +67,7 @@ object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLo
   val MaxHeadersAllowed = 50 // in sync v2 message, no more than 50 headers allowed
 
   val MaxHeaderSize = 1000 // currently header is about 200+ bytes, but new fields can be added via a SF,
-                           // anyway we set hard max header size limit
+                           // but for all imaginable evolutions 1000 bytes would be enough
 
   override def serialize(obj: ErgoSyncInfo, w: Writer): Unit = {
     obj match {
@@ -139,7 +140,7 @@ object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLo
         throw new Exception(s"Wrong SyncInfo version encoded with $mode")
       }
     } else { // parse v1 sync message
-      require(length <= ErgoSyncInfo.MaxBlockIds + 1, "Too many block ids in sync info")
+      require(length <= ErgoSyncInfoV1.MaxBlockIds + 1, "Too many block ids in sync info")
       val ids = (1 to length).map(_ => bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize)))
       ErgoSyncInfoV1(ids)
     }

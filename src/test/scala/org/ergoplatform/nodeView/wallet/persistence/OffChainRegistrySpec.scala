@@ -73,7 +73,7 @@ class OffChainRegistrySpec
       val height = Random.nextInt(500) + 1
 
       //apply block to empty registry
-      val registry = OffChainRegistry.empty.updateOnBlock(height, boxes.toArray, boxes.map(tb => encodedBoxId(tb.box.id)).to[TreeSet])
+      val registry = OffChainRegistry.empty.updateOnBlock(height, boxes, boxes.map(tb => encodedBoxId(tb.box.id)).to[TreeSet])
       val balance = balanceAmount(boxes.map(_.box))
       val assetsBalance = assetAmount(boxes.map(_.box))
       registry.height shouldEqual height
@@ -81,7 +81,7 @@ class OffChainRegistrySpec
       registry.digest.walletAssetBalances.toMap shouldEqual assetsBalance.toMap
 
       //a block coming is not making any offchain box on-chain
-      val registry2 = OffChainRegistry.empty.updateOnBlock(height, boxes.toArray, TreeSet.empty)
+      val registry2 = OffChainRegistry.empty.updateOnBlock(height, boxes, TreeSet.empty)
       registry2.height shouldEqual height
       registry2.digest.walletBalance shouldEqual balance
       registry2.digest.walletAssetBalances.toMap shouldEqual assetsBalance.toMap

@@ -41,7 +41,7 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
   def fromJsonOrPlain(str: String): String =
     str.asJson.as[String] match {
       case Right(value) if value.startsWith("\"") && value.endsWith("\"") =>
-        value.drop(1).dropRight(1)
+        value.substring(1, value.length - 1)
       case _ => str
     }
 

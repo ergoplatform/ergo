@@ -26,6 +26,7 @@ import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import java.io.FileNotFoundException
+import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -417,15 +418,15 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   }
 
   override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox] = {
-    val unconfirmed: Array[TrackedBox] =
+    val unconfirmed: Seq[TrackedBox] =
       if (considerUnconfirmed) {
         state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
       } else {
-        Array.empty[TrackedBox]
+        ArraySeq.empty[TrackedBox]
       }
 
     val currentHeight = state.fullHeight
-    val unspentBoxes: Array[TrackedBox] = state.registry.unspentBoxesByInclusionHeight(scanId, minHeight, maxHeight)
+    val unspentBoxes: Seq[TrackedBox] = state.registry.unspentBoxesByInclusionHeight(scanId, minHeight, maxHeight)
     (unspentBoxes ++ unconfirmed).map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 

@@ -11,6 +11,7 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.util.bytesToId
 
+import scala.collection.compat.immutable.ArraySeq
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable
 import scala.util.Try
@@ -36,9 +37,9 @@ object WalletScanLogic extends ScorexLogging {
     * @param inputsSpent         - wallet-related inputs spent
     * @param relatedTransactions - transactions affected (creating wallet-related boxes or spending them)
     */
-  case class ScanResults(outputs: Array[TrackedBox],
-                         inputsSpent: Array[SpentInputData],
-                         relatedTransactions: Array[WalletTransaction])
+  case class ScanResults(outputs: Seq[TrackedBox],
+                         inputsSpent: Seq[SpentInputData],
+                         relatedTransactions: Seq[WalletTransaction])
 
   def scanBlockTransactions(registry: WalletRegistry,
                             offChainRegistry: OffChainRegistry,
@@ -95,7 +96,7 @@ object WalletScanLogic extends ScorexLogging {
       tb.copy(scans = Set(PaymentsScanId))
     }
 
-    val initialScanResults = ScanResults(resolvedBoxes, Array.empty, Array.empty)
+    val initialScanResults = ScanResults(resolvedBoxes, ArraySeq.empty, ArraySeq.empty)
 
     // Wallet unspent outputs, we fetch them only when Bloom filter shows that some outputs may be spent
     val unspentBoxes = mutable.Map[ModifierId, TrackedBox]()

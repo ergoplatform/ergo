@@ -38,7 +38,7 @@ case class ErgoWalletState(
     */
   val walletFilter: FilterFn = (trackedBox: TrackedBox) => {
     val preStatus = if (trackedBox.chainStatus.onChain) {
-      offChainRegistry.onChainBalances.exists(x => java.util.Arrays.equals(x.id, trackedBox.box.id))
+      offChainRegistry.onChainBalances.exists(_.id == trackedBox.boxId)
     } else {
       true
     }

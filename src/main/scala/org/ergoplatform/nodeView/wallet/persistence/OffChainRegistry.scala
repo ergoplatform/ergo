@@ -6,6 +6,7 @@ import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 
+import scala.collection.compat.immutable.ArraySeq
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable
 
@@ -18,8 +19,8 @@ import scala.collection.mutable
   * @param onChainBalances  - on-chain balances snapshot (required to calculate off-chain indexes)
   */
 case class OffChainRegistry(height: Int,
-                            offChainBoxes: Array[TrackedBox],
-                            onChainBalances: Array[Balance]) {
+                            offChainBoxes: Seq[TrackedBox],
+                            onChainBalances: Seq[Balance]) {
 
   import org.ergoplatform.nodeView.wallet.IdUtils._
 
@@ -60,7 +61,7 @@ case class OffChainRegistry(height: Int,
         Some(x)
       }
     } ++ newBoxes
-    val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIds.contains(encodedBoxId(x.id)))
+    val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIds.contains(x.id))
     this.copy(
       offChainBoxes = unspentCertain.distinct,
       onChainBalances = onChainBalancesUpdated
@@ -75,7 +76,7 @@ case class OffChainRegistry(height: Int,
     * @param onChainIds      - ids of all boxes which became on-chain in result of a current block application
     */
   def updateOnBlock(newHeight: Int,
-                    allCertainBoxes: Array[TrackedBox],
+                    allCertainBoxes: Seq[TrackedBox],
                     onChainIds: TreeSet[EncodedBoxId]): OffChainRegistry = {
     val updatedOnChainBalances = allCertainBoxes.map(Balance.apply)
     val cleanedOffChainBoxes = offChainBoxes.filterNot(b => onChainIds.contains(EncodedBoxId @@@ b.boxId))
@@ -91,12 +92,12 @@ case class OffChainRegistry(height: Int,
 object OffChainRegistry {
 
   def empty: OffChainRegistry =
-    OffChainRegistry(ErgoHistory.EmptyHistoryHeight, Array.empty, Array.empty)
+    OffChainRegistry(ErgoHistory.EmptyHistoryHeight, ArraySeq.empty, ArraySeq.empty)
 
   def init(walletRegistry: WalletRegistry):OffChainRegistry = {
     val unspent = walletRegistry.unspentBoxes(PaymentsScanId)
     val h = walletRegistry.fetchDigest().height
-    OffChainRegistry(h, Array.empty, unspent.map(Balance.apply))
+    OffChainRegistry(h, ArraySeq.empty, unspent.map(Balance.apply))
   }
 
 }

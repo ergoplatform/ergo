@@ -8,6 +8,7 @@ import scorex.core.network.message.SyncInfoMessageSpec
 import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import scorex.util.Extensions._
 
 /**
   * Information on sync status to be sent to peer over the wire. It should provide an answer to the question how
@@ -57,6 +58,11 @@ case class ErgoSyncInfoV3(lastHeaders: Seq[Header],
                           headersRanges: Seq[(Height, Height)],
                           fullBlocksRanges: Seq[(Height, Height)]) extends ErgoSyncInfo with HeadersBasedSyncInfo
 
+object ErgoSyncInfoV3 {
+  val maxHeadersRanges = 4
+  val maxFullBlockRanges = 4
+}
+
 
 object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLogging {
 
@@ -93,18 +99,18 @@ object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLo
         w.put(v3HeaderMode) // signal that v2 message started
         writeLastHeaders(w, v3.lastHeaders)
         // write headers available
-        // todo: limit max number of records, add checks
-        val headerRangesCount = v3.headersRanges.length.toByte
-        w.put(headerRangesCount)
+        val headerRangesCount = v3.headersRanges.length
+        require(headerRangesCount <= ErgoSyncInfoV3.maxHeadersRanges)
+        w.putUByte(headerRangesCount)
         v3.headersRanges.foreach { case (start, end) =>
           w.putUInt(start)
           w.putUInt(end)
         }
 
         // write full-blocks available
-        // todo: limit max number of records, add checks
-        val fullblocksRangesCount = v3.fullBlocksRanges.length.toByte
-        w.put(fullblocksRangesCount)
+        val fullblocksRangesCount = v3.fullBlocksRanges.length
+        require(fullblocksRangesCount <= ErgoSyncInfoV3.maxFullBlockRanges)
+        w.putUByte(fullblocksRangesCount)
         v3.fullBlocksRanges.foreach { case (start, end) =>
           w.putUInt(start)
           w.putUInt(end)
@@ -115,25 +121,45 @@ object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLo
   }
 
   override def parse(r: Reader): ErgoSyncInfo = {
+    def readLastHeaders(r: Reader): Seq[Header] = {
+      val headersCount = r.getUByte()
+
+      require(headersCount <= MaxHeadersAllowed) // check to avoid spam
+
+      val headers = (1 to headersCount).map { _ =>
+        val headerBytesCount = r.getUShort()
+        require(headerBytesCount < MaxHeaderSize) // check to avoid spam
+        val headerBytes = r.getBytes(headerBytesCount)
+        HeaderSerializer.parseBytes(headerBytes)
+      }
+      headers
+    }
+
     val length = r.getUShort()
     if (length == 0 && r.remaining > 1) {
       val mode = r.getByte()
       if (mode == v2HeaderMode) {
         // parse v2 sync message
-        val headersCount = r.getUByte()
-
-        require(headersCount <= MaxHeadersAllowed) // check to avoid spam
-
-        val headers = (1 to headersCount).map { _ =>
-          val headerBytesCount = r.getUShort()
-          require(headerBytesCount < MaxHeaderSize) // check to avoid spam
-          val headerBytes = r.getBytes(headerBytesCount)
-          HeaderSerializer.parseBytes(headerBytes)
-        }
-        ErgoSyncInfoV2(headers)
+        val lastHeaders = readLastHeaders(r)
+        ErgoSyncInfoV2(lastHeaders)
       } else if (mode == v3HeaderMode) {
-        //todo: do sync v3 reader
-        ???
+        // parse v2 sync message
+        val lastHeaders = readLastHeaders(r)
+        val headerRangesCount = r.getUByte().toByteExact
+        require(headerRangesCount <= ErgoSyncInfoV3.maxHeadersRanges)
+        val headersRanges = (1 to headerRangesCount).map{_ =>
+          val start = r.getUInt().toIntExact
+          val end = r.getUInt().toIntExact
+          start -> end
+        }
+        val fullBlocksRangesCount = r.getUByte().toByteExact
+        require(fullBlocksRangesCount <= ErgoSyncInfoV3.maxFullBlockRanges)
+        val fullBlocksRanges = (1 to fullBlocksRangesCount).map{_ =>
+          val start = r.getUInt().toIntExact
+          val end = r.getUInt().toIntExact
+          start -> end
+        }
+        ErgoSyncInfoV3(lastHeaders, headersRanges, fullBlocksRanges)
       } else {
         throw new Exception(s"Wrong SyncInfo version encoded with $mode")
       }

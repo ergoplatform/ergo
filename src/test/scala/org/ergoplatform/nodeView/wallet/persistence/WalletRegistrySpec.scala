@@ -13,6 +13,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.VersionTag
 import scorex.util.encode.Base16
 
+import scala.collection.compat.immutable.ArraySeq
 import scala.util.Success
 
 class WalletRegistrySpec
@@ -108,7 +109,7 @@ class WalletRegistrySpec
         val registry = new WalletRegistry(store)(settings.walletSettings)
         val blockId = modifierIdGen.sample.get
         val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus))
-        registry.updateOnBlock(ScanResults(unspentBoxes, Seq.empty, Seq.empty), blockId, 100).get
+        registry.updateOnBlock(ScanResults(unspentBoxes, ArraySeq.empty, ArraySeq.empty), blockId, 100).get
         registry.walletUnspentBoxes().toList should contain theSameElementsAs unspentBoxes
       }
     }
@@ -123,7 +124,7 @@ class WalletRegistrySpec
         bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
       }
       val inputs = outs.map(tb => SpentInputData(fakeTxId, tb))
-      registry.updateOnBlock(ScanResults(outs, inputs, Seq.empty), blockId, 100).get
+      registry.updateOnBlock(ScanResults(outs, inputs, ArraySeq.empty), blockId, 100).get
       registry.walletUnspentBoxes() shouldBe Seq.empty
     }
   }
@@ -140,6 +141,7 @@ class WalletRegistrySpec
 
         WalletRegistry.putBox(emptyBag, tb).transact(store).get
         reg.getBox(tb.box.id) shouldBe Some(tb)
+        reg.cache -= tb.boxId
         WalletRegistry.removeBoxes(emptyBag, Seq(tb)).transact(store).get
         reg.getBox(tb.box.id) shouldBe None
       }
@@ -174,6 +176,7 @@ class WalletRegistrySpec
           scans = Set(PaymentsScanId, ScanId @@ 2.toShort))
         val updatedBoxes = tbs.map(updateFn)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)
+        reg.cache --= tbs.map(_.boxId)
         WalletRegistry.removeBoxes(emptyBag, tbs).transact(store).get
         reg.getBoxes(tbs.map(_.box.id)).flatten shouldBe Seq()
       }

@@ -1408,8 +1408,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       logger.debug("Chain is good")
 
     case ChainIsStuck(error) =>
-      log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
-      deliveryTracker.reset()
+      if (historyReader.fullBlockHeight > 0) {
+        log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
+        deliveryTracker.reset()
+      } else {
+        log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
+      }
   }
 
   /** handlers of messages coming from peers */

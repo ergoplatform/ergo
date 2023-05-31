@@ -59,8 +59,15 @@ case class ErgoSyncInfoV3(lastHeaders: Seq[Header],
                           fullBlocksRanges: Seq[(Height, Height)]) extends ErgoSyncInfo with HeadersBasedSyncInfo
 
 object ErgoSyncInfoV3 {
-  val maxHeadersRanges = 4
-  val maxFullBlockRanges = 4
+  /**
+    * How many different headers ranges a peer can report
+    */
+  val maxHeadersRanges = 8
+
+  /**
+    * How many different full-block ranges a peer can report
+    */
+  val maxFullBlockRanges = 8
 }
 
 

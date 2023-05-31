@@ -352,9 +352,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val peersV3 = mutable.Buffer[ConnectedPeer]()
 
     peers.foreach{peer =>
-      if(syncV3Supported(peer)) {
+      if (syncV3Supported(peer)) {
         peersV3 += peer
-      } else if(syncV2Supported(peer)) {
+      } else if (syncV2Supported(peer)) {
         peersV2 += peer
       } else {
         peersV1 += peer

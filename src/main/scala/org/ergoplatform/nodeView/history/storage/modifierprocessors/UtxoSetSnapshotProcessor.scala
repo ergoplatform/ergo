@@ -60,6 +60,10 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     * after.
     */
   def utxoSnapshotApplied(height: Height): Unit = {
+    val utxoPhaseTime = {
+      _cachedDownloadPlan.map(_.latestUpdateTime).getOrElse(0L) - _cachedDownloadPlan.map(_.createdTime).getOrElse(0L)
+    }
+    log.info(s"UTXO set downloading and application time: $utxoPhaseTime")
     // remove downloaded utxo set snapshots chunks
     val ts0 = System.currentTimeMillis()
     _cachedDownloadPlan.foreach { plan =>

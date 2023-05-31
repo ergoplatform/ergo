@@ -172,7 +172,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
-  //
+  /**
+    * How many peers should have a utxo set snapshot to start downloading it
+    */
   private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
 
   /**
@@ -565,15 +567,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * Private helper methods to request UTXO set snapshots metadata and related data (manifests, chunks) from peers
    */
 
-  /*
-   // todo: register?
-
-   val snapshotsInfoId = ModifierId @@ Algos.encode(Algos.hash("snapshots info"))
-   deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(snapshotsInfoId), peer) { deliveryCheck =>
-        context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
-      }
-   */
-
   private def requestSnapshotsInfo(): Unit = {
     // ask all the peers supporting UTXO set snapshots for snapshots they have
     val msg = Message(GetSnapshotsInfoSpec, Right(()), None)
@@ -595,8 +588,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def requestUtxoSetChunk(subtreeId: SubtreeId, peer: ConnectedPeer): Unit = {
+    // as we download multiple chunks in parallel and they can be quite large, timeout increased
+    val chunkDeliveryTimeout = 4 * deliveryTimeout
     deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, ModifierId @@ Algos.encode(subtreeId), peer) { deliveryCheck =>
-      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+      context.system.scheduler.scheduleOnce(chunkDeliveryTimeout, self, deliveryCheck)
     }
     val msg = Message(GetUtxoSnapshotChunkSpec, Right(subtreeId), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))

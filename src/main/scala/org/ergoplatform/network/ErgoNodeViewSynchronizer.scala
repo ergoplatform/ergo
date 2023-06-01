@@ -575,7 +575,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (peersCount >= MinSnapshots) {
       networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
     } else {
-      log.info(s"Less UTXO-snapshot supporting peers found than required mininum ($peersCount < $MinSnapshots)")
+      log.warn(s"Less UTXO-snapshot supporting peers found than required mininum ($peersCount < $MinSnapshots)")
     }
   }
 

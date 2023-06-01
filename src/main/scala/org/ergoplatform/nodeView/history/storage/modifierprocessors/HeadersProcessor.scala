@@ -42,6 +42,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     */
   protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 
+  /**
+    * Key for database record storing height of first full block stored
+    */
   protected val MinFullBlockHeightKey = {
     // hash of "minfullheight" UTF-8 string
     ByteArrayWrapper(Base16.decode("4987eb6a8fecbed88a6f733f456cdf4e334b944f4436be4cab50cacb442e15e6").get)

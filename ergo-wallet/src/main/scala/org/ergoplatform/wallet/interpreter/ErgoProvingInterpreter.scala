@@ -1,23 +1,21 @@
 package org.ergoplatform.wallet.interpreter
 
-import java.util
-
 import org.ergoplatform._
-import org.ergoplatform.utils.ArithUtils.{addExact, multiplyExact}
-import org.ergoplatform.validation.SigmaValidationSettings
+import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
+import org.ergoplatform.sdk.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey, SecretKey}
+import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
+import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
+import scorex.crypto.authds.ADDigest
+import scorex.util.encode.Base16
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
-import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
-import org.ergoplatform.validation.ValidationRules
-import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
-import org.ergoplatform.wallet.secrets.SecretKey
 import sigmastate.basics.SigmaProtocolPrivateInput
-import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
-import scorex.util.encode.Base16
+import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 import special.collection.Coll
 import special.sigma.{Header, PreHeader}
 
+import java.util
 import scala.util.{Failure, Success, Try}
 
 /**

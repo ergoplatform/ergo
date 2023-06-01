@@ -7,11 +7,11 @@ import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
+import org.ergoplatform.modifiers.history.header.Header.{Timestamp, Version}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer, HeaderWithoutPow}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
-import org.ergoplatform.modifiers.history.header.Header.{Timestamp, Version}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
@@ -19,7 +19,6 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.crypto.CryptoFacade
 
 import scala.annotation.tailrec
-import scala.math.BigInt
 import scala.util.Try
 
 /**
@@ -399,7 +398,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     val proofs = if (mandatoryTxIds.nonEmpty) {
       // constructs fake block transactions section (BlockTransactions instance) to get proofs from it
-      val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.wallet.Constants.ModifierIdLength)(0: Byte))
+      val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.sdk.wallet.Constants.ModifierIdLength)(0: Byte))
       val bt = BlockTransactions(fakeHeaderId, blockCandidate.version, blockCandidate.transactions)
       val ps = mandatoryTxIds.flatMap { txId => bt.proofFor(txId).map(mp => TransactionMembershipProof(txId, mp)) }
       Some(ProofOfUpcomingTransactions(headerCandidate, ps))

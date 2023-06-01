@@ -1,18 +1,18 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoAddressEncoder.TestnetNetworkPrefix
-import org.ergoplatform.ErgoScriptPredef.boxCreationHeight
-import org.ergoplatform.{ErgoBox, ErgoScriptPredef, Height, Self}
+import org.ergoplatform.ErgoTreePredef.boxCreationHeight
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
+import org.ergoplatform.{ErgoBox, ErgoTreePredef, Height, Self}
 import scorex.crypto.authds.avltree.batch.Remove
-import sigmastate._
 import sigmastate.Values._
-import sigmastate.lang.Terms._
+import sigmastate._
+import sigmastate.basics.CryptoConstants.dlogGroup
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{CompiletimeIRContext, IRContext}
-import sigmastate.interpreter.CryptoConstants.dlogGroup
+import sigmastate.lang.Terms._
 import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
 
 import scala.util.Try
@@ -55,7 +55,7 @@ class ScriptsSpec extends ErgoPropertyTest {
     delta shouldBe -1000
 
     applyBlockSpendingScript(GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))).toSigmaProp) shouldBe 'success
-    applyBlockSpendingScript(ErgoScriptPredef.rewardOutputScript(delta, defaultMinerPk)) shouldBe 'success
+    applyBlockSpendingScript(ErgoTreePredef.rewardOutputScript(delta, defaultMinerPk)) shouldBe 'success
 //        applyBlockSpendingScript(ErgoScriptPredef.feeProposition(delta)) shouldBe 'success
   }
 

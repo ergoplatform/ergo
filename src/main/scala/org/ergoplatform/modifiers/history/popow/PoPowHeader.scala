@@ -137,7 +137,7 @@ object PoPowHeader {
   * Binary serializer for PoPowHeader
   */
 object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
-  import org.ergoplatform.wallet.Constants.ModifierIdLength
+  import org.ergoplatform.sdk.wallet.Constants.ModifierIdLength
 
   implicit val hf: HF = Algos.hash
   val merkleProofSerializer = new BatchMerkleProofSerializer[Digest32, HF]

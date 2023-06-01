@@ -17,7 +17,7 @@ import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.db.LDBVersionedStore
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
 import java.io.File
 import scala.collection.mutable
@@ -31,17 +31,21 @@ import scala.util.{Failure, Success, Try}
   * * boxes, spent or not
   *
   */
-class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
+class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
 
   private val keepHistory = ws.keepSpentBoxes
+
+  // Internal buffer that holds unspent boxes for fast retreival
+  private[persistence] val cache: mutable.HashMap[ModifierId,TrackedBox] = mutable.HashMap[ModifierId,TrackedBox]()
 
   /**
     * Close wallet registry storage
     */
   def close(): Unit = {
     store.close()
+    cache.clear()
   }
 
   /**
@@ -51,7 +55,20 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @return wallet related box if it is stored in the database, None otherwise
     */
   def getBox(id: BoxId): Option[TrackedBox] = {
-    store.get(boxKey(id)).flatMap(bs => TrackedBoxSerializer.parseBytesTry(bs).toOption)
+    cache.get(bytesToId(id)) match {
+      case Some(tb) => Some(tb)
+      case None =>
+        store.get(boxKey(id)) match {
+          case Some(bytes) =>
+            TrackedBoxSerializer.parseBytesTry(bytes).toOption match {
+              case Some(tb) =>
+                cache.put(tb.boxId, tb)
+                Some(tb)
+              case None => None
+            }
+          case None => None
+        }
+    }
   }
 
 
@@ -242,6 +259,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = {
 
     // first, put newly created outputs and related transactions into key-value bag
+    cache ++= scanResults.outputs.map(b => b.boxId -> b)
     val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
     val bag2 = putTxs(bag1, scanResults.relatedTransactions)
 
@@ -294,8 +312,10 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     }
   }
 
-  def rollback(version: VersionTag): Try[Unit] =
+  def rollback(version: VersionTag): Try[Unit] = {
+    cache.clear()
     store.rollbackTo(scorex.core.versionToBytes(version))
+  }
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
@@ -325,9 +345,12 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
         tb.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = spendingTxIdOpt)
       }
 
+      cache --= spentBoxes.map(_._2.boxId)
       val bagBeforePut = removeBoxes(bag, spentBoxes.map(_._2))
+      cache ++= updatedBoxes.map(b => b.boxId -> b)
       putBoxes(bagBeforePut, updatedBoxes)
     } else {
+      cache --= spentBoxes.map(_._2.boxId)
       removeBoxes(bag, spentBoxes.map(_._2))
     }
   }
@@ -352,12 +375,15 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
       case (false, false) =>
         // replace scans of the box by removing it along with indexes related to old scans,
         // and then adding the box with indexes related to the new scans
+        cache.update(oldBox.get.boxId, newBox)
         putBox(removeBox(bag0, oldBox.get), newBox)
       case (false, true) =>
         // if new scans are empty, remove the box along with indexes
+        cache.remove(oldBox.get.boxId)
         removeBox(bag0, oldBox.get)
       case (true, false) =>
         // if old scans are empty, add the box along with indexes
+        cache.put(newBox.boxId, newBox)
         putBox(bag0, newBox)
       case (true, true) =>
         //old and new scans are empty, can't do anything useful
@@ -541,7 +567,14 @@ object WalletRegistry {
 
   private def boxKey(trackedBox: TrackedBox): Array[Byte] = BoxKeyPrefix +: trackedBox.box.id
 
-  private def boxKey(id: BoxId): Array[Byte] = BoxKeyPrefix +: id
+  private def boxKey(id: BoxId): Array[Byte] = {
+    // exported from ArrayOps +: to avoid boxing
+    val currentLength = id.length
+    val result = new Array[Byte](currentLength + 1)
+    result(0) = BoxKeyPrefix
+    Array.copy(id, 0, result, 1, currentLength)
+    result
+  }
 
   private def txKey(id: ModifierId): Array[Byte] = TxKeyPrefix +: idToBytes(id)
 

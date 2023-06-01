@@ -29,6 +29,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
 
   import WalletStorage._
 
+  private var cachedStateContext: Option[ErgoStateContext] = None
+
   //todo: used now only for importing pre-3.3.0 wallet database, remove after while
   def readPaths(): Seq[DerivationPath] = store
     .get(SecretPathsKey)
@@ -92,20 +94,29 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     }
   }
 
+  def getStateContext(parameters: Parameters): ErgoStateContext = cachedStateContext.getOrElse(readStateContext(parameters))
+
   /**
     * Write state context into the database
     * @param ctx - state context
     */
-  def updateStateContext(ctx: ErgoStateContext): Try[Unit] = store.insert(StateContextKey, ctx.bytes)
+  def updateStateContext(ctx: ErgoStateContext): Try[Unit] = {
+    cachedStateContext = Some(ctx)
+    store.insert(StateContextKey, ctx.bytes)
+  }
 
   /**
     * Read state context from the database
     * @return state context read
     */
-  def readStateContext(parameters: Parameters): ErgoStateContext = store
-    .get(StateContextKey)
-    .flatMap(r => ErgoStateContextSerializer(settings).parseBytesTry(r).toOption)
-    .getOrElse(ErgoStateContext.empty(settings, parameters))
+  def readStateContext(parameters: Parameters): ErgoStateContext = {
+    cachedStateContext = Some(store
+      .get(StateContextKey)
+      .flatMap(r => ErgoStateContextSerializer(settings).parseBytesTry(r).toOption)
+      .getOrElse(ErgoStateContext.empty(settings, parameters))
+    )
+    cachedStateContext.get
+  }
 
   /**
     * Update address used by the wallet for change outputs

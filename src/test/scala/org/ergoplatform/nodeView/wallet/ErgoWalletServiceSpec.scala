@@ -29,6 +29,7 @@ import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.helpers.TestingHelpers.testBox
 import sigmastate.{SType, Values}
 
+import scala.collection.compat.immutable.ArraySeq
 import scala.util.Random
 
 class ErgoWalletServiceSpec
@@ -190,7 +191,7 @@ class ErgoWalletServiceSpec
 
           // let's update wallet registry with a transaction from a block
           val genesisBlock = makeGenesisBlock(pks.head.pubkey, randomNewAsset)
-          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq(walletTx1)), genesisBlock.id, blockHeight = 100).get
+          wState.registry.updateOnBlock(ScanResults(allBoxes, ArraySeq.empty, Seq(walletTx1)), genesisBlock.id, blockHeight = 100).get
 
           // transaction should be retrieved by only a scan id that was associated with it
           val txs1 = walletService.getScanTransactions(wState, ScanId @@ 0.shortValue(), 100)
@@ -221,7 +222,7 @@ class ErgoWalletServiceSpec
           val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(PaymentsScanId)))
           val spentBox = boxes.head.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = Set(PaymentsScanId))
           val allBoxes = unspentBoxes :+ spentBox
-          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq.empty), blockId, 100).get
+          wState.registry.updateOnBlock(ScanResults(allBoxes, ArraySeq.empty, ArraySeq.empty), blockId, 100).get
 
           val walletService = new ErgoWalletServiceImpl(settings)
           val actualUnspentOnlyWalletBoxes = walletService.getWalletBoxes(wState, unspentOnly = true, considerUnconfirmed = false).toList

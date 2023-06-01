@@ -15,6 +15,8 @@ import scorex.util.encode.Base16
 import sigmastate.Values.ErgoTree
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
+import scala.collection.compat.immutable.ArraySeq
+
 object WalletRegistryBenchmark extends App with ErgoTestConstants {
 
   def createBox(value: Long,
@@ -53,7 +55,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
     TrackedBox(box, 2, Set(Constants.PaymentsScanId))
   }
 
-  val scanResults0 = ScanResults(boxes, Seq.empty, Seq.empty)
+  val scanResults0 = ScanResults(boxes, ArraySeq.empty, ArraySeq.empty)
   registry.updateOnBlock(scanResults0, ModifierId @@ Base16.encode(Array.fill(32)(0: Byte)), 1).get
   println("keys: " + walletVars.proverOpt.get.secretKeys.size)
 
@@ -72,7 +74,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
     WalletTransaction(tx, 2, Seq(Constants.PaymentsScanId))
   }
 
-  val scanResults1 = ScanResults(Seq.empty, Seq.empty, txs)
+  val scanResults1 = ScanResults(ArraySeq.empty, ArraySeq.empty, txs)
   registry.updateOnBlock(scanResults1, ModifierId @@ Base16.encode(Array.fill(32)(1: Byte)), 2).get
 
   val tts0 = System.currentTimeMillis()

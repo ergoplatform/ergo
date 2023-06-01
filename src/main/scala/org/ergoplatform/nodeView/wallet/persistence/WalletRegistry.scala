@@ -489,38 +489,38 @@ object WalletRegistry {
     * @return prefix | scanId | Array.fill(32)(suffix)  bytes packed in an array
     */
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, suffix: Byte): Array[Byte] = {
-    val res = new Array[Byte](35) // 1 + 2 + 32
+    val res = new Array[Byte](37) // 1 + 4 + 32
     res(0) = prefix
-    putShort(res, pos = 1, scanId)
-    putReplicated(res, pos = 3, n = 32, suffix)
+    putInt(res, pos = 1, scanId)
+    putReplicated(res, pos = 5, n = 32, suffix)
     res
   }
 
   /** Same as [[composeKey()]] where suffix is given by id. */
   private[persistence] final def composeKeyWithId(prefix: Byte, scanId: ScanId, suffixId: Array[Byte]): Array[Byte] = {
-    val res = new Array[Byte](3 + suffixId.length) // 1 byte for prefix + 2 for scanId
+    val res = new Array[Byte](5 + suffixId.length) // 1 byte for prefix + 4 for scanId
     res(0) = prefix
-    putShort(res, pos = 1, scanId)
-    putBytes(res, pos = 3, suffixId)
+    putInt(res, pos = 1, scanId)
+    putBytes(res, pos = 5, suffixId)
     res
   }
 
   /** Same as [[composeKey()]] with additional height parameter. */
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int, suffix: Byte): Array[Byte] = {
-    val res = new Array[Byte](39) // 1 byte for prefix + 2 for scanId + 4 for height + 32 for suffix
+    val res = new Array[Byte](41) // 1 byte for prefix + 4 for scanId + 4 for height + 32 for suffix
     res(0) = prefix
-    putShort(res, pos = 1, scanId)
-    putInt(res, pos = 3, height)
-    putReplicated(res, 7, 32, suffix)
+    putInt(res, pos = 1, scanId)
+    putInt(res, pos = 5, height)
+    putReplicated(res, 9, 32, suffix)
     res
   }
 
   /** Same as [[composeKey()]] with additional height parameter. */
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int): Array[Byte] = {
-    val res = new Array[Byte](39) // 1 byte for prefix + 2 for scanId + 4 for height
+    val res = new Array[Byte](41) // 1 byte for prefix + 4 for scanId + 4 for height + 32 for suffix
     res(0) = prefix
-    putShort(res, pos = 1, scanId)
-    putInt(res, pos = 3, height)
+    putInt(res, pos = 1, scanId)
+    putInt(res, pos = 5, height)
     res
   }
 
@@ -528,11 +528,11 @@ object WalletRegistry {
   /** Same as [[composeKey()]] with additional height parameter and suffix given by id. */
   private[persistence] final def composeKeyWithHeightAndId(prefix: Byte, scanId: ScanId,
                                                            height: Int, suffixId: Array[Byte]): Array[Byte] = {
-    val res = new Array[Byte](7 + suffixId.length) // 1 byte for prefix + 2 for scanId + 4 for height
+    val res = new Array[Byte](9 + suffixId.length) // 1 byte for prefix + 4 for scanId + 4 for height
     res(0) = prefix
-    putShort(res, pos = 1, scanId)
-    putInt(res, pos = 3, height)
-    putBytes(res, 7, suffixId)
+    putInt(res, pos = 1, scanId)
+    putInt(res, pos = 5, height)
+    putBytes(res, 9, suffixId)
     res
   }
 

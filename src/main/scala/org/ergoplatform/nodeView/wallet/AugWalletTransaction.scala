@@ -46,7 +46,7 @@ object AugWalletTransaction extends ApiCodecs {
       ergoTx <- c.as[ErgoTransaction]
       inclusionHeight <- c.downField("inclusionHeight").as[Int]
       numConfirmations <- c.downField("numConfirmations").as[Int]
-      scanIds <- c.downField("scans").as[Seq[Short]]
+      scanIds <- c.downField("scans").as[Seq[Int]]
     } yield AugWalletTransaction(WalletTransaction(ergoTx, inclusionHeight, scanIds.map(ScanId @@ _)), numConfirmations)
   }
 

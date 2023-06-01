@@ -615,7 +615,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     }
 
   override def addScan(state: ErgoWalletState, scanRequest: ScanRequest): Try[(Scan, ErgoWalletState)] =
-    state.storage.addScan(scanRequest).map { scan =>
+    state.storage.addScanRequest(scanRequest).map { scan =>
       scan -> state.copy(walletVars = state.walletVars.addScan(scan))
     }
 

@@ -9,8 +9,13 @@ import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.nodeView.wallet.scanning.LegacyScan
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
+import org.ergoplatform.utils.MempoolTestHelpers
+import org.ergoplatform.utils.generators.{ErgoTransactionGenerators, WalletGenerators}
+import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.utils.{ErgoPropertyTest, MempoolTestHelpers, WalletTestOps}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
@@ -34,6 +39,7 @@ import scala.util.Random
 
 class ErgoWalletServiceSpec
   extends ErgoPropertyTest
+    with WalletGenerators
     with MempoolTestHelpers
     with WalletTestOps
     with ErgoWalletSupport
@@ -160,8 +166,8 @@ class ErgoWalletServiceSpec
       withVersionedStore(10) { versionedStore =>
         withStore { store =>
           val allBoxes = {
-            val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(ScanId @@ 0.shortValue())))
-            val spentBox = boxes.head.copy(spendingHeightOpt = Some(100), spendingTxIdOpt = Some(txId), scans = Set(ScanId @@ 0.shortValue()))
+            val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(ScanId @@ 0)))
+            val spentBox = boxes.head.copy(spendingHeightOpt = Some(100), spendingTxIdOpt = Some(txId), scans = Set(ScanId @@ 0))
             unspentBoxes :+ spentBox
           }
           val encodedBoxes = allBoxes.map { box =>
@@ -187,16 +193,16 @@ class ErgoWalletServiceSpec
           val signedTx1 =
             walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, sign = true)
               .get.asInstanceOf[ErgoTransaction]
-          val walletTx1 = WalletTransaction(signedTx1, 100, Seq(ScanId @@ 0.shortValue()))
+          val walletTx1 = WalletTransaction(signedTx1, 100, Seq(ScanId @@ 0))
 
           // let's update wallet registry with a transaction from a block
           val genesisBlock = makeGenesisBlock(pks.head.pubkey, randomNewAsset)
           wState.registry.updateOnBlock(ScanResults(allBoxes, ArraySeq.empty, Seq(walletTx1)), genesisBlock.id, blockHeight = 100).get
 
           // transaction should be retrieved by only a scan id that was associated with it
-          val txs1 = walletService.getScanTransactions(wState, ScanId @@ 0.shortValue(), 100)
+          val txs1 = walletService.getScanTransactions(wState, ScanId @@ 0, 100)
           assert(txs1.nonEmpty)
-          val txs2 = walletService.getScanTransactions(wState, ScanId @@ 1.shortValue(), 100)
+          val txs2 = walletService.getScanTransactions(wState, ScanId @@ 1, 100)
           assert(txs2.isEmpty)
 
           // let's test that unconfirmed transaction is retrieved
@@ -288,6 +294,33 @@ class ErgoWalletServiceSpec
         unlockedWalletState.storage.readAllKeys().size shouldBe 1
         unlockedWalletState.storage.readChangeAddress shouldNot be(empty)
         unlockedWalletState.walletVars.proverOpt shouldNot be(empty)
+      }
+    }
+  }
+
+  property("it should migrate legacy scans") {
+    forAll(Gen.nonEmptyListOf(externalAppGen)) { scans =>
+      withVersionedStore(2) { versionedStore =>
+        withStore { store =>
+          val state = initialState(store, versionedStore)
+          scans.foreach { scan =>
+            val legacyScan =
+              LegacyScan(scan.scanId.toShort,
+                scan.scanName,
+                scan.trackingRule,
+                scan.walletInteraction,
+                scan.removeOffchain
+              )
+            state.storage.addLegacyScan(legacyScan).get
+          }
+          state.storage.getLegacyScans shouldNot be(empty)
+          val legacyScanCount = state.storage.getLegacyScans.size
+          val (newScans, newState) = state.migrateScans(settings).get
+          newScans.size shouldBe legacyScanCount
+          newState.walletVars.externalScans shouldBe newScans
+          state.storage.getLegacyScans shouldBe empty
+          state.storage.allScans.size shouldBe legacyScanCount
+        }
       }
     }
   }

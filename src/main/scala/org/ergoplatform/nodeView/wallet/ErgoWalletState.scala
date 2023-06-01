@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
+import cats.implicits._
+import cats.Traverse
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
@@ -8,7 +10,9 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.scanning.{LegacyScan, Scan}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import scorex.util.ScorexLogging
@@ -124,9 +128,31 @@ case class ErgoWalletState(
     (registry.walletUnspentBoxes(maxInputsToUse * BoxSelector.ScanDepthFactor) ++ offChainRegistry.offChainBoxes).distinct
   }
 
+  /**
+    * Compatibility bridge to version 4.0.36 where ScanId changed from Short to Int, let's migrate them
+    * @return migration status
+    */
+  def migrateScans(settings: ErgoSettings): Try[(Vector[Scan], ErgoWalletState)] =
+    Traverse[Vector].sequence {
+      storage.getLegacyScans.map { scan =>
+        storage.removeLegacyScan(scan.scanId).map(_ => scan)
+      }.toVector
+    }.flatMap { removedScans =>
+      Traverse[Vector].sequence {
+        removedScans.map { case LegacyScan(id, name, trackingRule, walletInteraction, removeOffchain) =>
+          val intScanId = ScanId @@ id.intValue()
+          val newScan = Scan(intScanId, name, trackingRule, walletInteraction, removeOffchain)
+          storage.addScan(newScan).map(_ => newScan)
+        }
+      }.map { newScans =>
+        // scans are cached in WalletVars, let's reload it
+        newScans -> copy(walletVars = WalletVars(storage, settings))
+      }
+    }
+
 }
 
-object ErgoWalletState {
+object ErgoWalletState extends ScorexLogging {
 
   private type FilterFn = TrackedBox => Boolean
 
@@ -139,8 +165,9 @@ object ErgoWalletState {
     WalletRegistry.apply(ergoSettings).map { registry =>
       val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)
       val offChainRegistry = OffChainRegistry.init(registry)
-      val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
+      val walletVars = WalletVars(ergoStorage, ergoSettings)
       val maxInputsToUse = ergoSettings.walletSettings.maxInputs
+
       ErgoWalletState(
         ergoStorage,
         secretStorageOpt = None,

@@ -7,6 +7,7 @@ import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import org.ergoplatform.ErgoBoxAssets
+import scorex.util.Extensions._
 
 /**
   * A box tracked by a wallet that contains Ergo box itself as well as
@@ -114,7 +115,7 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     } else {
       w.putShort(appsCount)
       obj.scans.foreach { scanId =>
-        w.putShort(scanId)
+        w.putUInt(scanId)
       }
     }
     ErgoBoxSerializer.serialize(obj.box, w)
@@ -131,7 +132,7 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     val appStatuses: Set[ScanId] = if (appsCount == 0){
       Set(Constants.PaymentsScanId)
     } else {
-      (0 until appsCount).map(_ => ScanId @@ r.getShort()).toSet
+      (0 until appsCount).map(_ => ScanId @@ r.getUInt().toIntExact).toSet
     }
     val box = ErgoBoxSerializer.parse(r)
     TrackedBox(

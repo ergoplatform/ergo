@@ -39,7 +39,7 @@ object WalletTransactionSerializer extends ErgoSerializer[WalletTransaction] {
     } else {
       w.putShort(scansCount)
       wtx.scanIds.foreach { scanId =>
-        w.putShort(scanId)
+        w.putUInt(scanId)
       }
     }
     w.putUInt(txBytes.length)
@@ -53,7 +53,7 @@ object WalletTransactionSerializer extends ErgoSerializer[WalletTransaction] {
     val scanIds = if (scansCount == 0) {
       Seq(Constants.PaymentsScanId)
     } else {
-      (0 until scansCount).map(_ => ScanId @@ r.getShort())
+      (0 until scansCount).map(_ => ScanId @@ r.getUInt().toIntExact)
     }
 
     val txBytesLen = r.getUInt().toIntExact

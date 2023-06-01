@@ -39,7 +39,7 @@ object ScanEntities {
     implicit val scanIdsBoxDecoder: Decoder[BoxWithScanIds] = { c: HCursor =>
       for {
         box <- c.downField("box").as[ErgoBox]
-        scanIds <- ScanId @@ c.downField("scanIds").as[Set[Short]]
+        scanIds <- ScanId @@ c.downField("scanIds").as[Set[Int]]
       } yield BoxWithScanIds(box, scanIds)
     }
   }

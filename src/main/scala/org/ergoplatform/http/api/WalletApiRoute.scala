@@ -368,13 +368,13 @@ case class WalletApiRoute(readersHolder: ActorRef,
       if ((minHeight > 0 || maxHeight < Int.MaxValue) && (minConfNum > 0 || maxConfNum < Int.MaxValue))
         BadRequest("Bad request: both heights and confirmations set")
       else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
-        withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort, includeUnconfirmed)) {
+        withWalletOp(_.transactionsByScanId(ScanId @@ id.toInt, includeUnconfirmed)) {
           resp => ApiResponse(resp.result.asJson)
         }
       }
       else {
         withWalletOp(_.filteredScanTransactions(
-          List(ScanId @@ id.toShort),
+          List(ScanId @@ id.toInt),
           minHeight,
           maxHeight,
           minConfNum,

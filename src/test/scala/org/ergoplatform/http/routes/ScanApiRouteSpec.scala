@@ -54,7 +54,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
   }
 
   it should "deregister a scan" in {
-    var scanId: ScanIdWrapper = ScanIdWrapper(ScanId @@ (-1000: Short)) // improper value
+    var scanId: ScanIdWrapper = ScanIdWrapper(ScanId @@ (-1000)) // improper value
 
     // first, register an app
     Post(prefix + "/register", appRequest.asJson) ~> route ~> check {
@@ -254,7 +254,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
 
   it should "stop tracking a box" in {
-    val scanIdBoxId = ScanIdBoxId(ScanId @@ (51: Short), ADKey @@ Random.randomBytes(32))
+    val scanIdBoxId = ScanIdBoxId(ScanId @@ (51), ADKey @@ Random.randomBytes(32))
 
     Post(prefix + "/stopTracking", scanIdBoxId.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK

@@ -114,7 +114,7 @@ trait ApiCodecs extends JsonCodecs {
   }
 
   implicit val scanIdDecoder: Decoder[ScanId] = { c: HCursor =>
-    ScanId @@ c.as[Short]
+    ScanId @@ c.as[Int]
   }
 
   implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { box =>

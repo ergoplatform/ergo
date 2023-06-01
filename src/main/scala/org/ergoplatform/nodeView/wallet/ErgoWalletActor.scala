@@ -22,6 +22,7 @@ import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, ErgoBox, GlobalConstants, 
 import scorex.core.VersionTag
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
 import org.ergoplatform.wallet.secrets.DerivationPath
+import scorex.core.app.Version
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.Values.SigmaBoolean
@@ -72,6 +73,21 @@ class ErgoWalletActor(settings: ErgoSettings,
     log.info("Initializing wallet actor")
     ErgoWalletState.initial(settings, parameters) match {
       case Success(state) =>
+        val appVersion = Version(settings.scorexSettings.network.appVersion)
+        if (appVersion.compare(Version(4, 0, 36)) >= 0) {
+          state.migrateScans(settings) match {
+            case Success((migrationResults, newState)) =>
+              if (migrationResults.nonEmpty) {
+                log.info(s"${migrationResults.length} scans successfully migrated")
+              }
+              self ! ReadWallet(newState)
+            case Failure(ex) =>
+              log.error("Unable to migrate scans, please report this error to developer support", ex)
+              ErgoApp.shutdownSystem()(context.system)
+          }
+        } else {
+          self ! ReadWallet(state)
+        }
         context.system.eventStream.subscribe(self, classOf[ChangedState])
         context.system.eventStream.subscribe(self, classOf[ChangedMempool])
         self ! ReadWallet(state)

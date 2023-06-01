@@ -72,10 +72,10 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
 
     // should not be able to apply when blocks at this height are already pruned
     history.applicableTry(section) shouldBe 'success
-    history.minimalFullBlockHeightVar = history.bestHeaderOpt.get.height + 1
+    history.writeMinimalFullBlockHeight(history.bestHeaderOpt.get.height + 1)
     history.isHeadersChainSyncedVar = true
     history.applicableTry(section) shouldBe 'failure
-    history.minimalFullBlockHeightVar = ErgoHistory.GenesisHeight
+    history.writeMinimalFullBlockHeight(ErgoHistory.GenesisHeight)
 
     // should not be able to apply if corresponding header is marked as invalid
     history.applicableTry(section) shouldBe 'success

@@ -73,7 +73,7 @@ case class NodeConfigurationSettings(stateType: StateType,
     * Whether the node keeping all the full blocks of the blockchain or not.
     * @return true if the blockchain is pruned, false if not
     */
-  val isFullBlocksPruned: Boolean = blocksToKeep >= 0
+  val isFullBlocksPruned: Boolean = blocksToKeep >= 0 || utxoSettings.utxoBootstrap
 
   val areSnapshotsStored = utxoSettings.storingUtxoSnapshots > 0
 }

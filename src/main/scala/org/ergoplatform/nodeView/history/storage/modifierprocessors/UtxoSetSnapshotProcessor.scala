@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoState}
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
@@ -16,7 +16,7 @@ import scorex.db.LDBVersionedStore
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
-import scala.util.{Failure, Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
 /**
@@ -24,7 +24,7 @@ import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLPro
   *
   * Stores UTXO set snapshots manifests and chunks for incomplete snapshots.
   */
-trait UtxoSetSnapshotProcessor extends ScorexLogging {
+trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with ScorexLogging {
 
   import org.ergoplatform.settings.ErgoAlgos.HF
 
@@ -33,12 +33,6 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   // database to read history-related objects here and in descendants
   protected val historyStorage: HistoryStorage
-
-  // minimal height to applu full blocks from
-  // its value depends on node settings,
-  // if download with UTXO set snapshot is used, the value is being set to a first block after the snapshot,
-  // if blockToKeep > 0, the value is being set to a first block of blockchain suffix after headers downloaded
-  private[history] var minimalFullBlockHeightVar: Int
 
   private val downloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
 
@@ -52,7 +46,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     *         After first full-block block application not needed anymore.
     */
   def isUtxoSnapshotApplied: Boolean = {
-    minimalFullBlockHeightVar > ErgoHistory.GenesisHeight
+    readMinimalFullBlockHeight() > ErgoHistory.GenesisHeight
   }
 
   /**
@@ -60,7 +54,25 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     * after.
     */
   def utxoSnapshotApplied(height: Height): Unit = {
-    minimalFullBlockHeightVar = height + 1
+    val utxoPhaseTime = {
+      _cachedDownloadPlan.map(_.latestUpdateTime).getOrElse(0L) - _cachedDownloadPlan.map(_.createdTime).getOrElse(0L)
+    }
+    log.info(s"UTXO set downloading and application time: ${utxoPhaseTime / 1000.0} s.")
+    // remove downloaded utxo set snapshots chunks
+    val ts0 = System.currentTimeMillis()
+    _cachedDownloadPlan.foreach { plan =>
+      val chunkIdsToRemove = downloadedChunkIdsIterator(plan.totalChunks)
+        .map(chunkId => ModifierId @@ Algos.encode(chunkId))
+        .toArray
+      historyStorage.remove(Array.empty, chunkIdsToRemove)
+    }
+    _manifest = None
+    _cachedDownloadPlan = None
+    val ts = System.currentTimeMillis()
+    log.info(s"Imported UTXO set snapshots chunks removed in ${ts - ts0} ms")
+
+    // set height of first full block to be downloaded
+    writeMinimalFullBlockHeight(height + 1)
   }
 
   private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {
@@ -143,8 +155,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
       case Some(plan) =>
         cfor(0)(_ < plan.downloadedChunkIds.size, _ + 1) { idx =>
           if (!plan.downloadedChunkIds(idx) && plan.expectedChunkIds(idx).sameElements(chunkId)) {
-            val idxBytes = Ints.toByteArray(idx)
-            historyStorage.insert(downloadedChunksPrefix ++ idxBytes, chunkSerialized)
+            historyStorage.insert(chunkIdFromIndex(idx), chunkSerialized)
             val updDownloaded = plan.downloadedChunkIds.updated(idx, true)
             val updDownloading = plan.downloadingChunks - 1
             val updPlan = plan.copy(latestUpdateTime = System.currentTimeMillis(), downloadedChunkIds = updDownloaded, downloadingChunks = updDownloading)
@@ -157,16 +168,24 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     }
   }
 
+  private def chunkIdFromIndex(index: Int): Array[Byte] = {
+    val idxBytes = Ints.toByteArray(index)
+    downloadedChunksPrefix ++ idxBytes
+  }
+
+  private def downloadedChunkIdsIterator(totalChunks: Int): Iterator[Array[Byte]] = {
+    Iterator.range(0, totalChunks).map(chunkIdFromIndex)
+  }
+
   /**
-    * @return iterator for chunks downloded. Reads them from database one-by-one when requested.
+    * @return iterator for chunks downloaded. Reads them from database one-by-one when requested.
     */
   def downloadedChunksIterator(): Iterator[BatchAVLProverSubtree[Digest32]] = {
     utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
-        Iterator.range(0, plan.totalChunks).flatMap{idx =>
-          val idxBytes = Ints.toByteArray(idx)
+        downloadedChunkIdsIterator(plan.totalChunks).flatMap { chunkId =>
           historyStorage
-            .get(downloadedChunksPrefix ++ idxBytes)
+            .get(chunkId)
             .flatMap(bs => SubtreeSerializer.parseBytesTry(bs).toOption)
         }
       case None =>
@@ -178,26 +197,36 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
   /**
     * Create disk-persistent authenticated AVL+ tree prover
     * @param stateStore - disk database where AVL+ tree will be after restoration
+    * @param historyReader - history readed to get headers to restore state context
+    * @param height - height for which prover will be created (prover state will correspond to a
+    *                 moment after application of a block at this height)
     * @param blockId - id of a block corresponding to the tree (tree is on top of a state after the block)
     * @return prover with initialized tree database
     */
   def createPersistentProver(stateStore: LDBVersionedStore,
+                             historyReader: ErgoHistoryReader,
+                             height: Height,
                              blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = {
     _manifest match {
       case Some(manifest) =>
         log.info("Starting UTXO set snapshot transfer into state database")
-        val esc = ErgoStateReader.storageStateContext(stateStore, settings)
-        val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
-        VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
-          ldbStorage =>
-            log.info("Finished UTXO set snapshot transfer into state database")
-            ldbStorage.restorePrunedProver().map {
-              prunedAvlProver =>
-                new PersistentBatchAVLProver[Digest32, HF] {
-                  override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
-                  override val storage: VersionedLDBAVLStorage = ldbStorage
+        ErgoStateReader.reconstructStateContextBeforeEpoch(historyReader, height, settings) match {
+          case Success(esc) =>
+            val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
+            VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
+              ldbStorage =>
+                log.info("Finished UTXO set snapshot transfer into state database")
+                ldbStorage.restorePrunedProver().map {
+                  prunedAvlProver =>
+                    new PersistentBatchAVLProver[Digest32, HF] {
+                      override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
+                      override val storage: VersionedLDBAVLStorage = ldbStorage
+                    }
                 }
             }
+          case Failure(e) =>
+            log.warn("Can't reconstruct state context in createPersistentProver ", e)
+            Failure(e)
         }
       case None =>
         val msg = "No manifest available in createPersistentProver"
@@ -205,4 +234,5 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
         Failure(new Exception(msg))
     }
   }
+
 }

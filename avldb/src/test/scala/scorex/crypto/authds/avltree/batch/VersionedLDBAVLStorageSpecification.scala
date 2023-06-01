@@ -6,12 +6,14 @@ import org.scalatest.Assertion
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.topNodeHashKey
+import scorex.core.serialization.{ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.util.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.{LDBFactory, LDBVersionedStore}
+import scorex.util.ByteArrayBuilder
+import scorex.util.serialization.VLQByteBufferWriter
 import scorex.utils.{Random => RandomBytes}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -19,10 +21,11 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.{Success, Try}
 
-class VersionedLDBAVLStorageSpecification extends AnyPropSpec
-  with ScalaCheckPropertyChecks
-  with Matchers
-  with TestHelper {
+class VersionedLDBAVLStorageSpecification
+  extends AnyPropSpec
+    with ScalaCheckPropertyChecks
+    with Matchers
+    with TestHelper {
 
   override protected val KL = 32
   override protected val VL = 8
@@ -341,14 +344,30 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
   }
 
   property("dumping snapshot") {
+    val manifestDepth: Byte = 6
+    val manifestSerializer = new ManifestSerializer(manifestDepth)
     val prover = createPersistentProver()
     blockchainWorkflowTest(prover)
 
     val storage = prover.storage.asInstanceOf[VersionedLDBAVLStorage]
-    val store = LDBFactory.createKvDb("/tmp/aa")
+    val store = LDBFactory.createKvDb(getRandomTempDir.getAbsolutePath)
 
-    storage.dumpSnapshot(store, 4, prover.digest.dropRight(1))
-    store.get(topNodeHashKey).sameElements(prover.digest.dropRight(1)) shouldBe true
+    val rootNodeLabel = storage.dumpSnapshot(store, manifestDepth, prover.digest.dropRight(1)).get
+    rootNodeLabel.sameElements(prover.digest.dropRight(1)) shouldBe true
+    val manifestBytes = store.get(rootNodeLabel).get
+    val manifest = manifestSerializer.parseBytesTry(manifestBytes).get
+
+    val writer = new VLQByteBufferWriter(new ByteArrayBuilder())
+    manifestSerializer.serialize(prover.prover().topNode, prover.prover().rootNodeHeight.toByte, writer)
+    val altManifestBytes = writer.result().toBytes
+
+    manifestBytes.sameElements(altManifestBytes) shouldBe true
+
+    val subtreeIds = manifest.subtreesIds
+    subtreeIds.foreach { sid =>
+      val chunkBytes = store.get(sid).get
+      SubtreeSerializer.parseBytesTry(chunkBytes).get.id.sameElements(sid) shouldBe true
+    }
   }
 
 }

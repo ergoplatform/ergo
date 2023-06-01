@@ -173,6 +173,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
   /**
+    * How many peers should have a utxo set snapshot to start downloading it
+    */
+  private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
+
+  /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
   private def clearInterblockCost(): Unit = {
@@ -566,7 +571,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // ask all the peers supporting UTXO set snapshots for snapshots they have
     val msg = Message(GetSnapshotsInfoSpec, Right(()), None)
     val peers = UtxoSetNetworkingFilter.filter(syncTracker.knownPeers()).toSeq
-    networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+    val peersCount = peers.size
+    if (peersCount >= MinSnapshots) {
+      networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+    } else {
+      log.warn(s"Less UTXO-snapshot supporting peers found than required mininum ($peersCount < $MinSnapshots)")
+    }
   }
 
   private def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
@@ -578,8 +588,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def requestUtxoSetChunk(subtreeId: SubtreeId, peer: ConnectedPeer): Unit = {
+    // as we download multiple chunks in parallel and they can be quite large, timeout increased
+    val chunkDeliveryTimeout = 4 * deliveryTimeout
     deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, ModifierId @@ Algos.encode(subtreeId), peer) { deliveryCheck =>
-      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+      context.system.scheduler.scheduleOnce(chunkDeliveryTimeout, self, deliveryCheck)
     }
     val msg = Message(GetUtxoSnapshotChunkSpec, Right(subtreeId), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
@@ -593,7 +605,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           maxModifiers = deliveryTracker.modifiersToDownload,
           minModifiersPerBucket,
           maxModifiersPerBucket
-        )(getPeersForDownloadingBlocks) { howManyPerType =>
+        )(getPeersForDownloadingBlocks) { _ =>
           // leave block section ids only not touched before
           modifiersToFetch.flatMap { case (tid, mids) =>
             val updMids = mids.filter { mid =>
@@ -888,14 +900,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val encodedManifestId = ModifierId @@ Algos.encode(manifestId)
       val ownId = hr.bestHeaderAtHeight(height).map(_.stateRoot).map(stateDigest => splitDigest(stateDigest)._1)
       if (ownId.getOrElse(Array.emptyByteArray).sameElements(manifestId)) {
-        log.debug(s"Got manifest $encodedManifestId for height $height from $remote")
+        log.debug(s"Discovered manifest $encodedManifestId for height $height from $remote")
         // add manifest to available manifests dictionary if it is not written there yet
         val existingOffers = availableManifests.getOrElse(encodedManifestId, (height -> Seq.empty))
         if (!existingOffers._2.contains(remote)) {
           log.info(s"Found new manifest ${Algos.encode(manifestId)} for height $height at $remote")
           availableManifests.put(encodedManifestId, height -> (existingOffers._2 :+ remote))
         } else {
-          log.warn(s"Got manifest $manifestId twice from $remote")
+          log.warn(s"Double manifest declaration for $manifestId from $remote")
         }
       } else {
         log.error(s"Got wrong manifest id $encodedManifestId from $remote")
@@ -954,7 +966,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Success(subtree) =>
         val chunkId = ModifierId @@ Algos.encode(subtree.id)
         deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId) match {
-          case Some(ri) if ri.peer == remote =>
+          case Some(_) =>
             log.debug(s"Got utxo snapshot chunk, id: $chunkId, size: ${serializedChunk.length}")
             deliveryTracker.setUnknown(chunkId, UtxoSnapshotChunkTypeId.value)
             hr.registerDownloadedChunk(subtree.id, serializedChunk)
@@ -962,6 +974,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             hr.utxoSetSnapshotDownloadPlan() match {
               case Some(downloadPlan) =>
                 if (downloadPlan.fullyDownloaded) {
+                  log.info("All the UTXO set snapshot chunks downloaded")
                   // if all the chunks of snapshot are downloaded, initialize UTXO set state with it
                   if (!hr.isUtxoSnapshotApplied) {
                     val h = downloadPlan.snapshotHeight
@@ -983,8 +996,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 log.warn(s"No download plan found when processing UTXO set snapshot chunk $chunkId")
             }
 
-          case _ =>
-            log.info(s"Penalizing spamming peer $remote sent non-asked UTXO set snapshot $chunkId")
+          case None =>
+            log.info(s"Penalizing spamming peer $remote sent non-asked UTXO set snapshot chunk $chunkId")
             penalizeSpammingPeer(remote)
         }
 
@@ -1260,7 +1273,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   // check if we have enough UTXO set snapshots for some height
   // if so, request manifest from a random peer announced it
   private def checkUtxoSetManifests(historyReader: ErgoHistory): Unit = {
-    val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
 
     if (settings.nodeSettings.utxoSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&
@@ -1397,8 +1409,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       logger.debug("Chain is good")
 
     case ChainIsStuck(error) =>
-      log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
-      deliveryTracker.reset()
+      if (historyReader.fullBlockHeight > 0) {
+        log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
+        deliveryTracker.reset()
+      } else {
+        log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
+      }
   }
 
   /** handlers of messages coming from peers */

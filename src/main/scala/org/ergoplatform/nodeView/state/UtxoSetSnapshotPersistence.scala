@@ -47,13 +47,12 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
     def timeToTakeSnapshot(height: Int): Boolean = {
       height % MakeSnapshotEvery == MakeSnapshotEvery - 1
     }
-
+    log.info(s"checking snapshot for $height, simple check: " + timeToTakeSnapshot(height))
     if (ergoSettings.nodeSettings.areSnapshotsStored &&
         timeToTakeSnapshot(height) &&
         estimatedTip.nonEmpty &&
         estimatedTip.get - height <= MakeSnapshotEvery) {
 
-      import scala.concurrent.ExecutionContext.Implicits.global
       val ms0 = System.currentTimeMillis()
 
       // drop tree height byte from digest to get current root hash of AVL+ tree
@@ -67,9 +66,9 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
         snapshotsDb.pruneSnapshots(ergoSettings.nodeSettings.utxoSettings.storingUtxoSnapshots)
         val ft = System.currentTimeMillis()
         log.info("Work within future finished in: " + (ft - ft0) + " ms.")
-      }
+      }(scala.concurrent.ExecutionContext.Implicits.global)
       val ms = System.currentTimeMillis()
-      log.info("Main thread time to dump utxo set snapshot: " + (ms - ms0))
+      log.info("Main thread time to dump utxo set snapshot: " + (ms - ms0) + " ms.")
     }
   }
 

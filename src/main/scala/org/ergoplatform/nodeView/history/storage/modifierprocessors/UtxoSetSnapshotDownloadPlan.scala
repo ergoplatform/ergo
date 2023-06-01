@@ -10,6 +10,7 @@ import scorex.crypto.hash.Digest32
 /**
   * Entity which stores information about state of UTXO set snapshots downloading
   *
+  * @param createdTime - time when snapshot was created
   * @param latestUpdateTime - latest time when anything was updated for the state of UTXO set snapshot
   * @param snapshotHeight - height of a block UTXO set snapshot is corresponding to (UTXO set if after the block applied)
   * @param utxoSetRootHash - root hash of AVL+ tree which is authenticating UTXO set snasphot
@@ -20,7 +21,8 @@ import scorex.crypto.hash.Digest32
   * @param downloadingChunks - number of UTXO set shapshot chunks the node is currently downloading
   * @param peersToDownload - peers UTXO set snapshot chunks can be downloaded from
   */
-case class UtxoSetSnapshotDownloadPlan(latestUpdateTime: Long,
+case class UtxoSetSnapshotDownloadPlan(createdTime: Long,
+                                       latestUpdateTime: Long,
                                        snapshotHeight: Height,
                                        utxoSetRootHash: Digest32,
                                        utxoSetTreeHeight: Byte,
@@ -60,8 +62,16 @@ object UtxoSetSnapshotDownloadPlan {
     val now = System.currentTimeMillis()
 
     // it is safe to call .toByte below, as the whole tree has height <= 127, and manifest even less
-    UtxoSetSnapshotDownloadPlan(now, blockHeight, manifest.id, manifest.rootHeight.toByte, subtrees.toIndexedSeq,
-      IndexedSeq.empty, 0, peersToDownload)
+    UtxoSetSnapshotDownloadPlan(
+      createdTime = now,
+      latestUpdateTime = now,
+      snapshotHeight = blockHeight,
+      utxoSetRootHash = manifest.id,
+      utxoSetTreeHeight = manifest.rootHeight.toByte,
+      expectedChunkIds = subtrees.toIndexedSeq,
+      downloadedChunkIds = IndexedSeq.empty,
+      downloadingChunks = 0,
+      peersToDownload = peersToDownload)
   }
 
 }

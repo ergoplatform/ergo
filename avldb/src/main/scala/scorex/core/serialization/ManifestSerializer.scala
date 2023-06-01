@@ -11,8 +11,10 @@ import scorex.util.serialization.{Reader, Writer}
 class ManifestSerializer(manifestDepth: Byte) extends ErgoSerializer[BatchAVLProverManifest[DigestType]] {
   private val nodeSerializer = VersionedLDBAVLStorage.noStoreSerializer
 
-  override def serialize(manifest: BatchAVLProverManifest[DigestType], w: Writer): Unit = {
-    val rootNodeHeight = manifest.rootHeight.toByte
+  /**
+    * Serialize manifest provided as top subtree and height separately. Used in tests.
+    */
+  def serialize(rootNode: ProverNodes[DigestType], rootNodeHeight: Byte, w: Writer): Unit = {
     w.put(rootNodeHeight)
     w.put(manifestDepth)
 
@@ -24,10 +26,15 @@ class ManifestSerializer(manifestDepth: Byte) extends ErgoSerializer[BatchAVLPro
         case i: InternalProverNode[DigestType] if level < manifestDepth =>
           loop(i.left, level + 1)
           loop(i.right, level + 1)
+        case _: InternalProverNode[DigestType] =>
       }
     }
 
-    loop(manifest.root, level = 1)
+    loop(rootNode, level = 1)
+  }
+
+  override def serialize(manifest: BatchAVLProverManifest[DigestType], w: Writer): Unit = {
+    serialize(manifest.root, manifest.rootHeight.toByte, w)
   }
 
   override def parse(r: Reader): BatchAVLProverManifest[DigestType] = {

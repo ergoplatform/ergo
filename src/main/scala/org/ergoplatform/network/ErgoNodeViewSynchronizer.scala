@@ -974,6 +974,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             hr.utxoSetSnapshotDownloadPlan() match {
               case Some(downloadPlan) =>
                 if (downloadPlan.fullyDownloaded) {
+                  log.info("All the UTXO set snapshot chunks downloaded")
                   // if all the chunks of snapshot are downloaded, initialize UTXO set state with it
                   if (!hr.isUtxoSnapshotApplied) {
                     val h = downloadPlan.snapshotHeight

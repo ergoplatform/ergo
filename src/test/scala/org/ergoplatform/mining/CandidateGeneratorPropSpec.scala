@@ -51,7 +51,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
   }
 
   property("collect reward from emission box only") {
-    val us = createUtxoState(parameters)._1
+    val us = createUtxoState(settings)._1
     us.emissionBoxOpt should not be None
     val expectedReward = emission.minersRewardAtHeight(us.stateContext.currentHeight)
 
@@ -240,7 +240,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
   }
 
   property("collect reward from both emission box and fees") {
-    val (us, _) = createUtxoState(parameters)
+    val (us, _) = createUtxoState(settings)
     us.emissionBoxOpt should not be None
     val expectedReward = emission.minersRewardAtHeight(us.stateContext.currentHeight)
 

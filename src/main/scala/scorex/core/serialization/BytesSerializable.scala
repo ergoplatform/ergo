@@ -13,5 +13,5 @@ trait BytesSerializable extends Serializable {
     * Serializer which can convert self to bytes
     */
   def serializer: ErgoSerializer[M]
-  
+
 }

@@ -55,14 +55,10 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   /**
     * Store wallet-related public key in the database
     *
-    * @param publicKeys - public key to store
+    * @param publicKey - public key to store
     */
-  def addPublicKeys(publicKeys: ExtendedPublicKey*): Try[Unit] = {
-    store.insert {
-      publicKeys.map { publicKey =>
-        pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)
-      }.toArray
-    }
+  def addPublicKey(publicKey: ExtendedPublicKey): Try[Unit] = {
+    store.insert(pubKeyPrefixKey(publicKey), ExtendedPublicKeySerializer.toBytes(publicKey))
   }
 
   /**
@@ -101,8 +97,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * Write state context into the database
     * @param ctx - state context
     */
-  def updateStateContext(ctx: ErgoStateContext): Try[Unit] = store
-    .insert(Array(StateContextKey -> ctx.bytes))
+  def updateStateContext(ctx: ErgoStateContext): Try[Unit] = store.insert(StateContextKey, ctx.bytes)
 
   /**
     * Read state context from the database
@@ -119,7 +114,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     */
   def updateChangeAddress(address: P2PKAddress): Try[Unit] = {
     val bytes = settings.chainSettings.addressEncoder.toString(address).getBytes(Constants.StringEncoding)
-    store.insert(Array(ChangeAddressKey -> bytes))
+    store.insert(ChangeAddressKey, bytes)
   }
 
   /**
@@ -142,10 +137,10 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   def addScan(scanReq: ScanRequest): Try[Scan] = {
     val id = ScanId @@ (lastUsedScanId + 1).toShort
     scanReq.toScan(id).flatMap { app =>
-      store.insert(Array(
-        scanPrefixKey(id) -> ScanSerializer.toBytes(app),
-        lastUsedScanIdKey -> Shorts.toByteArray(id)
-      )).map(_ => app)
+      store.insert(
+        Array(scanPrefixKey(id), lastUsedScanIdKey),
+        Array(ScanSerializer.toBytes(app), Shorts.toByteArray(id))
+      ).map(_ => app)
     }
   }
 

@@ -29,7 +29,7 @@ package object core {
 
   def idToBytes: util.ModifierId => Array[Byte] = scorex.util.idToBytes
 
-  def bytesToVersion(bytes: Array[Byte]): VersionTag = VersionTag @@ Base16.encode(bytes)
+  def bytesToVersion(bytes: Array[Byte]): VersionTag = VersionTag @@@ Base16.encode(bytes)
 
   def versionToBytes(id: VersionTag): Array[Byte] = Base16.decode(id).get
 

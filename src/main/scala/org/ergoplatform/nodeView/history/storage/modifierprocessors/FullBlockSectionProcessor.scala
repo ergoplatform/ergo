@@ -99,7 +99,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
         .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
         .validate(bsHeadersChainSynced, isHeadersChainSynced, InvalidModifier(header.id, m.id, m.modifierTypeId))
-        .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height),
+        .validate(bsTooOld, isHistoryADProof(m, header) || shouldDownloadBlockAtHeight(header.height),
           InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
         .result
     }

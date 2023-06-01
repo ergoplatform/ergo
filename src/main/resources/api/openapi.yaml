@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.10"
+  version: "5.0.12"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -95,6 +95,17 @@ components:
       properties:
         bytes:
           $ref: '#/components/schemas/HexString'
+
+    SnapshotsInfo:
+      type: object
+      required:
+        - availableManifests
+      properties:
+        availableManifests:
+          description: Map of available manifests height -> manifestId
+          type: array
+          items:
+            type: object
 
     ErgoTransactionOutput:
       type: object
@@ -5076,6 +5087,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /utxo/getSnapshotsInfo:
+    get:
+      summary: Get information about locally stored UTXO snapshots
+      operationId: getSnapshotsInfo
+      tags:
+        - utxo
+      responses:
+        '200':
+          description: A list of saved snapshots
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SnapshotsInfo'
+    default:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+
 
   /utxo/genesis:
     get:

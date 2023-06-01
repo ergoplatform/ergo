@@ -28,7 +28,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
 
   property("ErgoFullBlock should be encoded into JSON and decoded back correctly") {
 
-    val (st, bh) = createUtxoState(parameters)
+    val (st, bh) = createUtxoState(settings)
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
 
     val blockJson: Json = block.asJson

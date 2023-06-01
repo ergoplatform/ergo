@@ -6,7 +6,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.nodeView.state.{StateConstants, UpcomingStateContext, ErgoStateContext, StateType, ErgoState}
+import org.ergoplatform.nodeView.state.{UpcomingStateContext, ErgoStateContext, StateType, ErgoState}
 import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.Parameters.{MaxBlockCostIncrease, MinValuePerByteIncrease}
@@ -58,7 +58,6 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val emission: EmissionRules = settings.chainSettings.emissionRules
   val coinsTotal: Long = emission.coinsTotal
-  val stateConstants: StateConstants = StateConstants(settings)
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
   val feeProp: ErgoTree = ErgoTreePredef.feeProposition(emission.settings.minerRewardDelay)
 

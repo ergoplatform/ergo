@@ -311,10 +311,6 @@ object ErgoStateContext {
     */
   val eip27Vote: Byte = 8
 
-  def empty(constants: StateConstants, parameters: Parameters): ErgoStateContext = {
-    empty(constants.settings.chainSettings.genesisStateDigest, constants.settings, parameters)
-  }
-
   def empty(settings: ErgoSettings, parameters: Parameters): ErgoStateContext = {
     empty(settings.chainSettings.genesisStateDigest, settings, parameters)
   }

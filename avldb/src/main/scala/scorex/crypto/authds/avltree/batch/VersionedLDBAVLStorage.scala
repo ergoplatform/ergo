@@ -1,7 +1,6 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import scorex.core.serialization.ManifestSerializer
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
@@ -95,9 +94,10 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     *
     * @param dumpStorage   - non-versioned storage to dump tree to
     * @param manifestDepth - depth of manifest tree
+    * @param expectedRootHash - expected UTXO set authenticating tree root hash
     * @return - hash of root node of tree, or failure if an error (e.g. in database) happened
     */
-  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Int): Try[Array[Byte]] = {
+  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Byte, expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
     store.processSnapshot { dbReader =>
 
       def subtreeLoop(label: DigestType, builder: mutable.ArrayBuilder[Byte]): Unit = {
@@ -136,12 +136,14 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       }
 
       val rootNodeLabel = dbReader.get(topNodeHashKey)
-      val rootNodeHeight = Ints.fromByteArray(dbReader.get(topNodeHeightKey))
+      val rootNodeHeight = Ints.fromByteArray(dbReader.get(topNodeHeightKey)).toByte
+
+      require(rootNodeLabel.sameElements(expectedRootHash), "Root node hash changed")
 
       val manifestBuilder = mutable.ArrayBuilder.make[Byte]()
       manifestBuilder.sizeHint(200000)
-      manifestBuilder ++= Ints.toByteArray(rootNodeHeight)
-      manifestBuilder += ManifestSerializer.MainnetManifestDepth
+      manifestBuilder += rootNodeHeight
+      manifestBuilder += manifestDepth
 
       manifestLoop(rootNodeLabel, level = 1, manifestBuilder)
       val manifestBytes = manifestBuilder.result()
@@ -229,13 +231,20 @@ object VersionedLDBAVLStorage {
     * Calculate tree digest, given root node label(hash) and root node height, by appending height to the hash
     */
   def digest[D <: hash.Digest](rootNodeLabel: D, rootNodeHeight: Int): ADDigest = {
-    assert(rootNodeHeight >= 0 && rootNodeHeight < 256)
+    assert(rootNodeHeight >= 0 && rootNodeHeight <= 127)
     // rootNodeHeight should never be more than 255, so the toByte conversion is safe (though it may cause an incorrect
     // sign on the signed byte if rootHeight>127, but we handle that case correctly on decoding the byte back to int in the
     // verifier, by adding 256 if it's negative).
     // The reason rootNodeHeight should never be more than 255 is that if height is more than 255,
     // then the AVL tree has at least  2^{255/1.4405} = 2^177 leaves, which is more than the number of atoms on planet Earth.
     ADDigest @@ (rootNodeLabel :+ rootNodeHeight.toByte)
+  }
+
+  /**
+    * splits 33-byte digest into 32-bytes hash and 1-byte tree height
+    */
+  def splitDigest(digest: ADDigest): (Array[Byte], Byte) = {
+    digest.dropRight(1) -> digest.takeRight(1).head
   }
 
 }

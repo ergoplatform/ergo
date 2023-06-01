@@ -63,7 +63,7 @@ object PreHeader {
   }
 
   /**
-    * fake pre-header, which is used in ErgoStateContext if last headers are empty 
+    * Fake pre-header, which is used in ErgoStateContext if last headers are empty
     *  because ErgoStateContext needs a PreHeader and it's not optional.
     *  See ErgoStateContext.currentHeight returns a height from the passed PreHeader
     */

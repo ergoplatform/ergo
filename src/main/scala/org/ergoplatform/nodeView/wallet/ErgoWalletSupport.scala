@@ -1,33 +1,32 @@
 package org.ergoplatform.nodeView.wallet
 
-import cats.implicits._
 import cats.Traverse
+import cats.implicits._
 import org.ergoplatform.ErgoBox.{BoxId, R4, R5, R6}
-import org.ergoplatform.{ErgoBoxAssets, UnsignedInput, P2PKAddress, ErgoBox, ErgoAddress, DataInput, ErgoBoxCandidate}
+import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
-import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.sdk.wallet.{TokensMap, AssetUtils}
-import org.ergoplatform.sdk.wallet.secrets.{ExtendedSecretKey, ExtendedPublicKey, DerivationPath}
-import org.ergoplatform.settings.Parameters
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.wallet.Constants
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import org.ergoplatform.wallet.boxes.{TrackedBox, BoxSelector}
+import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.transactions.TransactionBuilder
-import scorex.util.{ScorexLogging, idToBytes}
+import scorex.util.ScorexLogging
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
+import sigmastate.utils.Extensions._
 
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 trait ErgoWalletSupport extends ScorexLogging {
 
@@ -161,7 +160,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         }
       } else {
         if (pubKeys.size == 1 &&
-              pubKeys.head.path == Constants.eip3DerivationPath.toPublicBranch &&
+              pubKeys.head.path == sdk.wallet.Constants.eip3DerivationPath.toPublicBranch &&
               state.storage.readChangeAddress.isEmpty) {
           val changeAddress = P2PKAddress(pubKeys.head.key)(addressEncoder)
           log.info(s"Update change address to $changeAddress")
@@ -212,7 +211,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                   def minimalErgoAmount: Long =
                     BoxUtils.minimalErgoAmountSimulated(
                       lockWithAddress.script,
-                      Colls.fromItems((Digest32Coll @@@ assetId.toColl) -> amount),
+                      Colls.fromItems(assetId.toTokenId -> amount),
                       nonMandatoryRegisters,
                       parameters
                     )
@@ -221,7 +220,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                     valueOpt.getOrElse(minimalErgoAmount),
                     lockWithAddress.script,
                     fullHeight,
-                    Colls.fromItems((Digest32Coll @@@ assetId.toColl) -> amount),
+                    Colls.fromItems(assetId.toTokenId -> amount),
                     nonMandatoryRegisters
                   )
                 }
@@ -248,17 +247,14 @@ trait ErgoWalletSupport extends ScorexLogging {
         val p2r = ergoSettings.chainSettings.reemission.reemissionRules.payToReemission
         new ErgoBoxCandidate(eip27OutputAssets.value, p2r, walletHeight)
       }
-    } ++ selectionResult.changeBoxes.map { changeBoxAssets =>
-      changeBoxAssets match {
-        case candidate: ErgoBoxCandidate =>
-          candidate
-        case changeBox: ErgoBoxAssets =>
-          // todo: is this extra check needed ?
-          val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
-          val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => Digest32Coll @@ idToBytes(t._1).toColl -> t._2).toIndexedSeq
-
-          new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
-      }
+    } ++ selectionResult.changeBoxes.map {
+      case candidate: ErgoBoxCandidate =>
+        candidate
+      case changeBox: ErgoBoxAssets =>
+        // todo: is this extra check needed ?
+        val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
+        val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => t._1.toTokenId -> t._2).toIndexedSeq
+        new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
     }
     val inputBoxes = selectionResult.inputBoxes.toIndexedSeq
     new UnsignedErgoTransaction(

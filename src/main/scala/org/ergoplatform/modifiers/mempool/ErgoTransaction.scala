@@ -6,9 +6,9 @@ import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.{TransactionTypeId, ErgoNodeViewModifier, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
+import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
@@ -25,16 +25,16 @@ import scorex.core.serialization.ErgoSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ValidationState, ModifierValidator, ValidationResult, InvalidModifier}
+import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ScorexLogging, bytesToId, ModifierId}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.serialization.ConstantStore
-import sigmastate.utils.{SigmaByteWriter, SigmaByteReader}
+import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 
 import java.util
 import scala.collection.mutable
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 /**
   * ErgoTransaction is an atomic state transition operation. It destroys Boxes from the state
@@ -274,11 +274,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
               val firstEmissionBoxTokenId = emissionOut.additionalTokens.apply(0)._1
               val secondEmissionBoxTokenId = emissionOut.additionalTokens.apply(1)._1
               require(
-                firstEmissionBoxTokenId.toArray.sameElements(emissionNftIdBytes),
+                firstEmissionBoxTokenId == emissionNftIdBytes,
                 "No emission box NFT in the emission box"
               )
               require(
-                secondEmissionBoxTokenId.toArray.sameElements(reemissionTokenIdBytes),
+                secondEmissionBoxTokenId == reemissionTokenIdBytes,
                 "No re-emission token in the emission box"
               )
 

@@ -22,6 +22,7 @@ import sigmastate.SType
 import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
+import special.collection.Extensions._
 
 import java.net.InetSocketAddress
 import scala.concurrent.duration._
@@ -43,7 +44,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   val dataInput = DataInput(input.boxId)
 
   val absentModifierId = "0000000000000000000000000000000000000000000000000000000000000000"
-  val tokens = List[(TokenId, Long)](Digest32Coll @@@ inputBox.id.toColl -> 10)
+  val tokens = List[(TokenId, Long)](inputBox.id.toTokenId -> 10)
   val registers =
     Map(
       ErgoBox.R4 -> ByteArrayConstant("name".getBytes("UTF-8")),
@@ -228,7 +229,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   }
 
   it should "return unconfirmed output by tokenId from mempool" in {
-    val searchedToken = Base16.encode(tokens.head._1.toArray)
+    val searchedToken = tokens.head._1.toHex
     Get(prefix + s"/unconfirmed/outputs/byTokenId/$searchedToken") ~> chainedRoute ~> check {
       status shouldBe StatusCodes.OK
       val actualOutputIds = responseAs[List[Json]].map(_.hcursor.downField("boxId").as[String].right.get)

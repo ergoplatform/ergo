@@ -11,18 +11,17 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionVal
 import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeStateContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import scorex.core.serialization.{ErgoSerializer, BytesSerializable}
+import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ValidationState, ModifierValidator, InvalidModifier}
+import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.basics.CryptoConstants.EcPointType
-import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.eval.SigmaDsl
 import special.collection.Coll
 
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 /**
   * State context with predicted header.
@@ -85,10 +84,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
-  override def previousStateDigest: Coll[Byte] = if (sigmaLastHeaders.toArray.nonEmpty) {
-    sigmaLastHeaders.toArray.head.stateRoot.digest
+  override def previousStateDigest: ADDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
+    ADDigest @@ sigmaLastHeaders.toArray.head.stateRoot.digest.toArray
   } else {
-    genesisStateDigest.toColl
+    genesisStateDigest
   }
 
   /* NOHF PROOF:
@@ -276,7 +275,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }.flatten
 
   override def toString: String =
-    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest.toArray)}, $lastHeaders, $currentParameters)"
+    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
 
 
   /**

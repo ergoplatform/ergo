@@ -5,9 +5,11 @@ import org.ergoplatform.P2PKAddress;
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath;
 import org.ergoplatform.sdk.wallet.secrets.ExtendedPublicKey;
 import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey;
-import org.ergoplatform.wallet.mnemonic.Mnemonic;
 import org.ergoplatform.wallet.interface4j.SecretString;
+import org.ergoplatform.wallet.mnemonic.Mnemonic;
 import scala.Option;
+
+import static org.ergoplatform.sdk.wallet.Constants.eip3DerivationPath;
 
 /**
  * This runnable example is showing how to derive change address and other addresses according to EIP-3
@@ -40,7 +42,7 @@ public class AddressGenerationDemo {
         ExtendedSecretKey rootSecret = masterSecretFromSeed(seed);
 
         // Let's use "m/44'/429'/0'/0/0" path for change (this path is from EIP-3 which is BIP-44 for Ergo)
-        DerivationPath changePath = Constants.eip3DerivationPath();
+        DerivationPath changePath = eip3DerivationPath();
         ExtendedSecretKey changeSecretKey = deriveSecretKey(rootSecret, changePath);
         ExtendedPublicKey changePubkey = changeSecretKey.publicKey();
         P2PKAddress changeAddress = P2PKAddress.apply(changePubkey.key(), addressEncoder);

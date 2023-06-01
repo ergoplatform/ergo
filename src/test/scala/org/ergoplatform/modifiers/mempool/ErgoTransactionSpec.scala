@@ -8,26 +8,25 @@ import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.{ErgoTestConstants, ErgoPropertyTest}
+import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestConstants}
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
-import org.ergoplatform.wallet.interpreter.{TransactionHintsBag, ErgoInterpreter}
+import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.protocol.context.InputContext
-import org.ergoplatform.{Input, ErgoBox, ErgoBoxCandidate}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import scalan.util.BenchmarkUtil
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
-import scorex.util.{bytesToId, ModifierId}
 import scorex.util.encode.Base16
+import scorex.util.{ModifierId, bytesToId}
 import sigmastate.AND
-import sigmastate.Values.{TrueLeaf, SigmaPropConstant, ByteArrayConstant, IntConstant, ByteConstant, LongArrayConstant}
+import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant, TrueLeaf}
 import sigmastate.basics.CryptoConstants
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.helpers.TestingHelpers._
-
+import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.eval.Extensions._
 import scala.util.{Random, Try}
 
 class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
@@ -43,7 +42,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
         (seq :+ ebc) -> true
       } else {
         if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(t => !java.util.Arrays.equals(t._1.toArray, from.head.id))) {
-          (seq :+ modifyAsset(ebc, deltaFn, Digest32Coll @@@ from.head.id.toColl)) -> true
+          (seq :+ modifyAsset(ebc, deltaFn, from.head.id.toTokenId)) -> true
         } else {
           (seq :+ ebc) -> false
         }
@@ -253,7 +252,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
       // already existing token from one of the inputs
       val existingToken = from.flatMap(_.additionalTokens.toArray).toSet.head
       // completely new token
-      val randomToken = (Digest32Coll @@ scorex.util.Random.randomBytes().toColl, Random.nextInt(100000000).toLong)
+      val randomToken = (scorex.util.Random.randomBytes().toTokenId, Random.nextInt(100000000).toLong)
 
       val in0 = from.last
       // new token added to the last input
@@ -298,7 +297,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   property("spam simulation (transaction validation cost with too many tokens exceeds block limit)") {
     val bxsQty = 392 // with greater value test is failing with collection size exception
     val (inputs, tx) = validErgoTransactionGenTemplate(1, 1,16).sample.get // it takes too long to test with `forAll`
-    val tokens = (0 until 255).map(_ => (Digest32Coll @@ scorex.util.Random.randomBytes().toColl, Random.nextLong))
+    val tokens = (0 until 255).map(_ => (scorex.util.Random.randomBytes().toTokenId, Random.nextLong))
     val (in, out) = {
       val in0 = inputs.head
       val out0 = tx.outputs.head

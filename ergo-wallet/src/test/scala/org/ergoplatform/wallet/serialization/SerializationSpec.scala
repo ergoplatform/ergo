@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.serialization
 
-import org.ergoplatform.sdk.wallet.secrets.{DerivationPathSerializer, ExtendedSecretKeySerializer, ExtendedPublicKeySerializer}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPathSerializer, ExtendedPublicKeySerializer, ExtendedSecretKeySerializer}
 import org.ergoplatform.wallet.boxes.TrackedBoxSerializer
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen

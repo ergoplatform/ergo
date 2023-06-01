@@ -2,12 +2,13 @@ package org.ergoplatform.contracts
 
 import org.ergoplatform.ErgoBox.{R2, STokensRegType}
 import org.ergoplatform.ErgoTreePredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
-import org.ergoplatform.{Height, MinerPubkey, Outputs, Self}
-import org.ergoplatform.settings.MonetarySettings
-import sigmastate.{AND, EQ, GE, GT, LE, Minus, OR, SBox, SCollection, STuple}
-import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant, SigmaPropValue, Value}
-import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes, OptionGet, SelectField, SizeOf}
 import org.ergoplatform.mining.emission.EmissionRules.CoinsInOneErgo
+import org.ergoplatform.settings.MonetarySettings
+import org.ergoplatform.{Height, MinerPubkey, Outputs, Self}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant, SigmaPropValue, Value}
+import sigmastate.utxo._
+import sigmastate._
+import special.collection.Coll
 
 /**
   * Container for re-emission related contracts. Contains re-emission contract and pay-to-reemission contract.
@@ -22,7 +23,7 @@ trait ReemissionContracts {
   /**
     * @return - ID of NFT token associated with re-emission contract
     */
-  def reemissionNftIdBytes: Array[Byte]
+  def reemissionNftIdBytes: Coll[Byte]
 
   /**
     * @return - height when reemission starts

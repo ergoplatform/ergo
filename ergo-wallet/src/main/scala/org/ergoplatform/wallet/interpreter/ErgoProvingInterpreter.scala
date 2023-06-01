@@ -1,23 +1,22 @@
 package org.ergoplatform.wallet.interpreter
 
-import java.util
 import org.ergoplatform._
 import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
-import org.ergoplatform.sdk.wallet.protocol.context.{ErgoLikeStateContext, ErgoLikeParameters}
-import org.ergoplatform.sdk.wallet.secrets.{SecretKey, ExtendedSecretKey, ExtendedPublicKey}
-import org.ergoplatform.validation.SigmaValidationSettings
-import sigmastate.AvlTreeData
-import sigmastate.Values.SigmaBoolean
-import sigmastate.interpreter.{ProverInterpreter, ContextExtension}
-import org.ergoplatform.validation.ValidationRules
+import org.ergoplatform.sdk.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey, SecretKey}
+import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import scorex.crypto.authds.ADDigest
-import sigmastate.basics.SigmaProtocolPrivateInput
 import scorex.util.encode.Base16
+import sigmastate.AvlTreeData
+import sigmastate.Values.SigmaBoolean
+import sigmastate.basics.SigmaProtocolPrivateInput
+import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 import special.collection.Coll
 import special.sigma.{Header, PreHeader}
 
-import scala.util.{Try, Success, Failure}
+import java.util
+import scala.util.{Failure, Success, Try}
 
 /**
   * A class which is holding secrets and signing transactions.
@@ -129,7 +128,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
 
               inputsCostTry.flatMap { case (ins, totalCost) =>
                 val context = new ErgoLikeContext(
-                  ErgoInterpreter.avlTreeFromDigest(ADDigest @@ stateContext.previousStateDigest.toArray),
+                  ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
                   stateContext.sigmaLastHeaders,
                   stateContext.sigmaPreHeader,
                   dataBoxes,
@@ -197,7 +196,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       val inputBox = boxesToSpend(inpIndex)
 
       val context = new ErgoLikeContext(
-        ErgoInterpreter.avlTreeFromDigest(ADDigest @@ stateContext.previousStateDigest.toArray),
+        ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
         stateContext.sigmaLastHeaders,
         stateContext.sigmaPreHeader,
         dataBoxes,
@@ -241,7 +240,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       val exp = box.ergoTree
       val proof = input.spendingProof.proof
 
-      val lastBlockUtxoRoot: AvlTreeData = ErgoInterpreter.avlTreeFromDigest(ADDigest @@ stateContext.previousStateDigest.toArray)
+      val lastBlockUtxoRoot: AvlTreeData = ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest)
       val headers: Coll[Header] = stateContext.sigmaLastHeaders
       val preHeader: PreHeader = stateContext.sigmaPreHeader
       val spendingTransaction = tx

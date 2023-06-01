@@ -1,9 +1,9 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
-import scorex.util.encode.Base16
 import sigmastate.Values.EvaluatedValue
 import sigmastate.{SType, Values}
+import special.collection.Extensions._
 
 /**
   * Basic interface for box scanning predicate functionality
@@ -130,7 +130,7 @@ case class ContainsAssetPredicate(assetId: ErgoBox.TokenId) extends ScanningPred
 
   override def hashCode(): Int = assetId.hashCode()
 
-  override def toString: String = s"ContainsAssetPredicate(${Base16.encode(assetId.toArray)})"
+  override def toString: String = s"ContainsAssetPredicate(${assetId.toHex})"
 }
 
 

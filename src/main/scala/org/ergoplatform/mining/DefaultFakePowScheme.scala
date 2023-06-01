@@ -5,8 +5,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import sigmastate.basics.CryptoConstants.EcPointType
 
-import scala.math.BigInt
-import scala.util.{Random, Try, Success}
+import scala.util.{Random, Success, Try}
 
 /**
   * Fake Pow Scheme for tests.

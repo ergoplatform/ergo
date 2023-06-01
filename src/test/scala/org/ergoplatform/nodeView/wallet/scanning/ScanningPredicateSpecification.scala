@@ -1,18 +1,17 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
-import org.ergoplatform.{P2PKAddress, ErgoTreePredef}
+import io.circe.parser._
 import org.ergoplatform.ErgoBox.R1
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
+import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
+import org.ergoplatform.{ErgoTreePredef, P2PKAddress}
 import sigmastate.Values.ByteArrayConstant
+import sigmastate.eval.Extensions.ArrayByteOps
 import sigmastate.helpers.TestingHelpers._
 
-import scala.util.Random
 import scala.language.implicitConversions
-import io.circe.parser._
-import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
-import sigmastate.eval.Digest32Coll
-import sigmastate.eval.Extensions.ArrayOps
+import scala.util.Random
 
 class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
 
@@ -20,7 +19,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
 
   private implicit def bacFromBytes(bs: Array[Byte]) = ByteArrayConstant(bs)
 
-  //helper function to change random byte
+  /** Helper function to create a new array with changed random byte. */
   private def mutateRandomByte(source: Array[Byte]): Array[Byte] = {
     val sourceModified = source.clone()
     val idx = Random.nextInt(sourceModified.length)
@@ -102,7 +101,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
         val emptyBox = testBox(value = 1, pk, creationHeight = 0)
         ContainsAssetPredicate(tokenId).filter(emptyBox) shouldBe false
 
-        ContainsAssetPredicate(Digest32Coll @@ mutateRandomByte(tokenId.toArray).toColl).filter(box) shouldBe false
+        ContainsAssetPredicate(mutateRandomByte(tokenId.toArray).toTokenId).filter(box) shouldBe false
       }
     }
   }
@@ -122,7 +121,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
         ).filter(box) shouldBe true
 
         AndScanningPredicate(
-          ContainsAssetPredicate(Digest32Coll @@ mutateRandomByte(tokenId.toArray).toColl),
+          ContainsAssetPredicate(mutateRandomByte(tokenId.toArray).toTokenId),
           ContainsScanningPredicate(R1, p2pk.contentBytes)
         ).filter(box) shouldBe false
 
@@ -149,7 +148,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
         ).filter(box) shouldBe true
 
         OrScanningPredicate(
-          ContainsAssetPredicate(Digest32Coll @@ mutateRandomByte(tokenId.toArray).toColl),
+          ContainsAssetPredicate(mutateRandomByte(tokenId.toArray).toTokenId),
           ContainsScanningPredicate(R1, p2pk.contentBytes)
         ).filter(box) shouldBe true
 
@@ -159,7 +158,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
         ).filter(box) shouldBe true
 
         OrScanningPredicate(
-          ContainsAssetPredicate(Digest32Coll @@ mutateRandomByte(tokenId.toArray).toColl),
+          ContainsAssetPredicate(mutateRandomByte(tokenId.toArray).toTokenId),
           ContainsScanningPredicate(R1, mutateRandomByte(p2pk.contentBytes))
         ).filter(box) shouldBe false
       }

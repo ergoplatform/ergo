@@ -134,20 +134,32 @@ object PeerManager {
       *
       * Used in peer propagation: peers chosen are recommended to a peer asking our node about more peers.
       */
-    case class SeenPeers(howMany: Int) extends GetPeers[Seq[PeerInfo]] {
+    case class SeenPeers(howMany: Int) extends GetPeers[Seq[PeerInfo]] with ScorexLogging {
 
       val limit: Long = 3 * 60 * 60 * 1000 // 3h
 
       override def choose(knownPeers: Map[InetSocketAddress, PeerInfo],
                           blacklistedPeers: Seq[InetAddress],
                           sc: ScorexContext): Seq[PeerInfo] = {
-        val recentlySeenNonBlacklisted = knownPeers.values.toSeq
+        val nonBlacklisted = knownPeers.values.toSeq
           .filter { p =>
             (p.connectionType.isDefined || p.lastHandshake > 0) &&
-            !blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip)) &&
-            (System.currentTimeMillis - p.lastHandshake < limit)
+              !blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip))
           }
-        Random.shuffle(recentlySeenNonBlacklisted).take(howMany)
+
+        val recentlySeenNonBlacklisted = nonBlacklisted.filter { p =>
+          (System.currentTimeMillis() - p.lastStoredActivityTime < limit)
+        }
+
+        if (recentlySeenNonBlacklisted.nonEmpty) {
+          val res = Random.shuffle(recentlySeenNonBlacklisted).take(howMany)
+          log.debug(s"Sending ${res.length} active peers: " + res)
+          res
+        } else {
+          val res = Random.shuffle(nonBlacklisted).take(howMany)
+          log.debug(s"Sending ${res.length} known peers: " + res)
+          res
+        }
       }
     }
 

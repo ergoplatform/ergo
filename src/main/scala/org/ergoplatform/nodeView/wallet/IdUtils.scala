@@ -3,8 +3,9 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox.{BoxId, TokenId}
 import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
+import sigmastate.eval.Digest32Coll
+import sigmastate.eval.Extensions.ArrayOps
 import supertagged.TaggedType
 
 object IdUtils {
@@ -22,7 +23,7 @@ object IdUtils {
 
   def encodedTokenId(id: TokenId): EncodedTokenId = ModifierId @@ Algos.encode(id)
 
-  def decodedTokenId(id: EncodedTokenId): TokenId = Digest32 @@ Algos.decode(id)
-    .getOrElse(throw new Error("Failed to decode token id"))
+  def decodedTokenId(id: EncodedTokenId): TokenId =
+    Digest32Coll @@ (Algos.decode(id).getOrElse(throw new Error("Failed to decode token id"))).toColl
 
 }

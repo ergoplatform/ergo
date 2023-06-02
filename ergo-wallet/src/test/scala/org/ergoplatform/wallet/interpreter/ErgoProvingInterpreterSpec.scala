@@ -1,15 +1,14 @@
 package org.ergoplatform.wallet.interpreter
 
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
+import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.utils.Generators
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, Random}
 import scorex.util.encode.Base16
-import scorex.util.Random
 import sigmastate.CTHRESHOLD
 import sigmastate.Values.{GroupElementConstant, SigmaBoolean}
 import sigmastate.interpreter.{ContextExtension, HintsBag}
@@ -42,8 +41,8 @@ class ErgoProvingInterpreterSpec
 
       signedTxFull.inputs.map(_.spendingProof.proof).zip(signedTxFull.inputs.map(_.spendingProof.proof))
         .foreach { case (fullProof, unsafeProof) =>
-          ErgoSignature.verify(unsignedTx.messageToSign, fullProof, extendedSecretKey.publicKey.key.h) shouldBe
-            ErgoSignature.verify(unsignedTx.messageToSign, unsafeProof, extendedSecretKey.publicKey.key.h)
+          ErgoSignature.verify(unsignedTx.messageToSign, fullProof, extendedSecretKey.publicKey.key.value) shouldBe
+            ErgoSignature.verify(unsignedTx.messageToSign, unsafeProof, extendedSecretKey.publicKey.key.value)
         }
     }
   }

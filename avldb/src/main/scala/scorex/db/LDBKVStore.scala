@@ -13,11 +13,21 @@ import spire.syntax.all.cfor
   * Both keys and values are var-sized byte arrays.
   */
 class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging {
+  private val emptyArrayOfByteArray = Array.empty[Array[Byte]]
 
-  def update(toInsert: Array[(K, V)], toRemove: Array[K]): Try[Unit] = {
+  /**
+    * Update this database atomically with a batch of insertion and removal operations
+    *
+    * @param toInsertKeys - keys of key-value pairs to insert into database
+    * @param toInsertValues - values of key-value pairs to insert into database
+    * @param toRemove - keys of key-value pairs to remove from the database
+    * @return - error if it happens, or success status
+    */
+  def update(toInsertKeys: Array[K], toInsertValues: Array[V], toRemove: Array[K]): Try[Unit] = {
     val batch = db.createWriteBatch()
     try {
-      cfor(0)(_ < toInsert.length, _ + 1) { i => batch.put(toInsert(i)._1, toInsert(i)._2)}
+      require(toInsertKeys.length == toInsertValues.length)
+      cfor(0)(_ < toInsertKeys.length, _ + 1) { i => batch.put(toInsertKeys(i), toInsertValues(i))}
       cfor(0)(_ < toRemove.length, _ + 1) { i => batch.delete(toRemove(i))}
       db.write(batch)
       Success(())
@@ -43,9 +53,19 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
     }
   }
 
-  def insert(values: Array[(K, V)]): Try[Unit] = update(values, Array.empty)
+  /**
+    * `update` variant where we only insert values into this database
+    */
+  def insert(keys: Array[K], values: Array[V]): Try[Unit] = {
+    update(keys, values, emptyArrayOfByteArray)
+  }
 
-  def remove(keys: Array[K]): Try[Unit] = update(Array.empty, keys)
+  /**
+    * `update` variant where we only remove values from this database
+    */
+  def remove(keys: Array[K]): Try[Unit] = {
+    update(emptyArrayOfByteArray, emptyArrayOfByteArray, keys)
+  }
 
   /**
     * Get last key within some range (inclusive) by used comparator.

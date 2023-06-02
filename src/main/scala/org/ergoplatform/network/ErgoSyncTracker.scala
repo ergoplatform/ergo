@@ -36,12 +36,13 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
 
   // returns diff
   def updateLastSyncGetTime(peer: ConnectedPeer): Long = {
+    val now = currentTime()
     val prevSyncGetTime = statuses.get(peer).flatMap(_.lastSyncGetTime).getOrElse(0L)
 
     statuses.get(peer).foreach { status =>
-      statuses.update(peer, status.copy(lastSyncGetTime = Option(currentTime())))
+      statuses.update(peer, status.copy(lastSyncGetTime = Option(now)))
     }
-    currentTime - prevSyncGetTime
+    now - prevSyncGetTime
   }
 
   /**
@@ -165,6 +166,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
     }
   }
 
+  /**
+    * @return all the peers ever sent sync message to the node and still connected
+    */
   def knownPeers(): Iterable[ConnectedPeer] = statuses.keys
 
   /**
@@ -190,8 +194,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
           unknowns
         }
         val nonOutdated = eldersAndUnknown ++ forks
+        val now = currentTime()
         nonOutdated.filter { case (_, status) =>
-          (currentTime() - status.lastSyncSentTime.getOrElse(0L)).millis >= MinSyncInterval
+          (now - status.lastSyncSentTime.getOrElse(0L)).millis >= MinSyncInterval
         }.map(_._1)
       }
 

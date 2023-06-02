@@ -5,30 +5,30 @@ import akka.pattern.StatusReply
 import com.google.common.primitives.Longs
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
-import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, FullBlockApplied}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
-import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
+import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.SType.ErgoBoxRType
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.CryptoFacade
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
@@ -183,7 +183,7 @@ class CandidateGenerator(
         if state.solvedBlock.isEmpty && state.cache.nonEmpty =>
       // Inject node pk if it is not externally set (in Autolykos 2)
       val solution =
-        if (preSolution.pk.isInfinity) {
+        if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
           AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
         } else {
           preSolution
@@ -460,7 +460,7 @@ object CandidateGenerator extends ScorexLogging {
       // Calculate required difficulty for the new block
       val nBits: Long = bestHeaderOpt
         .map(parent => history.requiredDifficultyAfter(parent))
-        .map(d => RequiredDifficulty.encodeCompactBits(d))
+        .map(d => DifficultySerializer.encodeCompactBits(d))
         .getOrElse(ergoSettings.chainSettings.initialNBits)
 
       // Obtain NiPoPoW interlinks vector to pack it into the extension section
@@ -506,7 +506,7 @@ object CandidateGenerator extends ScorexLogging {
         )
 
       val upcomingContext = state.stateContext.upcoming(
-        minerPk.h,
+        minerPk.value,
         timestamp,
         nBits,
         votes,
@@ -665,11 +665,11 @@ object CandidateGenerator extends ScorexLogging {
     val reemissionRules = reemissionSettings.reemissionRules
 
     val eip27ActivationHeight = reemissionSettings.activationHeight
-    val reemissionTokenId = Digest32 @@ reemissionSettings.reemissionTokenIdBytes
+    val reemissionTokenId = Digest32Coll @@ reemissionSettings.reemissionTokenIdBytes
 
     val nextHeight = currentHeight + 1
     val minerProp =
-      ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
+      ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop           = emissionBox.ergoTree

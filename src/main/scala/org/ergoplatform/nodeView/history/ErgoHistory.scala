@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings._
@@ -281,7 +282,18 @@ object ErgoHistory extends ScorexLogging {
     * @return ErgoHistory instance with new database or database read from existing folder
     */
   def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
-    val db = HistoryStorage(ergoSettings)
+    var db = HistoryStorage(ergoSettings)
+
+    // ExtraIndexer db check
+    if(ergoSettings.nodeSettings.extraIndex) { // check db schema
+      val schemaVersion: Int = getIndex(SchemaVersionKey, db).getInt
+      if (schemaVersion != NewestVersion) {
+        if(getIndex(IndexedHeightKey, db).getInt > 0)
+          db = db.deleteExtraDB(ergoSettings) // older schema -> delete and reopen db
+        db.insertExtra(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty) // update version key
+      }
+    }
+
     val nodeSettings = ergoSettings.nodeSettings
 
     val history: ErgoHistory = nodeSettings.verifyTransactions match {

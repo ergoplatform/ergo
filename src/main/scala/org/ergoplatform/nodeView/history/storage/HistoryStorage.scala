@@ -4,13 +4,18 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.extra.{ExtraIndexSerializer, ExtraIndex, IndexedErgoAddress}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, IndexedErgoAddress}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import scorex.core.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+
 import scala.util.{Failure, Success, Try}
 import spire.syntax.all.cfor
+
+import java.io.File
+import java.nio.file.Files
+import scala.jdk.CollectionConverters.asScalaIteratorConverter
 
 /**
   * Storage for Ergo history
@@ -108,22 +113,33 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
       }
     }
 
+  /**
+    * @return object with `id` if it is in the objects database
+    */
   def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(idToBytes(id)).orElse(extraStore.get(idToBytes(id)))
   def get(id: Array[Byte]): Option[Array[Byte]] = objectsStore.get(id).orElse(extraStore.get(id))
 
+  /**
+    * @return if object with `id` is in the objects database
+    */
   def contains(id: Array[Byte]): Boolean = get(id).isDefined
   def contains(id: ModifierId): Boolean = get(id).isDefined
 
   def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Array[BlockSection]): Try[Unit] = {
     objectsStore.insert(
-      objectsToInsert.map(mod => (mod.serializedId, HistoryModifierSerializer.toBytes(mod)))
+      objectsToInsert.map(mod => mod.serializedId),
+      objectsToInsert.map(mod => HistoryModifierSerializer.toBytes(mod))
     ).flatMap { _ =>
       cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i))}
       if (indexesToInsert.nonEmpty) {
-        indexStore.insert(indexesToInsert.map { case (k, v) => k.data -> v }).map { _ =>
-          cfor(0)(_ < indexesToInsert.length, _ + 1) { i => indexCache.put(indexesToInsert(i)._1, indexesToInsert(i)._2)}
-          ()
+        indexStore.insert(
+          indexesToInsert.map(_._1.data),
+          indexesToInsert.map(_._2)
+        ).map { _ =>
+          cfor(0)(_ < indexesToInsert.length, _ + 1) { i =>
+            indexCache.put(indexesToInsert(i)._1, indexesToInsert(i)._2)
+          }
         }
       } else Success(())
     }
@@ -131,7 +147,10 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
 
   def insertExtra(indexesToInsert: Array[(Array[Byte], Array[Byte])],
                   objectsToInsert: Array[ExtraIndex]): Unit = {
-    extraStore.insert(objectsToInsert.map(mod => (mod.serializedId, ExtraIndexSerializer.toBytes(mod))))
+    extraStore.insert(
+      objectsToInsert.map(mod => (mod.serializedId)),
+      objectsToInsert.map(mod => ExtraIndexSerializer.toBytes(mod))
+    )
     cfor(0)(_ < objectsToInsert.length, _ + 1) { i => val ei = objectsToInsert(i); extraCache.put(ei.id, ei)}
     cfor(0)(_ < indexesToInsert.length, _ + 1) { i => extraStore.insert(indexesToInsert(i)._1, indexesToInsert(i)._2)}
   }
@@ -178,6 +197,27 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
     extraStore.close()
     indexStore.close()
     objectsStore.close()
+  }
+
+  /**
+    * Delete the extra index database and reopen it.
+    *
+    * @param ergoSettings - settings to use
+    * @return new HistoryStorage instance with empty extra database, or this instance in case of failure
+    */
+  def deleteExtraDB(ergoSettings: ErgoSettings): HistoryStorage = {
+    log.warn(s"Removing extra index database due to old schema.")
+    close()
+    // org.ergoplatform.wallet.utils.FileUtils
+    val root = new File(s"${ergoSettings.directory}/history/extra")
+    if (root.exists()) {
+      Files.walk(root.toPath).iterator().asScala.toSeq.reverse.foreach(path => Try(Files.delete(path)))
+    }else {
+      log.error(s"Could not delete ${root.toString}")
+      return this
+    }
+    log.info(s"Deleted ${root.toString}")
+    HistoryStorage.apply(ergoSettings)
   }
 
 }

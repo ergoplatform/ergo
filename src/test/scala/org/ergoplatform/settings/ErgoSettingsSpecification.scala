@@ -24,7 +24,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       StateType.Utxo,
       verifyTransactions = true,
       1000,
-      utxoBootstrap = false,
+      utxoSettings = UtxoSettings(false, 0, 2),
       popowBootstrap = false,
       10,
       mining = true,
@@ -48,7 +48,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 500, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersCacheSize                 = 10000,
@@ -74,7 +74,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       StateType.Utxo,
       verifyTransactions = true,
       12,
-      utxoBootstrap = false,
+      utxoSettings = UtxoSettings(false, 0, 2),
       popowBootstrap = false,
       10,
       mining = true,
@@ -98,7 +98,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 500, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersCacheSize                 = 10000,
@@ -117,7 +117,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       StateType.Utxo,
       verifyTransactions = true,
       13,
-      utxoBootstrap = false,
+      utxoSettings = UtxoSettings(false, 0, 2),
       popowBootstrap = false,
       10,
       mining = true,
@@ -141,7 +141,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 500, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersCacheSize                 = 10000,

@@ -5,16 +5,16 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.DataInput
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
 import spire.implicits.cfor
 
 /**
-  * Index of a transaction.
+  * Minimum general information for transaction. Not storing the whole transation is done to save space.
   * @param txid        - id of this transaction
   * @param height      - height of the block which includes this transaction
-  * @param globalIndex - numeric index of this transaction
+  * @param globalIndex - serial number of this transaction counting from block 1
   * @param inputNums   - list of transaction inputs (needed for rollback)
   */
 case class IndexedErgoTransaction(txid: ModifierId,
@@ -22,8 +22,8 @@ case class IndexedErgoTransaction(txid: ModifierId,
                                   globalIndex: Long,
                                   inputNums: Array[Long]) extends ExtraIndex {
 
-  override def id: ModifierId = txid
-  override def serializedId: Array[Byte] = fastIdToBytes(txid)
+  override lazy val id: ModifierId = txid
+  override def serializedId: Array[Byte] = fastIdToBytes(id)
 
   private var _blockId: ModifierId = ModifierId @@ ""
   private var _inclusionHeight: Int = 0
@@ -69,7 +69,7 @@ case class IndexedErgoTransaction(txid: ModifierId,
   }
 }
 
-object IndexedErgoTransactionSerializer extends ScorexSerializer[IndexedErgoTransaction] {
+object IndexedErgoTransactionSerializer extends ErgoSerializer[IndexedErgoTransaction] {
 
   override def serialize(iTx: IndexedErgoTransaction, w: Writer): Unit = {
     w.putUByte(iTx.serializedId.length)

@@ -86,6 +86,10 @@ object SyncV2Filter extends PeerFilteringRule {
 
 }
 
+/**
+  * Filter used to differentiate peers supporting UTXO state snapshots, so possibly
+  * storing and serving them, from peers do not supporting UTXO set snapshots related networking protocol
+  */
 object UtxoSetNetworkingFilter extends PeerFilteringRule {
 
   def condition(version: Version): Boolean = {

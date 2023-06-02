@@ -1,6 +1,6 @@
 package scorex.core.app
 
-import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
+import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
 import scorex.util.serialization._
 
 /**
@@ -9,7 +9,7 @@ import scorex.util.serialization._
 case class Version(firstDigit: Byte, secondDigit: Byte, thirdDigit: Byte) extends BytesSerializable with Ordered[Version] {
   override type M = Version
 
-  override def serializer: ScorexSerializer[Version] = ApplicationVersionSerializer
+  override def serializer: ErgoSerializer[Version] = ApplicationVersionSerializer
 
   override def compare(that: Version): Int = {
     if (this.firstDigit != that.firstDigit) {
@@ -44,12 +44,12 @@ object Version {
   val Eip37ForkVersion: Version = Version(4, 0, 100)
   val JitSoftForkVersion: Version = Version(5, 0, 0)
 
-  val UtxoSnapsnotActivationVersion: Version = Version(5, 0, 6) // todo: set proper version around release
+  val UtxoSnapsnotActivationVersion: Version = Version(5, 0, 12)
 
-  val NipopowActivationVersion: Version = Version(5, 0, 6) // todo: set proper version around release
+  val NipopowActivationVersion: Version = Version(5, 0, 13) // todo: set proper version around release
 }
 
-object ApplicationVersionSerializer extends ScorexSerializer[Version] {
+object ApplicationVersionSerializer extends ErgoSerializer[Version] {
   val SerializedVersionLength: Int = 3
 
 

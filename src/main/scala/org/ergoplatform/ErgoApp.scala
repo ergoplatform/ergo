@@ -59,17 +59,19 @@ class ErgoApp(args: Args) extends ScorexLogging {
     else None
   upnpGateway.foreach(_.addPort(scorexSettings.network.bindAddress.getPort))
 
-  //an address to send to peers
-  private val externalSocketAddress: Option[InetSocketAddress] =
-  scorexSettings.network.declaredAddress orElse {
-    upnpGateway.map(u =>
-      new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort)
-    )
+  // own address to send to peers
+  private val externalSocketAddress: Option[InetSocketAddress] = {
+    scorexSettings.network.declaredAddress orElse {
+      upnpGateway.map(u =>
+        new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort)
+      )
+    }
   }
 
   private val nipopowProofSpec = NipopowProofSpec(ergoSettings)
 
-  private val basicSpecs = {
+  // descriptors of p2p networking protocol messages
+  private val p2pMessageSpecifications = {
     Seq(
       GetPeersSpec,
       new PeersSpec(scorexSettings.network.maxPeerSpecObjects),
@@ -89,7 +91,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   }
 
   private val scorexContext = ScorexContext(
-    messageSpecs        = basicSpecs,
+    messageSpecs        = p2pMessageSpecifications,
     upnpGateway         = upnpGateway,
     externalNodeAddress = externalSocketAddress
   )
@@ -108,8 +110,13 @@ class ErgoApp(args: Args) extends ScorexLogging {
       None
     }
 
+  if(ergoSettings.nodeSettings.extraIndex)
+    require(
+      ergoSettings.nodeSettings.stateType.holdsUtxoSet && !ergoSettings.nodeSettings.isFullBlocksPruned,
+      "Node must store full UTXO set and all blocks to run extra indexer."
+    )
   // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
-  ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings)
+  private val indexer: ActorRef = ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings)
 
   private val syncTracker = ErgoSyncTracker(scorexSettings.network)
 
@@ -179,7 +186,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
-    BlockchainApiRoute(readersHolderRef, ergoSettings),
+    BlockchainApiRoute(readersHolderRef, ergoSettings, indexer),
     ErgoPeersApiRoute(
       peerManagerRef,
       networkControllerRef,

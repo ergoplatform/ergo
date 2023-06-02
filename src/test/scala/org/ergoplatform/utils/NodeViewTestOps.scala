@@ -132,7 +132,7 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 
   def getPoolSize(implicit ctx: Ctx): Int = getCurrentView.pool.size
 
-  def getRootHash(implicit ctx: Ctx): String = Algos.encode(getCurrentState.rootHash)
+  def getRootHash(implicit ctx: Ctx): String = Algos.encode(getCurrentState.rootDigest)
 
   def getBestFullBlockOpt(implicit ctx: Ctx): Option[ErgoFullBlock] = getHistory.bestFullBlockOpt
 

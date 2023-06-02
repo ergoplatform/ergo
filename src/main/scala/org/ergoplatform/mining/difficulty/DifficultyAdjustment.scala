@@ -87,8 +87,8 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     log.debug(s"Difficulty for ${previousHeaders.last.height + 1}: predictive $predictiveDiff, limited predictive: $limitedPredictiveDiff, classic: $classicDiff, " +
              s"resulting uncompressed: $uncompressedDiff")
     // perform serialization cycle in order to normalize resulted difficulty
-    RequiredDifficulty.decodeCompactBits(
-      RequiredDifficulty.encodeCompactBits(uncompressedDiff)
+    DifficultySerializer.decodeCompactBits(
+      DifficultySerializer.encodeCompactBits(uncompressedDiff)
     )
   }
 
@@ -112,8 +112,8 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
       }
     }
     // perform serialization cycle in order to normalize resulted difficulty
-    RequiredDifficulty.decodeCompactBits(
-      RequiredDifficulty.encodeCompactBits(uncompressedDiff)
+    DifficultySerializer.decodeCompactBits(
+      DifficultySerializer.encodeCompactBits(uncompressedDiff)
     )
   }
 

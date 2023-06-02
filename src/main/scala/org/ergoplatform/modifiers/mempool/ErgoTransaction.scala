@@ -6,21 +6,22 @@ import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
+import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
+import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
-import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import org.ergoplatform.wallet.protocol.context.InputContext
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import scorex.core.EphemerealNodeViewModifier
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
@@ -227,10 +228,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
       lazy val reemissionRules = reemissionSettings.reemissionRules
 
-      lazy val reemissionTokenId = ModifierId @@ reemissionSettings.reemissionTokenId
+      lazy val reemissionTokenId = ModifierId @@@ reemissionSettings.reemissionTokenId
       lazy val reemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
 
-      lazy val emissionNftId = ModifierId @@ reemissionSettings.emissionNftId
+      lazy val emissionNftId = ModifierId @@@ reemissionSettings.emissionNftId
       lazy val emissionNftIdBytes = reemissionSettings.emissionNftIdBytes
 
       lazy val chainSettings = stateContext.ergoSettings.chainSettings
@@ -273,11 +274,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
               val firstEmissionBoxTokenId = emissionOut.additionalTokens.apply(0)._1
               val secondEmissionBoxTokenId = emissionOut.additionalTokens.apply(1)._1
               require(
-                firstEmissionBoxTokenId.sameElements(emissionNftIdBytes),
+                firstEmissionBoxTokenId == emissionNftIdBytes,
                 "No emission box NFT in the emission box"
               )
               require(
-                secondEmissionBoxTokenId.sameElements(reemissionTokenIdBytes),
+                secondEmissionBoxTokenId == reemissionTokenIdBytes,
                 "No re-emission token in the emission box"
               )
 
@@ -452,7 +453,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override type M = ErgoTransaction
 
-  override def serializer: ScorexSerializer[ErgoTransaction] = ErgoTransactionSerializer
+  override def serializer: ErgoSerializer[ErgoTransaction] = ErgoTransactionSerializer
 
   override def toString: String = {
     import ErgoTransaction._
@@ -486,7 +487,7 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     inputs.zipWithIndex.filterNot(i => resolvedInputs.exists(bx => util.Arrays.equals(bx.id, i._1))).map(_._2)
 }
 
-object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
+object ErgoTransactionSerializer extends ErgoSerializer[ErgoTransaction] {
 
   override def serialize(tx: ErgoTransaction, w: Writer): Unit = {
     val elt = new ErgoLikeTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)

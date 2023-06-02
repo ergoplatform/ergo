@@ -1,22 +1,20 @@
 package scorex.core.network.message
 
-
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
-import org.ergoplatform.wallet.Constants
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, NipopowProofSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.core.NodeViewModifier
 import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
-
+import org.ergoplatform.sdk.wallet.Constants.ModifierIdLength
 import scala.collection.immutable
 
 /**
@@ -38,7 +36,7 @@ case class NipopowProofData(m: Int = 6, k: Int = 6, headerId: Option[ModifierId]
   *
   * Payload of this message should be determined in underlying applications.
   */
-class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ScorexSerializer[SI]) extends MessageSpecV1[SI] {
+class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ErgoSerializer[SI]) extends MessageSpecV1[SI] {
 
   override val messageCode: MessageCode = 65: Byte
   override val messageName: String = "Sync"
@@ -280,6 +278,7 @@ object GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
 
 /**
   * The `SnapshotsInfo` message is a reply to a `GetSnapshotsInfo` message.
+  * It contains information about UTXO set snapshots stored locally.
   */
 object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
   private val SizeLimit = 20000
@@ -300,12 +299,14 @@ object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
     require(r.remaining <= SizeLimit, s"Too big SnapshotsInfo message: ${r.remaining} bytes found, $SizeLimit max expected.")
 
     val length = r.getUInt().toIntExact
-    SnapshotsInfo((0 until length).map { _ =>
+    val manifests = (0 until length).map { _ =>
       val height = r.getInt()
-      val manifest = Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+      val manifest = Digest32 @@ r.getBytes(ModifierIdLength)
       height -> manifest
-    }.toMap)
+    }.toMap
+    new SnapshotsInfo(manifests)
   }
+
 }
 
 /**
@@ -323,15 +324,17 @@ object GetManifestSpec extends MessageSpecV1[ManifestId] {
 
   override def parse(r: Reader): ManifestId = {
     require(r.remaining < SizeLimit, "Too big GetManifest message")
-    Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+    Digest32 @@ r.getBytes(ModifierIdLength)
   }
+
 }
 
 /**
   * The `Manifest` message is a reply to a `GetManifest` message.
+  * It contains serialized manifest, top subtree of a tree authenticating UTXO set snapshot
   */
 object ManifestSpec extends MessageSpecV1[Array[Byte]] {
-  private val SizeLimit = 10000000
+  private val SizeLimit = 4000000
 
   override val messageCode: MessageCode = 79: Byte
 
@@ -348,10 +351,11 @@ object ManifestSpec extends MessageSpecV1[Array[Byte]] {
     val length = r.getUInt().toIntExact
     r.getBytes(length)
   }
+
 }
 
 /**
-  * The `GetManifest` sends send utxo subtree (BatchAVLProverSubtree) identifier
+  * The `GetUtxoSnapshotChunk` sends send utxo subtree (BatchAVLProverSubtree) identifier
   */
 object GetUtxoSnapshotChunkSpec extends MessageSpecV1[SubtreeId] {
   private val SizeLimit = 100
@@ -366,15 +370,16 @@ object GetUtxoSnapshotChunkSpec extends MessageSpecV1[SubtreeId] {
 
   override def parse(r: Reader): SubtreeId = {
     require(r.remaining < SizeLimit, "Too big GetUtxoSnapshotChunk message")
-    Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+    Digest32 @@ r.getBytes(ModifierIdLength)
   }
+
 }
 
 /**
-  * The `Manifest` message is a reply to a `GetManifest` message.
+  * The `UtxoSnapshotChunk` message is a reply to a `GetUtxoSnapshotChunk` message.
   */
 object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
-  private val SizeLimit = 10000000
+  private val SizeLimit = 4000000
 
   override val messageCode: MessageCode = 81: Byte
 
@@ -391,6 +396,7 @@ object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
     val length = r.getUInt().toIntExact
     r.getBytes(length)
   }
+
 }
 
 /**
@@ -419,14 +425,12 @@ object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
   override def parse(r: Reader): NipopowProofData = {
     require(r.remaining <= SizeLimit, s"Too big GetNipopowProofSpec message(size: ${r.remaining})")
 
-    val modifierIdLength = Constants.ModifierIdLength
-
     val m = r.getInt()
     val k = r.getInt()
 
     val headerIdPresents = r.getByte() == 1
     val headerIdOpt = if (headerIdPresents) {
-      Some(ModifierId @@ Algos.encode(r.getBytes(modifierIdLength)))
+      Some(ModifierId @@ Algos.encode(r.getBytes(ModifierIdLength)))
     } else {
       None
     }
@@ -442,7 +446,7 @@ object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
 /**
   * The `NipopowProof` message is a reply to a `GetNipopowProof` message.
   */
-class NipopowProofSpec(serializer: ScorexSerializer[NipopowProof]) extends MessageSpecV1[NipopowProof] {
+class NipopowProofSpec(serializer: ErgoSerializer[NipopowProof]) extends MessageSpecV1[NipopowProof] {
 
   import NipopowProofSpec._
 

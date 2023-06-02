@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.7"
+  version: "5.0.12"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -292,7 +292,7 @@ components:
           type: boolean
           example: false
         globalIndex:
-          description: The global index of the box
+          description: Global index of the output in the blockchain
           type: integer
           format: int64
           minimum: 0
@@ -495,7 +495,7 @@ components:
           format: int32
           example: 3
         globalIndex:
-          description: index of the box globally
+          description: Global index of the transaction in the blockchain
           type: integer
           format: int64
           example: 3565445
@@ -3027,7 +3027,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '02c9e71790399816b3e40b2207e9ade19a9b7fe0600186cfb8e2b115bfdb34b57f38cd3c9f2890d11720eb3bb993993f00ededf812a590d2993df094a7ca4f0213e4820e1ab831eed5dc5c72665396d3a01d2a12900f1c3ab77700b284ae24fa8e8f7754f86f2282c795db6b0b17df1c29cc0552e59d01f7d777c638a813333277271c2f8b4d99d01ff0e6ee8695697bdd5b568089395620d7198c6093ce8bc59b928611b1b12452c05addaa42f4beff6a0a6fe90000000380d0dbc3f40210090402040005c801040205c8010500040004000e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04d807d601e4c6a70408d602b2a5730000d603e4c6a70601d604e4c6a7080ed605e4c6a70505d606e4c6a70705d60795720399c1a7c1720299c17202c1a7eb027201d1ededededededededed93c27202c2a793e4c672020408720193e4c6720205059572039d9c72057eb272047301000573029d9c72057eb2720473030005730494e4c672020601720393e4c672020705720693e4c67202080e720493e4c67202090ec5a79572039072079c720672059272079c72067205917207730595ef720393b1db630872027306d801d608b2db63087202730700ed938c7208017308938c7208027206c8df35000508cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba0405c8a8c105010105dc8b020e0266608cdea8baf0380008cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04c8df350000c0843d1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304c8df350000'
+                example: '"02c9e71790399816b3e40b2207e9ade19a9b7fe0600186cfb8e2b115bfdb34b57f38cd3c9f2890d11720eb3bb993993f00ededf812a590d2993df094a7ca4f0213e4820e1ab831eed5dc5c72665396d3a01d2a12900f1c3ab77700b284ae24fa8e8f7754f86f2282c795db6b0b17df1c29cc0552e59d01f7d777c638a813333277271c2f8b4d99d01ff0e6ee8695697bdd5b568089395620d7198c6093ce8bc59b928611b1b12452c05addaa42f4beff6a0a6fe90000000380d0dbc3f40210090402040005c801040205c8010500040004000e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04d807d601e4c6a70408d602b2a5730000d603e4c6a70601d604e4c6a7080ed605e4c6a70505d606e4c6a70705d60795720399c1a7c1720299c17202c1a7eb027201d1ededededededededed93c27202c2a793e4c672020408720193e4c6720205059572039d9c72057eb272047301000573029d9c72057eb2720473030005730494e4c672020601720393e4c672020705720693e4c67202080e720493e4c67202090ec5a79572039072079c720672059272079c72067205917207730595ef720393b1db630872027306d801d608b2db63087202730700ed938c7208017308938c7208027206c8df35000508cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba0405c8a8c105010105dc8b020e0266608cdea8baf0380008cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04c8df350000c0843d1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304c8df350000"'
         responses:
           '200':
             description: JSON with ID of the new transaction
@@ -3083,7 +3083,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '02c9e71790399816b3e40b2207e9ade19a9b7fe0600186cfb8e2b115bfdb34b57f38cd3c9f2890d11720eb3bb993993f00ededf812a590d2993df094a7ca4f0213e4820e1ab831eed5dc5c72665396d3a01d2a12900f1c3ab77700b284ae24fa8e8f7754f86f2282c795db6b0b17df1c29cc0552e59d01f7d777c638a813333277271c2f8b4d99d01ff0e6ee8695697bdd5b568089395620d7198c6093ce8bc59b928611b1b12452c05addaa42f4beff6a0a6fe90000000380d0dbc3f40210090402040005c801040205c8010500040004000e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04d807d601e4c6a70408d602b2a5730000d603e4c6a70601d604e4c6a7080ed605e4c6a70505d606e4c6a70705d60795720399c1a7c1720299c17202c1a7eb027201d1ededededededededed93c27202c2a793e4c672020408720193e4c6720205059572039d9c72057eb272047301000573029d9c72057eb2720473030005730494e4c672020601720393e4c672020705720693e4c67202080e720493e4c67202090ec5a79572039072079c720672059272079c72067205917207730595ef720393b1db630872027306d801d608b2db63087202730700ed938c7208017308938c7208027206c8df35000508cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba0405c8a8c105010105dc8b020e0266608cdea8baf0380008cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04c8df350000c0843d1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304c8df350000'
+                example: '"02c9e71790399816b3e40b2207e9ade19a9b7fe0600186cfb8e2b115bfdb34b57f38cd3c9f2890d11720eb3bb993993f00ededf812a590d2993df094a7ca4f0213e4820e1ab831eed5dc5c72665396d3a01d2a12900f1c3ab77700b284ae24fa8e8f7754f86f2282c795db6b0b17df1c29cc0552e59d01f7d777c638a813333277271c2f8b4d99d01ff0e6ee8695697bdd5b568089395620d7198c6093ce8bc59b928611b1b12452c05addaa42f4beff6a0a6fe90000000380d0dbc3f40210090402040005c801040205c8010500040004000e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04d807d601e4c6a70408d602b2a5730000d603e4c6a70601d604e4c6a7080ed605e4c6a70505d606e4c6a70705d60795720399c1a7c1720299c17202c1a7eb027201d1ededededededededed93c27202c2a793e4c672020408720193e4c6720205059572039d9c72057eb272047301000573029d9c72057eb2720473030005730494e4c672020601720393e4c672020705720693e4c67202080e720493e4c67202090ec5a79572039072079c720672059272079c72067205917207730595ef720393b1db630872027306d801d608b2db63087202730700ed938c7208017308938c7208027206c8df35000508cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba0405c8a8c105010105dc8b020e0266608cdea8baf0380008cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04c8df350000c0843d1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304c8df350000"'
         responses:
           '200':
             description: JSON with ID of the new transaction
@@ -4761,6 +4761,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/getPrivateKey:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get the private key corresponding to a known address
+      operationId: walletGetPrivateKey
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErgoAddress"
+      responses:
+        '200':
+          description: Successfully retrieved secret key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DlogSecret'
+        '404':
+          description: Address not found in wallet database
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /mining/candidate:
     get:
       security:
@@ -5056,7 +5090,7 @@ paths:
 
   /utxo/getSnapshotsInfo:
     get:
-      summary: Get information about saved UTXO snapshots
+      summary: Get information about locally stored UTXO snapshots
       operationId: getSnapshotsInfo
       tags:
         - utxo
@@ -5780,7 +5814,8 @@ paths:
           application/json:
             description: adderess associated with transactions
             schema:
-              $ref: '#/components/schemas/ErgoAddress'
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
       parameters:
         - in: query
           name: offset
@@ -5813,7 +5848,7 @@ paths:
                       $ref: '#/components/schemas/IndexedErgoTransaction'
                   total:
                     type: integer
-                    description: Total count of transactions
+                    description: Total count of retreived transactions
         '404':
           description: No transactions found for wanted address
           content:
@@ -5945,7 +5980,8 @@ paths:
           application/json:
             description: adderess associated with boxes
             schema:
-              $ref: '#/components/schemas/ErgoAddress'
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
       parameters:
         - in: query
           name: offset
@@ -5975,10 +6011,10 @@ paths:
                     type: array
                     description: Array of boxes
                     items:
-                      $ref: '#/components/schemas/IndexedErgoTransaction'
+                      $ref: '#/components/schemas/IndexedErgoBox'
                   total:
                     type: integer
-                    description: Total number of boxes
+                    description: Total number of retreived boxes
         '404':
           description: No boxes found for wanted address
           content:
@@ -6004,7 +6040,8 @@ paths:
           application/json:
             description: adderess associated with unspent boxes
             schema:
-              $ref: '#/components/schemas/ErgoAddress'
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
       parameters:
         - in: query
           name: offset
@@ -6022,6 +6059,13 @@ paths:
             type: integer
             format: int32
             default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
       responses:
         '200':
           description: unspent boxes associated with wanted address
@@ -6031,7 +6075,7 @@ paths:
                 type: array
                 description: Array of boxes
                 items:
-                  $ref: '#/components/schemas/IndexedErgoTransaction'
+                  $ref: '#/components/schemas/IndexedErgoBox'
         '404':
           description: No unspent boxes found for wanted address
           content:
@@ -6098,7 +6142,7 @@ paths:
             description: hex encoded ergotree
             schema:
               type: string
-              example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
+              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
       parameters:
         - in: query
           name: offset
@@ -6131,7 +6175,7 @@ paths:
                       $ref: '#/components/schemas/IndexedErgoBox'
                   total:
                     type: integer
-                    description: Total number of boxes
+                    description: Total number of retreived boxes
         default:
           description: Error
           content:
@@ -6152,7 +6196,7 @@ paths:
             description: hex encoded ergotree
             schema:
               type: string
-              example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
+              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
       parameters:
         - in: query
           name: offset
@@ -6170,13 +6214,29 @@ paths:
             type: integer
             format: int32
             default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
       responses:
         '200':
           description: unspent boxes with wanted ergotree
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IndexedErgoBox'
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoBox'
+                  total:
+                    type: integer
+                    description: Total number of retreived boxes
         '404':
           description: No unspent box found with wanted ergotree
           content:
@@ -6235,7 +6295,8 @@ paths:
           application/json:
             description: adderess with balance
             schema:
-              $ref: '#/components/schemas/ErgoAddress'
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
       responses:
         '200':
           description: balance information

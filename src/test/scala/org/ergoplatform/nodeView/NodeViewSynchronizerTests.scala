@@ -1,35 +1,35 @@
-package scorex.testkit.properties
+package org.ergoplatform.nodeView
 
-import akka.actor._
+import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.UtxoState.ManifestId
+import org.ergoplatform.nodeView.state._
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote}
 import scorex.core.consensus.SyncInfo
+import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.state.UtxoState.ManifestId
-import org.ergoplatform.nodeView.state.{ErgoState, SnapshotsDb, SnapshotsInfo, UtxoState, UtxoStateReader}
-import org.ergoplatform.settings.Algos
-import org.ergoplatform.utils.generators.ChainGenerator
-import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
-import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
+import scorex.core.serialization.{BytesSerializable, ErgoSerializer, ManifestSerializer}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
-import scorex.util.serialization._
+import scorex.util.serialization.{Reader, Writer}
 
+import org.ergoplatform.utils.generators.ChainGenerator
 import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
@@ -40,7 +40,10 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   with ScorexLogging
   with SyntacticallyTargetedModifierProducer
   with TotallyValidModifierProducer[ST]
-  with ChainGenerator {
+  with ChainGenerator
+  with TestFileUtils {
+
+  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
   val historyGen: Gen[ErgoHistory]
   val memPool: ErgoMemPool
@@ -48,7 +51,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   val stateGen: Gen[ST]
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
-    (ActorRef, ErgoSyncInfo, BlockSection, ErgoTransaction, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[BlockSection])
+  (ActorRef, ErgoSyncInfo, BlockSection, ErgoTransaction, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ErgoSerializer[BlockSection])
 
   class SynchronizerFixture extends AkkaFixture {
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
@@ -119,7 +122,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
     withFixture { ctx =>
       import ctx._
 
-      val dummySyncInfoMessageSpec = new SyncInfoMessageSpec[SyncInfo](serializer = new ScorexSerializer[SyncInfo]{
+      val dummySyncInfoMessageSpec = new SyncInfoMessageSpec[SyncInfo](serializer = new ErgoSerializer[SyncInfo] {
         override def parse(r: Reader): SyncInfo = {
           throw new Exception()
         }
@@ -130,7 +133,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       val dummySyncInfo: SyncInfo = new SyncInfo {
         type M = BytesSerializable
 
-        def serializer: ScorexSerializer[M] = throw new Exception
+        def serializer: ErgoSerializer[M] = throw new Exception
       }
 
       val msgBytes = dummySyncInfoMessageSpec.toBytes(dummySyncInfo)
@@ -279,8 +282,8 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
         val m = (0 until 100).map { _ =>
           Random.nextInt(1000000) -> (Digest32 @@ Algos.decode(mod.id).get)
         }.toMap
-        val si = SnapshotsInfo(m)
-        val db = SnapshotsDb.create(s.constants.settings)
+        val si = new SnapshotsInfo(m)
+        val db = SnapshotsDb.create(createTempDir.getPath)
         db.writeSnapshotsInfo(si)
 
         // Then send message to request it
@@ -309,13 +312,11 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
           // Generate some snapshot
           val height = 1
           usr.applyModifier(mod, Some(height))(_ => ())
-          val (manifest, subtrees) = usr.slicedTree()
 
-          val db = SnapshotsDb.create(s.constants.settings)
-          db.writeSnapshot(height, manifest, subtrees)
+          val manifestId = usr.dumpSnapshot(height, usr.rootDigest.dropRight(1)).get
 
           // Then send message to request it
-          node ! Message[ManifestId](GetManifestSpec, Left(manifest.id), Option(peer))
+          node ! Message[ManifestId](GetManifestSpec, Left(manifestId), Option(peer))
           ncProbe.fishForMessage(5 seconds) {
             case stn: SendToNetwork if stn.message.spec.isInstanceOf[ManifestSpec.type] => true
             case _: Any => false
@@ -339,15 +340,21 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
           node ! ChangedState(s)
 
           // Generate some snapshot
-          val height = 1
-          usr.applyModifier(mod, Some(height))(_ => ())
-          val (manifest, subtrees) = usr.slicedTree()
 
-          val db = SnapshotsDb.create(s.constants.settings)
-          db.writeSnapshot(height, manifest, subtrees)
+          val height = 1
+
+          usr.applyModifier(mod, Some(height))(_ => ())
+
+          val manifestDepth = 2.toByte
+          val serializer = new ManifestSerializer(manifestDepth)
+          usr.dumpSnapshot(height, usr.rootDigest.dropRight(1), manifestDepth)
+          val manifestId = usr.snapshotsDb.readSnapshotsInfo.availableManifests.apply(height)
+          val manifestBytes = usr.snapshotsDb.readManifestBytes(manifestId).get
+          val manifest = serializer.parseBytes(manifestBytes)
+          val subtreeIds = manifest.subtreesIds
 
           // Then send message to request it
-          node ! Message[ManifestId](GetUtxoSnapshotChunkSpec, Left(subtrees.last.id), Option(peer))
+          node ! Message[ManifestId](GetUtxoSnapshotChunkSpec, Left(subtreeIds.last), Option(peer))
           ncProbe.fishForMessage(5 seconds) {
             case stn: SendToNetwork if stn.message.spec.isInstanceOf[UtxoSnapshotChunkSpec.type] => true
             case _: Any => false

@@ -1,14 +1,14 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.contracts.ReemissionContracts
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
+import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
+import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
+import org.ergoplatform.wallet.transactions.TransactionBuilder._
+import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder}
 import scorex.util.ModifierId
-import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder, ErgoBoxCandidate}
-import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
-import org.ergoplatform.wallet.{AssetUtils, TokensMap}
+
 import scala.annotation.tailrec
 import scala.collection.mutable
-import org.ergoplatform.wallet.transactions.TransactionBuilder._
-import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 
 /**
   * Default implementation of the box selector. It simply picks boxes till sum of their monetary values
@@ -19,9 +19,8 @@ import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
   */
 class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData]) extends BoxSelector {
 
-  import DefaultBoxSelector._
   import BoxSelector._
-  import scorex.util.idToBytes
+  import DefaultBoxSelector._
 
   // helper function which returns count of assets in `initialMap` not fully spent in `subtractor`
   private def diffCount(initialMap: mutable.Map[ModifierId, Long], subtractor: TokensMap): Int = {
@@ -104,7 +103,7 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
         assetsMet
       )) {
         formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBoxes =>
-          selectionResultWithEip27Output(res, changeBoxes)
+          selectionResultWithEip27Output(res.toSeq, changeBoxes)
         }
       } else {
         Left(NotEnoughTokensError(

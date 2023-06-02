@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
-import org.ergoplatform.settings.{Algos, Constants, Parameters}
+import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
@@ -22,23 +22,21 @@ import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.ModifierId
-import scorex.util.ScorexLogging
-import Constants.StateTreeParameters
 
 import scala.util.{Failure, Success, Try}
 
 /**
-  * Utxo set implementation
+  * Utxo set based state implementation
   *
-  * @param persistentProver - persistent prover that build authenticated AVL+ tree on top of utxo set
+  * @param persistentProver - persistent prover that builds authenticated AVL+ tree on top of utxo set
   * @param store            - storage of persistentProver that also keeps metadata
   * @param version          - current state version
-  * @param constants        - constants, that do not change with state version changes
+  * @param ergoSettings     - protocol and client config to to get state-related settings from
   */
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
                 override val store: LDBVersionedStore,
-                override val constants: StateConstants)
+                override protected val ergoSettings: ErgoSettings)
   extends ErgoState[UtxoState]
     with TransactionValidation
     with UtxoStateReader
@@ -46,7 +44,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   import UtxoState.metadata
 
-  override def rootHash: ADDigest = persistentProver.synchronized {
+  override def rootDigest: ADDigest = persistentProver.synchronized {
     persistentProver.digest
   }
 
@@ -57,7 +55,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
-          new UtxoState(p, version, store, constants)
+          new UtxoState(p, version, store, ergoSettings)
         }
         rollbackResult
       case None =>
@@ -116,12 +114,14 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                             (generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
 
+      val keepVersions = ergoSettings.nodeSettings.keepVersions
+
       // avoid storing versioned information in the database when block being processed is behind
       // blockchain tip by `keepVersions` blocks at least
       // we store `keepVersions` diffs in the database if chain tip is not known yet
-      if (fb.height >= estimatedTip.getOrElse(0) - constants.keepVersions) {
-        if (store.getKeepVersions < constants.keepVersions) {
-          store.setKeepVersions(constants.keepVersions)
+      if (fb.height >= estimatedTip.getOrElse(0) - keepVersions) {
+        if (store.getKeepVersions < keepVersions) {
+          store.setKeepVersions(keepVersions)
         }
       } else {
         if (store.getKeepVersions > 0) {
@@ -134,7 +134,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
         log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
 
-        val inRoot = rootHash
+        val inRoot = rootDigest
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
           val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.id, fb.header.stateRoot, newStateContext)
@@ -203,7 +203,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
             saveSnapshotIfNeeded(fb.height, estimatedTip)
-            new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
+            new UtxoState(persistentProver, idToVersion(fb.id), store, ergoSettings)
           }
         }
         stateTry.recoverWith[UtxoState] { case e =>
@@ -220,7 +220,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       //todo: update state context with headers (when snapshot downloading is done), so
       //todo: application of the first full block after the snapshot should have correct state context
       //todo: (in particular, "lastHeaders" field of it)
-      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
+      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, ergoSettings))
 
     case a: Any =>
       log.error(s"Unhandled unknown modifier: $a")
@@ -236,26 +236,42 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
 }
 
-object UtxoState extends ScorexLogging {
+object UtxoState {
 
+  /**
+    * Short synonym for AVL+ tree type used in the node
+    */
   type Manifest = BatchAVLProverManifest[Digest32]
+
+  /**
+    * Short synonym for AVL subtree type used in the node
+    */
   type Subtree = BatchAVLProverSubtree[Digest32]
 
+
+  /**
+    * Manifest is associated with 32 bytes cryptographically strong unique id (root hash of the AVL tree under manifest)
+    */
   type ManifestId = Digest32
+
+  /**
+    * Subtree is associated with 32 bytes cryptographically strong unique id (hash of subtree's root node)
+    */
   type SubtreeId = Digest32
 
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
-  // block-specific metadata to write into database (in addition to AVL+ tree)
 
   /**
+    * Block-specific metadata to write into database (in addition to AVL+ tree)
     *
     * @param modId - ID of a block (header) corresponding to UTXO set
     * @param stateRoot - UTXO set digest (hash and tree height) AFTER applying block `modId`
-    * @param currentEmissionBoxOpt
-    * @param context
-    * @return
+    * @param currentEmissionBoxOpt - current unspent emission script box
+    * @param context - current state context used in input scripts validation (for the next block)
+    *
+    * @return binary-serialized metadata
     */
   def metadata(modId: VersionTag,
                stateRoot: ADDigest,
@@ -271,16 +287,19 @@ object UtxoState extends ScorexLogging {
     Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
 
-  def create(dir: File, constants: StateConstants): UtxoState = {
-    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
+  /**
+    * @return UTXO set based state on top of existing database, or genesis state if the database is empty
+    */
+  def create(dir: File, settings: ErgoSettings): UtxoState = {
+    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
-      val storage = new VersionedLDBAVLStorage[Digest32, HF](store, StateTreeParameters)(Algos.hash)
+      val storage = new VersionedLDBAVLStorage(store)
       PersistentBatchAVLProver.create(bp, storage).get
     }
-    new UtxoState(persistentProver, version, store, constants)
+    new UtxoState(persistentProver, version, store, settings)
   }
 
   /**
@@ -290,17 +309,17 @@ object UtxoState extends ScorexLogging {
   def fromBoxHolder(bh: BoxHolder,
                     currentEmissionBoxOpt: Option[ErgoBox],
                     dir: File,
-                    constants: StateConstants,
+                    settings: ErgoSettings,
                     parameters: Parameters): UtxoState = {
     val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
     bh.sortedBoxes.foreach { b =>
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
 
-    val defaultStateContext = ErgoStateContext.empty(constants, parameters)
-    val storage = new VersionedLDBAVLStorage[Digest32, HF](store, StateTreeParameters)(Algos.hash)
+    val defaultStateContext = ErgoStateContext.empty(settings, parameters)
+    val storage = new VersionedLDBAVLStorage(store)
     val persistentProver = PersistentBatchAVLProver.create(
       p,
       storage,
@@ -308,7 +327,7 @@ object UtxoState extends ScorexLogging {
       paranoidChecks = true
     ).get
 
-    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
+    new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, settings)
   }
 
 }

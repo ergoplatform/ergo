@@ -17,7 +17,7 @@ import org.scalacheck.Gen
 import scorex.core.idToBytes
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.network.peer.PeerInfo
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -28,7 +28,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
 
   override val stateGen: Gen[WrappedDigestState] = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
-      val digestState = DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
+      val digestState = DigestState.create(Some(wus.version), Some(wus.rootDigest), createTempDir, settings)
       new WrappedDigestState(digestState, wus, settings)
     }
   }
@@ -53,7 +53,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   }
 
   override def nodeViewSynchronizer(implicit system: ActorSystem):
-  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM]) = {
+  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ErgoSerializer[PM]) = {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
@@ -95,7 +95,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     )
     ref ! ChangedHistory(h)
     ref ! ChangedMempool(pool)
-    val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
+    val serializer: ErgoSerializer[PM] = HeaderSerializer.asInstanceOf[ErgoSerializer[PM]]
     (ref, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener, serializer)
   }
 

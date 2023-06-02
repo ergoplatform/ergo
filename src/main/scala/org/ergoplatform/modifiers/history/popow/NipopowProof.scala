@@ -2,7 +2,7 @@ package org.ergoplatform.modifiers.history.popow
 
 import io.circe.{Decoder, Encoder}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps
 
@@ -27,6 +27,8 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
                         suffixHead: PoPowHeader,
                         suffixTail: Seq[Header],
                         difficultyCheckHeaders: Seq[Header]) {
+
+  def serializer: ErgoSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
 
   def headersChain: Seq[Header] = {
     prefixHeaders ++ suffixHeaders // todo: add difficulty headers?
@@ -129,7 +131,7 @@ object NipopowProof {
 
 }
 
-class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ScorexSerializer[NipopowProof] {
+class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[NipopowProof] {
 
   override def serialize(obj: NipopowProof, w: Writer): Unit = {
     w.putUInt(obj.m)

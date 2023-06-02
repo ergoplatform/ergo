@@ -149,7 +149,7 @@ class DifficultyAdjustmentSpecification extends ErgoPropertyTest {
         val previousHeaders = control.previousHeightsRequiredForRecalculation(epoch * useLastEpochs + 1, epoch).map { i =>
           header.copy(timestamp = header.timestamp + i * interval,
             height = i,
-            nBits = RequiredDifficulty.encodeCompactBits(RequiredDifficulty.decodeCompactBits(header.nBits) + step))
+            nBits = DifficultySerializer.encodeCompactBits(DifficultySerializer.decodeCompactBits(header.nBits) + step))
         }
 
         previousHeaders.length shouldBe useLastEpochs + 1

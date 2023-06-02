@@ -23,8 +23,7 @@ object OOMTest extends App {
   val store = new LDBVersionedStore(dir, initialKeepVersions = 200)
 
   val bestVersionKey = Blake2b256("best state version")
-  private lazy val np = AvlTreeParameters(keySize = 32, valueSize = None, labelSize = 32)
-  protected lazy val storage = new VersionedLDBAVLStorage[Digest32, HF](store, np)
+  protected lazy val storage = new VersionedLDBAVLStorage(store)
 
   val afterGenesisStateDigestHex: String = "78b130095239561ecf5449a7794c0615326d1fd007cc79dcc286e46e4beb1d3f01"
   val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex).get
@@ -67,7 +66,7 @@ object OOMTest extends App {
       Longs.toByteArray(value) ++ propBytes ++ (0.toByte +: Array.emptyByteArray) ++
         transactionId ++ Shorts.toByteArray(boxId)
     val id = Blake2b256.hash(bytes)
-    ADKey @@ id -> ADValue @@ bytes
+    ADKey @@@ id -> ADValue @@@ bytes
   }
 
   private def metadata(modId: Array[Byte], stateRoot: ADDigest): Seq[(Array[Byte], Array[Byte])] = {

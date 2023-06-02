@@ -1,5 +1,7 @@
 package scorex.crypto.authds.avltree.batch
 
+import Constants.HashLength
+
 /**
   * Parameters of AVL+ tree nodes (internal and leaves)
   * @param keySize - size of a key (fixed)
@@ -11,8 +13,11 @@ case class AvlTreeParameters(keySize: Int, valueSize: Option[Int], labelSize: In
     * @return whether value is fixed-size
     */
   def fixedSizeValue: Boolean = valueSize.isDefined
-
-  // todo: move out? not looking so good here
-  private[batch] val TopNodeKey: Array[Byte] = Array.fill(labelSize)(123: Byte)
-  private[batch] val TopNodeHeight: Array[Byte] = Array.fill(labelSize)(124: Byte)
 }
+
+
+/**
+  * AVL+ tree node parameters. The tree is used to authenticate UTXO set.
+  * Keys and hashes are 256-bits long, values are boxes, so value size is dynamic.
+  */
+object StateTreeParameters extends AvlTreeParameters(keySize = HashLength, valueSize = None, labelSize = HashLength)

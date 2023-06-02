@@ -2,35 +2,26 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
-import org.ergoplatform.nodeView.wallet.WalletBox
-import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, TrackedBox}
-import scorex.core.serialization.ScorexSerializer
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 
 /**
-  * Index of a box.
+  * Wrapper with dditional information for ErgoBox.
   * @param inclusionHeight   - height of the block in which the creating transaction was included in
   * @param spendingTxIdOpt   - optional, id of the spending transaction
   * @param spendingHeightOpt - optional, height of the block in which the spending transaction was included in
   * @param box               - underlying ErgoBox
-  * @param globalIndex       - numeric index of the box
+  * @param globalIndex       - serial number of this output counting from genesis box
   */
 class IndexedErgoBox(val inclusionHeight: Int,
                      var spendingTxIdOpt: Option[ModifierId],
                      var spendingHeightOpt: Option[Int],
                      val box: ErgoBox,
-                     val globalIndex: Long)
-  extends WalletBox(TrackedBox(box.transactionId,
-                               box.index,
-                               Some(inclusionHeight),
-                               spendingTxIdOpt,
-                               spendingHeightOpt,
-                               box,
-                               Set.empty[ScanId]),
-                               None) with ExtraIndex {
+                     val globalIndex: Long) extends ExtraIndex {
 
+  override lazy val id: ModifierId = bytesToId(serializedId)
   override def serializedId: Array[Byte] = box.id
 
 
@@ -45,8 +36,14 @@ class IndexedErgoBox(val inclusionHeight: Int,
     spendingHeightOpt = Some(txHeight)
     this
   }
+
+  /**
+    * Whether or not the box is spent
+    * @return true if spent, false otherwise
+    */
+  def isSpent: Boolean = spendingTxIdOpt.isDefined
 }
-object IndexedErgoBoxSerializer extends ScorexSerializer[IndexedErgoBox] {
+object IndexedErgoBoxSerializer extends ErgoSerializer[IndexedErgoBox] {
 
   override def serialize(iEb: IndexedErgoBox, w: Writer): Unit = {
     w.putInt(iEb.inclusionHeight)

@@ -4,28 +4,29 @@ import io.circe.syntax._
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
+import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestConstants}
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
-import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import org.ergoplatform.wallet.protocol.context.InputContext
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import scalan.util.BenchmarkUtil
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.ByteArrayWrapper
-import scorex.util.{ModifierId, bytesToId}
+import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
+import scorex.util.{ModifierId, bytesToId}
 import sigmastate.AND
 import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant, TrueLeaf}
+import sigmastate.basics.CryptoConstants
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
 import sigmastate.helpers.TestingHelpers._
-
+import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.eval.Extensions._
 import scala.util.{Random, Try}
 
 class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
@@ -40,8 +41,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
       if (modified) {
         (seq :+ ebc) -> true
       } else {
-        if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(t => !java.util.Arrays.equals(t._1, from.head.id))) {
-          (seq :+ modifyAsset(ebc, deltaFn, Digest32 @@ from.head.id)) -> true
+        if (ebc.additionalTokens.nonEmpty && ebc.additionalTokens.exists(t => !java.util.Arrays.equals(t._1.toArray, from.head.id))) {
+          (seq :+ modifyAsset(ebc, deltaFn, from.head.id.toTokenId)) -> true
         } else {
           (seq :+ ebc) -> false
         }
@@ -62,10 +63,10 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   private def modifyAsset(boxCandidate: ErgoBoxCandidate,
                           deltaFn: Long => Long,
                           idToskip: TokenId): ErgoBoxCandidate = {
-    val assetId = boxCandidate.additionalTokens.find(t => !java.util.Arrays.equals(t._1, idToskip)).get._1
+    val assetId = boxCandidate.additionalTokens.find(t => t._1 != idToskip).get._1
 
     val tokens = boxCandidate.additionalTokens.map { case (id, amount) =>
-      if (java.util.Arrays.equals(id, assetId)) assetId -> deltaFn(amount) else assetId -> amount
+      if (id == assetId) assetId -> deltaFn(amount) else assetId -> amount
     }
 
     new ErgoBoxCandidate(
@@ -96,7 +97,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     val minerPkHex = "0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942"
     val minerPk = Base16.decode(minerPkHex).map { point =>
       ProveDlog(
-        CryptoConstants.dlogGroup.curve.decodePoint(point).asInstanceOf[CryptoConstants.EcPointType]
+        CryptoConstants.dlogGroup.ctx.decodePoint(point)
       )
     }.get
     val inputs: IndexedSeq[Input] = IndexedSeq(
@@ -205,7 +206,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   property("impossible to overflow an asset value") {
     val gen = validErgoTransactionGenTemplate(minAssets = 1, maxAssets = 1, maxInputs = 16, propositionGen = trueLeafGen)
     forAll(gen) { case (from, tx) =>
-      val tokenOpt = tx.outputCandidates.flatMap(_.additionalTokens.toArray).map(t => ByteArrayWrapper.apply(t._1) -> t._2)
+      val tokenOpt = tx.outputCandidates.flatMap(_.additionalTokens.toArray)
         .groupBy(_._1).find(_._2.size >= 2)
 
       whenever(tokenOpt.nonEmpty) {
@@ -215,7 +216,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
         var modified = false
         val updCandidates = tx.outputCandidates.map { c =>
           val updTokens = c.additionalTokens.map { case (id, amount) =>
-            if (!modified && ByteArrayWrapper(id) == tokenId) {
+            if (!modified && id == tokenId) {
               modified = true
               id -> ((Long.MaxValue - tokenAmount) + amount + 1)
             } else {
@@ -251,7 +252,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
       // already existing token from one of the inputs
       val existingToken = from.flatMap(_.additionalTokens.toArray).toSet.head
       // completely new token
-      val randomToken = (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong)
+      val randomToken = (scorex.util.Random.randomBytes().toTokenId, Random.nextInt(100000000).toLong)
 
       val in0 = from.last
       // new token added to the last input
@@ -296,7 +297,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   property("spam simulation (transaction validation cost with too many tokens exceeds block limit)") {
     val bxsQty = 392 // with greater value test is failing with collection size exception
     val (inputs, tx) = validErgoTransactionGenTemplate(1, 1,16).sample.get // it takes too long to test with `forAll`
-    val tokens = (0 until 255).map(_ => (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextLong))
+    val tokens = (0 until 255).map(_ => (scorex.util.Random.randomBytes().toTokenId, Random.nextLong))
     val (in, out) = {
       val in0 = inputs.head
       val out0 = tx.outputs.head

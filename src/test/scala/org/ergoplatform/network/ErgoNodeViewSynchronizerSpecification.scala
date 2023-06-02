@@ -23,7 +23,7 @@ import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.testkit.utils.AkkaFixture
 
 import scala.concurrent.duration.{Duration, _}
@@ -121,7 +121,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   }
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
-  (ActorRef, ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM], DeliveryTracker) = {
+  (ActorRef, ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, ErgoSerializer[PM], DeliveryTracker) = {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val h = localHistoryGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
@@ -162,7 +162,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     )
     synchronizerMockRef ! ChangedHistory(history)
     synchronizerMockRef ! ChangedMempool(pool)
-    val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
+    val serializer: ErgoSerializer[PM] = HeaderSerializer.asInstanceOf[ErgoSerializer[PM]]
     (synchronizerMockRef, nodeViewHolderMockRef, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, eventListener, serializer, deliveryTracker)
   }
 

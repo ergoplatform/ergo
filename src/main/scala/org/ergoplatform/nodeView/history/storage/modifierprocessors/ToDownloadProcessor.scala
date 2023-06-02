@@ -31,10 +31,13 @@ trait ToDownloadProcessor
 
   def isInBestChain(id: ModifierId): Boolean
 
+  /**
+    * @return estimated height of a best chain found in the network
+    */
   def estimatedTip(): Option[Height]
 
   /**
-    * Get modifier ids to download to synchronize full blocks
+    * Get network object ids to download to synchronize full blocks or start UTXO set snapshot downlood
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
     * @param condition only ModifierIds which pass filter are included into results
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
@@ -83,8 +86,7 @@ trait ToDownloadProcessor
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
         val minHeight = Math.max(1, fb.header.height - 100)
         continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
-      case None if (nodeSettings.utxoBootstrap && !_utxoSnapshotApplied) =>
-        // todo: can be requested multiple times, prevent it
+      case None if (nodeSettings.utxoSettings.utxoBootstrap && !isUtxoSnapshotApplied) =>
         if (utxoSetSnapshotDownloadPlan().isEmpty) {
           Map(SnapshotsInfoTypeId.value -> Seq.empty)
         } else {
@@ -92,9 +94,7 @@ trait ToDownloadProcessor
         }
       case None =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
-        val res = continuation(minimalFullBlockHeight, Map.empty, maxHeight = Int.MaxValue)
-        log.info("To download: " + res.size)
-        res
+        continuation(minimalFullBlockHeight, Map.empty, maxHeight = Int.MaxValue)
     }
   }
 

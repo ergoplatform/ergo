@@ -69,7 +69,7 @@ case class ErgoWalletState(
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them).
   // The state context is being updated by listening to state updates.
-  def stateContext: ErgoStateContext = storage.readStateContext(parameters)
+  def stateContext: ErgoStateContext = storage.getStateContext(parameters)
 
   /**
     * @return height of the last block scanned by the wallet

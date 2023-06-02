@@ -5,6 +5,8 @@ import org.ergoplatform.reemission.ReemissionRules
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
+import sigmastate.eval.Extensions.ArrayOps
+import special.collection.Coll
 
 /**
   * Configuration section for re-emission (EIP27) parameters
@@ -19,9 +21,9 @@ case class ReemissionSettings(checkReemissionRules: Boolean,
                               reemissionStartHeight: Int,
                               injectionBoxBytesEncoded: String) {
 
-  val emissionNftIdBytes: Array[Byte] = Algos.decode(emissionNftId).get
-  val reemissionNftIdBytes: Array[Byte] = Algos.decode(reemissionNftId).get
-  val reemissionTokenIdBytes: Array[Byte] = Algos.decode(reemissionTokenId).get
+  val emissionNftIdBytes: Coll[Byte] = emissionNftId.toBytes.toColl
+  val reemissionNftIdBytes: Coll[Byte] = reemissionNftId.toBytes.toColl
+  val reemissionTokenIdBytes: Coll[Byte] = reemissionTokenId.toBytes.toColl
 
   lazy val InjectionBoxBytes: Array[Byte] = Base16.decode(injectionBoxBytesEncoded).get
   lazy val injectionBox: ErgoBox = ErgoBoxSerializer.parseBytes(InjectionBoxBytes)

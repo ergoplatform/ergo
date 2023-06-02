@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{NodeConfigurationSettings, PeerFeatureDescriptors}
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -26,7 +26,7 @@ case class ModePeerFeature(stateType: StateType,
 
   override val featureId: Id = PeerFeatureDescriptors.ModeFeatureId
 
-  override def serializer: ScorexSerializer[ModePeerFeature] = ModeFeatureSerializer
+  override def serializer: ErgoSerializer[ModePeerFeature] = ModeFeatureSerializer
 }
 
 object ModePeerFeature {
@@ -60,7 +60,7 @@ object ModePeerFeature {
   * handshake which contains mode information (along with other features supported by the peer) has separate length
   * limit provided in settings ("maxHandshakeSize" field in network settings).
   */
-object ModeFeatureSerializer extends ScorexSerializer[ModePeerFeature] {
+object ModeFeatureSerializer extends ErgoSerializer[ModePeerFeature] {
 
   val MaxSize = 512
 

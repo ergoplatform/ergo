@@ -88,17 +88,13 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
   /**
     * Method to put a transaction into the memory pool. Validation of the transactions against
-    * the state is done in NodeVieHolder. This put() method can check whether a transaction is valid
+    * the state is done in NodeViewHolder. This put() method can check whether a transaction is valid
     * @param unconfirmedTx
     * @return Success(updatedPool), if transaction successfully added to the pool, Failure(_) otherwise
     */
   def put(unconfirmedTx: UnconfirmedTransaction): ErgoMemPool = {
-    if (!pool.contains(unconfirmedTx.id)) {
-      val updatedPool = pool.put(unconfirmedTx, feeFactor(unconfirmedTx))
-      new ErgoMemPool(updatedPool, stats, sortingOption)
-    } else {
-      this
-    }
+    val updatedPool = pool.put(unconfirmedTx, feeFactor(unconfirmedTx))
+    new ErgoMemPool(updatedPool, stats, sortingOption)
   }
 
   def put(txs: TraversableOnce[UnconfirmedTransaction]): ErgoMemPool = {
@@ -137,8 +133,14 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     pool.get(unconfirmedTransactionId) match {
       case Some(utx) => invalidate(utx)
       case None =>
-        log.warn(s"Can't invalidate transaction $unconfirmedTransactionId as it is not in the pool")
-        this
+        log.warn(s"pool.get failed for $unconfirmedTransactionId")
+        pool.orderedTransactions.valuesIterator.find(_.id == unconfirmedTransactionId) match {
+          case Some(utx) =>
+            invalidate(utx)
+          case None =>
+            log.warn(s"Can't invalidate transaction $unconfirmedTransactionId as it is not in the pool")
+            this
+        }
     }
   }
 

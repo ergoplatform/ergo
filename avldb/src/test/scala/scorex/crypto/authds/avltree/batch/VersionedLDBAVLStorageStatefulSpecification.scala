@@ -27,7 +27,6 @@ object WithLDB extends VersionedLDBAVLStorageStatefulCommands with TestHelper {
 
   override protected val KL = 32
   override protected val VL = 8
-  override protected val LL = 32
 
   override protected def createStatefulProver: PersistentBatchAVLProver[Digest32, HF] = {
     createPersistentProver(keepVersions)

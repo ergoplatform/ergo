@@ -1,10 +1,8 @@
 package scorex.core.network.message
 
-
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
-import org.ergoplatform.wallet.Constants
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
@@ -14,7 +12,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
-
+import org.ergoplatform.sdk.wallet.Constants.ModifierIdLength
 import scala.collection.immutable
 
 /**
@@ -297,7 +295,7 @@ object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
     val length = r.getUInt().toIntExact
     val manifests = (0 until length).map { _ =>
       val height = r.getInt()
-      val manifest = Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+      val manifest = Digest32 @@ r.getBytes(ModifierIdLength)
       height -> manifest
     }.toMap
     new SnapshotsInfo(manifests)
@@ -320,7 +318,7 @@ object GetManifestSpec extends MessageSpecV1[ManifestId] {
 
   override def parse(r: Reader): ManifestId = {
     require(r.remaining < SizeLimit, "Too big GetManifest message")
-    Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+    Digest32 @@ r.getBytes(ModifierIdLength)
   }
 
 }
@@ -366,7 +364,7 @@ object GetUtxoSnapshotChunkSpec extends MessageSpecV1[SubtreeId] {
 
   override def parse(r: Reader): SubtreeId = {
     require(r.remaining < SizeLimit, "Too big GetUtxoSnapshotChunk message")
-    Digest32 @@ r.getBytes(Constants.ModifierIdLength)
+    Digest32 @@ r.getBytes(ModifierIdLength)
   }
 
 }

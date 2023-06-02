@@ -624,7 +624,7 @@ trait ErgoHistoryReader
     */
   def estimatedTip(): Option[Height] = {
     Try { //error may happen if history not initialized
-      if(isHeadersChainSynced) {
+      if (isHeadersChainSynced) {
         Some(headersHeight)
       } else {
         None

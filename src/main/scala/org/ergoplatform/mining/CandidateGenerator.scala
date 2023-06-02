@@ -12,18 +12,17 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages
-import ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, FullBlockApplied, NodeViewChange}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
-import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
+import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
@@ -666,11 +665,11 @@ object CandidateGenerator extends ScorexLogging {
     val reemissionRules = reemissionSettings.reemissionRules
 
     val eip27ActivationHeight = reemissionSettings.activationHeight
-    val reemissionTokenId = Digest32 @@ reemissionSettings.reemissionTokenIdBytes
+    val reemissionTokenId = Digest32Coll @@ reemissionSettings.reemissionTokenIdBytes
 
     val nextHeight = currentHeight + 1
     val minerProp =
-      ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
+      ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop           = emissionBox.ergoTree

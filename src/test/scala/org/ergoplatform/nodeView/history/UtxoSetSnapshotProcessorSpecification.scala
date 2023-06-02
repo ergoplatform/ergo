@@ -19,10 +19,14 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
   val epochLength = 20
 
   val utxoSetSnapshotProcessor = new UtxoSetSnapshotProcessor {
+    var minimalFullBlockHeightVar = ErgoHistory.GenesisHeight
     override protected val settings: ErgoSettings = s.copy(chainSettings =
       s.chainSettings.copy(voting = s.chainSettings.voting.copy(votingLength = epochLength)))
     override protected val historyStorage: HistoryStorage = HistoryStorage(settings)
-    override private[history] var minimalFullBlockHeightVar = ErgoHistory.GenesisHeight
+    override def readMinimalFullBlockHeight() = minimalFullBlockHeightVar
+    override def writeMinimalFullBlockHeight(height: Int): Unit = {
+      minimalFullBlockHeightVar = height
+    }
   }
 
   var history = generateHistory(

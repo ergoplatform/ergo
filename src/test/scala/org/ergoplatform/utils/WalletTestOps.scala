@@ -10,21 +10,22 @@ import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
+import org.ergoplatform.sdk.wallet.TokensMap
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform.wallet.TokensMap
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.util.{ModifierId, bytesToId}
+import scorex.crypto.hash.Blake2b256
+import scorex.util.ModifierId
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
+import special.collection.Extensions._
 
 trait WalletTestOps extends NodeViewBaseOps {
 
-  def newAssetIdStub: TokenId = Blake2b256.hash("new_asset")
+  def newAssetIdStub: TokenId = Blake2b256.hash("new_asset").toTokenId
 
   def withFixture[T](test: WalletFixture => T): T =
     new WalletFixture(settings, parameters, getCurrentView(_).vault).apply(test)
@@ -51,10 +52,10 @@ trait WalletTestOps extends NodeViewBaseOps {
     tx.outputs.filter(_.propositionBytes.containsSlice(org.ergoplatform.mining.groupElemToBytes(pk.value)))
 
   def assetAmount(boxes: Seq[ErgoBoxCandidate]): Seq[(ModifierId, Long)] =
-    assetsByTokenId(boxes).map { case (tokenId, sum) => (bytesToId(tokenId), sum) }.toArray[(ModifierId, Long)]
+    assetsByTokenId(boxes).map { case (tokenId, sum) => (tokenId.toModifierId, sum) }.toArray[(ModifierId, Long)]
 
   def toAssetMap(assetSeq: Seq[(TokenId, Long)]): TokensMap =
-    assetSeq.map { case (tokenId, sum) => (bytesToId(tokenId), sum) }.toMap
+    assetSeq.map { case (tokenId, sum) => (tokenId.toModifierId, sum) }.toMap
 
   def assetsByTokenId(boxes: Seq[ErgoBoxCandidate]): Map[TokenId, Long] = {
     boxes
@@ -78,7 +79,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   def makeGenesisTxWithAsset(publicKey: ProveDlog, issueAsset: Boolean): ErgoTransaction = {
     val inputs = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
     val assets: Seq[(TokenId, Long)] = if (issueAsset) {
-      Seq((Digest32 @@@ inputs.head.boxId) -> 1L)
+      Seq(inputs.head.boxId.toTokenId -> 1L)
     } else {
       Seq.empty
     }
@@ -125,10 +126,10 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   private def replaceNewAssetStub(assets: Seq[(TokenId, Long)], inputs: Seq[Input]): Seq[(TokenId, Long)] = {
-    def isNewAsset(tokenId: TokenId, value: Long): Boolean = java.util.Arrays.equals(tokenId, newAssetIdStub)
+    def isNewAsset(tokenId: TokenId, value: Long): Boolean = tokenId == newAssetIdStub
 
     val (newAsset, spentAssets) = assets.partition((isNewAsset _).tupled)
-    newAsset.map(Digest32 @@@ inputs.head.boxId -> _._2) ++ spentAssets
+    newAsset.map(inputs.head.boxId.toTokenId -> _._2) ++ spentAssets
   }
 
   def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> randomLong())

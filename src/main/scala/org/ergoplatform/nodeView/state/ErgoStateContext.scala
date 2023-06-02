@@ -8,17 +8,17 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
+import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeStateContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.eval.SigmaDsl
-import sigmastate.interpreter.CryptoConstants.EcPointType
 import special.collection.Coll
 
 import scala.util.{Failure, Success, Try}

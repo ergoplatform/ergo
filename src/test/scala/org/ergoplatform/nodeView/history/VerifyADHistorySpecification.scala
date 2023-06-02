@@ -22,7 +22,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
                          minFullHeight: Option[Int] = Some(ErgoHistory.GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     minFullHeight.foreach { h =>
-      inHistory.minimalFullBlockHeightVar = h
+      inHistory.writeMinimalFullBlockHeight(h)
       inHistory.isHeadersChainSyncedVar = true
     }
 

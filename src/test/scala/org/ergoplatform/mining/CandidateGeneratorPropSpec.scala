@@ -1,6 +1,6 @@
 package org.ergoplatform.mining
 
-import org.ergoplatform.ErgoScriptPredef
+import org.ergoplatform.ErgoTreePredef
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.MonetarySettings
@@ -16,7 +16,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
   val delta: Int = settings.chainSettings.monetary.minerRewardDelay
 
   private def expectedRewardOutputScriptBytes(pk: ProveDlog): Array[Byte] =
-    ErgoScriptPredef.rewardOutputScript(delta, pk).bytes
+    ErgoTreePredef.rewardOutputScript(delta, pk).bytes
 
   implicit private val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
 
@@ -195,7 +195,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
     val delta          = 1
     val inputsNum      = 2
-    val feeProposition = ErgoScriptPredef.feeProposition(delta)
+    val feeProposition = ErgoTreePredef.feeProposition(delta)
 
     val bh     = boxesHolderGen.sample.get
     var us     = createUtxoState(bh, parameters)

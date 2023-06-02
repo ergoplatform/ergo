@@ -24,7 +24,7 @@ import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLPro
   *
   * Stores UTXO set snapshots manifests and chunks for incomplete snapshots.
   */
-trait UtxoSetSnapshotProcessor extends ScorexLogging {
+trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with ScorexLogging {
 
   import org.ergoplatform.settings.ErgoAlgos.HF
 
@@ -33,12 +33,6 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
 
   // database to read history-related objects here and in descendants
   protected val historyStorage: HistoryStorage
-
-  // minimal height to applu full blocks from
-  // its value depends on node settings,
-  // if download with UTXO set snapshot is used, the value is being set to a first block after the snapshot,
-  // if blockToKeep > 0, the value is being set to a first block of blockchain suffix after headers downloaded
-  private[history] var minimalFullBlockHeightVar: Int
 
   private val downloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
 
@@ -52,7 +46,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     *         After first full-block block application not needed anymore.
     */
   def isUtxoSnapshotApplied: Boolean = {
-    minimalFullBlockHeightVar > ErgoHistory.GenesisHeight
+    readMinimalFullBlockHeight() > ErgoHistory.GenesisHeight
   }
 
   /**
@@ -60,6 +54,10 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     * after.
     */
   def utxoSnapshotApplied(height: Height): Unit = {
+    val utxoPhaseTime = {
+      _cachedDownloadPlan.map(_.latestUpdateTime).getOrElse(0L) - _cachedDownloadPlan.map(_.createdTime).getOrElse(0L)
+    }
+    log.info(s"UTXO set downloading and application time: ${utxoPhaseTime / 1000.0} s.")
     // remove downloaded utxo set snapshots chunks
     val ts0 = System.currentTimeMillis()
     _cachedDownloadPlan.foreach { plan =>
@@ -74,7 +72,7 @@ trait UtxoSetSnapshotProcessor extends ScorexLogging {
     log.info(s"Imported UTXO set snapshots chunks removed in ${ts - ts0} ms")
 
     // set height of first full block to be downloaded
-    minimalFullBlockHeightVar = height + 1
+    writeMinimalFullBlockHeight(height + 1)
   }
 
   private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {

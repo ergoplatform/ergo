@@ -66,7 +66,7 @@ trait ValidBlocksGenerators
       val currentSize = acc.map(_.size).sum
       val averageSize = if (currentSize > 0) currentSize / acc.length else 1000
       val customTokens = (stateBoxes ++ selfBoxes).flatMap(_.additionalTokens.toArray)
-      val customTokensNum = customTokens.map(ct => ByteArrayWrapper(ct._1)).toSet.size
+      val customTokensNum = customTokens.map(ct => ByteArrayWrapper(ct._1.toArray)).toSet.size
       val issueNew = customTokensNum == 0
 
       stateBoxes.find(isEmissionBox) match {

@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hash
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.ApiError.BadRequest
+import scorex.core.api.http.ApiError.{BadRequest, InternalError}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.{ModifierId, bytesToId}
@@ -55,15 +55,16 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private val ergoAddress: Directive1[ErgoAddress] = entity(as[String]).flatMap(handleErgoAddress)
 
-  private def handleErgoAddress(value: String): Directive1[ErgoAddress] = {
-    ergoAddressEncoder.fromString(value) match {
+  private def handleErgoAddress(value: String): Directive1[ErgoAddress] =
+    ergoAddressEncoder.fromString(fromJsonOrPlain(value)) match {
       case Success(addr) => provide(addr)
       case _ => reject(ValidationRejection("Wrong address format"))
     }
-  }
 
-  override val route: Route = pathPrefix("blockchain") {
-    getIndexedHeightR ~
+  override val route: Route =
+  if(ergoSettings.nodeSettings.extraIndex)
+    pathPrefix("blockchain") {
+      getIndexedHeightR ~
       getTxByIdR ~
       getTxByIndexR ~
       getTxsByAddressR ~
@@ -77,7 +78,11 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getBoxesByErgoTreeUnspentR ~
       getTokenInfoByIdR ~
       getAddressBalanceTotalR
-  }
+    }
+  else
+    pathPrefix("blockchain") {
+      indexerNotEnabledR
+    }
 
   private def getHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
@@ -112,6 +117,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getIndexedHeightR: Route = (pathPrefix("indexedHeight") & get) {
     ApiResponse(getIndexedHeightF)
+  }
+
+  private def indexerNotEnabledR: Route = get {
+    InternalError("Extra indexing is not enabled")
   }
 
   private def getTxByIdR: Route = (get & pathPrefix("transaction" / "byId") & modifierId) { id =>

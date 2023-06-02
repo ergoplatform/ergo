@@ -24,7 +24,6 @@ import scorex.util._
 import scorex.util.encode.Base16
 
 import scala.annotation.tailrec
-import scala.collection.compat.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 
@@ -80,7 +79,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   override def writeMinimalFullBlockHeight(height: Height): Unit = {
     historyStorage.insert(
       indexesToInsert = Array(MinFullBlockHeightKey -> Ints.toByteArray(height)),
-      objectsToInsert = ArraySeq.empty[BlockSection].unsafeArray)
+      objectsToInsert = BlockSection.emptyArray)
   }
 
   override def readMinimalFullBlockHeight(): Height = {

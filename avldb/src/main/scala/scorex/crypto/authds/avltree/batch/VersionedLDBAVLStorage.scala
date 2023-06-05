@@ -244,7 +244,7 @@ object VersionedLDBAVLStorage {
     * splits 33-byte digest into 32-bytes hash and 1-byte tree height
     */
   def splitDigest(digest: ADDigest): (Array[Byte], Byte) = {
-    digest.dropRight(1) -> digest.takeRight(1).head
+    digest.dropRight(1) -> digest.last
   }
 
 }

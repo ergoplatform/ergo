@@ -82,8 +82,7 @@ object Constants {
     * So for the Ergo mainnet the value should be divisible by 1024 (for testnet, 128, any number divisible by
     * 1024 is divisible by 128 also.
     */
-  // todo: change before deployment to 52224
-  val MakeSnapshotEvery = 1024
+  val MakeSnapshotEvery = 52224
 
   /**
     * AVL+ tree node parameters. The tree is used to authenticate UTXO set.

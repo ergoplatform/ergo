@@ -87,6 +87,7 @@ trait ToDownloadProcessor
         val minHeight = Math.max(1, fb.header.height - 100)
         continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
       case None if (nodeSettings.utxoSettings.utxoBootstrap && !isUtxoSnapshotApplied) =>
+        // if bootstrapping with UTXO set snapshot is chosen, and no snapshot applied yet, ask peers for snapshots
         if (utxoSetSnapshotDownloadPlan().isEmpty) {
           Map(SnapshotsInfoTypeId.value -> Seq.empty)
         } else {

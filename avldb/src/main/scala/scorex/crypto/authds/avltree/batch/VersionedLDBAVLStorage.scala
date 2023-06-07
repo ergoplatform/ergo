@@ -231,7 +231,7 @@ object VersionedLDBAVLStorage {
     * Calculate tree digest, given root node label(hash) and root node height, by appending height to the hash
     */
   def digest[D <: hash.Digest](rootNodeLabel: D, rootNodeHeight: Int): ADDigest = {
-    assert(rootNodeHeight >= 0 && rootNodeHeight <= 127)
+    assert(rootNodeHeight >= 0 && rootNodeHeight < 256)
     // rootNodeHeight should never be more than 255, so the toByte conversion is safe (though it may cause an incorrect
     // sign on the signed byte if rootHeight>127, but we handle that case correctly on decoding the byte back to int in the
     // verifier, by adding 256 if it's negative).

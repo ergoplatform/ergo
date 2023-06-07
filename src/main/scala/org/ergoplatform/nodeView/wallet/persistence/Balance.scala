@@ -10,5 +10,5 @@ case class Balance(id: EncodedBoxId,
 
 object Balance {
   def apply(tb: TrackedBox): Balance = Balance(encodedBoxId(tb.box.id), tb.box.value,
-    tb.box.additionalTokens.toArray.map(x => (bytesToId(x._1), x._2)).toMap)
+    tb.box.additionalTokens.toArray.map(x => (bytesToId(x._1.toArray), x._2)).toMap)
 }

@@ -1,27 +1,27 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import java.io.File
-import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
-import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
-import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
-import org.ergoplatform.wallet.{AssetUtils, Constants}
-import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
-import scorex.core.VersionTag
-import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
-import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.PreGenesisHeader
-import scorex.db.LDBVersionedStore
-
-import scala.util.{Failure, Success, Try}
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
+import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
+import org.ergoplatform.sdk.wallet.AssetUtils
+import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
+import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
+import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
+import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
+import scorex.db.LDBVersionedStore
 import scorex.util.encode.Base16
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
+import java.io.File
 import scala.collection.mutable
+import scala.util.{Failure, Success, Try}
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -88,7 +88,10 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @return sequences of all the unspent boxes from the database
     */
   def allUnspentBoxes(): Seq[TrackedBox] = {
-    store.getRange(firstUnspentBoxKey, lastUnspentBoxKey).flatMap(pair => getBox(ADKey @@ pair._2))
+    store.getRange(firstUnspentBoxKey, lastUnspentBoxKey)
+      .flatMap { case (_, boxId) =>
+        getBox(ADKey @@ boxId)
+      }
   }
 
   /**

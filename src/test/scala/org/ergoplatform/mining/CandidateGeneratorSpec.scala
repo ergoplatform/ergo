@@ -9,16 +9,16 @@ import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
@@ -201,7 +201,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
       DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
     val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
     val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
-    rewardBox.propositionBytes shouldBe ErgoScriptPredef
+    rewardBox.propositionBytes shouldBe ErgoTreePredef
       .rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk)
       .bytes
     val input = Input(rewardBox.id, emptyProverResult)

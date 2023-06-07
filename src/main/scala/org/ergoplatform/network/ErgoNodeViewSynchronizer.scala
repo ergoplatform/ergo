@@ -4,27 +4,29 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{NodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoSetSnapshotPersistence, UtxoStateReader}
+import scorex.core.network.message._
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
+import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.serialization.ErgoSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
@@ -33,12 +35,16 @@ import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.app.Version
-
+import scorex.crypto.hash.Digest32
+import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
+import org.ergoplatform.ErgoLikeContext.Height
+import scorex.core.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Random, Success}
 
 /**
   * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the
@@ -49,9 +55,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                settings: ErgoSettings,
                                syncTracker: ErgoSyncTracker,
-                               deliveryTracker: DeliveryTracker
-                              )(implicit ex: ExecutionContext)
+                               deliveryTracker: DeliveryTracker)(implicit ex: ExecutionContext)
   extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
+
+  type EncodedManifestId = ModifierId
 
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
     maxNrOfRetries = 10,
@@ -159,6 +166,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var modifiersCacheSize: Int = 0
 
   /**
+    * UTXO set snapshot manifests found in the p2p are stored in this table. The table is cleared when a manifest
+    * is found which available for downloading from at least min number of peers required (the min is provided in
+    * ergo.node.utxo.p2pUtxoSnapshots setting)
+    */
+  private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
+
+  /**
+    * How many peers should have a utxo set snapshot to start downloading it
+    */
+  private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
+
+  /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
   private def clearInterblockCost(): Unit = {
@@ -229,7 +248,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   override def preStart(): Unit = {
     // subscribe for history and mempool changes
-    viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
+    viewHolderRef ! GetNodeViewChanges(history = true, state = true, vault = false, mempool = true)
 
     val toDownloadCheckInterval = networkSettings.syncInterval
 
@@ -240,6 +259,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // subscribe for all the node view holder events involving modifiers and transactions
     context.system.eventStream.subscribe(self, classOf[ChangedHistory])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool])
+    context.system.eventStream.subscribe(self, classOf[ChangedState])
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
@@ -518,18 +538,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * A helper method to ask for block section from given peer
     *
     * @param modifierTypeId - block section type id
-    * @param modifierIds - ids of block section to download
-    * @param peer - peer to download from
-    * @param checksDone - how many times the block section was requested before
-    *                    (non-zero if we're re-requesting the block section, in this case, there should be only
-    *                     one id to request in `modifierIds`
+    * @param modifierIds    - ids of block section to download
+    * @param peer           - peer to download from
+    * @param checksDone     - how many times the block section was requested before
+    *                       (non-zero if we're re-requesting the block section, in this case, there should be only
+    *                       one id to request in `modifierIds`
     */
   def requestBlockSection(modifierTypeId: NetworkObjectTypeId.Value,
                           modifierIds: Seq[ModifierId],
                           peer: ConnectedPeer,
                           checksDone: Int = 0): Unit = {
     log.debug(s"Requesting block sections of type $modifierTypeId : $modifierIds")
-    if(checksDone > 0 && modifierIds.length > 1) {
+    if (checksDone > 0 && modifierIds.length > 1) {
       log.warn(s"Incorrect state, checksDone > 0 && modifierIds.length > 1 , for $modifierIds of type $modifierTypeId")
     }
     val msg = Message(RequestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
@@ -543,15 +563,49 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  def onDownloadRequest(historyReader: ErgoHistory): Receive = {
+  /*
+   * Private helper methods to request UTXO set snapshots metadata and related data (manifests, chunks) from peers
+   */
+
+  private def requestSnapshotsInfo(): Unit = {
+    // ask all the peers supporting UTXO set snapshots for snapshots they have
+    val msg = Message(GetSnapshotsInfoSpec, Right(()), None)
+    val peers = UtxoSetNetworkingFilter.filter(syncTracker.knownPeers()).toSeq
+    val peersCount = peers.size
+    if (peersCount >= MinSnapshots) {
+      networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+    } else {
+      log.warn(s"Less UTXO-snapshot supporting peers found than required mininum ($peersCount < $MinSnapshots)")
+    }
+  }
+
+  private def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
+    deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(manifestId), peer) { deliveryCheck =>
+      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+    }
+    val msg = Message(GetManifestSpec, Right(manifestId), None)
+    networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+  }
+
+  private def requestUtxoSetChunk(subtreeId: SubtreeId, peer: ConnectedPeer): Unit = {
+    // as we download multiple chunks in parallel and they can be quite large, timeout increased
+    val chunkDeliveryTimeout = 4 * deliveryTimeout
+    deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, ModifierId @@ Algos.encode(subtreeId), peer) { deliveryCheck =>
+      context.system.scheduler.scheduleOnce(chunkDeliveryTimeout, self, deliveryCheck)
+    }
+    val msg = Message(GetUtxoSnapshotChunkSpec, Right(subtreeId), None)
+    networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+  }
+
+  private def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) =>
       log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
-      if(modifiersToFetch.nonEmpty) {
+      if (modifiersToFetch.nonEmpty) {
         requestDownload(
           maxModifiers = deliveryTracker.modifiersToDownload,
           minModifiersPerBucket,
           maxModifiersPerBucket
-        )(getPeersForDownloadingBlocks) { howManyPerType =>
+        )(getPeersForDownloadingBlocks) { _ =>
           // leave block section ids only not touched before
           modifiersToFetch.flatMap { case (tid, mids) =>
             val updMids = mids.filter { mid =>
@@ -571,32 +625,48 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Modifier download method that is given min/max constraints for modifiers to download from peers.
     * It sends requests for modifiers to given peers in optimally sized batches.
     *
-    * @param maxModifiers maximum modifiers to download
+    * @param maxModifiers          maximum modifiers to download
     * @param minModifiersPerBucket minimum modifiers to download per bucket
     * @param maxModifiersPerBucket maximum modifiers to download per bucket
-    * @param getPeersOpt optionally get peers to download from, all peers have the same PeerSyncState
-    * @param fetchMax function that fetches modifiers, it is passed how many of them tops
+    * @param getPeersOpt           optionally get peers to download from, all peers have the same PeerSyncState
+    * @param fetchMax              function that fetches modifiers, it is passed how many of them tops
     */
   protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
                                (getPeersOpt: => Option[Iterable[ConnectedPeer]])
-                               (fetchMax: Int => Map[NetworkObjectTypeId.Value, Seq[ModifierId]]): Unit =
-    getPeersOpt
-      .foreach { peers =>
-        val modifiersByBucket = ElementPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
-        // collect and log useful downloading progress information, don't worry it does not run frequently
-        modifiersByBucket.headOption.foreach { _ =>
-          modifiersByBucket
-            .groupBy(_._1._2)
-            .mapValues(_.map(_._2.size))
-            .map { case (modType, batchSizes) =>
-              s"Downloading from peers : type[$modType] of ${batchSizes.size} batches each of ~ size: ${batchSizes.take(2).max}"
-            }.foreach(log.info(_))
+                               (fetchMax: Int => Map[NetworkObjectTypeId.Value, Seq[ModifierId]]): Unit = {
+    getPeersOpt match {
+      case Some(peers) if peers.nonEmpty =>
+        val peersCount = peers.size
+        val maxElementsToFetch = Math.min(maxModifiers, peersCount * maxModifiersPerBucket)
+        val fetched = if (maxElementsToFetch <= 0) {
+          Map.empty
+        } else {
+          fetchMax(maxElementsToFetch)
         }
-        // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
-        modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
-          requestBlockSection(modifierTypeId, modifierIds, peer)
+        if (fetched.size == 1 && fetched.head._1 == SnapshotsInfoTypeId.value) {
+          // special case when underlying logic in `fetchMax` is providing a request
+          // to start downloading UTXO set snapshots
+          requestSnapshotsInfo()
+        } else {
+          val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched)
+          // collect and log useful downloading progress information, don't worry it does not run frequently
+          modifiersByBucket.headOption.foreach { _ =>
+            modifiersByBucket
+              .groupBy(_._1._2)
+              .mapValues(_.map(_._2.size))
+              .map { case (modType, batchSizes) =>
+                s"Downloading from peers : type[$modType] of ${batchSizes.size} batches each of ~ size: ${batchSizes.take(2).max}"
+              }.foreach(log.info(_))
+          }
+          // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
+          modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
+            requestBlockSection(modifierTypeId, modifierIds, peer)
+          }
         }
-      }
+      case _ =>
+        log.warn("No peers available in requestDownload")
+    }
+  }
 
   private def transactionsFromRemote(requestedModifiers: Map[ModifierId, Array[Byte]],
                                      mp: ErgoMemPool,
@@ -763,6 +833,180 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     modifiersByStatus.getOrElse(Requested, Map.empty)
   }
 
+  /*
+   * Private helper methods to send UTXO set snapshots related network messages
+   */
+
+  private def sendSnapshotsInfo(usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
+    val snapshotsInfo = usr.getSnapshotInfo()
+    log.debug(s"Sending snapshots info with ${snapshotsInfo.availableManifests.size} snapshots to $peer")
+    val msg = Message(SnapshotsInfoSpec, Right(snapshotsInfo), None)
+    networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+  }
+
+  private def sendManifest(id: ManifestId, usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
+    usr.getManifestBytes(id) match {
+      case Some(manifestBytes) => {
+        val msg = Message(ManifestSpec, Right(manifestBytes), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      }
+      case _ => log.warn(s"No manifest ${Algos.encode(id)} available")
+    }
+  }
+
+  private def sendUtxoSnapshotChunk(subtreeId: SubtreeId, usr: UtxoSetSnapshotPersistence, peer: ConnectedPeer): Unit = {
+    usr.getUtxoSnapshotChunkBytes(subtreeId) match {
+      case Some(snapChunk) => {
+        log.debug(s"Sending utxo snapshot chunk (${Algos.encode(subtreeId)}) to $peer")
+        val msg = Message(UtxoSnapshotChunkSpec, Right(snapChunk), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      }
+      case _ => log.warn(s"No chunk ${Algos.encode(subtreeId)} available")
+    }
+  }
+
+  private def requestMoreChunksIfNeeded(hr: ErgoHistory): Unit = {
+    // we request more chunks if currently less than `ChunksInParallelMin` chunks are being downloading
+    // we request up to `ChunksInParallelMin`, so in extreme case may download almost 2 * `ChunksInParallelMin`
+    // we download new chunks from random peers, `ChunksPerPeer` chunks from a random peer (but we may ask the same
+    // peer twice as choice is truly random)
+    val ChunksInParallelMin = 16
+    val ChunksPerPeer = 4
+    hr.utxoSetSnapshotDownloadPlan() match {
+      case Some(downloadPlan) =>
+
+        if (downloadPlan.downloadingChunks < ChunksInParallelMin) {
+          (1 to ChunksPerPeer).foreach { _ =>
+            val toRequest = hr.getChunkIdsToDownload(howMany = ChunksInParallelMin / ChunksPerPeer)
+            hr.randomPeerToDownloadChunks() match {
+              case Some(remote) => toRequest.foreach(subtreeId => requestUtxoSetChunk(subtreeId, remote))
+              case None =>
+                log.warn(s"No peers to download chunks from")
+            }
+          }
+        }
+      case None =>
+        log.warn("No download plan found in requestMoreChunksIfNeeded")
+    }
+  }
+
+  /**
+    * Process information about snapshots got from another peer
+    */
+  private def processSnapshotsInfo(hr: ErgoHistory,
+                                   snapshotsInfo: SnapshotsInfo,
+                                   remote: ConnectedPeer): Unit = {
+    snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
+      val encodedManifestId = ModifierId @@ Algos.encode(manifestId)
+      val ownId = hr.bestHeaderAtHeight(height).map(_.stateRoot).map(stateDigest => splitDigest(stateDigest)._1)
+      if (ownId.getOrElse(Array.emptyByteArray).sameElements(manifestId)) {
+        log.debug(s"Discovered manifest $encodedManifestId for height $height from $remote")
+        // add manifest to available manifests dictionary if it is not written there yet
+        val existingOffers = availableManifests.getOrElse(encodedManifestId, (height -> Seq.empty))
+        if (!existingOffers._2.contains(remote)) {
+          log.info(s"Found new manifest ${Algos.encode(manifestId)} for height $height at $remote")
+          availableManifests.put(encodedManifestId, height -> (existingOffers._2 :+ remote))
+        } else {
+          log.warn(s"Double manifest declaration for $manifestId from $remote")
+        }
+      } else {
+        log.error(s"Got wrong manifest id $encodedManifestId from $remote")
+      }
+    }
+    checkUtxoSetManifests(hr) // check if we got enough manifests for the height to download manifests and chunks
+  }
+
+  // process serialized manifest got from another peer
+  private def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer): Unit = {
+    ManifestSerializer.defaultSerializer.parseBytesTry(manifestBytes) match {
+      case Success(manifest) =>
+        val manifestId = ModifierId @@ Algos.encode(manifest.id)
+        log.info(s"Got manifest $manifestId from $remote")
+        deliveryTracker.getRequestedInfo(ManifestTypeId.value, manifestId) match {
+          case Some(ri) if ri.peer == remote =>
+            deliveryTracker.setUnknown(manifestId, ManifestTypeId.value)
+            val manifestRecordOpt = availableManifests.get(manifestId)
+            manifestRecordOpt match {
+              case Some(manifestRecord) =>
+                val height = manifestRecord._1
+                val peersToDownload = manifestRecord._2
+
+                // check if manifest is valid against root hash and height of AVL+ tree found in a header
+                val manifestVerified = hr
+                  .bestHeaderAtHeight(height)
+                  .map(_.stateRoot)
+                  .map(splitDigest)
+                  .exists { case (expRoot, expHeight) => manifest.verify(Digest32 @@ expRoot, expHeight) }
+
+                if(manifestVerified) {
+                  log.info(s"Going to download chunks for manifest ${Algos.encode(manifest.id)} at height $height from $peersToDownload")
+                  hr.registerManifestToDownload(manifest, height, peersToDownload)
+                  availableManifests.clear()
+                  requestMoreChunksIfNeeded(hr)
+                } else {
+                  log.error(s"Got invalid manifest from $remote")
+                  penalizeMaliciousPeer(remote)
+                }
+              case None =>
+                log.error(s"No height found for manifest ${Algos.encode(manifest.id)}")
+            }
+          case _ =>
+            log.info(s"Penalizing spamming peer $remote sent non-asked manifest $manifestId")
+            penalizeSpammingPeer(remote)
+        }
+      case Failure(e) =>
+        log.info(s"Cant' restore manifest (got from $remote) from bytes ", e)
+        penalizeMisbehavingPeer(remote)
+    }
+  }
+
+  // process utxo set snapshot chunk got from another peer
+  private def processUtxoSnapshotChunk(serializedChunk: Array[Byte], hr: ErgoHistory, remote: ConnectedPeer): Unit = {
+    SubtreeSerializer.parseBytesTry(serializedChunk) match {
+      case Success(subtree) =>
+        val chunkId = ModifierId @@ Algos.encode(subtree.id)
+        deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId) match {
+          case Some(_) =>
+            log.debug(s"Got utxo snapshot chunk, id: $chunkId, size: ${serializedChunk.length}")
+            deliveryTracker.setUnknown(chunkId, UtxoSnapshotChunkTypeId.value)
+            hr.registerDownloadedChunk(subtree.id, serializedChunk)
+
+            hr.utxoSetSnapshotDownloadPlan() match {
+              case Some(downloadPlan) =>
+                if (downloadPlan.fullyDownloaded) {
+                  log.info("All the UTXO set snapshot chunks downloaded")
+                  // if all the chunks of snapshot are downloaded, initialize UTXO set state with it
+                  if (!hr.isUtxoSnapshotApplied) {
+                    val h = downloadPlan.snapshotHeight
+                    hr.bestHeaderIdAtHeight(h) match {
+                      case Some(blockId) =>
+                        viewHolderRef ! InitStateFromSnapshot(h, blockId)
+                      case None =>
+                        // shouldn't happen in principle
+                        log.error("No best header found when all chunks are downloaded. Please contact developers.")
+                    }
+                  } else {
+                    log.warn("UTXO set snapshot already applied, double application attemt")
+                  }
+                } else {
+                  // if not all the chunks are downloaded, request more if needed
+                  requestMoreChunksIfNeeded(hr)
+                }
+              case None =>
+                log.warn(s"No download plan found when processing UTXO set snapshot chunk $chunkId")
+            }
+
+          case None =>
+            log.info(s"Penalizing spamming peer $remote sent non-asked UTXO set snapshot chunk $chunkId")
+            penalizeSpammingPeer(remote)
+        }
+
+      case Failure(e) =>
+        log.info(s"Cant' restore snapshot chunk (got from $remote) from bytes ", e)
+        penalizeMisbehavingPeer(remote)
+    }
+  }
+
   /**
     * Object ids coming from other node.
     * Filter out modifier ids that are already in process (requested, received or applied),
@@ -913,7 +1157,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * wait for delivery until the number of checks exceeds the maximum if the peer sent `Inv` for this modifier
     * re-request modifier from a different random peer, if our node does not know a peer who have it
     */
-  protected def checkDelivery: Receive = {
+  protected def checkDelivery(hr: ErgoHistory): Receive = {
     case CheckDelivery(peer, modifierTypeId, modifierId) =>
       if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
         // If transaction not delivered on time, we just forget about it.
@@ -922,11 +1166,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           deliveryTracker.clearStatusForModifier(modifierId, modifierTypeId, ModifiersStatus.Requested)
         } else {
           // A block section is not delivered on time.
-          log.info(s"Peer ${peer.toString} has not delivered modifier " +
+          log.info(s"Peer ${peer.toString} has not delivered network object " +
                    s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time")
 
-          // Number of block section delivery checks increased or initialized,
-          // except the case where we can have issues with connectivity,
+          // Number of delivery checks for a block section, utxo set snapshot chunk or manifest
+          // increased or initialized, except the case where we can have issues with connectivity,
           // which is currently defined by comparing request time with time the
           // node got last modifier (in future we may consider more precise method)
           val checksDone = deliveryTracker.getRequestedInfo(modifierTypeId, modifierId) match {
@@ -940,17 +1184,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
           if (checksDone < maxDeliveryChecks) {
-            // randomly choose a peer for another download attempt
-            val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
-              getPeersForDownloadingHeaders(peer).toSeq
+            if (modifierTypeId == UtxoSnapshotChunkTypeId.value) {
+              // randomly choosing a peer to download UTXO set snapshot chunk
+              val newPeerOpt = hr.randomPeerToDownloadChunks()
+              log.info(s"Rescheduling request for UTXO set chunk $modifierId , new peer $newPeerOpt")
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+              newPeerOpt match {
+                case Some(newPeer) => requestUtxoSetChunk(Digest32 @@ Algos.decode(modifierId).get, newPeer)
+                case None => log.warn(s"No peer found to download UTXO set chunk $modifierId")
+              }
             } else {
-              getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
+              // randomly choose a peer for another block sections download attempt
+              val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
+                getPeersForDownloadingHeaders(peer).toSeq
+              } else {
+                getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
+              }
+              val newPeerIndex = scala.util.Random.nextInt(newPeerCandidates.size)
+              val newPeer = newPeerCandidates(newPeerIndex)
+              log.info(s"Rescheduling request for $modifierId , new peer $newPeer")
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+              requestBlockSection(modifierTypeId, Seq(modifierId), newPeer, checksDone)
             }
-            val newPeerIndex = scala.util.Random.nextInt(newPeerCandidates.size)
-            val newPeer = newPeerCandidates(newPeerIndex)
-            log.info(s"Rescheduling request for $modifierId , new peer $newPeer")
-            deliveryTracker.setUnknown(modifierId, modifierTypeId)
-            requestBlockSection(modifierTypeId, Seq(modifierId), newPeer, checksDone)
           } else {
             log.error(s"Exceeded max delivery attempts($maxDeliveryChecks) limit for $modifierId")
             if (modifierTypeId == Header.modifierTypeId) {
@@ -1015,8 +1270,31 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  // check if we have enough UTXO set snapshots for some height
+  // if so, request manifest from a random peer announced it
+  private def checkUtxoSetManifests(historyReader: ErgoHistory): Unit = {
+
+    if (settings.nodeSettings.utxoSettings.utxoBootstrap &&
+          historyReader.fullBlockHeight == 0 &&
+          availableManifests.nonEmpty &&
+          historyReader.utxoSetSnapshotDownloadPlan().isEmpty) {
+      val res = availableManifests.filter { case (_, (_, peers)) => peers.length >= MinSnapshots }
+      if (res.nonEmpty) {
+        val(encModifierId, (height, peers)) = res.maxBy(_._2._1)
+        log.info(s"Downloading manifest for height $height from ${peers.size} peers")
+        val manifestId = Digest32 @@ Algos.decode(encModifierId).get
+        val randomPeer = peers(Random.nextInt(peers.length))
+        requestManifest(manifestId, randomPeer)
+      } else {
+        log.info("No manifests to download found ")
+      }
+    }
+  }
+
+
   private def viewHolderEvents(historyReader: ErgoHistory,
                                  mempoolReader: ErgoMemPool,
+                                 utxoStateReaderOpt: Option[UtxoStateReader],
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
@@ -1029,8 +1307,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           minModifiersPerBucket,
           maxModifiersPerBucket
         )(getPeersForDownloadingBlocks) { howManyPerType =>
-          val tip = historyReader.estimatedTip()
-          historyReader.nextModifiersToDownload(howManyPerType, tip, downloadRequired(historyReader))
+          historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
         }
       }
 
@@ -1090,10 +1367,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
-      context.become(initialized(newHistoryReader, mempoolReader, blockAppliedTxsCache))
+      context.become(initialized(newHistoryReader, mempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
 
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
-      context.become(initialized(historyReader, newMempoolReader, blockAppliedTxsCache))
+      context.become(initialized(historyReader, newMempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
+
+    case ChangedState(reader: ErgoStateReader) =>
+      reader match {
+        case utxoStateReader: UtxoStateReader =>
+          context.become(initialized(historyReader, mempoolReader, Some(utxoStateReader), blockAppliedTxsCache))
+        case _ =>
+      }
 
     case BlockSectionsProcessingCacheUpdate(headersCacheSize, blockSectionsCacheSize, cleared) =>
       val HeadersCacheSizeToDownloadMore = 3184
@@ -1118,20 +1402,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
       // We collect applied TXs to history in order to avoid banning peers that sent these afterwards
       logger.debug("Caching applied transactions")
-      context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache.putAll(transactionIds)))
+      context.become(initialized(historyReader, mempoolReader, utxoStateReaderOpt, blockAppliedTxsCache.putAll(transactionIds)))
 
     case ChainIsHealthy =>
       // good news
       logger.debug("Chain is good")
 
     case ChainIsStuck(error) =>
-      log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
-      deliveryTracker.reset()
+      if (historyReader.fullBlockHeight > 0) {
+        log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
+        deliveryTracker.reset()
+      } else {
+        log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
+      }
   }
 
-  /** get handlers of messages coming from peers */
+  /** handlers of messages coming from peers */
   private def msgHandlers(hr: ErgoHistory,
                           mp: ErgoMemPool,
+                          usrOpt: Option[UtxoStateReader],
                           blockAppliedTxsCache: FixedSizeApproximateCacheQueue
                          ): PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: ErgoSyncInfoMessageSpec.type @unchecked, data: ErgoSyncInfo @unchecked, remote) =>
@@ -1142,41 +1431,79 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       modifiersReq(hr, mp, data, remote)
     case (_: ModifiersSpec.type, data: ModifiersData, remote) =>
       modifiersFromRemote(hr, mp, data, remote, blockAppliedTxsCache)
+    case (spec: MessageSpec[_], _, remote) if spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
+      usrOpt match {
+        case Some(usr) => sendSnapshotsInfo(usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+    case (spec: MessageSpec[_], data: SnapshotsInfo, remote) if spec.messageCode == SnapshotsInfoSpec.messageCode =>
+      processSnapshotsInfo(hr, data, remote)
+    case (_: GetManifestSpec.type, id: Array[Byte], remote) =>
+      usrOpt match {
+        case Some(usr) => sendManifest(Digest32 @@ id, usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+    case (_: ManifestSpec.type, manifestBytes: Array[Byte], remote) =>
+      processManifest(hr, manifestBytes, remote)
+    case (_: GetUtxoSnapshotChunkSpec.type,  subtreeId: Array[Byte], remote) =>
+      usrOpt match {
+        case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ subtreeId, usr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+    case (_: UtxoSnapshotChunkSpec.type,  serializedChunk: Array[Byte], remote) =>
+      usrOpt match {
+        case Some(_) => processUtxoSnapshotChunk(serializedChunk, hr, remote)
+        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
+      }
+
   }
 
-  def initialized(hr: ErgoHistory, mp: ErgoMemPool, blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
-    processDataFromPeer(msgHandlers(hr, mp, blockAppliedTxsCache)) orElse
+  def initialized(hr: ErgoHistory,
+                  mp: ErgoMemPool,
+                  usr: Option[UtxoStateReader],
+                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
+    processDataFromPeer(msgHandlers(hr, mp, usr, blockAppliedTxsCache)) orElse
       onDownloadRequest(hr) orElse
       sendLocalSyncInfo(hr) orElse
-      viewHolderEvents(hr, mp, blockAppliedTxsCache) orElse
+      viewHolderEvents(hr, mp, usr, blockAppliedTxsCache) orElse
       peerManagerEvents orElse
-      checkDelivery orElse {
+      checkDelivery(hr) orElse {
       case a: Any => log.error("Strange input: " + a)
     }
   }
 
   /** Wait until both historyReader and mempoolReader instances are received so actor can be operational */
-  def initializing(hr: Option[ErgoHistory], mp: Option[ErgoMemPool], blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
+  def initializing(hr: Option[ErgoHistory],
+                   mp: Option[ErgoMemPool],
+                   usr: Option[UtxoStateReader],
+                   blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
     case ChangedHistory(historyReader: ErgoHistory) =>
       mp match {
         case Some(mempoolReader) =>
-          context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache))
+          context.become(initialized(historyReader, mempoolReader, usr, blockAppliedTxsCache))
         case _ =>
-          context.become(initializing(Option(historyReader), mp, blockAppliedTxsCache))
+          context.become(initializing(Option(historyReader), mp, usr, blockAppliedTxsCache))
       }
     case ChangedMempool(mempoolReader: ErgoMemPool) =>
       hr match {
         case Some(historyReader) =>
-          context.become(initialized(historyReader, mempoolReader, blockAppliedTxsCache))
+          context.become(initialized(historyReader, mempoolReader, usr, blockAppliedTxsCache))
         case _ =>
-          context.become(initializing(hr, Option(mempoolReader), blockAppliedTxsCache))
+          context.become(initializing(hr, Option(mempoolReader), usr, blockAppliedTxsCache))
+      }
+    case ChangedState(reader: ErgoStateReader) =>
+      reader match {
+        case utxoStateReader: UtxoStateReader =>
+          context.become(initializing(hr, mp, Some(utxoStateReader), blockAppliedTxsCache))
+        case _ =>
+          context.become(initializing(hr, mp, None, blockAppliedTxsCache))
       }
     case msg =>
       // Actor not initialized yet, scheduling message until it is
       context.system.scheduler.scheduleOnce(1.second, self, msg)
   }
 
-  override def receive: Receive = initializing(None, None, FixedSizeApproximateCacheQueue.empty(cacheQueueSize = 5))
+  override def receive: Receive = initializing(None, None, None, FixedSizeApproximateCacheQueue.empty(cacheQueueSize = 5))
 
 }
 
@@ -1324,6 +1651,15 @@ object ErgoNodeViewSynchronizer {
       * @param mempool - mempool to check
       */
     case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
+
+    /**
+      * Signal for a central node view holder component to initialize UTXO state from UTXO set snapshot
+      * stored in the local database
+      *
+      * @param blockHeight - height of a block corresponding to the UTXO set snapshot
+      * @param blockId - id of a block corresponding to the UTXO set snapshot
+      */
+    case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
   }
 
 }

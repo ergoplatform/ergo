@@ -10,7 +10,7 @@ import scorex.util.ScorexLogging
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scorex.core.utils.MapPimp
+import scorex.core.utils.MapPimpMutable
 
 /**
   * Data structures and methods to keep status of peers, find ones with expired status to send sync message etc
@@ -165,6 +165,11 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
       None
     }
   }
+
+  /**
+    * @return all the peers ever sent sync message to the node and still connected
+    */
+  def knownPeers(): Iterable[ConnectedPeer] = statuses.keys
 
   /**
     * Return the peers to which this node should send a sync signal, including:

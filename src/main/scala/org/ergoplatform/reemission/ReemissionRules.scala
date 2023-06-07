@@ -9,6 +9,7 @@ import sigmastate.SBoolean
 import sigmastate.Values.Value
 import sigmastate.eval.CompiletimeIRContext
 import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
+import special.collection.Coll
 
 import scala.util.Try
 
@@ -18,7 +19,7 @@ import scala.util.Try
   */
 class ReemissionRules(reemissionSettings: ReemissionSettings) extends ReemissionContracts {
 
-  override val reemissionNftIdBytes: Array[Byte] = reemissionSettings.reemissionNftIdBytes
+  override val reemissionNftIdBytes: Coll[Byte] = reemissionSettings.reemissionNftIdBytes
   override val reemissionStartHeight: Height = reemissionSettings.reemissionStartHeight
 
   /**

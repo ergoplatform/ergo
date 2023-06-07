@@ -8,7 +8,7 @@ import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import spire.implicits.cfor
-
+import special.collection.Extensions._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -56,7 +56,7 @@ case class BalanceInfo() extends ScorexLogging {
   def add(box: ErgoBox): Unit = {
     nanoErgs += box.value
     cfor(0)(_ < box.additionalTokens.length, _ + 1) { i =>
-      val id: ModifierId = bytesToId(box.additionalTokens(i)._1)
+      val id: ModifierId = box.additionalTokens(i)._1.toModifierId
       index(id) match {
         case Some(n) => tokens(n) = Tuple2(id, tokens(n)._2 + box.additionalTokens(i)._2)
         case None    => tokens += Tuple2(id, box.additionalTokens(i)._2)
@@ -72,11 +72,11 @@ case class BalanceInfo() extends ScorexLogging {
   def subtract(box: ErgoBox)(implicit ae: ErgoAddressEncoder): Unit = {
     nanoErgs = math.max(nanoErgs - box.value, 0)
     cfor(0)(_ < box.additionalTokens.length, _ + 1) { i =>
-      val id: ModifierId = bytesToId(box.additionalTokens(i)._1)
+      val id: ModifierId = box.additionalTokens(i)._1.toModifierId
       index(id) match {
         case Some(n) =>
           val newVal: Long = tokens(n)._2 - box.additionalTokens(i)._2
-          if(newVal == 0)
+          if (newVal == 0)
             tokens.remove(n)
           else
             tokens(n) = (id, newVal)

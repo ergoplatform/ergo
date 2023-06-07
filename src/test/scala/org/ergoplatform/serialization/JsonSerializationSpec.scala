@@ -4,19 +4,19 @@ import io.circe.syntax._
 import io.circe.{ACursor, Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
-import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
+import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.scalatest.Inspectors
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
@@ -28,7 +28,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
 
   property("ErgoFullBlock should be encoded into JSON and decoded back correctly") {
 
-    val (st, bh) = createUtxoState(parameters)
+    val (st, bh) = createUtxoState(settings)
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
 
     val blockJson: Json = block.asJson

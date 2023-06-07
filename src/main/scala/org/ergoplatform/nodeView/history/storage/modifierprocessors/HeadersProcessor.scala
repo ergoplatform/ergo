@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
+import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
@@ -21,6 +21,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayWrapper
 import scorex.util._
+import scorex.util.encode.Base16
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -30,6 +31,25 @@ import scala.util.{Failure, Success, Try}
   * Contains all functions required by History to process Headers.
   */
 trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
+
+  /**
+    * Key for database record storing ID of best block header
+    */
+  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
+
+  /**
+    * Key for database record storing ID of best full block
+    */
+  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
+
+  /**
+    * Key for database record storing height of first full block stored
+    */
+  protected val MinFullBlockHeightKey = {
+    // hash of "minfullheight" UTF-8 string
+    ByteArrayWrapper(Base16.decode("4987eb6a8fecbed88a6f733f456cdf4e334b944f4436be4cab50cacb442e15e6").get)
+  }
+
 
   protected val historyStorage: HistoryStorage
 
@@ -55,6 +75,16 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+
+  override def writeMinimalFullBlockHeight(height: Height): Unit = {
+    historyStorage.insert(
+      indexesToInsert = Array(MinFullBlockHeightKey -> Ints.toByteArray(height)),
+      objectsToInsert = BlockSection.emptyArray)
+  }
+
+  override def readMinimalFullBlockHeight(): Height = {
+    historyStorage.getIndex(MinFullBlockHeightKey).map(Ints.fromByteArray).getOrElse(ErgoHistory.GenesisHeight)
+  }
 
   def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(bytesToId)
 
@@ -157,10 +187,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return Success() if header is valid, Failure(error) otherwise
     */
   protected def validate(header: Header): Try[Unit] = HeaderValidator.validate(header).toTry
-
-  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
-
-  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 
   /**
     * @param id - header id

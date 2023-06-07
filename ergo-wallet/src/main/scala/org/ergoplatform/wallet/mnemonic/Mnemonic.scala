@@ -2,12 +2,11 @@ package org.ergoplatform.wallet.mnemonic
 
 import java.text.Normalizer.Form.NFKD
 import java.text.Normalizer.normalize
-
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
-import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.interface4j.SecretString
 import scodec.bits.BitVector
+import sigmastate.crypto.CryptoFacade
 
 import scala.util.{Failure, Try}
 
@@ -73,7 +72,7 @@ object Mnemonic {
     
     val spec = new PBEKeySpec(
       normalizedMnemonic,
-      normalizedPass.getBytes(Constants.Encoding),
+      normalizedPass.getBytes(CryptoFacade.Encoding),
       Pbkdf2Iterations,
       Pbkdf2KeyLength
     )

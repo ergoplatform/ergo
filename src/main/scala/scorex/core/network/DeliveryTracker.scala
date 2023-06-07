@@ -84,8 +84,10 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
       requested.foldLeft(0) {
         case (sum, (modTypeId, _)) if modTypeId == Header.modifierTypeId =>
           sum
-        case (sum, (_, mid)) =>
+        case (sum, (modTypeId, mid)) if NetworkObjectTypeId.isBlockSection(modTypeId) =>
           sum + mid.size
+        case (sum, _) =>
+          sum
       }
     Math.max(0, desiredSizeOfExpectingModifierQueue - nonHeaderModifiersCount)
   }

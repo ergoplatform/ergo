@@ -3,8 +3,8 @@ package org.ergoplatform.modifiers.history.header
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.AutolykosSolution
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, PreHeader}
 import org.ergoplatform.modifiers.{BlockSection, HeaderTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
@@ -16,9 +16,9 @@ import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
+import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.eval.Extensions._
 import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
-import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.concurrent.duration.FiniteDuration
 

@@ -6,7 +6,8 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UpcomingStateContext}
+import org.ergoplatform.nodeView.state._
+import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.Parameters.{MaxBlockCostIncrease, MinValuePerByteIncrease}
 import org.ergoplatform.settings.ValidationRules._
@@ -14,16 +15,15 @@ import org.ergoplatform.settings._
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey
-import org.ergoplatform.{DataInput, ErgoBox, ErgoScriptPredef}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoTreePredef}
 import scorex.core.app.Version
 import scorex.core.network.PeerSpec
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
+import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
@@ -58,9 +58,8 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val emission: EmissionRules = settings.chainSettings.emissionRules
   val coinsTotal: Long = emission.coinsTotal
-  val stateConstants: StateConstants = StateConstants(settings)
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
-  val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
+  val feeProp: ErgoTree = ErgoTreePredef.feeProposition(emission.settings.minerRewardDelay)
 
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   lazy val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.fold[SecretString](SecretString.empty())(SecretString.create(_)))

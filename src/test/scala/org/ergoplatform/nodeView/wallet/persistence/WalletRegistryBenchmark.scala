@@ -1,15 +1,15 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input}
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, TokenId}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletVars}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.utils.ErgoTestConstants
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input}
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 import sigmastate.Values.ErgoTree
@@ -42,7 +42,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
 
   val derivedSecrets = (1 to 15000).map { i =>
     val k = rootSecret.derive(DerivationPath.fromEncoded(s"m/44'/429'/0'/0/$i").get)
-    storage.addPublicKeys(k.publicKey).get
+    storage.addPublicKey(k.publicKey).get
     k
   }
 

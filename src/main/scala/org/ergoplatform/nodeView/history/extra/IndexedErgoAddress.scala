@@ -356,7 +356,7 @@ object IndexedErgoAddress {
     * @return array of offsets
     */
   private def getSegmentsForRange(offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[Int] =
-    (math.max(math.ceil(offset * 1F / segmentTreshold).toInt, 1) to math.ceil((offset + limit) * 1F / segmentTreshold).toInt).toArray
+    (math.max(math.floor(offset * 1F / segmentTreshold).toInt, 1) to math.ceil((offset + limit) * 1F / segmentTreshold).toInt).toArray
 
   /**
     * Get a range of elements from an ArrayBuffer by removing the last "offset" elements,
@@ -411,18 +411,18 @@ object IndexedErgoAddress {
                                              arraySelector: IndexedErgoAddress => ArrayBuffer[Long],
                                              retreive: (ArrayBuffer[Long], ErgoHistoryReader) => Array[T])
                                             (implicit segmentTreshold: Int): Array[T] = {
-    if(offset >= segmentTreshold * segmentCount + array.length)
+    val total: Int = segmentTreshold * segmentCount + array.length
+    if(offset >= total)
       return Array.empty[T] // return empty array if all elements are skipped
     if (offset + limit > array.length && segmentCount > 0) {
-      val range: Array[Int] = getSegmentsForRange(offset, limit)
       val data: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
-      cfor(0)(_ < range.length, _ + 1) { i =>
-        val id: ModifierId = idOf(treeHash, math.max(segmentCount - range(i), 0))
+      getSegmentsForRange(offset, limit).map(n => math.max(segmentCount - n, 0)).distinct.foreach { num =>
         arraySelector(
-          history.typedExtraIndexById[IndexedErgoAddress](id).get
+          history.typedExtraIndexById[IndexedErgoAddress](idOf(treeHash, num)).get
         ) ++=: data
       }
-      retreive(sliceReversed(data ++= (if (offset < array.length) array else Nil), offset % segmentTreshold, limit), history)
+      data ++= (if (offset < array.length) array else Nil)
+      retreive(sliceReversed(data, offset % segmentTreshold, math.min(total - offset, limit)), history)
     } else
       retreive(sliceReversed(array, offset, limit), history)
   }

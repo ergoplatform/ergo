@@ -22,4 +22,6 @@ object BlockSection {
     case other => throw new Exception(s"Unknown block section type: $other")
   }
 
+  /** Immutable empty array can be shared to avoid allocations. */
+  val emptyArray: Array[BlockSection] = Array.empty[BlockSection]
 }

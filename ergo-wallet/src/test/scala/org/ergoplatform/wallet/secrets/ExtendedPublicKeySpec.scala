@@ -1,5 +1,6 @@
 package org.ergoplatform.wallet.secrets
 
+import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.utils.Generators
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 

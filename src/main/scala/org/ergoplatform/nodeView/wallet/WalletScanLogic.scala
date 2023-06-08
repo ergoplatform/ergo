@@ -11,6 +11,8 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.util.bytesToId
 
+import scala.collection.compat.immutable.ArraySeq
+import scala.collection.immutable.TreeSet
 import scala.collection.mutable
 import scala.util.Try
 
@@ -94,7 +96,7 @@ object WalletScanLogic extends ScorexLogging {
       tb.copy(scans = Set(PaymentsScanId))
     }
 
-    val initialScanResults = ScanResults(resolvedBoxes, Seq.empty, Seq.empty)
+    val initialScanResults = ScanResults(resolvedBoxes, ArraySeq.empty, ArraySeq.empty)
 
     // Wallet unspent outputs, we fetch them only when Bloom filter shows that some outputs may be spent
     val unspentBoxes = mutable.Map[ModifierId, TrackedBox]()
@@ -168,7 +170,7 @@ object WalletScanLogic extends ScorexLogging {
         //data needed to update the offchain-registry
         val walletUnspent = registry.walletUnspentBoxes()
         val newOnChainIds = scanRes.outputs.map(x => encodedBoxId(x.box.id))
-        val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
+        val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds.to[TreeSet])
 
         (registry, updatedOffchainRegistry, outputsFilter)
       }

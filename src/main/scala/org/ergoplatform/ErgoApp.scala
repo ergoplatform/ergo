@@ -59,28 +59,35 @@ class ErgoApp(args: Args) extends ScorexLogging {
     else None
   upnpGateway.foreach(_.addPort(scorexSettings.network.bindAddress.getPort))
 
-  //an address to send to peers
-  private val externalSocketAddress: Option[InetSocketAddress] =
-  scorexSettings.network.declaredAddress orElse {
-    upnpGateway.map(u =>
-      new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort)
-    )
+  // own address to send to peers
+  private val externalSocketAddress: Option[InetSocketAddress] = {
+    scorexSettings.network.declaredAddress orElse {
+      upnpGateway.map(u =>
+        new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort)
+      )
+    }
   }
 
-  private val basicSpecs = {
+  // descriptors of p2p networking protocol messages
+  private val p2pMessageSpecifications = {
     Seq(
       GetPeersSpec,
       new PeersSpec(scorexSettings.network.maxPeerSpecObjects),
+      ErgoSyncInfoMessageSpec,
       InvSpec,
       RequestModifierSpec,
-      ModifiersSpec
+      ModifiersSpec,
+      GetSnapshotsInfoSpec,
+      SnapshotsInfoSpec,
+      GetManifestSpec,
+      ManifestSpec,
+      GetUtxoSnapshotChunkSpec,
+      UtxoSnapshotChunkSpec
     )
   }
 
-  private val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-
   private val scorexContext = ScorexContext(
-    messageSpecs        = basicSpecs ++ additionalMessageSpecs,
+    messageSpecs        = p2pMessageSpecifications,
     upnpGateway         = upnpGateway,
     externalNodeAddress = externalSocketAddress
   )
@@ -129,7 +136,14 @@ class ErgoApp(args: Args) extends ScorexLogging {
         InvSpec.messageCode                 -> ergoNodeViewSynchronizerRef,
         RequestModifierSpec.messageCode     -> ergoNodeViewSynchronizerRef,
         ModifiersSpec.messageCode           -> ergoNodeViewSynchronizerRef,
-        ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef
+        ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef,
+        // utxo set snapshot exchange related messages
+        GetSnapshotsInfoSpec.messageCode    -> ergoNodeViewSynchronizerRef,
+        SnapshotsInfoSpec.messageCode       -> ergoNodeViewSynchronizerRef,
+        GetManifestSpec.messageCode         -> ergoNodeViewSynchronizerRef,
+        ManifestSpec.messageCode            -> ergoNodeViewSynchronizerRef,
+        GetUtxoSnapshotChunkSpec.messageCode-> ergoNodeViewSynchronizerRef,
+        UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef
       )
       // Launching PeerSynchronizer actor which is then registering itself at network controller
       if (ergoSettings.scorexSettings.network.peerDiscovery) {

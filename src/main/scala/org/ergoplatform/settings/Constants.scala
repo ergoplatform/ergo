@@ -7,15 +7,18 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSeriali
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scorex.core.serialization.ErgoSerializer
 import scorex.core.NodeViewModifier
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.avltree.batch.AvlTreeParameters
 import sigmastate.Values
 import sigmastate.Values.ErgoTree
 
 
 object Constants {
-  val HashLength: Int = 32
+  /**
+    * Length of hash function output used around the Ergo code
+    */
+  val HashLength: Int = scorex.crypto.authds.avltree.batch.Constants.HashLength
 
   val CoinsInOneErgo: Long = 1000000000
 
@@ -69,6 +72,17 @@ object Constants {
 
   // Maximum extension size during bytes parsing
   val MaxExtensionSizeMax: Int = 1024 * 1024
+
+  /**
+    * UTXO set snapshot to be taken every this number of blocks.
+    * The value MUST be divisible by voting epoch length (chainSettings.voting.votingLength),
+    * so after snapshot the state is corresponding to a moment before applying first block of a voting epoch,
+    * and then the first block sets current validation parameters.
+    *
+    * So for the Ergo mainnet the value should be divisible by 1024 (for testnet, 128, any number divisible by
+    * 1024 is divisible by 128 also.
+    */
+  val MakeSnapshotEvery = 52224
 
   /**
     * AVL+ tree node parameters. The tree is used to authenticate UTXO set.

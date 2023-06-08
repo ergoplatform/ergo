@@ -1,6 +1,5 @@
 package scorex.core.serialization
 
-import com.google.common.primitives.Ints
 import scorex.crypto.authds.avltree.batch.Constants.DigestType
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, ProxyInternalNode}
 import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes, VersionedLDBAVLStorage}
@@ -12,30 +11,37 @@ import scorex.util.serialization.{Reader, Writer}
 class ManifestSerializer(manifestDepth: Byte) extends ErgoSerializer[BatchAVLProverManifest[DigestType]] {
   private val nodeSerializer = VersionedLDBAVLStorage.noStoreSerializer
 
-  override def serialize(manifest: BatchAVLProverManifest[DigestType], w: Writer): Unit = {
-    val height = manifest.rootHeight
-    w.putBytes(Ints.toByteArray(height))
+  /**
+    * Serialize manifest provided as top subtree and height separately. Used in tests.
+    */
+  def serialize(rootNode: ProverNodes[DigestType], rootNodeHeight: Byte, w: Writer): Unit = {
+    w.put(rootNodeHeight)
     w.put(manifestDepth)
 
     def loop(node: ProverNodes[DigestType], level: Int): Unit = {
       nodeSerializer.serialize(node, w)
       node match {
-        case _: ProverLeaf[DigestType] =>
         case n: ProxyInternalNode[DigestType] if n.isEmpty =>
         case i: InternalProverNode[DigestType] if level < manifestDepth =>
           loop(i.left, level + 1)
           loop(i.right, level + 1)
+        case _: InternalProverNode[DigestType] | _: ProverLeaf[DigestType] =>
       }
     }
 
-    loop(manifest.root, level = 1)
+    loop(rootNode, level = 1)
+  }
+
+  override def serialize(manifest: BatchAVLProverManifest[DigestType], w: Writer): Unit = {
+    serialize(manifest.root, manifest.rootHeight.toByte, w)
   }
 
   override def parse(r: Reader): BatchAVLProverManifest[DigestType] = {
-    val rootHeight = Ints.fromByteArray(r.getBytes(4))
+    val rootHeight = r.getByte()
     val manifestDepth = r.getByte()
 
-    require(manifestDepth == this.manifestDepth, "Wrong manifest depth")
+    require(manifestDepth == this.manifestDepth,
+            s"Wrong manifest depth, found: $manifestDepth, expected: ${this.manifestDepth}")
 
     def loop(level: Int): ProverNodes[DigestType] = {
       val node = nodeSerializer.parse(r)

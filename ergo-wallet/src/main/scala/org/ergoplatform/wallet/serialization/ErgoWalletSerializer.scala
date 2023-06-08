@@ -1,9 +1,10 @@
 package org.ergoplatform.wallet.serialization
 
 import java.nio.ByteBuffer
-
 import scorex.util.ByteArrayBuilder
 import scorex.util.serialization._
+import sigmastate.serialization.{SigmaSerializer, ConstantStore}
+import sigmastate.utils.{SigmaByteWriter, SigmaByteReader}
 
 import scala.util.Try
 
@@ -22,4 +23,20 @@ trait ErgoWalletSerializer[T] extends Serializer[T, T, Reader, Writer] {
 
   def parseBytesTry(bytes: Array[Byte]): Try[T] = Try(parseBytes(bytes))
 
+}
+
+object ErgoWalletSerializer {
+
+  /** Creates a new serializer which delegates to the given [[SigmaSerializer]]. */
+  def fromSigmaSerializer[T](ss: SigmaSerializer[T, T]): ErgoWalletSerializer[T] = new ErgoWalletSerializer[T] {
+    override def serialize(obj: T, w: Writer): Unit = {
+      val sw = new SigmaByteWriter(w, None)
+      ss.serialize(obj, sw)
+    }
+
+    override def parse(r: Reader): T = {
+      val sr = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
+      ss.parse(sr)
+    }
+  }
 }

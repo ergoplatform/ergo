@@ -23,10 +23,10 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate.Values.ErgoTree
+import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
-import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{CryptoConstants, ProverResult}
+import sigmastate.basics.{CryptoConstants, DiffieHellmanTupleProverInput, ProveDHTuple}
+import sigmastate.interpreter.ProverResult
 
 import scala.util.Random
 

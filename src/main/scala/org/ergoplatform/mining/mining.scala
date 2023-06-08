@@ -2,10 +2,9 @@ package org.ergoplatform
 
 import org.bouncycastle.util.BigIntegers
 import scorex.crypto.hash.Blake2b256
-import sigmastate.basics.BcDlogGroup
+import sigmastate.basics.CryptoConstants.EcPointType
+import sigmastate.basics.{BcDlogGroup, CryptoConstants}
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.interpreter.CryptoConstants
-import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.serialization.{GroupElementSerializer, SigmaSerializer}
 
 package object mining {

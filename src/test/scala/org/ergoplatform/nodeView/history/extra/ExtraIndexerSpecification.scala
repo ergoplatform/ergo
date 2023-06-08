@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, P2PKAddress, UnsignedInput}
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform._
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -13,13 +13,13 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, hashErgoTree, txSegmentId}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UtxoState, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings}
+import org.ergoplatform.nodeView.state._
+import org.ergoplatform.settings.{ErgoSettings, NetworkType, NodeConfigurationSettings, UtxoSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestHelpers, HistoryTestHelpers}
-import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import special.collection.Coll
 import spire.implicits.cfor
@@ -38,7 +38,7 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
   override protected implicit val addressEncoder: ErgoAddressEncoder = initSettings.chainSettings.addressEncoder
 
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
-    -1, poPoWBootstrap = false, ChainGenerator.minimalSuffix, mining = false, ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, useExternalMiner = false,
+    -1, UtxoSettings(false, 0, 2), poPoWBootstrap = false, ChainGenerator.minimalSuffix, mining = false, ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, useExternalMiner = false,
     internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
     200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
     1000000, 100, adProofsSuffixLength = 112 * 1024, extraIndex = false)
@@ -239,7 +239,7 @@ object ChainGenerator extends ErgoTestHelpers {
   val MaxTxsPerBlock: Int = 10
   val minerPk: ProveDlog = defaultProver.hdKeys.head.publicImage
   val selfAddressScript: Values.ErgoTree = P2PKAddress(minerPk).script
-  val minerProp: Values.ErgoTree = ErgoScriptPredef.rewardOutputScript(RewardDelay, minerPk)
+  val minerProp: Values.ErgoTree = ErgoTreePredef.rewardOutputScript(RewardDelay, minerPk)
   val votingEpochLength: Height = votingSettings.votingLength
   val protocolVersion: Byte = initSettings.chainSettings.protocolVersion
   val minimalSuffix = 2
@@ -251,7 +251,7 @@ object ChainGenerator extends ErgoTestHelpers {
   def generate(length: Int, dir: File)(history: ErgoHistory): Unit = {
     val stateDir = new File(s"${dir.getAbsolutePath}/state")
     stateDir.mkdirs()
-    val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(initSettings))
+    val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, initSettings)
     System.out.println(s"Going to generate a chain at ${dir.getAbsolutePath} starting from ${history.bestFullBlockOpt}")
     startTime = System.currentTimeMillis() - (blockInterval * (length - 1)).toMillis
     val chain = loop(state, None, None, Seq())(history)
@@ -298,7 +298,7 @@ object ChainGenerator extends ErgoTestHelpers {
     val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
     inOpt match {
       case Some(input) if cond =>
-        tokens += Tuple2(Digest32 @@@ input.id, math.abs(Random.nextInt()))
+        tokens += Tuple2(input.id.toTokenId, math.abs(Random.nextInt()))
       case Some(tokenBox) if !cond =>
         tokenBox.additionalTokens.toArray.foreach(tokens += _)
       case _ =>

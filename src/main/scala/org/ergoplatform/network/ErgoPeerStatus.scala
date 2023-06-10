@@ -12,13 +12,17 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Time
   *
   * @param peer - peer information (public address, exposed info on operating mode etc)
   * @param status - peer's blockchain status (is it ahead or behind our, or on fork)
-  * @param height - peer's height
+  * @param headersHeight - peer's height
+  * @param storedHeaders
+  * @param storedFullblocks
   * @param lastSyncSentTime - last time peer was asked to sync, None if never
   * @param lastSyncGetTime - last time peer received sync, None if never
   */
 case class ErgoPeerStatus(peer: ConnectedPeer,
                           status: PeerChainStatus,
-                          height: Height,
+                          headersHeight: Height,
+                          storedHeaders: Seq[(Height, Height)],
+                          storedFullblocks: Seq[(Height, Height)],
                           lastSyncSentTime: Option[Time],
                           lastSyncGetTime: Option[Time]) {
   val mode: Option[ModePeerFeature] = ErgoPeerStatus.mode(peer)
@@ -45,7 +49,7 @@ object ErgoPeerStatus {
       "version" -> status.version.map(_.toString).getOrElse("N/A").asJson,
       "mode" -> status.mode.asJson,
       "status" -> status.status.toString.asJson,
-      "height" -> status.height.asJson
+      "height" -> status.headersHeight.asJson
     )
   }
 

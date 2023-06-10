@@ -37,6 +37,12 @@ trait ToDownloadProcessor
   def estimatedTip(): Option[Height]
 
   /**
+    * @return min full block height the node has
+    * // todo: improve scaladoc
+    */
+  def minFullBlockAvailable: Int = minimalFullBlockHeight
+
+  /**
     * Get network object ids to download to synchronize full blocks or start UTXO set snapshot downlood
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
     * @param condition only ModifierIds which pass filter are included into results

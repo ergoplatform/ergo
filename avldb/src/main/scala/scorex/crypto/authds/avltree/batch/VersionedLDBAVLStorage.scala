@@ -5,7 +5,7 @@ import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, has
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
 import scorex.crypto.authds.{ADDigest, ADKey}
-import scorex.util.encode.{Base16, Base58}
+import scorex.util.encode.Base16
 import scorex.crypto.hash
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBKVStore, LDBVersionedStore}

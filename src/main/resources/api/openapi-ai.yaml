@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.10"
+  version: "5.0.13"
   title: Ergo Node API
   description: Specification of Ergo Node API for ChatGPT plugin.
     The following endpoints supported 
@@ -20,7 +20,9 @@ info:
 
 servers:
   - url: http://localhost:9052
-    description: Ergo full node API.
+    description: Ergo full node API (testnet).
+  - url: http://localhost:9053
+    description: Ergo full node API (mainnet).
 
 components:
   schemas:
@@ -248,7 +250,7 @@ components:
           items:
             $ref: '#/components/schemas/ErgoTransactionOutput'
         size:
-          description: Size of ErgoTransacton in bytes
+          description: Size of ErgoTransaction in bytes
           type: integer
           format: int32
 

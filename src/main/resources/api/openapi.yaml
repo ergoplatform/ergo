@@ -13,9 +13,6 @@ info:
     url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
 
 servers:
-  - url: http://localhost:9052
-    description: Ergo full node API.
-                   
   - url: /
     description: Local full node
   - url: http://213.239.193.208:9053
@@ -390,7 +387,7 @@ components:
           items:
             $ref: '#/components/schemas/ErgoTransactionOutput'
         size:
-          description: Size of ErgoTransacton in bytes
+          description: Size of ErgoTransaction in bytes
           type: integer
           format: int32
 
@@ -2621,7 +2618,7 @@ paths:
         - in: path
           name: blockHeight
           required: true
-          description: Height of a block to retrive header ids
+          description: Height of a block to retrieve header ids
           schema:
             type: integer
             format: int32

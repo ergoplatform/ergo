@@ -81,7 +81,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getBoxesByErgoTreeUnspentR ~
       getTokenInfoByIdR ~
       getAddressBalanceTotalR ~
-      getAddressBalanceTotalR_v2
+      getAddressBalanceTotalR_get
     }
   else
     pathPrefix("blockchain") {
@@ -357,9 +357,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getAddressBalanceTotal(address))
   }
 
-  val addressPass: Directive1[ErgoAddress] = pathPrefix(Segment).flatMap(handleErgoAddress)
+  /** Parses address in the url (i.e. `balanceForAddress/{address}` into [[ErgoAddress]] using [[ErgoAddressEncoder]]. */
+  private val addressPass: Directive1[ErgoAddress] = pathPrefix(Segment).flatMap(handleErgoAddress)
 
-  private def getAddressBalanceTotalR_v2: Route =
+  private def getAddressBalanceTotalR_get: Route =
     (pathPrefix("balanceForAddress") & get & addressPass) { address =>
       ApiResponse(getAddressBalanceTotal(address))
     }

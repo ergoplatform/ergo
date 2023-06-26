@@ -74,7 +74,9 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
   override def writeMinimalFullBlockHeight(height: Height): Unit = {
-    historyStorage.insert(Array(MinFullBlockHeightKey -> Ints.toByteArray(height)), Array.empty[BlockSection])
+    historyStorage.insert(
+      indexesToInsert = Array(MinFullBlockHeightKey -> Ints.toByteArray(height)),
+      objectsToInsert = BlockSection.emptyArray)
   }
 
   override def readMinimalFullBlockHeight(): Height = {

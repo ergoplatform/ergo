@@ -13,9 +13,9 @@ import scorex.crypto.hash.Digest32
   * @param createdTime - time when snapshot was created
   * @param latestUpdateTime - latest time when anything was updated for the state of UTXO set snapshot
   * @param snapshotHeight - height of a block UTXO set snapshot is corresponding to (UTXO set if after the block applied)
-  * @param utxoSetRootHash - root hash of AVL+ tree which is authenticating UTXO set snasphot
-  * @param utxoSetTreeHeight - tree height of AVL+ tree which is authenticating UTXO set snasphot
-  * @param expectedChunkIds - ids of UTXO set snasphot chunks to be downloaded
+  * @param utxoSetRootHash - root hash of AVL+ tree which is authenticating UTXO set snapshot
+  * @param utxoSetTreeHeight - tree height of AVL+ tree which is authenticating UTXO set snapshot
+  * @param expectedChunkIds - ids of UTXO set snapshot chunks to be downloaded
   * @param downloadedChunkIds - shapshot chunks already downloaded, in form of boolean map over
   *                             `expectedChunkIds` (true = downloaded)
   * @param downloadingChunks - number of UTXO set shapshot chunks the node is currently downloading

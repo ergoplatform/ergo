@@ -21,12 +21,11 @@ class ManifestSerializer(manifestDepth: Byte) extends ErgoSerializer[BatchAVLPro
     def loop(node: ProverNodes[DigestType], level: Int): Unit = {
       nodeSerializer.serialize(node, w)
       node match {
-        case _: ProverLeaf[DigestType] =>
         case n: ProxyInternalNode[DigestType] if n.isEmpty =>
         case i: InternalProverNode[DigestType] if level < manifestDepth =>
           loop(i.left, level + 1)
           loop(i.right, level + 1)
-        case _: InternalProverNode[DigestType] =>
+        case _: InternalProverNode[DigestType] | _: ProverLeaf[DigestType] =>
       }
     }
 

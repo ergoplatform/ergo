@@ -123,13 +123,6 @@ case class ContainsAssetPredicate(assetId: ErgoBox.TokenId) extends ScanningPred
     box.additionalTokens.exists(_._1 == assetId)
   }
 
-  override def equals(obj: Any): Boolean = obj match {
-    case other: ContainsAssetPredicate => other.assetId == assetId
-    case _ => false
-  }
-
-  override def hashCode(): Int = assetId.hashCode()
-
   override def toString: String = s"ContainsAssetPredicate(${assetId.toHex})"
 }
 

@@ -68,14 +68,14 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getTxByIdR ~
       getTxByIndexR ~
       getTxsByAddressR ~
-      getTxsByAddressR_get ~
+      getTxsByAddressGetRoute ~
       getTxRangeR ~
       getBoxByIdR ~
       getBoxByIndexR ~
       getBoxesByAddressR ~
-      getBoxesByAddressR_get ~
+      getBoxesByAddressGetRoute ~
       getBoxesByAddressUnspentR ~
-      getBoxesByAddressUnspentR_get ~
+      getBoxesByAddressUnspentGetRoute ~
       getBoxRangeR ~
       getBoxesByErgoTreeR ~
       getBoxesByErgoTreeUnspentR ~
@@ -165,7 +165,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     validateAndGetTxsByAddress(address, offset, limit)
   }
 
-  private def getTxsByAddressR_get: Route = (pathPrefix("transaction" / "byAddress") & get & addressPass & paging) { (address, offset, limit) =>
+  private def getTxsByAddressGetRoute: Route = (pathPrefix("transaction" / "byAddress") & get & addressPass & paging) { (address, offset, limit) =>
     validateAndGetTxsByAddress(address, offset, limit)
   }
 
@@ -233,7 +233,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     validateAndGetBoxesByAddress(address, offset, limit)
   }
 
-  private def getBoxesByAddressR_get: Route = (pathPrefix("box" / "byAddress") & get & addressPass & paging) { (address, offset, limit) =>
+  private def getBoxesByAddressGetRoute: Route = (pathPrefix("box" / "byAddress") & get & addressPass & paging) { (address, offset, limit) =>
     validateAndGetBoxesByAddress(address, offset, limit)
   }
 
@@ -264,7 +264,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
         validateAndGetBoxesByAddressUnspent(address, offset, limit, dir)
     }
 
-  private def getBoxesByAddressUnspentR_get: Route =
+  private def getBoxesByAddressUnspentGetRoute: Route =
     (pathPrefix("box" / "unspent" / "byAddress") & get & addressPass & paging & sortDir) {
       (address, offset, limit, dir) =>
         validateAndGetBoxesByAddressUnspent(address, offset, limit, dir)

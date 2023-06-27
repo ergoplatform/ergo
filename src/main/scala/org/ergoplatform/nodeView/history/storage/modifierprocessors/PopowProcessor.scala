@@ -111,8 +111,7 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
         }
         log.info(s"Nipopow proof applied, best header now is ${historyReader.bestHeaderOpt}")
       case r: NipopowProofVerificationResult =>
-        println("!!!") // todo: fix log msg
-        println(r)
+        log.warn(s"NiPoPoW proof is no better or invalid ($r): $proof")
     }
   }
 

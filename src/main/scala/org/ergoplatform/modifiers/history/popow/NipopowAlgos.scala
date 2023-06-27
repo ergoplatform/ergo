@@ -231,7 +231,7 @@ class NipopowAlgos(chainSettings: ChainSettings) {
 
     //todo: epoch length fix
     //todo: filter out headers already in prefix ?
-    val diffHeaders = if(params.continuous) {
+    val diffHeaders = if (params.continuous) {
       diffAdjustment.heightsForNextRecalculation(suffixHead.height, 128).flatMap { height =>
         histReader.bestHeaderAtHeight(height)
       }

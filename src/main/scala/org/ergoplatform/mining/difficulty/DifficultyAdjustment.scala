@@ -84,8 +84,8 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     } else {
       avg.max(lastDiff / 2)
     }
-    log.debug(s"Difficulty for ${previousHeaders.last.height + 1}: predictive $predictiveDiff, limited predictive: $limitedPredictiveDiff, classic: $classicDiff, " +
-             s"resulting uncompressed: $uncompressedDiff")
+    log.debug(s"Difficulty for ${previousHeaders.last.height + 1}: predictive $predictiveDiff, " +
+      s"limited predictive: $limitedPredictiveDiff, classic: $classicDiff, resulting uncompressed: $uncompressedDiff")
     // perform serialization cycle in order to normalize resulted difficulty
     DifficultySerializer.decodeCompactBits(
       DifficultySerializer.encodeCompactBits(uncompressedDiff)

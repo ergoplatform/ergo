@@ -108,15 +108,3 @@ object NipopowProofNetworkingFilter extends PeerFilteringRule {
   }
 
 }
-
-/**
-  * If peer's version is >= 5.0.12, the peer is supporting sync V3
-  */
-object SyncV3Filter extends PeerFilteringRule {
-  private val syncV3Version = Version(5, 0, 12) // todo: set before release
-
-  override def condition(version: Version): Boolean = {
-    version.compare(syncV3Version) >= 0
-  }
-
-}

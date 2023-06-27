@@ -128,8 +128,9 @@ class NipopowAlgos(chainSettings: ChainSettings) {
 
   /**
     * Computes NiPoPow proof for the given `chain` according to given `params`.
+    *
+    * todo: Used in tests only, so maybe better to replace it in tests with prove (histReader)
     */
-    //todo: remove this prove?
   def prove(chain: Seq[PoPowHeader])(params: PoPowParams): Try[NipopowProof] = Try {
     val k = params.k
     val m = params.m
@@ -229,19 +230,19 @@ class NipopowAlgos(chainSettings: ChainSettings) {
         histReader.popowHeader(suffix.head.id).get -> suffix.tail // .get to be caught in outer (prove's) Try
     }
 
-    //todo: epoch length fix
+    val genesisHeight = 1
+    val genesisPopowHeader = histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
+    val prefix = (genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)).distinct.sortBy(_.height)
+
     //todo: filter out headers already in prefix ?
     val diffHeaders = if (params.continuous) {
-      diffAdjustment.heightsForNextRecalculation(suffixHead.height, 128).flatMap { height =>
+      val epochLength = chainSettings.eip37EpochLength.getOrElse(chainSettings.epochLength)
+      diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).flatMap { height =>
         histReader.bestHeaderAtHeight(height)
       }
     } else {
       Seq.empty
     }
-
-    val genesisHeight = 1
-    val genesisPopowHeader = histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
-    val prefix = (genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)).distinct.sortBy(_.height)
 
     NipopowProof(this, m, k, prefix, suffixHead, suffixTail, diffHeaders)
   }

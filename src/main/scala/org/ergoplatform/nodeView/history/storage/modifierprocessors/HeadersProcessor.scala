@@ -321,7 +321,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
           val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
           chain.headers.filter(p => heights.contains(p.height))
         }
-        difficultyCalculator.eip37Calculate(headers, epochLength)
+        difficultyCalculator.eip37Calculate(headers, chainSettings.eip37EpochLength.get) // .get is ok for the mainnet
       } else {
         parent.requiredDifficulty
       }

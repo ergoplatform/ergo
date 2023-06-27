@@ -30,7 +30,6 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
   lazy val nipopowAlgos: NipopowAlgos = new NipopowAlgos(chainSettings)
   lazy val nipopowSerializer = new NipopowProofSerializer(nipopowAlgos)
 
-  // todo: NipopowVerifier holds nipopow proof in memory without releasing, fix
   lazy val nipopowVerifier = new NipopowVerifier(chainSettings.genesisId.get) // todo: get
 
   def historyReader: ErgoHistoryReader
@@ -103,12 +102,14 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
   def applyPopowProof(proof: NipopowProof): Unit = {
     nipopowVerifier.process(proof) match {
       case BetterChain =>
+        // todo .get
         val headersToApply = (nipopowVerifier.bestChain ++ nipopowVerifier.bestProofOpt.get.difficultyCheckHeaders).distinct.sortBy(_.height)
         headersToApply.foreach { h =>
           if (!historyStorage.contains(h.id)) {
             process(h, nipopowMode = true)
           }
         }
+        nipopowVerifier.reset()
         log.info(s"Nipopow proof applied, best header now is ${historyReader.bestHeaderOpt}")
       case r: NipopowProofVerificationResult =>
         log.warn(s"NiPoPoW proof is no better or invalid ($r): $proof")

@@ -44,4 +44,11 @@ class NipopowVerifier(genesisId: ModifierId) {
     }
   }
 
+  /**
+    * Clear proof stored
+   */
+  def reset(): Unit = {
+    bestProofOpt = None
+  }
+
 }

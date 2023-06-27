@@ -19,7 +19,9 @@ class NipopowVerifier(genesisId: ModifierId) {
   }
 
   /**
-    * @return - if newProof is replacing older ones
+    * Process a NiPoPoW proof, replace current best proof known with it if it is valid and better than
+    * the best proof.
+    * @return - status of newProof validation, see `NipopowProofVerificationResult` ScalaDoc
     */
   def process(newProof: NipopowProof): NipopowProofVerificationResult = {
     if (newProof.headersChain.head.id == genesisId) {

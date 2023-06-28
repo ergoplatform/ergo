@@ -184,7 +184,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val longerProof = nipopowAlgos.prove(longerChain)(smallPoPowParams).get
 
     val disconnectedProofPrefix = proof.prefix.take(proof.prefix.length / 2) ++ longerProof.prefix
-    val disconnectedProof = NipopowProof(nipopowAlgos, proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail, Seq.empty)
+    val disconnectedProof = NipopowProof(nipopowAlgos, proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail)
     proof.isBetterThan(disconnectedProof) shouldBe true
   }
 
@@ -197,7 +197,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
       val randomBlock = toPoPoWChain(genChain(1)).head
       val proof = nipopowAlgos.prove(chain)(smallPoPowParams).get
       val disconnectedProofPrefix = proof.prefix.updated(proof.prefix.length / 2, randomBlock)
-      val disconnectedProof = NipopowProof(nipopowAlgos, proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail, Seq.empty)
+      val disconnectedProof = NipopowProof(nipopowAlgos, proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail)
       proof.hasValidConnections shouldBe true
       disconnectedProof.hasValidConnections shouldBe false
     }
@@ -212,7 +212,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
       val randomBlock = genChain(1).head.header
       val proof = nipopowAlgos.prove(chain)(smallPoPowParams).get
       val disconnectedProofSuffixTail = proof.suffixTail.updated(proof.suffixTail.length / 2, randomBlock)
-      val disconnectedProof = NipopowProof(nipopowAlgos, proof.m, proof.k, proof.prefix, proof.suffixHead, disconnectedProofSuffixTail, Seq.empty)
+      val disconnectedProof = NipopowProof(nipopowAlgos, proof.m, proof.k, proof.prefix, proof.suffixHead, disconnectedProofSuffixTail)
       proof.hasValidConnections shouldBe true
       disconnectedProof.hasValidConnections shouldBe false
     }
@@ -222,7 +222,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     val prefix = toPoPoWChain(genChain(1))
     val suffix = toPoPoWChain(genChain(1))
-    NipopowProof(nipopowAlgos, 0, 0, prefix, suffix.head, suffix.tail.map(_.header), Seq.empty).hasValidConnections shouldBe false
+    NipopowProof(nipopowAlgos, 0, 0, prefix, suffix.head, suffix.tail.map(_.header)).hasValidConnections shouldBe false
   }
 
 }

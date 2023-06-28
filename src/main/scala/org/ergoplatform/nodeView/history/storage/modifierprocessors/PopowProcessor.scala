@@ -102,8 +102,7 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
   def applyPopowProof(proof: NipopowProof): Unit = {
     nipopowVerifier.process(proof) match {
       case BetterChain =>
-        // todo .get
-        val headersToApply = (nipopowVerifier.bestChain ++ nipopowVerifier.bestProofOpt.get.difficultyCheckHeaders).distinct.sortBy(_.height)
+        val headersToApply = nipopowVerifier.bestChain.distinct.sortBy(_.height)
         headersToApply.foreach { h =>
           if (!historyStorage.contains(h.id)) {
             process(h, nipopowMode = true)

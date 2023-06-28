@@ -160,7 +160,7 @@ class NipopowAlgos(chainSettings: ChainSettings) {
     val suffixTail = suffix.tail.map(_.header)
     val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, Seq.empty)
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
   }
 
   /**
@@ -230,21 +230,36 @@ class NipopowAlgos(chainSettings: ChainSettings) {
         histReader.popowHeader(suffix.head.id).get -> suffix.tail // .get to be caught in outer (prove's) Try
     }
 
-    val genesisHeight = 1
-    val genesisPopowHeader = histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
-    val prefix = (genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)).distinct.sortBy(_.height)
+    val storedHeights = mutable.Set[Height]() // cache to filter out duplicate headers
+    val prefixBuilder = mutable.ArrayBuilder.make[PoPowHeader]()
 
-    //todo: filter out headers already in prefix ?
-    val diffHeaders = if (params.continuous) {
+    val genesisHeight = 1
+    prefixBuilder += histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
+    storedHeights += genesisHeight
+
+    if (params.continuous) {
+      // put headers needed to check difficulty of new blocks after suffix into prefix
       val epochLength = chainSettings.eip37EpochLength.getOrElse(chainSettings.epochLength)
-      diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).flatMap { height =>
-        histReader.bestHeaderAtHeight(height)
+      diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).foreach { height =>
+        histReader.popowHeader(height).foreach { ph =>
+          prefixBuilder += ph
+          storedHeights += ph.height
+        }
       }
     } else {
       Seq.empty
     }
 
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, diffHeaders)
+    provePrefix(genesisHeight, suffixHead).foreach { ph =>
+      if (!storedHeights.contains(ph.height)) {
+        prefixBuilder += ph
+        storedHeights += ph.height
+      }
+    }
+
+    val prefix = prefixBuilder.result().sortBy(_.height)
+
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
   }
 
 }

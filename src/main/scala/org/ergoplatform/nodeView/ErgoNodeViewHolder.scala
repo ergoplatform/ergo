@@ -300,7 +300,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (history().isEmpty) {
         history().applyPopowProof(proof)
         updateNodeView(updatedHistory = Some(history()))
-        // todo: publish signal, send sync immediately in ENVS after getting it
       }
   }
 

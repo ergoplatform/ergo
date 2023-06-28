@@ -9,7 +9,7 @@ import scorex.util.Extensions.LongOps
 /**
   * A structure representing NiPoPow proof as a persistent modifier.
   *
-  * For details, see the paper:
+  * For details, see the foundational paper:
   *
   * [KMZ17] Non-Interactive Proofs of Proof-of-Work https://eprint.iacr.org/2017/963.pdf
   *
@@ -28,9 +28,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
 
   def serializer: ErgoSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
 
-  def headersChain: Seq[Header] = {
-    prefixHeaders ++ suffixHeaders // todo: add difficulty headers?
-  }
+  def headersChain: Seq[Header] = prefixHeaders ++ suffixHeaders
 
   def prefixHeaders: Seq[Header] = prefix.map(_.header)
 
@@ -60,7 +58,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return true if the proof is valid
     */
   def isValid: Boolean = {
-    this.hasValidConnections && this.hasValidHeights && this.hasValidProofs //todo: check diff headers
+    this.hasValidConnections && this.hasValidHeights && this.hasValidProofs
   }
 
   /**
@@ -98,7 +96,6 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     prefix.forall(_.checkInterlinksProof()) &&
       suffixHead.checkInterlinksProof()
   }
-
 }
 
 object NipopowProof {

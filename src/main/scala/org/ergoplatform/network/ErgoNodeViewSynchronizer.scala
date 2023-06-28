@@ -1279,7 +1279,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>
-      syncTracker.updateStatus(remote, status = Unknown, height = None, peerHeaders = Seq(0 -> 0), peerFullblocks = Seq(0 -> 0))
+      syncTracker.updateStatus(remote, status = Unknown, height = None)
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)

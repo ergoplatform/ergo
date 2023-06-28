@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowParams}
 import org.ergoplatform.network.ModePeerFeature
-import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
@@ -65,7 +65,7 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
   lazy val ergoSyncInfoV1Gen: Gen[ErgoSyncInfoV1] = for {
-    ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfoV1.MaxBlockIds))
+    ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
   } yield ErgoSyncInfoV1(ids)
 
   lazy val ergoSyncInfoV2Gen: Gen[ErgoSyncInfoV2] = for {

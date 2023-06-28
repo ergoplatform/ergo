@@ -15,14 +15,13 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
 
     val height = 1000
     // add peer to sync
-    syncTracker.updateStatus(connectedPeer, Younger, Some(height), Seq(0 -> height), Seq(0 -> height))
+    syncTracker.updateStatus(connectedPeer, Younger, Some(height))
     syncTracker.maxHeight() shouldBe Some(height)
-    syncTracker.statuses(connectedPeer) shouldBe ErgoPeerStatus(connectedPeer, Younger, height, Seq(0 -> height), Seq(0 -> height), None, None)
+    syncTracker.statuses(connectedPeer) shouldBe ErgoPeerStatus(connectedPeer, Younger, height, None, None)
     // updating status should change status and height of existing peer
-    syncTracker.updateStatus(connectedPeer, Older, Some(height+1), Seq(0 -> (height + 1)), Seq(0 -> (height + 1)))
+    syncTracker.updateStatus(connectedPeer, Older, Some(height+1))
     syncTracker.maxHeight() shouldBe Some(height + 1)
     syncTracker.getStatus(connectedPeer) shouldBe Some(Older)
-    syncTracker.fullInfo().head.headersHeight shouldBe height+1
 
     syncTracker.peersByStatus.apply(Older).head shouldBe connectedPeer
     // peer should not be synced yet

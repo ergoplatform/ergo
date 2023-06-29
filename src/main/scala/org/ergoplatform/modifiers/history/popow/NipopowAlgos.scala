@@ -27,7 +27,7 @@ import scala.util.{Failure, Success, Try}
   * Please note that for [KMZ17] we're using the version published @ Financial Cryptography 2020, which is different
   * from previously published versions on IACR eprint.
   */
-class NipopowAlgos(chainSettings: ChainSettings) {
+class NipopowAlgos(val chainSettings: ChainSettings) {
   import NipopowAlgos._
 
   private val powScheme: AutolykosPowScheme = chainSettings.powScheme
@@ -160,7 +160,7 @@ class NipopowAlgos(chainSettings: ChainSettings) {
     val suffixTail = suffix.tail.map(_.header)
     val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, params.continuous)
   }
 
   /**
@@ -259,7 +259,7 @@ class NipopowAlgos(chainSettings: ChainSettings) {
 
     val prefix = prefixBuilder.result().sortBy(_.height)
 
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, params.continuous)
   }
 
 }

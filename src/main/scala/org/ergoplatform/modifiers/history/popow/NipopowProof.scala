@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers.history.popow
 
 import io.circe.{Decoder, Encoder}
+import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
@@ -24,7 +25,8 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
                         k: Int,
                         prefix: Seq[PoPowHeader],
                         suffixHead: PoPowHeader,
-                        suffixTail: Seq[Header]) {
+                        suffixTail: Seq[Header],
+                        continuous: Boolean) {
 
   def serializer: ErgoSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
 
@@ -58,7 +60,32 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return true if the proof is valid
     */
   def isValid: Boolean = {
-    this.hasValidConnections && this.hasValidHeights && this.hasValidProofs
+    this.hasValidConnections && this.hasValidHeights && this.hasValidProofs && this.hasValidDifficultyHeaders
+  }
+
+  /**
+    * @return true if proof contains headers needed to check difficulty after the suffix,
+    *         or if the proof is for non-continuous mode, false otherwise
+    */
+  def hasValidDifficultyHeaders: Boolean = {
+    if (continuous) {
+      //
+      val chainSettings = popowAlgos.chainSettings
+      val epochLength = chainSettings.eip37EpochLength.getOrElse(chainSettings.epochLength)
+      val diffAdjustment = new DifficultyAdjustment(chainSettings)
+      var lastIndex = 0
+      diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).forall { height =>
+        lastIndex = headersChain.indexWhere(_.height == height, lastIndex)
+        if (lastIndex == -1) {
+          false
+        } else {
+          true
+        }
+      }
+    } else {
+      // if the proof is for non-continuous mode, not checking difficulty headers membership  in the proof
+      true
+    }
   }
 
   /**
@@ -108,7 +135,8 @@ object NipopowProof {
       "k" -> proof.k.asJson,
       "prefix" -> proof.prefix.asJson,
       "suffixHead" -> proof.suffixHead.asJson,
-      "suffixTail" -> proof.suffixTail.asJson
+      "suffixTail" -> proof.suffixTail.asJson,
+      "continuous" -> proof.continuous.asJson
     ).asJson
   }
 
@@ -119,7 +147,8 @@ object NipopowProof {
       prefix <- c.downField("prefix").as[Seq[PoPowHeader]]
       suffixHead <- c.downField("suffixHead").as[PoPowHeader]
       suffixTail <- c.downField("suffixTail").as[Seq[Header]]
-    } yield NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
+      continuous <- c.downField("continuous").as[Boolean]
+    } yield NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail, continuous)
   }
 
 }
@@ -144,6 +173,7 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[Ni
       w.putUInt(hBytes.length)
       w.putBytes(hBytes)
     }
+    w.put(if (obj.continuous) 1 else 0)
   }
 
   override def parse(r: Reader): NipopowProof = {
@@ -161,7 +191,8 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[Ni
       val size = r.getUInt().toIntExact
       HeaderSerializer.parseBytes(r.getBytes(size))
     }
-    NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
+    val continuous = if (r.getByte() == 1) true else false
+    NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail, continuous)
   }
 
 }

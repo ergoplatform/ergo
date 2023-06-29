@@ -336,6 +336,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def sendSync(history: ErgoHistory): Unit = {
     if (history.bestHeaderOpt.isEmpty && settings.nodeSettings.popowBootstrap) {
+      // if no any header applied yet, and boostrapping via nipopows is ordered,
+      // ask for nipopow proofs instead of sending sync signal
       requireNipopowProof(history)
     } else {
       val peers = syncTracker.peersToSyncWith()
@@ -1038,12 +1040,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def requireNipopowProof(hr: ErgoHistory): Unit = {
-    // todo: filter out peers bootstrapped with nipopows
-    // todo: such peers should not generate nipopows also
+    // todo: such peers should not generate nipopows also ??
     val m = hr.P2PNipopowProofM
     val k = hr.P2PNipopowProofK
     val msg = Message(GetNipopowProofSpec, Right(NipopowProofData(m, k, None)), None)
-    networkControllerRef ! SendToNetwork(msg, Broadcast) //todo: send to most developed peers only ?
+    val peers = NipopowFilter.filter(syncTracker.knownPeers()).toSeq
+    networkControllerRef ! SendToNetwork(msg, SendToPeers(peers)) //todo: send to most developed peers only ?
   }
 
   /**

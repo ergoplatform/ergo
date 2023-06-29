@@ -2,6 +2,7 @@ package scorex.core.network
 
 import akka.actor.ActorRef
 import io.circe.{Encoder, Json}
+import org.ergoplatform.network.ModePeerFeature
 import scorex.core.network.peer.PeerInfo
 
 /**
@@ -26,6 +27,13 @@ case class ConnectedPeer(connectionId: ConnectionId,
 
   override def toString: String = s"ConnectedPeer(connection: $connectionId , " +
                                     s"remote version: ${peerInfo.map(_.peerSpec.protocolVersion)})"
+
+  /**
+    * Helper method to get operating mode of the peer
+    */
+  lazy val mode: Option[ModePeerFeature] = {
+    peerInfo.flatMap(_.peerSpec.features.collectFirst[ModePeerFeature]({ case mf: ModePeerFeature => mf }))
+  }
 
 }
 

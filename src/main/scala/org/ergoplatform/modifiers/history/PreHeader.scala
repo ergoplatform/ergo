@@ -6,9 +6,9 @@ import org.ergoplatform.modifiers.history.header.Header._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import scorex.util._
+import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.eval.CGroupElement
 import sigmastate.eval.Extensions._
-import sigmastate.interpreter.CryptoConstants.EcPointType
 
 /**
   * Only header fields that can be predicted by a miner
@@ -63,7 +63,7 @@ object PreHeader {
   }
 
   /**
-    * fake pre-header, which is used in ErgoStateContext if last headers are empty 
+    * Fake pre-header, which is used in ErgoStateContext if last headers are empty
     *  because ErgoStateContext needs a PreHeader and it's not optional.
     *  See ErgoStateContext.currentHeight returns a height from the passed PreHeader
     */

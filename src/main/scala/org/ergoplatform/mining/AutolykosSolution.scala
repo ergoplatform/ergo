@@ -4,12 +4,12 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.modifiers.history.header.Header.Version
+import org.ergoplatform.settings.Algos
 import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.interpreter.CryptoConstants
-import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.basics.CryptoConstants
+import sigmastate.basics.CryptoConstants.EcPointType
 
 /**
   * Solution for an Autolykos PoW puzzle.
@@ -90,7 +90,7 @@ class AutolykosV1SolutionSerializer extends ErgoSerializer[AutolykosSolution] {
   */
 class AutolykosV2SolutionSerializer extends ErgoSerializer[AutolykosSolution] {
 
-  import AutolykosSolution.{wForV2, dForV2}
+  import AutolykosSolution.{dForV2, wForV2}
 
   override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
     w.putBytes(groupElemToBytes(obj.pk))

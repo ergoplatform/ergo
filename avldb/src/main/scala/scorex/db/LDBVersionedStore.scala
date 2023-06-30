@@ -422,8 +422,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     */
   def processSnapshot[T](logic: SnapshotReadInterface => T): Try[T] = {
     val ro = new ReadOptions()
-    ro.snapshot(db.getSnapshot)
     try {
+      lock.writeLock().lock()
+      ro.snapshot(db.getSnapshot)
+      lock.writeLock().unlock()
+
       object readInterface extends SnapshotReadInterface {
         def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
       }

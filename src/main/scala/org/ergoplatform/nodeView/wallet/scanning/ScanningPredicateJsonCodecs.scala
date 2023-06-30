@@ -1,14 +1,13 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
-import io.circe.Json
+import io.circe.syntax._
+import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
-import scorex.util.encode.Base16
-import io.circe.{Decoder, Encoder}
-import io.circe.syntax._
 import org.ergoplatform.http.api.ApiCodecs
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
+import special.collection.Extensions._
 
 
 object ScanningPredicateJsonCodecs extends ApiCodecs {
@@ -19,7 +18,7 @@ object ScanningPredicateJsonCodecs extends ApiCodecs {
     case ep: EqualsScanningPredicate =>
       Json.obj("predicate" -> "equals".asJson, "register" -> ep.regId.asJson, "value" -> ep.value.asJson)
     case cap: ContainsAssetPredicate =>
-      Json.obj("predicate" -> "containsAsset".asJson, "assetId" -> Base16.encode(cap.assetId).asJson)
+      Json.obj("predicate" -> "containsAsset".asJson, "assetId" -> cap.assetId.toHex.asJson)
     case and: AndScanningPredicate =>
       Json.obj("predicate" -> "and".asJson, "args" -> and.subPredicates.asJson)
     case or: OrScanningPredicate =>

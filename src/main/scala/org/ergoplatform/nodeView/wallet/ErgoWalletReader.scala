@@ -1,28 +1,28 @@
 package org.ergoplatform.nodeView.wallet
 
-import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
-import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
-import org.ergoplatform.wallet.interface4j.SecretString
+import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey}
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
-import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey}
+import org.ergoplatform.{ErgoBox, P2PKAddress}
 import scorex.core.NodeViewComponent
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
 import scala.util.Try
 

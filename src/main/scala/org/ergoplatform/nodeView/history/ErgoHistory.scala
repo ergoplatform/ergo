@@ -102,14 +102,14 @@ trait ErgoHistory
         if (nonMarkedIds.nonEmpty) {
           historyStorage.insert(
             nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
-            Array.empty[BlockSection]).map(_ => this)
+            BlockSection.emptyArray).map(_ => this)
         } else {
           Success(this)
         }
       case _ =>
         historyStorage.insert(
           Array(validityKey(modifier.id) -> Array(1.toByte)),
-          Array.empty[BlockSection]).map(_ => this)
+          BlockSection.emptyArray).map(_ => this)
     }
   }
 
@@ -136,7 +136,7 @@ trait ErgoHistory
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
-            historyStorage.insert(validityRow, Array.empty[BlockSection]).map { _ =>
+            historyStorage.insert(validityRow, BlockSection.emptyArray).map { _ =>
               this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
             }
           case _ =>
@@ -147,7 +147,7 @@ trait ErgoHistory
               //Only headers chain involved
               historyStorage.insert(
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toArray,
-                Array.empty[BlockSection]
+                BlockSection.emptyArray
               ).map { _ =>
                 this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
               }
@@ -175,7 +175,7 @@ trait ErgoHistory
               val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
-              historyStorage.insert(toInsert, Array.empty[BlockSection]).map { _ =>
+              historyStorage.insert(toInsert, BlockSection.emptyArray).map { _ =>
                 val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
                 this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
               }
@@ -184,7 +184,7 @@ trait ErgoHistory
       case None =>
         //No headers become invalid. Just mark this modifier as invalid
         log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
-        historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), Array.empty[BlockSection]).map { _ =>
+        historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), BlockSection.emptyArray).map { _ =>
           this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
         }
     }

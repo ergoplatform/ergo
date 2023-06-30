@@ -35,7 +35,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
   private val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
   property("Founders box workflow") {
-    var (us, bh) = createUtxoState(parameters)
+    var (us, bh) = createUtxoState(settings)
     var foundersBox = genesisBoxes.last
     var lastBlock = validFullBlock(parentOpt = None, us, bh)
     us = us.applyModifier(lastBlock, None)(_ => ()).get
@@ -60,7 +60,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
   }
 
   property("Founders should be able to spend genesis founders box") {
-    var (us, bh) = createUtxoState(parameters)
+    var (us, bh) = createUtxoState(settings)
     val foundersBox = genesisBoxes.last
     var height: Int = ErgoHistory.GenesisHeight
 
@@ -111,7 +111,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
   }
 
   property("Correct genesis state") {
-    val (us, bh) = createUtxoState(parameters)
+    val (us, bh) = createUtxoState(settings)
     val boxes = bh.boxes.values.toList
     boxes.size shouldBe 3
 
@@ -135,7 +135,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
   }
 
   property("extractEmissionBox() should extract correct box") {
-    var (us, bh) = createUtxoState(parameters)
+    var (us, bh) = createUtxoState(settings)
     us.emissionBoxOpt should not be None
     var lastBlockOpt: Option[ErgoFullBlock] = None
     forAll { seed: Int =>
@@ -158,7 +158,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
   }
 
   property("proofsForTransactions") {
-    var (us: UtxoState, bh) = createUtxoState(parameters)
+    var (us: UtxoState, bh) = createUtxoState(settings)
     var height: Int = ErgoHistory.GenesisHeight
     forAll(defaultHeaderGen) { header =>
       val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
@@ -435,13 +435,13 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
   property("applyModifier() - invalid block") {
     forAll(invalidErgoFullBlockGen) { b =>
-      val state = createUtxoState(parameters)._1
+      val state = createUtxoState(settings)._1
       state.applyModifier(b, None)(_ => ()).isFailure shouldBe true
     }
   }
 
   property("applyModifier() - valid full block after invalid one") {
-    val (us, bh) = createUtxoState(parameters)
+    val (us, bh) = createUtxoState(settings)
     val validBlock = validFullBlock(parentOpt = None, us, bh)
 
     //Different state
@@ -460,20 +460,20 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
 
   property("2 forks switching") {
-    val (us, bh) = createUtxoState(parameters)
+    val (us, bh) = createUtxoState(settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, settings, parameters).applyModifier(genesis)(_ => ()).get
     val chain1block1 = validFullBlock(Some(genesis), wusAfterGenesis)
     val wusChain1Block1 = wusAfterGenesis.applyModifier(chain1block1)(_ => ()).get
     val chain1block2 = validFullBlock(Some(chain1block1), wusChain1Block1)
 
-    val (us2, bh2) = createUtxoState(parameters)
-    val wus2AfterGenesis = WrappedUtxoState(us2, bh2, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
+    val (us2, bh2) = createUtxoState(settings)
+    val wus2AfterGenesis = WrappedUtxoState(us2, bh2, settings, parameters).applyModifier(genesis)(_ => ()).get
     val chain2block1 = validFullBlock(Some(genesis), wus2AfterGenesis)
     val wusChain2Block1 = wus2AfterGenesis.applyModifier(chain2block1)(_ => ()).get
     val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
 
-    var (state, _) = createUtxoState(parameters)
+    var (state, _) = createUtxoState(settings)
     state = state.applyModifier(genesis, None)(_ => ()).get
 
     state = state.applyModifier(chain1block1, None)(_ => ()).get
@@ -494,7 +494,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         val us = createUtxoState(bh, parameters)
         bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
         val genesis = validFullBlock(parentOpt = None, us, bh)
-        val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis)(_ => ()).get
+        val wusAfterGenesis = WrappedUtxoState(us, bh, settings, parameters).applyModifier(genesis)(_ => ()).get
         wusAfterGenesis.rootDigest shouldEqual genesis.header.stateRoot
 
         val (finalState: WrappedUtxoState, chain: Seq[ErgoFullBlock]) = (0 until depth)

@@ -9,21 +9,21 @@ import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef, mempool}
+import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
-import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import sigmastate.SigmaAnd
 import sigmastate.Values.{ErgoTree, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol
@@ -85,7 +85,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     val boxToSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToSpend.propositionBytes shouldBe ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
+    boxToSpend.propositionBytes shouldBe ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
     val input = Input(boxToSpend.id, emptyProverResult)
 
@@ -94,7 +94,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val outputs = (0 until 10).map(_ => output)
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
     val tx = defaultProver.sign(unsignedTx, IndexedSeq(boxToSpend), IndexedSeq(), r.s.stateContext).get
-    nodeViewHolderRef ! LocallyGeneratedTransaction(mempool.UnconfirmedTransaction(ErgoTransaction(tx), None))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(tx), None))
     expectNoMessage(1 seconds)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
@@ -121,7 +121,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     txCost shouldBe 439080
 
     // send costly transaction to the mempool
-    nodeViewHolderRef ! LocallyGeneratedTransaction(mempool.UnconfirmedTransaction(ErgoTransaction(costlyTx), None))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(costlyTx), None))
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
@@ -186,7 +186,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
         )
       }
 
-      txs.map(tx => mempool.UnconfirmedTransaction(tx, None)).foreach(nodeViewHolderRef ! LocallyGeneratedTransaction(_))
+      txs.map(tx => UnconfirmedTransaction(tx, None)).foreach(nodeViewHolderRef ! LocallyGeneratedTransaction(_))
 
       if (toSend > toSpend.size) {
         // wait for the next block
@@ -241,7 +241,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToDoubleSpend.propositionBytes shouldBe ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
+    boxToDoubleSpend.propositionBytes shouldBe ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
     val input = Input(boxToDoubleSpend.id, emptyProverResult)
 
@@ -254,7 +254,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
     // As double-spending transactions are filtered out in the mempool, the only way to push them is to order to
     // include double-spending transaction directly via mandatoryTransactions argument of PrepareCandidate command
-    nodeViewHolderRef ! LocallyGeneratedTransaction(mempool.UnconfirmedTransaction(ErgoTransaction(tx1), None))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(tx1), None))
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     testProbe.expectNoMessage(200.millis)

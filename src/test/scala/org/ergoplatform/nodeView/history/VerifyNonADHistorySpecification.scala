@@ -11,7 +11,7 @@ import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.ProgressInfo
 
 class VerifyNonADHistorySpecification extends HistoryTestHelpers {
-  import org.ergoplatform.nodeView.history.storage.modifierprocessors.ToDownloadProcessor._
+  import scorex.core.utils.MapPimp
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
@@ -19,8 +19,8 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
   property("block sections application in incorrect order") {
     var history = genHistory()
     val chain = genChain(6, history)
-    if (!history.pruningProcessor.isHeadersChainSynced) {
-      history.pruningProcessor.updateBestFullBlock(chain.last.header)
+    if (!history.isHeadersChainSynced) {
+      history.updateBestFullBlock(chain.last.header)
     }
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     chain.foreach(fb => history.append(fb.extension).get)
@@ -95,8 +95,8 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     history.bestHeaderOpt.value shouldBe chain.last.header
     history.bestFullBlockOpt shouldBe None
 
-    if (!history.pruningProcessor.isHeadersChainSynced) {
-      history.pruningProcessor.updateBestFullBlock(chain.last.header)
+    if (!history.isHeadersChainSynced) {
+      history.updateBestFullBlock(chain.last.header)
     }
 
     // Until UTXO snapshot synchronization is implemented, we should always start to apply full blocks from genesis
@@ -121,13 +121,13 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
       newAcc.adjust(mType)(_.fold(Seq(mId))(_ :+ mId))
     }
 
-    history.nextModifiersToDownload(1, None, (_, id) => !history.contains(id))
+    history.nextModifiersToDownload(1, (_, id) => !history.contains(id))
       .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS.mapValues(_.take(1)).view.force
 
-    history.nextModifiersToDownload(2 * (BlocksToKeep - 1), None, (_, id) => !history.contains(id))
+    history.nextModifiersToDownload(2 * (BlocksToKeep - 1), (_, id) => !history.contains(id))
       .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS
 
-    history.nextModifiersToDownload(2, None, (_, id) => !history.contains(id) && (id != missedChain.head.blockTransactions.id))
+    history.nextModifiersToDownload(2, (_, id) => !history.contains(id) && (id != missedChain.head.blockTransactions.id))
       .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS.mapValues(_.take(2).filter( _ != missedChain.head.blockTransactions.id)).view.force
   }
 
@@ -156,7 +156,7 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
   }
 
   property("append header to genesis - 2") {
-    val (us, bh) = createUtxoState(parameters)
+    val (us, bh) = createUtxoState(settings)
 
     val block = validFullBlock(None, us, bh)
 

@@ -10,14 +10,14 @@ class LDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
       val valueA = (byteString("A"), byteString("1"))
       val valueB = (byteString("B"), byteString("2"))
 
-      store.update(toInsert = Array(valueA, valueB), toRemove = Array.empty).get
+      store.update(Array(valueA._1, valueB._1), Array(valueA._2, valueB._2), toRemove = Array.empty).get
 
       store.get(valueA._1).toBs shouldBe Some(valueA._2).toBs
       store.get(valueB._1).toBs shouldBe Some(valueB._2).toBs
 
       store.getAll.toSeq.toBs shouldBe Seq(valueA, valueB).toBs
 
-      store.update(toInsert = Array.empty, toRemove = Array(valueA._1)).get
+      store.update(Array.empty, Array.empty, toRemove = Array(valueA._1)).get
       store.get(valueA._1) shouldBe None
     }
   }
@@ -28,11 +28,11 @@ class LDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
       val valA = byteString("1")
       val valB = byteString("2")
 
-      store.insert(Array(key -> valA)).get
+      store.insert(key, valA).get
 
       store.get(key).toBs shouldBe Some(valA).toBs
 
-      store.insert(Array(key -> valB)).get
+      store.insert(key, valB).get
 
       store.get(key).toBs shouldBe Some(valB).toBs
 
@@ -49,7 +49,8 @@ class LDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
       val valueE = (byteString("E"), byteString("3"))
       val valueF = (byteString("F"), byteString("4"))
 
-      store.insert(Array(valueA, valueB, valueC, valueD, valueE, valueF)).get
+      val values = Array(valueA, valueB, valueC, valueD, valueE, valueF)
+      store.insert(values.map(_._1), values.map(_._2)).get
 
       store.lastKeyInRange(valueA._1, valueC._1).get.toSeq shouldBe valueC._1.toSeq
       store.lastKeyInRange(valueD._1, valueF._1).get.toSeq shouldBe valueF._1.toSeq

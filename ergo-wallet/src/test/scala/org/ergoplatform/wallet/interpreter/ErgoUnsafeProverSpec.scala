@@ -1,7 +1,7 @@
 package org.ergoplatform.wallet.interpreter
 
+import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers

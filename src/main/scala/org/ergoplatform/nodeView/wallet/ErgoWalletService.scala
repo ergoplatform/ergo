@@ -11,19 +11,21 @@ import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
 import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, ErgoBoxSerializer, TrackedBox}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, JsonSecretStorage}
+import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ModifierId}
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.DLogProverInput
+import special.collection.Extensions.CollBytesOps
 
 import java.io.FileNotFoundException
 import scala.collection.compat.immutable.ArraySeq
@@ -447,8 +449,12 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     registry.getTx(txId)
       .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
 
-  override def collectBoxes(state: ErgoWalletState, boxSelector: BoxSelector, targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]): Try[CollectedBoxes] = {
-    val assetsMap = targetAssets.map(t => bytesToId(t._1) -> t._2)
+  override def collectBoxes(
+      state: ErgoWalletState,
+      boxSelector: BoxSelector,
+      targetBalance: Long,
+      targetAssets: Map[ErgoBox.TokenId, Long]): Try[CollectedBoxes] = {
+    val assetsMap = targetAssets.map(t => t._1.toModifierId -> t._2)
     val inputBoxes = state.getBoxesToSpend
     boxSelector
       .select(inputBoxes.iterator, state.walletFilter, targetBalance, assetsMap)

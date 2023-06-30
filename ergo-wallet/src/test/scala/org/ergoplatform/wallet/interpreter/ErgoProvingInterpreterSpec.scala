@@ -1,15 +1,14 @@
 package org.ergoplatform.wallet.interpreter
 
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
+import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.utils.Generators
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, Random}
 import scorex.util.encode.Base16
-import scorex.util.Random
 import sigmastate.CTHRESHOLD
 import sigmastate.Values.{GroupElementConstant, SigmaBoolean}
 import sigmastate.interpreter.{ContextExtension, HintsBag}

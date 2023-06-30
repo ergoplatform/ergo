@@ -23,9 +23,9 @@ UTXO set is authenticated via AVL+ tree. Design principles for tree construction
 [https://eprint.iacr.org/2016/994.pdf](https://eprint.iacr.org/2016/994.pdf), the implementation of the 
 tree is available in [the Scrypto framework](https://github.com/input-output-hk/scrypto).
 
-Time is broken into epochs, 1 epoch = 51,200 blocks (~72 days).
+Time is broken into epochs, 1 epoch = 52,224 blocks (~72.5 days).
 Snapshot is taken after last block of an epoch, namely, after processing a block with 
-height *h % 51200 == 51199*.
+height *h % 52224 == 52,223*.
 
 Chunk format
 ------------

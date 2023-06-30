@@ -278,6 +278,28 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   /**
+    * signal to pull Utxo set snapshot from database and recreate UTXO set from it
+    */
+  def processStateSnapshot: Receive = {
+    case InitStateFromSnapshot(height, blockId) =>
+      if (!history().isUtxoSnapshotApplied) {
+        val store = minimalState().store
+        history().createPersistentProver(store, history(), height, blockId) match {
+          case Success(pp) =>
+            log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
+            history().onUtxoSnapshotApplied(height)
+            val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
+            updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+          case Failure(t) =>
+            log.error("UTXO set snapshot application failed: ", t)
+        }
+      } else {
+        log.warn("InitStateFromSnapshot arrived when state already initialized")
+      }
+
+  }
+
+  /**
     * Process new modifiers from remote.
     * Put all candidates to modifiersCache and then try to apply as much modifiers from cache as possible.
     * Clear cache if it's size exceeds size limit.
@@ -406,8 +428,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    val constants = StateConstants(settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[State], history) match {
+    restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history) match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
@@ -533,8 +554,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val dir = stateDir(settings)
     deleteRecursive(dir)
 
-    val constants = StateConstants(settings)
-    ErgoState.readOrGenerate(settings, constants)
+    ErgoState.readOrGenerate(settings)
       .asInstanceOf[State]
       .ensuring(
         state => java.util.Arrays.equals(state.rootDigest, settings.chainSettings.genesisStateDigest),
@@ -580,7 +600,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * Recovers digest state from history.
     */
   private def recoverDigestState(bestFullBlock: ErgoFullBlock, history: ErgoHistory): Try[DigestState] = {
-    val constants = StateConstants(settings)
     val votingLength = settings.chainSettings.voting.votingLength
     val bestHeight = bestFullBlock.header.height
     val newEpochHeadersQty = bestHeight % votingLength // how many blocks current epoch lasts
@@ -592,12 +611,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val recoveredStateTry = firstExtensionOpt
       .fold[Try[ErgoStateContext]](Failure(new Exception("Could not find extension to recover from"))
-      )(ext => ErgoStateContext.recover(constants.genesisStateDigest, ext, lastHeaders)(settings))
+      )(ext => ErgoStateContext.recover(settings.chainSettings.genesisStateDigest, ext, lastHeaders)(settings))
       .flatMap { ctx =>
         val recoverVersion = idToVersion(lastHeaders.last.id)
         val recoverRoot = bestFullBlock.header.stateRoot
-        val parameters = ctx.currentParameters
-        DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), constants, parameters)
+        DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), settings)
       }
 
     recoveredStateTry match {
@@ -609,7 +627,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case Failure(exception) => // recover using whole headers chain
         log.warn(s"Failed to recover state from current epoch, using whole chain: ${exception.getMessage}")
         val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
-        val genesisState = DigestState.create(None, None, stateDir(settings), constants)
+        val genesisState = DigestState.create(None, None, stateDir(settings), settings)
         wholeChain.foldLeft[Try[DigestState]](Success(genesisState)) { case (acc, m) =>
           acc.flatMap(_.applyModifier(m, history.estimatedTip())(lm => self ! lm))
         }
@@ -673,6 +691,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       transactionsProcessing orElse
       getCurrentInfo orElse
       getNodeViewChanges orElse
+      processStateSnapshot orElse
       handleHealthCheck orElse {
         case a: Any => log.error("Strange input: " + a)
       }

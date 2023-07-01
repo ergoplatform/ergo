@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings}
@@ -64,7 +64,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       ))
 
     var poolSize = ErgoMemPool.empty(sortBySizeSettings)
-    val uTx1 = mempool.UnconfirmedTransaction(tx, None)
+    val uTx1 = UnconfirmedTransaction(tx, None)
     poolSize = poolSize.process(uTx1, wus)._1
     poolSize.pool.orderedTransactions.firstKey._2 shouldBe uTx1.weight(ms,fPb)
 
@@ -74,7 +74,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       ))
 
     var poolCost = ErgoMemPool.empty(sortByCostSettings)
-    val uTx2 = mempool.UnconfirmedTransaction(tx, None)
+    val uTx2 = UnconfirmedTransaction(tx, None)
     poolCost = poolCost.process(uTx2, wus)._1
     poolCost.pool.orderedTransactions.firstKey._2 shouldBe uTx2.withCost(wus.validateWithCost(tx, Int.MaxValue).get).weight(ms,fPc)
   }
@@ -332,6 +332,13 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       })
     }
 
+    val weights = pool.pool.orderedTransactions.keysIterator.take(11).toSeq
+    val ids = weights.map(_._1)
+
+    pool.take(11).toSeq.map(_.transaction.id) shouldBe ids
+    pool.getAll.map(_.transaction.id) shouldBe ids
+    pool.getAllPrioritized.map(_.transaction.id) shouldBe ids
+
     val conformingTxs = pool.take(3).toSeq
     val stateWithTxs = wus.withUnconfirmedTransactions(conformingTxs)
 
@@ -389,9 +396,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   }
 
   it should "accept double-spending transaction if it is paying more than one already sitting in the pool" in {
-    val (us, bh) = createUtxoState(extendedParameters)
+    val (us, bh) = createUtxoState(settings)
     val genesis = validFullBlock(None, us, bh)
-    val wus = WrappedUtxoState(us, bh, stateConstants, extendedParameters).applyModifier(genesis)(_ => ()).get
+    val wus = WrappedUtxoState(us, bh, settings, extendedParameters).applyModifier(genesis)(_ => ()).get
 
     val input = wus.takeBoxes(100).collectFirst {
       case box if box.ergoTree == TrueLeaf.toSigmaProp.treeWithSegregation => box
@@ -407,7 +414,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
           ContextExtension(Map((1: Byte) -> ByteArrayConstant(Array.fill(1 + txCount - i)(0: Byte))))))
         ), IndexedSeq(out)
       )
-      txs(i) = mempool.UnconfirmedTransaction(ErgoTransaction(txLike.inputs, txLike.outputCandidates), None)
+      txs(i) = UnconfirmedTransaction(ErgoTransaction(txLike.inputs, txLike.outputCandidates), None)
     }
 
     val pool = ErgoMemPool.empty(settings)

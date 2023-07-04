@@ -129,7 +129,7 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
   /**
     * Computes NiPoPow proof for the given `chain` according to given `params`.
     *
-    * todo: Used in tests only, so maybe better to replace it in tests with prove (histReader)
+    * todo: Paper-like code used in tests only, so maybe better to replace it in tests with prove (histReader)
     */
   def prove(chain: Seq[PoPowHeader])(params: PoPowParams): Try[NipopowProof] = Try {
     val k = params.k

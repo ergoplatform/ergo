@@ -69,7 +69,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     */
   def hasValidDifficultyHeaders: Boolean = {
     if (continuous) {
-      //
+      // check that headers needed to check difficulty are in the proof
       val chainSettings = popowAlgos.chainSettings
       val epochLength = chainSettings.eip37EpochLength.getOrElse(chainSettings.epochLength)
       val diffAdjustment = new DifficultyAdjustment(chainSettings)

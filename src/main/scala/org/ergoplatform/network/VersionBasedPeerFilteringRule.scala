@@ -4,6 +4,10 @@ import org.ergoplatform.nodeView.state.StateType
 import scorex.core.app.Version
 import scorex.core.network.ConnectedPeer
 
+/**
+  * Basic interface for a filter describing an action of choosing peers from available ones
+  * based on peer capabilities.
+  */
 sealed trait PeerFilteringRule {
   /**
     * @param peer - peer
@@ -21,7 +25,10 @@ sealed trait PeerFilteringRule {
   }
 }
 
-object NipopowFilter extends PeerFilteringRule {
+/**
+  * Filter which selects peers NOT bootstrapped via NiPoPoWs (so peers having all the headers)
+  */
+object NipopowBootstrappedFilter extends PeerFilteringRule {
   /**
     * @param peer - peer
     * @return - whether the peer should be selected
@@ -32,8 +39,7 @@ object NipopowFilter extends PeerFilteringRule {
 }
 
 /**
-  * Basic abstract component describing an action of choosing peers from available ones
-  * based on peer version (and other properties).
+  * Basic interface for filters based on peer version only
   */
 trait VersionBasedPeerFilteringRule extends PeerFilteringRule {
 
@@ -118,7 +124,10 @@ object UtxoSetNetworkingFilter extends VersionBasedPeerFilteringRule {
 
 }
 
-object NipopowProofNetworkingFilter extends VersionBasedPeerFilteringRule {
+/**
+  * Version-based filter used to differentiate peers supporting nipopow-related p2p messages
+  */
+object NipopowSupportFilter extends VersionBasedPeerFilteringRule {
 
   def condition(version: Version): Boolean = {
     // If neighbour version is >= `UtxoSnapsnotActivationVersion`, the neighbour supports utxo snapshots exchange

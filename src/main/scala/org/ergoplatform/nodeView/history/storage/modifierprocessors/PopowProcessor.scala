@@ -57,7 +57,8 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
     * Checks and appends new header to history
     *
     * @param h - header to process
-    * @param nipopowMode
+    * @param nipopowMode if header is applied with parent potentially not available
+    *                    (which could be the valid case when NiPoPoW proof is used for bootstrapping headers-chain)
     * @return ProgressInfo - info required for State to be consistent with History
     */
   protected def process(h: Header, nipopowMode: Boolean): Try[ProgressInfo[BlockSection]]

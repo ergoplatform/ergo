@@ -30,6 +30,9 @@ class DifficultyAdjustmentSpecification extends ErgoPropertyTest {
     control.nextRecalculationHeight(926977, epochLength) shouldBe 927105
     control.nextRecalculationHeight(926975, epochLength) shouldBe 926977
     control.nextRecalculationHeight(926950, epochLength) shouldBe 926977
+    control.nextRecalculationHeight(1, epochLength) shouldBe 129
+    control.nextRecalculationHeight(129, epochLength) shouldBe 257
+    control.nextRecalculationHeight(256, epochLength) shouldBe 257
   }
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {

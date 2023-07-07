@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection, NetworkObjectTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
@@ -581,6 +581,10 @@ trait ErgoHistoryReader
         None
       }
     }.getOrElse(None)
+  }
+
+  def readPopowProofBytesFromDb(): Option[Array[Byte]] = {
+    historyStorage.getIndex(NipopowSnapshotHeightKey)
   }
 
 }

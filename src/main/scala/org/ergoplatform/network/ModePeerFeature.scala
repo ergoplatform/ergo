@@ -73,7 +73,7 @@ object ModeFeatureSerializer extends ErgoSerializer[ModePeerFeature] {
     w.put(mf.stateType.stateTypeCode)
     w.put(booleanToByte(mf.verifyingTransactions))
     w.putOption(mf.popowSuffix)(_.putInt(_))
-    w.putInt(mf.blocksToKeep) // todo: put -2 if bootstrapped from utxo set snapshot?
+    w.putInt(mf.blocksToKeep) // todo: put -2 if bootstrapped via utxo set snapshot? https://github.com/ergoplatform/ergo/issues/2014
   }
 
   override def parse(r: Reader): ModePeerFeature = {

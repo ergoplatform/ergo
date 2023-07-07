@@ -5,8 +5,8 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, NipopowProofSerializer, PoPowHeader, PoPowParams}
+import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.ChainSettings
 import org.ergoplatform.settings.Constants.HashLength
 import scorex.core.consensus.ProgressInfo
@@ -15,25 +15,44 @@ import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.util.Try
 
-
+/**
+  * Functional component of history storage and processing, which is focused on processing NiPoPoWs and storing
+  * corresponding data
+  */
 trait PopowProcessor extends BasicReaders with ScorexLogging {
 
-  protected val historyStorage: HistoryStorage
-
-  val NipopowSnapshotHeightKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(50: Byte))
-
-  val P2PNipopowProofM = 6
-  val P2PNipopowProofK = 10
+  /**
+    * @return interface to read objects from history database
+    */
+  def historyReader: ErgoHistoryReader
 
   protected def chainSettings: ChainSettings
 
-  lazy val nipopowAlgos: NipopowAlgos = new NipopowAlgos(chainSettings)
+  private lazy val nipopowAlgos: NipopowAlgos = new NipopowAlgos(chainSettings)
   lazy val nipopowSerializer = new NipopowProofSerializer(nipopowAlgos)
 
-  lazy val nipopowVerifier = new NipopowVerifier(chainSettings.genesisId.get) // todo: get
+  private lazy val nipopowVerifier =
+    new NipopowVerifier(chainSettings.genesisId.getOrElse(bestHeaderIdAtHeight(GenesisHeight).get))
 
-  def historyReader: ErgoHistoryReader
+  protected val NipopowSnapshotHeightKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(50: Byte))
 
+  /**
+    * Minimal superchain length ('m' in KMZ17 paper) value used in NiPoPoW proofs for bootstrapping
+    */
+  val P2PNipopowProofM = 6
+
+  /**
+    * Suffix length ('k' in KMZ17 paper) value used in NiPoPoW proofs for bootstrapping
+    */
+  val P2PNipopowProofK = 10
+
+  /**
+    * Checks and appends new header to history
+    *
+    * @param h - header to process
+    * @param nipopowMode
+    * @return ProgressInfo - info required for State to be consistent with History
+    */
   protected def process(h: Header, nipopowMode: Boolean): Try[ProgressInfo[BlockSection]]
 
   /**
@@ -70,8 +89,9 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
   /**
     * Constructs PoPoW proof for given m and k according to KMZ17 (FC20 version).
     * See PoPowAlgos.prove for construction details.
-    * @param m - min superchain length
-    * @param k - suffix length
+    *
+    * @param m           - min superchain length
+    * @param k           - suffix length
     * @param headerIdOpt - optional header to start suffix from (so to construct proof for the header).
     *                    Please note that k-1 headers will be provided after the header.
     * @return PoPow proof if success, Failure instance otherwise
@@ -93,18 +113,12 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
     popowProofBytes(P2PNipopowProofM, P2PNipopowProofK, None)
   }
 
-  def readPopowFromDb(): Option[NipopowProof] = {
-    historyStorage.getIndex(NipopowSnapshotHeightKey).map{bs =>
-      nipopowSerializer.parseBytes(bs)
-    }
-  }
-
   def applyPopowProof(proof: NipopowProof): Unit = {
     nipopowVerifier.process(proof) match {
       case BetterChain =>
         val headersToApply = nipopowVerifier.bestChain.distinct.sortBy(_.height)
         headersToApply.foreach { h =>
-          if (!historyStorage.contains(h.id)) {
+          if (!historyReader.contains(h.id)) {
             process(h, nipopowMode = true)
           }
         }

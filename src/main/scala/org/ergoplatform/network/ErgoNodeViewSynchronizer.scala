@@ -1015,32 +1015,35 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  private val nipopowProofSpec = NipopowProofSpec(settings)
-
   protected def sendNipopowProof(data: NipopowProofData, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
     //todo: ignoring data, check it ?
-    hr.readPopowFromDb() match {
-      case Some(proof) =>
-        val msg = Message(nipopowProofSpec, Right(proof), None)
+    hr.readPopowProofBytesFromDb() match {
+      case Some(proofBytes) =>
+        val msg = Message(NipopowProofSpec, Right(proofBytes), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
       case None =>
         log.warn("No Nipopow Proof available") //todo: msg
     }
   }
 
-  protected def processNipopowProof(proof: NipopowProof, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+  protected def processNipopowProof(proofBytes: Array[Byte], hr: ErgoHistory, peer: ConnectedPeer): Unit = {
     //todo: check proof's height
     //todo: consider proofs after first one applied, there could be different options here
     //e.g.  collect few proofs first and then apply, or apply again if better proof appeared
     if (hr.bestHeaderOpt.isEmpty) {
-      viewHolderRef ! InitHistoryFromNipopow(proof)
+      hr.nipopowSerializer.parseBytesTry(proofBytes) match {
+        case Success(proof) if proof.isValid =>
+          viewHolderRef ! InitHistoryFromNipopow(proof)
+        case _ =>
+          log.warn(s"Peer $peer sent wrong nipopow")
+          penalizeMisbehavingPeer(peer)
+      }
     } else {
       log.warn("Got nipopow proof, but it is already applied")
     }
   }
 
   private def requireNipopowProof(hr: ErgoHistory): Unit = {
-    // todo: such peers should not generate nipopows also ??
     val m = hr.P2PNipopowProofM
     val k = hr.P2PNipopowProofK
     val msg = Message(GetNipopowProofSpec, Right(NipopowProofData(m, k, None)), None)
@@ -1498,8 +1501,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
     case (_: GetNipopowProofSpec.type, data: NipopowProofData, remote) =>
       sendNipopowProof(data, hr, remote)
-    case (_: NipopowProofSpec, data: NipopowProof, remote) =>
-      processNipopowProof(data, hr, remote)
+    case (_: NipopowProofSpec.type , proofBytes: Array[Byte], remote) =>
+      processNipopowProof(proofBytes, hr, remote)
   }
 
   def initialized(hr: ErgoHistory,

@@ -167,7 +167,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
       ncProbe.fishForMessage(5 seconds) {
         case stn: SendToNetwork =>
           stn.message.spec match {
-            case _: NipopowProofSpec => true
+            case _: NipopowProofSpec.type => true
             case _ => false
           }
         case _: Any => false

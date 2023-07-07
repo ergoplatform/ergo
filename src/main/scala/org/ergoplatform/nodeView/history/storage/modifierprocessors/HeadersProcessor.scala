@@ -111,10 +111,6 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
 
   def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
-  /**
-    * @param h - header to process
-    * @return ProgressInfo - info required for State to be consistent with History
-    */
   protected def process(h: Header, nipopowMode: Boolean = false): Try[ProgressInfo[BlockSection]] = synchronized {
     val dataToInsert: (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = toInsert(h, nipopowMode)
 

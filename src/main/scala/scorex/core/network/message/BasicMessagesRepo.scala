@@ -3,8 +3,7 @@ package scorex.core.network.message
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
-import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, NipopowProofSerializer}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.Algos
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.Message.MessageCode
@@ -446,39 +445,28 @@ object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
 /**
   * The `NipopowProof` message is a reply to a `GetNipopowProof` message.
   */
-class NipopowProofSpec(serializer: ErgoSerializer[NipopowProof]) extends MessageSpecV1[NipopowProof] {
-
-  import NipopowProofSpec._
+object NipopowProofSpec extends MessageSpecV1[Array[Byte]] {
 
   val SizeLimit = 2000000
+  override val messageCode: Byte = 91
+  override val messageName: String = "NipopowProof"
 
-  override val messageCode: MessageCode = MessageCode
-  override val messageName: String = MessageName
-
-  override def serialize(proof: NipopowProof, w: Writer): Unit = {
-    serializer.serialize(proof, w)
+  override def serialize(proof: Array[Byte], w: Writer): Unit = {
+    w.putUInt(proof.length)
+    w.putBytes(proof)
     w.putUShort(0) // to allow adding new data in future, we are adding possible pad length
   }
 
-  override def parse(r: Reader): NipopowProof = {
+  override def parse(r: Reader): Array[Byte] = {
     require(r.remaining <= SizeLimit, s"Too big NipopowProofSpec message(size: ${r.remaining})")
-    val proof = serializer.parse(r)
+    val proofSize = r.getUInt().toIntExact
+    require(proofSize > 0  && proofSize < SizeLimit)
+    val proof = r.getBytes(proofSize)
     val remainingBytes = r.getUShort()
     if (remainingBytes > 0 && remainingBytes < SizeLimit) {
       r.getBytes(remainingBytes) // current version of reader just skips possible additional bytes
     }
     proof
-  }
-
-}
-
-object NipopowProofSpec {
-
-  val MessageCode: Byte = 91
-  val MessageName: String = "NipopowProof"
-
-  def apply(ergoSettings: ErgoSettings): NipopowProofSpec = {
-    new NipopowProofSpec(new NipopowProofSerializer(new NipopowAlgos(ergoSettings.chainSettings)))
   }
 
 }

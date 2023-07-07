@@ -583,6 +583,9 @@ trait ErgoHistoryReader
     }.getOrElse(None)
   }
 
+  /**
+    * @return serialized NiPoPoW proof store in database
+    */
   def readPopowProofBytesFromDb(): Option[Array[Byte]] = {
     historyStorage.getIndex(NipopowSnapshotHeightKey)
   }

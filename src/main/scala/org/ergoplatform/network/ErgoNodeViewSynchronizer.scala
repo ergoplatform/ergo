@@ -1708,6 +1708,10 @@ object ErgoNodeViewSynchronizer {
       */
     case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
 
+    /**
+      * Signal for a central node view holder component to initialize headers chain from NiPoPoW proof
+      * @param nipopowProof - proof to initialize history from
+      */
     case class InitHistoryFromNipopow(nipopowProof: NipopowProof)
   }
 

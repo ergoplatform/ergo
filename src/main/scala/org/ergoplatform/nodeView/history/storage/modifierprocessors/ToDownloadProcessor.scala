@@ -38,7 +38,6 @@ trait ToDownloadProcessor
 
   /**
     * @return min full block height the node has
-    * // todo: improve scaladoc
     */
   def minFullBlockAvailable: Int = minimalFullBlockHeight
 

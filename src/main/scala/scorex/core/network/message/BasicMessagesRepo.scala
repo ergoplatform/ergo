@@ -23,7 +23,7 @@ case class ModifiersData(typeId: NetworkObjectTypeId.Value, modifiers: Map[Modif
 
 case class InvData(typeId: NetworkObjectTypeId.Value, ids: Seq[ModifierId])
 
-case class NipopowProofData(m: Int = 6, k: Int = 6, headerId: Option[ModifierId]) {
+case class NipopowProofData(m: Int, k: Int, headerId: Option[ModifierId]) {
   def headerIdBytesOpt: Option[Array[Byte]] = headerId.map(Algos.decode).flatMap(_.toOption)
 }
 

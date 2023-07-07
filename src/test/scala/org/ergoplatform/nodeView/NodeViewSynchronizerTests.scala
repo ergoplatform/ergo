@@ -160,7 +160,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
 
       // Build and send GetNipopowProofSpec request
       val spec = GetNipopowProofSpec
-      val msgBytes = spec.toBytes(NipopowProofData(headerId = Some(headerId)))
+      val msgBytes = spec.toBytes(NipopowProofData(m = 6, k = 6,headerId = Some(headerId)))
       node ! Message[NipopowProofData](spec, Left(msgBytes), Option(peer))
 
       // Listen for NipopowProofSpec response

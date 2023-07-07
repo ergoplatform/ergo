@@ -8,9 +8,12 @@ import scorex.util.ModifierId
   * A verifier for PoPoW proofs. During its lifetime, it processes many proofs with the aim of deducing at any given
   * point what is the best (sub)chain rooted at the specified genesis.
   *
-  * @param genesisId    - the block id of the genesis block
+  * @param genesisIdOpt    - the block id of the genesis block as hard-coded in config. If not available, proof for
+  *                        any chain could be accepted! This is not desirable likely, thus better to set genesis block
+  *                        id in settings!
+  *
   */
-class NipopowVerifier(genesisId: ModifierId) {
+class NipopowVerifier(genesisIdOpt: Option[ModifierId]) {
 
   var bestProofOpt: Option[NipopowProof] = None
 
@@ -24,7 +27,7 @@ class NipopowVerifier(genesisId: ModifierId) {
     * @return - status of newProof validation, see `NipopowProofVerificationResult` ScalaDoc
     */
   def process(newProof: NipopowProof): NipopowProofVerificationResult = {
-    if (newProof.headersChain.head.id == genesisId) {
+    if (genesisIdOpt.isEmpty || genesisIdOpt.contains(newProof.headersChain.head.id)) {
       bestProofOpt match {
         case Some(bestProof) =>
           if (newProof.isBetterThan(bestProof)) {

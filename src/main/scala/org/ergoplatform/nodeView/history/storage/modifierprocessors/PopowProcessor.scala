@@ -26,13 +26,20 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
     */
   def historyReader: ErgoHistoryReader
 
+  /**
+    * @return settings corresponding to ergo { chain { ... }} section of the config
+    */
   protected def chainSettings: ChainSettings
 
   private lazy val nipopowAlgos: NipopowAlgos = new NipopowAlgos(chainSettings)
+
+  /**
+    * Binary serializer for NiPoPoW proofs
+    */
   lazy val nipopowSerializer = new NipopowProofSerializer(nipopowAlgos)
 
   private lazy val nipopowVerifier =
-    new NipopowVerifier(chainSettings.genesisId.getOrElse(bestHeaderIdAtHeight(GenesisHeight).get))
+    new NipopowVerifier(chainSettings.genesisId.orElse(bestHeaderIdAtHeight(GenesisHeight)))
 
   protected val NipopowSnapshotHeightKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(50: Byte))
 
@@ -101,22 +108,34 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
     nipopowAlgos.prove(historyReader, headerIdOpt = headerIdOpt)(proofParams)
   }
 
+  /**
+    * Constructs PoPoW proof for default m and k
+    */
   def popowProof(): Try[NipopowProof] = {
     popowProof(P2PNipopowProofM, P2PNipopowProofK, None)
   }
 
+  /**
+    * Constructs PoPoW proof for given m and k and then serializing it
+    */
   def popowProofBytes(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[Array[Byte]] = {
     popowProof(m, k, headerIdOpt).map(p => nipopowSerializer.toBytes(p))
   }
 
+  /**
+    * Constructs PoPoW proof for default m and k and then serializing it
+    */
   def popowProofBytes(): Try[Array[Byte]] = {
     popowProofBytes(P2PNipopowProofM, P2PNipopowProofK, None)
   }
 
+  /**
+    * Extract headers from proof and initialize history with them
+    */
   def applyPopowProof(proof: NipopowProof): Unit = {
     nipopowVerifier.process(proof) match {
       case BetterChain =>
-        val headersToApply = nipopowVerifier.bestChain.distinct.sortBy(_.height)
+        val headersToApply = nipopowVerifier.bestChain.sortBy(_.height) // sorting could be an overkill, but anyway
         headersToApply.foreach { h =>
           if (!historyReader.contains(h.id)) {
             process(h, nipopowMode = true)

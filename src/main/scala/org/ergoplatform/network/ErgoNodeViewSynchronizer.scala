@@ -1015,24 +1015,43 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  protected def sendNipopowProof(data: NipopowProofData, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
-    //todo: ignoring data, check it ?
-    hr.readPopowProofBytesFromDb() match {
-      case Some(proofBytes) =>
-        val msg = Message(NipopowProofSpec, Right(proofBytes), None)
-        networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
-      case None =>
-        log.warn("No Nipopow Proof available") //todo: msg
+  /**
+    * Ask peers around for NiPoPoW proofs of the chain to bootstrap
+    */
+  private def requireNipopowProof(hr: ErgoHistory): Unit = {
+    val m = hr.P2PNipopowProofM
+    val k = hr.P2PNipopowProofK
+    val msg = Message(GetNipopowProofSpec, Right(NipopowProofData(m, k, None)), None)
+    val peers = NipopowBootstrappedFilter.filter(syncTracker.knownPeers()).toSeq
+    networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+  }
+
+  /**
+    * Send NiPoPoW proof to a peer asked it
+    */
+  private def sendNipopowProof(data: NipopowProofData, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+    if (data.m == hr.P2PNipopowProofM && data.k == hr.P2PNipopowProofK && data.headerIdBytesOpt.isEmpty) {
+      hr.readPopowProofBytesFromDb() match {
+        case Some(proofBytes) =>
+          val msg = Message(NipopowProofSpec, Right(proofBytes), None)
+          networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+        case None =>
+          log.warn("No Nipopow Proof available")
+      }
+    } else {
+      // for now, we are serving proofs for concrete params only
+      log.warn(s"Peer $peer asked for a nipopow proof which can't be served (params: $data)")
     }
   }
 
-  protected def processNipopowProof(proofBytes: Array[Byte], hr: ErgoHistory, peer: ConnectedPeer): Unit = {
-    //todo: check proof's height
-    //todo: consider proofs after first one applied, there could be different options here
-    //e.g.  collect few proofs first and then apply, or apply again if better proof appeared
+  /**
+    * Process NiPoPoW proof got from remote peer
+    */
+  private def processNipopowProof(proofBytes: Array[Byte], hr: ErgoHistory, peer: ConnectedPeer): Unit = {
     if (hr.bestHeaderOpt.isEmpty) {
       hr.nipopowSerializer.parseBytesTry(proofBytes) match {
         case Success(proof) if proof.isValid =>
+          log.info(s"Got valid nipopow proof, size: ${proofBytes.length}")
           viewHolderRef ! InitHistoryFromNipopow(proof)
         case _ =>
           log.warn(s"Peer $peer sent wrong nipopow")
@@ -1043,13 +1062,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  private def requireNipopowProof(hr: ErgoHistory): Unit = {
-    val m = hr.P2PNipopowProofM
-    val k = hr.P2PNipopowProofK
-    val msg = Message(GetNipopowProofSpec, Right(NipopowProofData(m, k, None)), None)
-    val peers = NipopowBootstrappedFilter.filter(syncTracker.knownPeers()).toSeq
-    networkControllerRef ! SendToNetwork(msg, SendToPeers(peers)) //todo: send to most developed peers only ?
-  }
 
   /**
     * Object ids coming from other node.

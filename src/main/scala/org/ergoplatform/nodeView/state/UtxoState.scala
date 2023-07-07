@@ -218,10 +218,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     case bs: BlockSection =>
       log.warn(s"Only full-blocks are expected, found $bs")
       Success(this)
-
-    case a: Any =>
-      log.error(s"Unhandled unknown input: $a")
-      Failure(new Exception("unknown input"))
   }
 
   @SuppressWarnings(Array("OptionGet"))

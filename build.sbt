@@ -62,6 +62,8 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-parsing" % akkaHttpVersion,
   "com.typesafe.akka" %% "akka-stream" % akkaVersion,
   "org.bitlet" % "weupnp" % "0.1.4",
+
+  "org.zeromq" % "jeromq" % "0.5.3",
   
   // api dependencies 
   "io.circe" %% "circe-core" % circeVersion,

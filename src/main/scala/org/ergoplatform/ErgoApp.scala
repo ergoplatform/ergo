@@ -12,7 +12,7 @@ import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.{ErgoEventPublisherRef, ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
@@ -97,6 +97,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+
+  ErgoEventPublisherRef()
 
   // Create an instance of ErgoMiner actor if "mining = true" in config
   private val minerRefOpt: Option[ActorRef] =

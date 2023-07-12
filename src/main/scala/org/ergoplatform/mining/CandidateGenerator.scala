@@ -524,7 +524,7 @@ object CandidateGenerator extends ScorexLogging {
       } else if (state.stateContext.currentParameters.maxBlockCost < 5000000) {
         150000
       } else {
-        1000000
+        500000
       }
 
       val (txs, toEliminate) = collectTxs(

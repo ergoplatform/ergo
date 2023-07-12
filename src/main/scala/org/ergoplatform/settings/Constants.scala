@@ -90,7 +90,4 @@ object Constants {
     */
   object StateTreeParameters extends AvlTreeParameters(keySize = HashLength, valueSize = None, labelSize = HashLength)
 
-  def timeToTakeSnapshot(height: Int): Boolean = {
-    height % MakeSnapshotEvery == MakeSnapshotEvery - 1
-  }
 }

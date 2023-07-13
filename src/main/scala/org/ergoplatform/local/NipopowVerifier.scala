@@ -15,9 +15,9 @@ import scorex.util.ModifierId
   */
 class NipopowVerifier(genesisIdOpt: Option[ModifierId]) {
 
-  var bestProofOpt: Option[NipopowProof] = None
+  private var bestProofOpt: Option[NipopowProof] = None
 
-  def bestChain: Seq[Header] = {
+  def bestChain: Seq[Header] = bestProofOpt.synchronized {
     bestProofOpt.map(_.headersChain).getOrElse(Seq())
   }
 
@@ -26,7 +26,7 @@ class NipopowVerifier(genesisIdOpt: Option[ModifierId]) {
     * the best proof.
     * @return - status of newProof validation, see `NipopowProofVerificationResult` ScalaDoc
     */
-  def process(newProof: NipopowProof): NipopowProofVerificationResult = {
+  def process(newProof: NipopowProof): NipopowProofVerificationResult = bestProofOpt.synchronized {
     if (genesisIdOpt.isEmpty || genesisIdOpt.contains(newProof.headersChain.head.id)) {
       bestProofOpt match {
         case Some(bestProof) =>
@@ -52,7 +52,7 @@ class NipopowVerifier(genesisIdOpt: Option[ModifierId]) {
   /**
     * Clear proof stored
    */
-  def reset(): Unit = {
+  def reset(): Unit = bestProofOpt.synchronized {
     bestProofOpt = None
   }
 

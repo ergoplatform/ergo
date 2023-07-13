@@ -246,8 +246,6 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
           storedHeights += ph.height
         }
       }
-    } else {
-      Seq.empty
     }
 
     provePrefix(genesisHeight, suffixHead).foreach { ph =>

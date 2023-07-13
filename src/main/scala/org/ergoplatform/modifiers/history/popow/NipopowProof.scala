@@ -19,6 +19,8 @@ import scorex.util.Extensions.LongOps
   * @param prefix     - proof prefix headers
   * @param suffixHead - first header of the suffix
   * @param suffixTail - tail of the proof suffix headers
+  * @param continuous - if the proof in continuous mode, see `org.ergoplatform.modifiers.history.popow.PoPowParams`
+  *                     scaladoc for details
   */
 case class NipopowProof(popowAlgos: NipopowAlgos,
                         m: Int,
@@ -28,13 +30,13 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
                         suffixTail: Seq[Header],
                         continuous: Boolean) {
 
-  def serializer: ErgoSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
+  lazy val serializer: ErgoSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
 
-  def headersChain: Seq[Header] = prefixHeaders ++ suffixHeaders
+  lazy val headersChain: Seq[Header] = prefixHeaders ++ suffixHeaders
 
-  def prefixHeaders: Seq[Header] = prefix.map(_.header)
+  lazy val prefixHeaders: Seq[Header] = prefix.map(_.header)
 
-  def suffixHeaders: Seq[Header] = suffixHead.header +: suffixTail
+  lazy val suffixHeaders: Seq[Header] = suffixHead.header +: suffixTail
 
   def chainOfLevel(l: Int): Seq[PoPowHeader] = prefix.filter(x => popowAlgos.maxLevelOf(x.header) >= l)
 
@@ -59,7 +61,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * Checks if the proof is valid: if the heights are consistent and the connections are valid.
     * @return true if the proof is valid
     */
-  def isValid: Boolean = {
+  lazy val isValid: Boolean = {
     this.hasValidConnections && this.hasValidHeights && this.hasValidProofs && this.hasValidDifficultyHeaders
   }
 
@@ -67,7 +69,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return true if proof contains headers needed to check difficulty after the suffix,
     *         or if the proof is for non-continuous mode, false otherwise
     */
-  def hasValidDifficultyHeaders: Boolean = {
+  lazy val hasValidDifficultyHeaders: Boolean = {
     if (continuous) {
       // check that headers needed to check difficulty are in the proof
       val chainSettings = popowAlgos.chainSettings
@@ -94,7 +96,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     *
     * @return true if the heights of the header-chain are consistent
     */
-  def hasValidHeights: Boolean = {
+  lazy val hasValidHeights: Boolean = {
     headersChain.zip(headersChain.tail).forall({
       case (prev, next) => prev.height < next.height
     })
@@ -106,7 +108,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     *
     * @return true if all adjacent blocks are correctly connected
     */
-  def hasValidConnections: Boolean = {
+  lazy val hasValidConnections: Boolean = {
     prefix.zip(prefix.tail :+ suffixHead).forall({
       // Note that blocks with level 0 do not appear at all within interlinks, which is why we need to check the parent
       // block id as well.
@@ -119,10 +121,11 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
   /**
    * Checks the interlink proofs of the blocks in the proof.
    */
-  def hasValidProofs: Boolean = {
+  lazy val hasValidProofs: Boolean = {
     prefix.forall(_.checkInterlinksProof()) &&
       suffixHead.checkInterlinksProof()
   }
+
 }
 
 object NipopowProof {

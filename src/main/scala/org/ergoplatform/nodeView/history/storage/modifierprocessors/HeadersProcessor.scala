@@ -131,7 +131,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     * Data to add to and remove from the storage to process a header
     * @param h - header to be written into the storage
     * @param nipopowMode - flag showing whether header `h` is applied sequentially (so parent is already there), or
-    *                     coming after a possible gap (during nipopow application)
+    *                     coming after a possible gap (during nipopow application). If true, a gap is possible.
     */
   private def toInsert(h: Header, nipopowMode: Boolean): (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = {
     //todo: construct resulting Array without ++
@@ -139,7 +139,8 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
 
-    // todo: comment
+    // in nipopow comment, we consider that header we got is in best chain (which is guaranteed by the proof),
+    // so we do not check chain's score (and we do not have it)
     val bestHeader = if (nipopowMode) {
       true
     } else {

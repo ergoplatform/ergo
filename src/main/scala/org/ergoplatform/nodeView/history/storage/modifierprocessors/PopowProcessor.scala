@@ -84,7 +84,7 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
   }
 
   /**
-    * Constructs popow header (header + interlinks) for еру best header at given height
+    * Constructs popow header (header + interlinks) for best header at given height
     *
     * @param height - height
     * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available

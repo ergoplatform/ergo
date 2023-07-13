@@ -174,7 +174,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
         h.height % MakeSnapshotEvery == MakeSnapshotEvery - 1 - Constants.LastHeadersInContext
     }
 
-    val nipopowsRow = if (timeToTakeNipopowProof) {
+    val nipopowsRow: Seq[(ByteArrayWrapper, Array[Byte])] = if (timeToTakeNipopowProof) {
       val ts0 = System.currentTimeMillis()
       popowProofBytes() match {
         case Success(pbs) =>
@@ -183,10 +183,10 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
           Array(NipopowSnapshotHeightKey -> pbs)
         case Failure(e) =>
           log.error("Nipopow proof generation failed ", e)
-          Array.empty
+          Array.empty[(ByteArrayWrapper, Array[Byte])]
       }
     } else {
-      Array.empty
+      Array.empty[(ByteArrayWrapper, Array[Byte])]
     }
 
     (Array(scoreRow, heightRow) ++ bestRow ++ headerIdsRow ++ nipopowsRow, Array(h))

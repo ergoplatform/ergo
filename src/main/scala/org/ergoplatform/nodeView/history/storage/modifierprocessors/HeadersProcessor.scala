@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.settings.Constants.{HashLength, MakeSnapshotEvery}
+import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import scorex.core.consensus.ProgressInfo

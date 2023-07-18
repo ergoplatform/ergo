@@ -77,15 +77,19 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
       val diffAdjustment = new DifficultyAdjustment(chainSettings)
       var lastIndex = 0
       diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).forall { height =>
-        lastIndex = headersChain.indexWhere(_.height == height, lastIndex)
-        if (lastIndex == -1) {
-          false
+        if (height > 0 && height < suffixHead.height) {
+          lastIndex = headersChain.indexWhere(_.height == height, lastIndex)
+          if (lastIndex == -1) {
+            false
+          } else {
+            true
+          }
         } else {
           true
         }
       }
     } else {
-      // if the proof is for non-continuous mode, not checking difficulty headers membership  in the proof
+      // if the proof is for non-continuous mode, not checking difficulty headers membership in the proof
       true
     }
   }

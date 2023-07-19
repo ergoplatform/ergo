@@ -118,10 +118,12 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
   lazy val hasValidConnections: Boolean = {
     val maxDiffHeaders = popowAlgos.chainSettings.useLastEpochs + 1
 
-    val prefixConnections = (1 until prefix.length).forall { checkIdx =>
-      val next = prefix(checkIdx)
+    val prefixToCheck = prefix :+ suffixHead
+
+    val prefixConnections = (1 until prefixToCheck.length).forall { checkIdx =>
+      val next = prefixToCheck(checkIdx)
       (checkIdx - 1).to(Math.max(0, checkIdx - maxDiffHeaders - 1 - 1), -1).exists { prevIdx =>
-        val prev = prefix(prevIdx)
+        val prev = prefixToCheck(prevIdx)
         // Note that blocks with level 0 do not appear at all within interlinks, which is why we need to check the parent
         // block id as well.
         next.interlinks.contains(prev.id) || next.header.parentId == prev.id

@@ -26,15 +26,19 @@ sealed trait PeerFilteringRule {
 }
 
 /**
-  * Filter which selects peers NOT bootstrapped via NiPoPoWs (so peers having all the headers)
+  * Filter which selects peers NOT bootstrapped via NiPoPoWs (so peers having all the headers),
+  * and also having version supporting bootstrapping with NiPoPoWs
   */
-object NipopowBootstrappedFilter extends PeerFilteringRule {
+object NipopowSupportFilter extends PeerFilteringRule {
   /**
     * @param peer - peer
     * @return - whether the peer should be selected
     */
   override def condition(peer: ConnectedPeer): Boolean = {
-    peer.mode.flatMap(_.popowSuffix).isEmpty
+    val version = peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
+
+    peer.mode.flatMap(_.popowSuffix).isEmpty &&
+      version.compare(Version.NipopowActivationVersion) >= 0
   }
 }
 
@@ -120,18 +124,6 @@ object UtxoSetNetworkingFilter extends VersionBasedPeerFilteringRule {
   def condition(version: Version): Boolean = {
     // If neighbour version is >= `UtxoSnapsnotActivationVersion`, the neighbour supports utxo snapshots exchange
     version.compare(Version.UtxoSnapsnotActivationVersion) >= 0
-  }
-
-}
-
-/**
-  * Version-based filter used to differentiate peers supporting nipopow-related p2p messages
-  */
-object NipopowSupportFilter extends VersionBasedPeerFilteringRule {
-
-  def condition(version: Version): Boolean = {
-    // If neighbour version is >= `UtxoSnapsnotActivationVersion`, the neighbour supports utxo snapshots exchange
-    version.compare(Version.NipopowActivationVersion) >= 0
   }
 
 }

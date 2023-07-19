@@ -1022,7 +1022,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val m = hr.P2PNipopowProofM
     val k = hr.P2PNipopowProofK
     val msg = Message(GetNipopowProofSpec, Right(NipopowProofData(m, k, None)), None)
-    val peers = NipopowBootstrappedFilter.filter(syncTracker.knownPeers()).toSeq
+    val peers = NipopowSupportFilter.filter(syncTracker.knownPeers()).toSeq
     networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
   }
 

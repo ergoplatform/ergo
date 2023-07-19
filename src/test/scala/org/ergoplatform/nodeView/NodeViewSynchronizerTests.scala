@@ -149,18 +149,15 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
 
       // Generate history chain
       val emptyHistory = historyGen.sample.get
-      val prefix = blockStream(None).take(10)
-      val prefixHistory = applyChain(emptyHistory, prefix)
-      val suffix = blockStream(Some(prefix.last)).take(10)
-      val fullHistory = applyChain(prefixHistory, suffix)
-      val headerId = suffix.head.header.id
+      val prefix = blockStream(None).take(100)
+      val fullHistory = applyChain(emptyHistory, prefix)
 
       // Broadcast updated history
       node ! ChangedHistory(fullHistory)
 
       // Build and send GetNipopowProofSpec request
       val spec = GetNipopowProofSpec
-      val msgBytes = spec.toBytes(NipopowProofData(m = 6, k = 6,headerId = Some(headerId)))
+      val msgBytes = spec.toBytes(NipopowProofData(m = emptyHistory.P2PNipopowProofM, k = emptyHistory.P2PNipopowProofK, headerId = None))
       node ! Message[NipopowProofData](spec, Left(msgBytes), Option(peer))
 
       // Listen for NipopowProofSpec response

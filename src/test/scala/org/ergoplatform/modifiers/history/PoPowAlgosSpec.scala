@@ -15,6 +15,8 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   private val poPowParams = PoPowParams(30, 30, continuous = false)
   private val ChainLength = 10
 
+  private def toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
+
   property("updateInterlinks") {
     val chain = genChain(ChainLength)
     val genesis = chain.head
@@ -159,7 +161,6 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
 
   property("isBetterThan - marginally longer chain should be better") {
     val sizes = Seq(1000)
-    val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     sizes.foreach { size =>
       val baseChain = genChain(size)
       val branchPoint = baseChain(baseChain.length - 1)
@@ -176,7 +177,6 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   property("isBetterThan - a disconnected prefix chain should not win") {
     val smallPoPowParams = PoPowParams(50, 1, continuous = false)
     val size = 100
-    val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     val chain = toPoPoWChain(genChain(size))
     val proof = nipopowAlgos.prove(chain)(smallPoPowParams).get
 
@@ -191,7 +191,6 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   property("hasValidConnections - ensures a connected prefix chain") {
     val smallPoPowParams = PoPowParams(5, 5, continuous = false)
     val sizes = Seq(100, 200)
-    val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     sizes.foreach { size =>
       val chain = toPoPoWChain(genChain(size))
       val randomBlock = toPoPoWChain(genChain(1)).head
@@ -206,7 +205,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   property("hasValidConnections - ensures a connected suffix chain") {
     val smallPoPowParams = PoPowParams(5, 5, continuous = false)
     val sizes = Seq(100, 200)
-    val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
+
     sizes.foreach { size =>
       val chain = toPoPoWChain(genChain(size))
       val randomBlock = genChain(1).head.header
@@ -219,7 +218,6 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   }
 
   property("hasValidConnections - ensures prefix.last & suffix.head are linked") {
-    val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     val prefix = toPoPoWChain(genChain(1))
     val suffix = toPoPoWChain(genChain(1))
     NipopowProof(nipopowAlgos, 0, 0, prefix, suffix.head, suffix.tail.map(_.header), continuous = false).hasValidConnections shouldBe false

@@ -60,8 +60,8 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val s = stateGen.sample.get
     val settings = ErgoSettings.read()
     val pool = ErgoMemPool.empty(settings)
-    val v = h.bestFullBlockIdOpt.orElse(h.bestHeaderIdOpt).get
-    s.store.update(idToBytes(v), Seq(), Seq()).get
+    val v = h.bestFullBlockIdOpt.orElse(h.bestHeaderIdOpt)
+    v.foreach(id => s.store.update(idToBytes(id), Seq(), Seq()).get)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
     val vhProbe = TestProbe("ViewHolderProbe")

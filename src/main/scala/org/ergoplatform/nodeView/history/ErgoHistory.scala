@@ -296,29 +296,15 @@ object ErgoHistory extends ScorexLogging {
 
     val nodeSettings = ergoSettings.nodeSettings
 
-    val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {
-      case (true, true) =>
+    val history: ErgoHistory = nodeSettings.verifyTransactions match {
+      case true =>
         new ErgoHistory with FullBlockSectionProcessor {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
         }
 
-      case (false, true) =>
-        new ErgoHistory with EmptyBlockSectionProcessor {
-          override protected val settings: ErgoSettings = ergoSettings
-          override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-        }
-
-      case (true, false) =>
-        new ErgoHistory with FullBlockSectionProcessor {
-          override protected val settings: ErgoSettings = ergoSettings
-          override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-        }
-
-      case (false, false) =>
+      case false =>
         new ErgoHistory with EmptyBlockSectionProcessor {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db

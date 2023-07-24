@@ -444,7 +444,7 @@ object CandidateGenerator extends ScorexLogging {
                        ergoSettings: ErgoSettings
   ): Try[(Candidate, EliminateTransactions)] =
     Try {
-      val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings.powScheme)
+      val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
       // Extract best header and extension of a best block user their data for assembling a new block
       val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
@@ -524,7 +524,7 @@ object CandidateGenerator extends ScorexLogging {
       } else if (state.stateContext.currentParameters.maxBlockCost < 5000000) {
         150000
       } else {
-        1000000
+        500000
       }
 
       val (txs, toEliminate) = collectTxs(

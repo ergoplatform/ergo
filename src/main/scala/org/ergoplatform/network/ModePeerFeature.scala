@@ -34,7 +34,7 @@ object ModePeerFeature {
   import io.circe.syntax._
 
   def apply(nodeSettings: NodeConfigurationSettings): ModePeerFeature = {
-    val popowSuffix = if (nodeSettings.poPoWBootstrap) Some(nodeSettings.minimalSuffix) else None
+    val popowSuffix = if (nodeSettings.popowBootstrap) Some(nodeSettings.popowSuffix) else None
 
     new ModePeerFeature(
       nodeSettings.stateType,
@@ -73,7 +73,7 @@ object ModeFeatureSerializer extends ErgoSerializer[ModePeerFeature] {
     w.put(mf.stateType.stateTypeCode)
     w.put(booleanToByte(mf.verifyingTransactions))
     w.putOption(mf.popowSuffix)(_.putInt(_))
-    w.putInt(mf.blocksToKeep)
+    w.putInt(mf.blocksToKeep) // todo: put -2 if bootstrapped via utxo set snapshot? https://github.com/ergoplatform/ergo/issues/2014
   }
 
   override def parse(r: Reader): ModePeerFeature = {

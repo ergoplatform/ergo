@@ -28,7 +28,7 @@ case class ErgoSettings(directory: String,
                         cacheSettings: CacheSettings,
                         votingTargets: VotingTargets = VotingTargets.empty) {
 
-  val addressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
+  val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
 
   val miningRewardDelay: Int = chainSettings.monetary.minerRewardDelay
 
@@ -197,15 +197,16 @@ object ErgoSettings extends ScorexLogging
 
   private def consistentSettings(settings: ErgoSettings,
                                  desiredNetworkTypeOpt: Option[NetworkType]): ErgoSettings = {
-    if (settings.nodeSettings.keepVersions < 0) {
+    val nodeSettings = settings.nodeSettings
+    if (nodeSettings.keepVersions < 0) {
       failWithError("nodeSettings.keepVersions should not be negative")
-    } else if (!settings.nodeSettings.verifyTransactions && !settings.nodeSettings.stateType.requireProofs) {
+    } else if (!nodeSettings.verifyTransactions && !nodeSettings.stateType.requireProofs) {
       failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
     } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {
       failWithError(s"Malformed network config. Desired networkType is `${desiredNetworkTypeOpt.get}`, " +
         s"but one declared in config is `${settings.networkType}`")
     } else if(settings.networkType.isMainNet &&
-                settings.nodeSettings.mining &&
+                nodeSettings.mining &&
                 !settings.chainSettings.reemission.checkReemissionRules) {
       failWithError(s"Mining is enabled, but ergo.chain.reemission.checkReemissionRules = false , set it to true")
     } else if (settings.scorexSettings.restApi.publicUrl.exists(invalidRestApiUrl)) {
@@ -215,6 +216,12 @@ object ErgoSettings extends ScorexLogging
       failWithError(s"p2pUtxoSnapshots <= 0, must be 1 at least")
     } else if (settings.nodeSettings.extraIndex && settings.nodeSettings.isFullBlocksPruned) {
       failWithError(s"Extra indexes could be enabled only if there is no blockchain pruning")
+    } else if (nodeSettings.popowBootstrap &&
+                !(nodeSettings.utxoSettings.utxoBootstrap || nodeSettings.blocksToKeep >= 0)) {
+      failWithError("nodeSettings.popowBootstrap can be set only if " +
+                    "nodeSettings.utxoBootstrap is set or nodeSettings.blocksToKeep >=0")
+    } else if (nodeSettings.popowBootstrap && settings.chainSettings.genesisId.isEmpty) {
+      failWithError("nodeSettings.popowBootstrap is set but genesisId is not")
     } else {
       settings
     }
@@ -228,7 +235,7 @@ object ErgoSettings extends ScorexLogging
   /**
     * Override the log level at runtime with values provided in config/user provided config.
     */
-  private def overrideLogLevel(level: String) = level match {
+  private def overrideLogLevel(level: String): Unit = level match {
       case "TRACE" | "ERROR" | "INFO" | "WARN" | "DEBUG" =>
         log.info(s"Log level set to $level")
         val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]

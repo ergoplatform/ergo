@@ -36,7 +36,7 @@ trait ErgoHistoryReader
 
   protected val settings: ErgoSettings
 
-  override protected val nipopowSettings: NipopowSettings = settings.nodeSettings.nipopowSettings
+  override protected def nipopowSettings: NipopowSettings = settings.nodeSettings.nipopowSettings
 
   private val Valid = 1.toByte
   private val Invalid = 0.toByte

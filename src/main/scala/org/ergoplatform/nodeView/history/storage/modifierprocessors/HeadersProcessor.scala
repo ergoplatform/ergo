@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.settings.Constants.{HashLength, MakeSnapshotEvery}
+import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import scorex.core.consensus.ProgressInfo
@@ -170,8 +170,9 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
       // as no extension sections (with interlinks) available for headers downloaded via nipopows
       false
     } else  {
-     this.isHeadersChainSynced &&
-        h.height % MakeSnapshotEvery == MakeSnapshotEvery - 1 - Constants.LastHeadersInContext
+      val makeSnapshotEvery = chainSettings.makeSnapshotEvery
+      this.isHeadersChainSynced &&
+        h.height % makeSnapshotEvery == makeSnapshotEvery - 1 - Constants.LastHeadersInContext
     }
 
     val nipopowsRow: Seq[(ByteArrayWrapper, Array[Byte])] = if (timeToTakeNipopowProof) {

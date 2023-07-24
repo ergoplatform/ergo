@@ -6,15 +6,19 @@ package org.ergoplatform.local
   */
 sealed trait NipopowProofVerificationResult
 
+sealed trait CorrectNipopowProofVerificationResult extends NipopowProofVerificationResult {
+  val totalProofsProcessed: Int
+}
+
 /**
   * Presented nipopow proof is better than known one
   */
-case object BetterChain extends NipopowProofVerificationResult
+case class BetterChain(override val totalProofsProcessed: Int) extends CorrectNipopowProofVerificationResult
 
 /**
   * Presented nipopow proof is no better than known one
   */
-case object NoBetterChain extends NipopowProofVerificationResult
+case class NoBetterChain(override val totalProofsProcessed: Int) extends CorrectNipopowProofVerificationResult
 
 /**
   * Presented nipopow proof is not valid

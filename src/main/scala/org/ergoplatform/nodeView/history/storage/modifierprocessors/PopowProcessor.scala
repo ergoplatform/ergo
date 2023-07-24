@@ -1,13 +1,13 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.local.{BetterChain, NipopowProofVerificationResult, NipopowVerifier}
+import org.ergoplatform.local.{CorrectNipopowProofVerificationResult, NipopowProofVerificationResult, NipopowVerifier}
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, NipopowProofSerializer, PoPowHeader, PoPowParams}
 import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.settings.ChainSettings
+import org.ergoplatform.settings.{ChainSettings, NipopowSettings}
 import org.ergoplatform.settings.Constants.HashLength
 import scorex.core.consensus.ProgressInfo
 import scorex.db.ByteArrayWrapper
@@ -30,6 +30,8 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
     * @return settings corresponding to ergo { chain { ... }} section of the config
     */
   protected def chainSettings: ChainSettings
+
+  protected def nipopowSettings: NipopowSettings
 
   private lazy val nipopowAlgos: NipopowAlgos = new NipopowAlgos(chainSettings)
 
@@ -135,15 +137,19 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
     */
   def applyPopowProof(proof: NipopowProof): Unit = {
     nipopowVerifier.process(proof) match {
-      case BetterChain =>
-        val headersToApply = nipopowVerifier.bestChain.sortBy(_.height) // sorting could be an overkill, but anyway
-        headersToApply.foreach { h =>
-          if (!historyReader.contains(h.id)) {
-            process(h, nipopowMode = true)
+      case res: CorrectNipopowProofVerificationResult =>
+        if (res.totalProofsProcessed >= nipopowSettings.p2pNipopows) {
+          val headersToApply = nipopowVerifier.bestChain.sortBy(_.height) // sorting could be an overkill, but anyway
+          headersToApply.foreach { h =>
+            if (!historyReader.contains(h.id)) {
+              process(h, nipopowMode = true)
+            }
           }
+          nipopowVerifier.reset()
+          log.info(s"Nipopow proof applied, best header now is ${historyReader.bestHeaderOpt}")
+        } else {
+          log.info(s"Processed ${res.totalProofsProcessed} NiPoPoW proofs, quorum needed: ${nipopowSettings.p2pNipopows}")
         }
-        nipopowVerifier.reset()
-        log.info(s"Nipopow proof applied, best header now is ${historyReader.bestHeaderOpt}")
       case r: NipopowProofVerificationResult =>
         log.warn(s"NiPoPoW proof is no better or invalid ($r): $proof")
     }

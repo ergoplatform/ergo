@@ -335,7 +335,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     *
     */
   protected def sendSync(history: ErgoHistory): Unit = {
-    if (history.bestHeaderOpt.isEmpty && settings.nodeSettings.popowBootstrap) {
+    if (history.bestHeaderOpt.isEmpty && settings.nodeSettings.nipopowSettings.nipopowBootstrap) {
       // if no any header applied yet, and boostrapping via nipopows is ordered,
       // ask for nipopow proofs instead of sending sync signal
       requireNipopowProof(history)
@@ -1052,7 +1052,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       hr.nipopowSerializer.parseBytesTry(proofBytes) match {
         case Success(proof) if proof.isValid =>
           log.info(s"Got valid nipopow proof, size: ${proofBytes.length}")
-          viewHolderRef ! InitHistoryFromNipopow(proof)
+          viewHolderRef ! ProcessNipopow(proof)
         case _ =>
           log.warn(s"Peer $peer sent wrong nipopow")
           penalizeMisbehavingPeer(peer)
@@ -1724,7 +1724,7 @@ object ErgoNodeViewSynchronizer {
       * Signal for a central node view holder component to initialize headers chain from NiPoPoW proof
       * @param nipopowProof - proof to initialize history from
       */
-    case class InitHistoryFromNipopow(nipopowProof: NipopowProof)
+    case class ProcessNipopow(nipopowProof: NipopowProof)
   }
 
 }

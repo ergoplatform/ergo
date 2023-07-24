@@ -16,6 +16,7 @@ import scorex.util.ModifierId
 class NipopowVerifier(genesisIdOpt: Option[ModifierId]) {
 
   private var bestProofOpt: Option[NipopowProof] = None
+  private var proofsProcessed = 0
 
   def bestChain: Seq[Header] = bestProofOpt.synchronized {
     bestProofOpt.map(_.headersChain).getOrElse(Seq())
@@ -32,14 +33,21 @@ class NipopowVerifier(genesisIdOpt: Option[ModifierId]) {
         case Some(bestProof) =>
           if (newProof.isBetterThan(bestProof)) {
             bestProofOpt = Some(newProof)
-            BetterChain
+            proofsProcessed += 1
+            BetterChain(proofsProcessed)
           } else {
-            NoBetterChain
+            if (newProof.isValid) {
+              proofsProcessed += 1
+              NoBetterChain(proofsProcessed)
+            } else {
+              ValidationError
+            }
           }
         case None =>
           if (newProof.isValid) {
             bestProofOpt = Some(newProof)
-            BetterChain
+            proofsProcessed += 1
+            BetterChain(proofsProcessed)
           } else {
             ValidationError
           }

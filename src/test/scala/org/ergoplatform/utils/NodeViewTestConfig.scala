@@ -2,7 +2,7 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
 
 
 case class NodeViewTestConfig(stateType: StateType,
@@ -18,7 +18,7 @@ case class NodeViewTestConfig(stateType: StateType,
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = stateType,
         verifyTransactions = verifyTransactions,
-        popowBootstrap = popowBootstrap
+        nipopowSettings = NipopowSettings(popowBootstrap, 1, 10)
       )
     )
   }

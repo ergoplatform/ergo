@@ -1,5 +1,6 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.nodeView.history.extra.ChainGenerator
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -25,8 +26,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       verifyTransactions = true,
       1000,
       utxoSettings = UtxoSettings(false, 0, 2),
-      popowBootstrap = false,
-      10,
+      nipopowSettings = NipopowSettings(false, 1, ChainGenerator.minimalSuffix),
       mining = true,
       txCostLimit,
       txSizeLimit,
@@ -75,8 +75,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       verifyTransactions = true,
       12,
       utxoSettings = UtxoSettings(false, 0, 2),
-      popowBootstrap = false,
-      10,
+      nipopowSettings = NipopowSettings(false, 1, ChainGenerator.minimalSuffix),
       mining = true,
       txCostLimit,
       txSizeLimit,
@@ -118,8 +117,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       verifyTransactions = true,
       13,
       utxoSettings = UtxoSettings(false, 0, 2),
-      popowBootstrap = false,
-      10,
+      nipopowSettings = NipopowSettings(false, 1, 10),
       mining = true,
       txCostLimit,
       txSizeLimit,

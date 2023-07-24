@@ -216,11 +216,11 @@ object ErgoSettings extends ScorexLogging
       failWithError(s"p2pUtxoSnapshots <= 0, must be 1 at least")
     } else if (settings.nodeSettings.extraIndex && settings.nodeSettings.isFullBlocksPruned) {
       failWithError(s"Extra indexes could be enabled only if there is no blockchain pruning")
-    } else if (nodeSettings.popowBootstrap &&
+    } else if (nodeSettings.nipopowSettings.nipopowBootstrap &&
                 !(nodeSettings.utxoSettings.utxoBootstrap || nodeSettings.blocksToKeep >= 0)) {
       failWithError("nodeSettings.popowBootstrap can be set only if " +
                     "nodeSettings.utxoBootstrap is set or nodeSettings.blocksToKeep >=0")
-    } else if (nodeSettings.popowBootstrap && settings.chainSettings.genesisId.isEmpty) {
+    } else if (nodeSettings.nipopowSettings.nipopowBootstrap && settings.chainSettings.genesisId.isEmpty) {
       failWithError("nodeSettings.popowBootstrap is set but genesisId is not")
     } else {
       settings

@@ -165,7 +165,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     // e.g. on a height h , where h % MakeSnapshotEvery == MakeSnapshotEvery - 1
     // and NiPoPoW proof is taken Constants.LastHeadersInContext before to have Constants.LastHeadersInContext
     // (actually, Constants.LastHeadersInContext + 1 even) consecutive headers before first full block to be validated
-    val timeToTakeNipopowProof: Boolean = if (settings.nodeSettings.popowBootstrap) {
+    val timeToTakeNipopowProof: Boolean = if (settings.nodeSettings.nipopowSettings.nipopowBootstrap) {
       // currently, the node is not taking NiPoPoW proof if was bootstrapped via a NiPoPoW itself,
       // as no extension sections (with interlinks) available for headers downloaded via nipopows
       false

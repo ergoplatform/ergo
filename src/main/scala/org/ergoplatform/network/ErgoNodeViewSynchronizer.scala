@@ -174,6 +174,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
+  private val nipopowProviders = mutable.Set[ConnectedPeer]()
+
   /**
     * How many peers should have a utxo set snapshot to start downloading it
     */
@@ -918,7 +920,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           log.warn(s"Double manifest declaration for $manifestId from $remote")
         }
       } else {
-        log.error(s"Got wrong manifest id $encodedManifestId from $remote")
+        log.error(s"Got wrong manifest id $encodedManifestId from $remote for height $height, " +
+                  s"their id: ${Algos.encode(manifestId)}, our id ${ownId.map(Algos.encode)}")
       }
     }
     checkUtxoSetManifests(hr) // check if we got enough manifests for the height to download manifests and chunks
@@ -1022,8 +1025,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val m = hr.P2PNipopowProofM
     val k = hr.P2PNipopowProofK
     val msg = Message(GetNipopowProofSpec, Right(NipopowProofData(m, k, None)), None)
-    val peers = NipopowSupportFilter.filter(syncTracker.knownPeers()).toSeq
-    networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+    val knownPeers = syncTracker.knownPeers()
+    val peers = NipopowSupportFilter.filter(knownPeers).filter(cp => !nipopowProviders.contains(cp)).toSeq
+    if (peers.nonEmpty) {
+      networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+    } else {
+      log.warn("No peers to ask NiPoPoWs from")
+    }
   }
 
   /**
@@ -1049,13 +1057,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def processNipopowProof(proofBytes: Array[Byte], hr: ErgoHistory, peer: ConnectedPeer): Unit = {
     if (hr.bestHeaderOpt.isEmpty) {
-      hr.nipopowSerializer.parseBytesTry(proofBytes) match {
-        case Success(proof) if proof.isValid =>
-          log.info(s"Got valid nipopow proof, size: ${proofBytes.length}")
-          viewHolderRef ! ProcessNipopow(proof)
-        case _ =>
-          log.warn(s"Peer $peer sent wrong nipopow")
-          penalizeMisbehavingPeer(peer)
+      if(!nipopowProviders.contains(peer)) {
+        nipopowProviders += peer
+        hr.nipopowSerializer.parseBytesTry(proofBytes) match {
+          case Success(proof) if proof.isValid =>
+            log.info(s"Got valid nipopow proof, size: ${proofBytes.length}")
+            viewHolderRef ! ProcessNipopow(proof)
+          case _ =>
+            log.warn(s"Peer $peer sent wrong nipopow")
+            penalizeMisbehavingPeer(peer)
+        }
+      } else {
+        log.info(s"Received Nipopow proof from $peer again")
       }
     } else {
       log.warn("Got nipopow proof, but it is already applied")

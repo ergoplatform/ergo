@@ -6,7 +6,13 @@ package org.ergoplatform.local
   */
 sealed trait NipopowProofVerificationResult
 
+/**
+  * Basic interface for valid proof verification results
+  */
 sealed trait CorrectNipopowProofVerificationResult extends NipopowProofVerificationResult {
+  /**
+    * Total number of known valid proofs verified, including this one
+    */
   val totalProofsProcessed: Int
 }
 

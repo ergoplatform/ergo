@@ -296,11 +296,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       } else {
         log.warn("InitStateFromSnapshot arrived when state already initialized")
       }
-    // Initialize headers-chain via NiPoPoW-proof
+    // Process NiPoPoW proof, initialize history if enough proofs collected
     case ProcessNipopow(proof) =>
       if (history().isEmpty) {
         history().applyPopowProof(proof)
-        updateNodeView(updatedHistory = Some(history()))
+        if (!history().isEmpty) {
+          updateNodeView(updatedHistory = Some(history()))
+        }
       }
   }
 

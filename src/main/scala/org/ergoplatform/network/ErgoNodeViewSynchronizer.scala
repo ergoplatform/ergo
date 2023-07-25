@@ -174,6 +174,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
+  /**
+    * Peers provided nipopow poofs
+    */
   private val nipopowProviders = mutable.Set[ConnectedPeer]()
 
   /**
@@ -1734,7 +1737,8 @@ object ErgoNodeViewSynchronizer {
     case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
 
     /**
-      * Signal for a central node view holder component to initialize headers chain from NiPoPoW proof
+      * Command for a central node view holder component to process NiPoPoW proof,
+      * and possibly initialize headers chain from a best NiPoPoW proof known, when enough proofs collected
       * @param nipopowProof - proof to initialize history from
       */
     case class ProcessNipopow(nipopowProof: NipopowProof)

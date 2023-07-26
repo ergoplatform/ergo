@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.settings.Constants.{HashLength, MakeSnapshotEvery}
+import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import scorex.core.consensus.ProgressInfo
@@ -165,13 +165,20 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     // e.g. on a height h , where h % MakeSnapshotEvery == MakeSnapshotEvery - 1
     // and NiPoPoW proof is taken Constants.LastHeadersInContext before to have Constants.LastHeadersInContext
     // (actually, Constants.LastHeadersInContext + 1 even) consecutive headers before first full block to be validated
-    val timeToTakeNipopowProof: Boolean = if (settings.nodeSettings.popowBootstrap) {
+    val timeToTakeNipopowProof: Boolean = if (settings.nodeSettings.nipopowSettings.nipopowBootstrap) {
       // currently, the node is not taking NiPoPoW proof if was bootstrapped via a NiPoPoW itself,
       // as no extension sections (with interlinks) available for headers downloaded via nipopows
       false
     } else  {
-     this.isHeadersChainSynced &&
-        h.height % MakeSnapshotEvery == MakeSnapshotEvery - 1 - Constants.LastHeadersInContext
+      // the node is currently storing one nipopow proof and possibly spreading it over p2p network only
+      // for the case of bootstrapping nodes which will download UTXO set snapshot after
+      // (stateless clients with suffix length resulting to applying full blocks after that height are ok also)
+      // so nipopow proof is taken at Constants.LastHeadersInContext blocks before UTXO set snapshot height,
+      // to have enough headers to apply full blocks after snapshot (Constants.LastHeadersInContext headers will make
+      // execution context whole)
+      val makeSnapshotEvery = chainSettings.makeSnapshotEvery
+      this.isHeadersChainSynced &&
+        h.height % makeSnapshotEvery == makeSnapshotEvery - 1 - Constants.LastHeadersInContext
     }
 
     val nipopowsRow: Seq[(ByteArrayWrapper, Array[Byte])] = if (timeToTakeNipopowProof) {

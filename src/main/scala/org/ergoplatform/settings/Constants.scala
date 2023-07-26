@@ -74,17 +74,6 @@ object Constants {
   val MaxExtensionSizeMax: Int = 1024 * 1024
 
   /**
-    * UTXO set snapshot to be taken every this number of blocks.
-    * The value MUST be divisible by voting epoch length (chainSettings.voting.votingLength),
-    * so after snapshot the state is corresponding to a moment before applying first block of a voting epoch,
-    * and then the first block sets current validation parameters.
-    *
-    * So for the Ergo mainnet the value should be divisible by 1024 (for testnet, 128, any number divisible by
-    * 1024 is divisible by 128 also.
-    */
-  val MakeSnapshotEvery = 52224
-
-  /**
     * AVL+ tree node parameters. The tree is used to authenticate UTXO set.
     * Keys and hashes are 256-bits long, values are boxes, so value size is dynamic.
     */

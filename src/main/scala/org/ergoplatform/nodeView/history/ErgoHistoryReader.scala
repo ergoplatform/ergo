@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
 import scorex.core.NodeViewComponent
 import scorex.core.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
 import scorex.core.utils.ScorexEncoding
@@ -35,6 +35,8 @@ trait ErgoHistoryReader
   protected[history] val historyStorage: HistoryStorage
 
   protected val settings: ErgoSettings
+
+  override protected def nipopowSettings: NipopowSettings = settings.nodeSettings.nipopowSettings
 
   private val Valid = 1.toByte
   private val Invalid = 0.toByte

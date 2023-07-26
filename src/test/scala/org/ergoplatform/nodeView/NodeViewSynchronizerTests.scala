@@ -27,8 +27,8 @@ import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, Totally
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
-
 import org.ergoplatform.utils.generators.ChainGenerator
+
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -149,7 +149,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
 
       // Generate history chain
       val emptyHistory = historyGen.sample.get
-      val prefix = blockStream(None).take(100)
+      val prefix = blockStream(None).take(settings.chainSettings.makeSnapshotEvery)
       val fullHistory = applyChain(emptyHistory, prefix)
 
       // Broadcast updated history

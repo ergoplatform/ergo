@@ -175,6 +175,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
   /**
+    * Peers provided nipopow poofs
+    */
+  private val nipopowProviders = mutable.Set[ConnectedPeer]()
+
+  /**
     * How many peers should have a utxo set snapshot to start downloading it
     */
   private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
@@ -335,7 +340,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     *
     */
   protected def sendSync(history: ErgoHistory): Unit = {
-    if (history.bestHeaderOpt.isEmpty && settings.nodeSettings.popowBootstrap) {
+    if (history.bestHeaderOpt.isEmpty && settings.nodeSettings.nipopowSettings.nipopowBootstrap) {
       // if no any header applied yet, and boostrapping via nipopows is ordered,
       // ask for nipopow proofs instead of sending sync signal
       requireNipopowProof(history)
@@ -918,7 +923,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           log.warn(s"Double manifest declaration for $manifestId from $remote")
         }
       } else {
-        log.error(s"Got wrong manifest id $encodedManifestId from $remote")
+        log.error(s"Got wrong manifest id $encodedManifestId from $remote for height $height, " +
+                  s"their id: ${Algos.encode(manifestId)}, our id ${ownId.map(Algos.encode)}")
       }
     }
     checkUtxoSetManifests(hr) // check if we got enough manifests for the height to download manifests and chunks
@@ -1022,8 +1028,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val m = hr.P2PNipopowProofM
     val k = hr.P2PNipopowProofK
     val msg = Message(GetNipopowProofSpec, Right(NipopowProofData(m, k, None)), None)
-    val peers = NipopowSupportFilter.filter(syncTracker.knownPeers()).toSeq
-    networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+    val knownPeers = syncTracker.knownPeers()
+    val peers = NipopowSupportFilter.filter(knownPeers).filter(cp => !nipopowProviders.contains(cp)).toSeq
+    if (peers.nonEmpty) {
+      networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+    } else {
+      log.warn("No peers to ask NiPoPoWs from")
+    }
   }
 
   /**
@@ -1049,13 +1060,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def processNipopowProof(proofBytes: Array[Byte], hr: ErgoHistory, peer: ConnectedPeer): Unit = {
     if (hr.bestHeaderOpt.isEmpty) {
-      hr.nipopowSerializer.parseBytesTry(proofBytes) match {
-        case Success(proof) if proof.isValid =>
-          log.info(s"Got valid nipopow proof, size: ${proofBytes.length}")
-          viewHolderRef ! InitHistoryFromNipopow(proof)
-        case _ =>
-          log.warn(s"Peer $peer sent wrong nipopow")
-          penalizeMisbehavingPeer(peer)
+      if(!nipopowProviders.contains(peer)) {
+        nipopowProviders += peer
+        hr.nipopowSerializer.parseBytesTry(proofBytes) match {
+          case Success(proof) if proof.isValid =>
+            log.info(s"Got valid nipopow proof, size: ${proofBytes.length}")
+            viewHolderRef ! ProcessNipopow(proof)
+          case _ =>
+            log.warn(s"Peer $peer sent wrong nipopow")
+            penalizeMisbehavingPeer(peer)
+        }
+      } else {
+        log.info(s"Received Nipopow proof from $peer again")
       }
     } else {
       log.warn("Got nipopow proof, but it is already applied")
@@ -1721,10 +1737,11 @@ object ErgoNodeViewSynchronizer {
     case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
 
     /**
-      * Signal for a central node view holder component to initialize headers chain from NiPoPoW proof
+      * Command for a central node view holder component to process NiPoPoW proof,
+      * and possibly initialize headers chain from a best NiPoPoW proof known, when enough proofs collected
       * @param nipopowProof - proof to initialize history from
       */
-    case class InitHistoryFromNipopow(nipopowProof: NipopowProof)
+    case class ProcessNipopow(nipopowProof: NipopowProof)
   }
 
 }

@@ -7,14 +7,24 @@ package org.ergoplatform.local
 sealed trait NipopowProofVerificationResult
 
 /**
+  * Basic interface for valid proof verification results
+  */
+sealed trait CorrectNipopowProofVerificationResult extends NipopowProofVerificationResult {
+  /**
+    * Total number of known valid proofs verified, including this one
+    */
+  val totalProofsProcessed: Int
+}
+
+/**
   * Presented nipopow proof is better than known one
   */
-case object BetterChain extends NipopowProofVerificationResult
+case class BetterChain(override val totalProofsProcessed: Int) extends CorrectNipopowProofVerificationResult
 
 /**
   * Presented nipopow proof is no better than known one
   */
-case object NoBetterChain extends NipopowProofVerificationResult
+case class NoBetterChain(override val totalProofsProcessed: Int) extends CorrectNipopowProofVerificationResult
 
 /**
   * Presented nipopow proof is not valid

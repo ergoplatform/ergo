@@ -170,6 +170,12 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
       // as no extension sections (with interlinks) available for headers downloaded via nipopows
       false
     } else  {
+      // the node is currently storing one nipopow proof and possibly spreading it over p2p network only
+      // for the case of bootstrapping nodes which will download UTXO set snapshot after
+      // (stateless clients with suffix length resulting to applying full blocks after that height are ok also)
+      // so nipopow proof is taken at Constants.LastHeadersInContext blocks before UTXO set snapshot height,
+      // to have enough headers to apply full blocks after snapshot (Constants.LastHeadersInContext headers will make
+      // execution context whole)
       val makeSnapshotEvery = chainSettings.makeSnapshotEvery
       this.isHeadersChainSynced &&
         h.height % makeSnapshotEvery == makeSnapshotEvery - 1 - Constants.LastHeadersInContext

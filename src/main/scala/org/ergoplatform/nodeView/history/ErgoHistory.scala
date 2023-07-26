@@ -318,11 +318,14 @@ object ErgoHistory extends ScorexLogging {
     // nipopows + utxo set snapshot soon after 5.0.13 release
     // todo: remove after height 1,096,693 on the mainnet
     val bestHeaderHeight = history.headersHeight
-    if (bestHeaderHeight > 1054000 && bestHeaderHeight < 1096693) { //history.readPopowProofBytesFromDb().isDefined){
+    if (bestHeaderHeight > 1054000 && bestHeaderHeight < 1096693 && history.readPopowProofBytesFromDb().isEmpty) {
+      // we store nipopow proof for height 1,044,469 corresponding to UTXO set snapshot
+      // @ # 1,044,479 already taken by 5.0.12 nodes
+      val block1044469Id = "25a11667e38e62412522c062d90b073afd9ed9551080ff4e0a67d1757ce18b98"
       history.popowProofBytes(
         history.P2PNipopowProofM,
         history.P2PNipopowProofK,
-        Some(ModifierId @@ "25a11667e38e62412522c062d90b073afd9ed9551080ff4e0a67d1757ce18b98")) match {
+        Some(ModifierId @@ block1044469Id)) match {
         case Success(proofBytes) =>
           log.info("Writing nipopow proof bytes for height 1,044,469")
           db.insert(Array(history.NipopowSnapshotHeightKey -> proofBytes), Array.empty[BlockSection])

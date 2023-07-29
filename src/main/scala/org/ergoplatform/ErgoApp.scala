@@ -47,11 +47,11 @@ class ErgoApp(args: Args) extends ScorexLogging {
   log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")
 
   implicit private def scorexSettings: ScorexSettings = ergoSettings.scorexSettings
-  
+
   implicit private val actorSystem: ActorSystem = ActorSystem(
     scorexSettings.network.agentName
   )
-  
+
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
 
   private val upnpGateway: Option[UPnPGateway] =
@@ -82,7 +82,9 @@ class ErgoApp(args: Args) extends ScorexLogging {
       GetManifestSpec,
       ManifestSpec,
       GetUtxoSnapshotChunkSpec,
-      UtxoSnapshotChunkSpec
+      UtxoSnapshotChunkSpec,
+      GetNipopowProofSpec,
+      NipopowProofSpec
     )
   }
 
@@ -143,7 +145,9 @@ class ErgoApp(args: Args) extends ScorexLogging {
         GetManifestSpec.messageCode         -> ergoNodeViewSynchronizerRef,
         ManifestSpec.messageCode            -> ergoNodeViewSynchronizerRef,
         GetUtxoSnapshotChunkSpec.messageCode-> ergoNodeViewSynchronizerRef,
-        UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef
+        UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef,
+        GetNipopowProofSpec.messageCode     -> ergoNodeViewSynchronizerRef,
+        NipopowProofSpec.messageCode        -> ergoNodeViewSynchronizerRef
       )
       // Launching PeerSynchronizer actor which is then registering itself at network controller
       if (ergoSettings.scorexSettings.network.peerDiscovery) {

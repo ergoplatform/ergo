@@ -27,6 +27,7 @@ import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, Totally
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
+import org.ergoplatform.utils.generators.ChainGenerator
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -39,6 +40,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   with ScorexLogging
   with SyntacticallyTargetedModifierProducer
   with TotallyValidModifierProducer[ST]
+  with ChainGenerator
   with TestFileUtils {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
@@ -138,6 +140,35 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
 
       node ! Message(dummySyncInfoMessageSpec, Left(msgBytes), Some(peer))
       //    vhProbe.fishForMessage(3 seconds) { case m => m == OtherNodeSyncingInfo(peer, dummySyncInfo) }
+    }
+  }
+
+  property("NodeViewSynchronizer: GetNipopowProof") {
+    withFixture { ctx =>
+      import ctx._
+
+      // Generate history chain
+      val emptyHistory = historyGen.sample.get
+      val prefix = blockStream(None).take(settings.chainSettings.makeSnapshotEvery)
+      val fullHistory = applyChain(emptyHistory, prefix)
+
+      // Broadcast updated history
+      node ! ChangedHistory(fullHistory)
+
+      // Build and send GetNipopowProofSpec request
+      val spec = GetNipopowProofSpec
+      val msgBytes = spec.toBytes(NipopowProofData(m = emptyHistory.P2PNipopowProofM, k = emptyHistory.P2PNipopowProofK, headerId = None))
+      node ! Message[NipopowProofData](spec, Left(msgBytes), Option(peer))
+
+      // Listen for NipopowProofSpec response
+      ncProbe.fishForMessage(5 seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec match {
+            case _: NipopowProofSpec.type => true
+            case _ => false
+          }
+        case _: Any => false
+      }
     }
   }
 

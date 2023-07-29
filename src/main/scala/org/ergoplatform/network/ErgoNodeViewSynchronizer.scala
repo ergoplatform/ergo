@@ -5,6 +5,7 @@ import akka.actor.{Actor, ActorInitializationException, ActorKilledException, Ac
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
@@ -40,6 +41,7 @@ import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
 import scorex.core.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
@@ -173,6 +175,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
   /**
+    * Peers provided nipopow poofs
+    */
+  //todo: clear after bootstrapping
+  private val nipopowProviders = mutable.Set[ConnectedPeer]()
+
+  /**
     * How many peers should have a utxo set snapshot to start downloading it
     */
   private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
@@ -247,7 +255,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Register periodic events
     */
   override def preStart(): Unit = {
-    // subscribe for history and mempool changes
+    // subscribe for history, state and mempool changes
     viewHolderRef ! GetNodeViewChanges(history = true, state = true, vault = false, mempool = true)
 
     val toDownloadCheckInterval = networkSettings.syncInterval
@@ -333,17 +341,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     *
     */
   protected def sendSync(history: ErgoHistory): Unit = {
-    val peers = syncTracker.peersToSyncWith()
-    val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
-    log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
-    if (peersV1.nonEmpty) {
-      val msg = Message(syncInfoSpec, Right(getV1SyncInfo(history)), None)
-      networkControllerRef ! SendToNetwork(msg, SendToPeers(peersV1))
-    }
-    if (peersV2.nonEmpty) {
-      //todo: send only last header to peers which are equal or younger
-      val v2SyncInfo = getV2SyncInfo(history, full = true)
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
+    if (history.bestHeaderOpt.isEmpty && settings.nodeSettings.nipopowSettings.nipopowBootstrap) {
+      // if no any header applied yet, and boostrapping via nipopows is ordered,
+      // ask for nipopow proofs instead of sending sync signal
+      requireNipopowProof(history)
+    } else {
+      val peers = syncTracker.peersToSyncWith()
+      val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
+      log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
+      if (peersV1.nonEmpty) {
+        val msg = Message(syncInfoSpec, Right(getV1SyncInfo(history)), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeers(peersV1))
+      }
+      if (peersV2.nonEmpty) {
+        //todo: send only last header to peers which are equal or younger
+        val v2SyncInfo = getV2SyncInfo(history, full = true)
+        networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
+      }
     }
   }
 
@@ -910,7 +924,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           log.warn(s"Double manifest declaration for $manifestId from $remote")
         }
       } else {
-        log.error(s"Got wrong manifest id $encodedManifestId from $remote")
+        log.error(s"Got wrong manifest id $encodedManifestId from $remote for height $height, " +
+                  s"their id: ${Algos.encode(manifestId)}, our id ${ownId.map(Algos.encode)}")
       }
     }
     checkUtxoSetManifests(hr) // check if we got enough manifests for the height to download manifests and chunks
@@ -1006,6 +1021,64 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         penalizeMisbehavingPeer(remote)
     }
   }
+
+  /**
+    * Ask peers around for NiPoPoW proofs of the chain to bootstrap
+    */
+  private def requireNipopowProof(hr: ErgoHistory): Unit = {
+    val m = hr.P2PNipopowProofM
+    val k = hr.P2PNipopowProofK
+    val msg = Message(GetNipopowProofSpec, Right(NipopowProofData(m, k, None)), None)
+    val knownPeers = syncTracker.knownPeers()
+    val peers = NipopowSupportFilter.filter(knownPeers).filter(cp => !nipopowProviders.contains(cp)).toSeq
+    if (peers.nonEmpty) {
+      networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+    } else {
+      log.warn("No peers to ask NiPoPoWs from")
+    }
+  }
+
+  /**
+    * Send NiPoPoW proof to a peer asked it
+    */
+  private def sendNipopowProof(data: NipopowProofData, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+    if (data.m == hr.P2PNipopowProofM && data.k == hr.P2PNipopowProofK && data.headerIdBytesOpt.isEmpty) {
+      hr.readPopowProofBytesFromDb() match {
+        case Some(proofBytes) =>
+          val msg = Message(NipopowProofSpec, Right(proofBytes), None)
+          networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+        case None =>
+          log.warn("No Nipopow Proof available")
+      }
+    } else {
+      // for now, we are serving proofs for concrete params only
+      log.warn(s"Peer $peer asked for a nipopow proof which can't be served (params: $data)")
+    }
+  }
+
+  /**
+    * Process NiPoPoW proof got from remote peer
+    */
+  private def processNipopowProof(proofBytes: Array[Byte], hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+    if (hr.bestHeaderOpt.isEmpty) {
+      if (!nipopowProviders.contains(peer)) {
+        nipopowProviders += peer
+        hr.nipopowSerializer.parseBytesTry(proofBytes) match {
+          case Success(proof) if proof.isValid =>
+            log.info(s"Got valid nipopow proof, size: ${proofBytes.length}")
+            viewHolderRef ! ProcessNipopow(proof)
+          case _ =>
+            log.warn(s"Peer $peer sent wrong nipopow")
+            penalizeMisbehavingPeer(peer)
+        }
+      } else {
+        log.info(s"Received Nipopow proof from $peer again")
+      }
+    } else {
+      log.warn("Got nipopow proof, but it is already applied")
+    }
+  }
+
 
   /**
     * Object ids coming from other node.
@@ -1445,17 +1518,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
     case (_: ManifestSpec.type, manifestBytes: Array[Byte], remote) =>
       processManifest(hr, manifestBytes, remote)
-    case (_: GetUtxoSnapshotChunkSpec.type,  subtreeId: Array[Byte], remote) =>
+    case (_: GetUtxoSnapshotChunkSpec.type, subtreeId: Array[Byte], remote) =>
       usrOpt match {
         case Some(usr) => sendUtxoSnapshotChunk(Digest32 @@ subtreeId, usr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
-    case (_: UtxoSnapshotChunkSpec.type,  serializedChunk: Array[Byte], remote) =>
+    case (_: UtxoSnapshotChunkSpec.type, serializedChunk: Array[Byte], remote) =>
       usrOpt match {
         case Some(_) => processUtxoSnapshotChunk(serializedChunk, hr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
-
+    case (_: GetNipopowProofSpec.type, data: NipopowProofData, remote) =>
+      sendNipopowProof(data, hr, remote)
+    case (_: NipopowProofSpec.type , proofBytes: Array[Byte], remote) =>
+      processNipopowProof(proofBytes, hr, remote)
   }
 
   def initialized(hr: ErgoHistory,
@@ -1660,6 +1736,13 @@ object ErgoNodeViewSynchronizer {
       * @param blockId - id of a block corresponding to the UTXO set snapshot
       */
     case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
+
+    /**
+      * Command for a central node view holder component to process NiPoPoW proof,
+      * and possibly initialize headers chain from a best NiPoPoW proof known, when enough proofs collected
+      * @param nipopowProof - proof to initialize history from
+      */
+    case class ProcessNipopow(nipopowProof: NipopowProof)
   }
 
 }

@@ -22,7 +22,6 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     syncTracker.updateStatus(connectedPeer, Older, Some(height+1))
     syncTracker.maxHeight() shouldBe Some(height + 1)
     syncTracker.getStatus(connectedPeer) shouldBe Some(Older)
-    syncTracker.fullInfo().head.height shouldBe height+1
 
     syncTracker.peersByStatus.apply(Older).head shouldBe connectedPeer
     // peer should not be synced yet

@@ -3,13 +3,12 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
 import scorex.core.NodeViewComponent
 import scorex.core.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
 import scorex.core.utils.ScorexEncoding
@@ -37,8 +36,12 @@ trait ErgoHistoryReader
 
   protected val settings: ErgoSettings
 
+  override protected def nipopowSettings: NipopowSettings = settings.nodeSettings.nipopowSettings
+
   private val Valid = 1.toByte
   private val Invalid = 0.toByte
+
+  override val historyReader = this
 
   /**
     * True if there's no history, even genesis block
@@ -514,7 +517,7 @@ trait ErgoHistoryReader
       }
     }
 
-    loop(2, HeaderChain(Seq(header2)))
+    loop(numberBack = 2, otherChain = HeaderChain(Seq(header2)))
   }
 
   protected[history] def commonBlockThenSuffixes(otherChain: HeaderChain,
@@ -569,50 +572,6 @@ trait ErgoHistoryReader
   }
 
   /**
-    * Constructs popow header against given header identifier
-    *
-    * @param headerId - identifier of the header
-    * @return PoPowHeader(header + interlinks + interlinkProof) or
-    *         None if header of extension of a corresponding block are not available
-    */
-  def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
-    typedModifierById[Header](headerId).flatMap(h =>
-      typedModifierById[Extension](h.extensionId).flatMap { ext =>
-        val interlinks = NipopowAlgos.unpackInterlinks(ext.fields).toOption
-        val interlinkProof = NipopowAlgos.proofForInterlinkVector(ext)
-        (interlinks, interlinkProof) match {
-          case (Some(links), Some(proof)) => Some(PoPowHeader(h, links, proof))
-          case _ => None
-        }
-      }
-    )
-  }
-
-  /**
-    * Constructs popow header (header + interlinks) for еру best header at given height
-    *
-    * @param height - height
-    * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
-    */
-  def popowHeader(height: Int): Option[PoPowHeader] = {
-    bestHeaderIdAtHeight(height).flatMap(popowHeader)
-  }
-
-  /**
-    * Constructs PoPoW proof for given m and k according to KMZ17 (FC20 version).
-    * See PoPowAlgos.prove for construction details.
-    * @param m - min superchain length
-    * @param k - suffix length
-    * @param headerIdOpt - optional header to start suffix from (so to construct proof for the header).
-    *                    Please note that k-1 headers will be provided after the header.
-    * @return PoPow proof if success, Failure instance otherwise
-    */
-  def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
-    val proofParams = PoPowParams(m, k)
-    nipopowAlgos.prove(histReader = this, headerIdOpt = headerIdOpt)(proofParams)
-  }
-
-  /**
     * Get estimated height of headers-chain, if it is synced
     * @return height of last header known, if headers-chain is synced, or None if not synced
     */
@@ -624,6 +583,13 @@ trait ErgoHistoryReader
         None
       }
     }.getOrElse(None)
+  }
+
+  /**
+    * @return serialized NiPoPoW proof store in database
+    */
+  def readPopowProofBytesFromDb(): Option[Array[Byte]] = {
+    historyStorage.getIndex(NipopowSnapshotHeightKey)
   }
 
 }

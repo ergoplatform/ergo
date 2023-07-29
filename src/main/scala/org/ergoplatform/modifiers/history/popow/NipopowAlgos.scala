@@ -241,9 +241,12 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
       // put headers needed to check difficulty of new blocks after suffix into prefix
       val epochLength = chainSettings.eip37EpochLength.getOrElse(chainSettings.epochLength)
       diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).foreach { height =>
-        histReader.popowHeader(height).foreach { ph =>
-          prefixBuilder += ph
-          storedHeights += ph.height
+        // check that header in or after suffix is not included, otherwise, sorting by height would be broken
+        if (height < suffixHead.height) {
+          histReader.popowHeader(height).foreach { ph =>
+            prefixBuilder += ph
+            storedHeights += ph.height
+          }
         }
       }
     }

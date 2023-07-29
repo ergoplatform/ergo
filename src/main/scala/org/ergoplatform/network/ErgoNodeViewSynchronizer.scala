@@ -177,6 +177,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Peers provided nipopow poofs
     */
+  //todo: clear after bootstrapping
   private val nipopowProviders = mutable.Set[ConnectedPeer]()
 
   /**
@@ -1060,7 +1061,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def processNipopowProof(proofBytes: Array[Byte], hr: ErgoHistory, peer: ConnectedPeer): Unit = {
     if (hr.bestHeaderOpt.isEmpty) {
-      if(!nipopowProviders.contains(peer)) {
+      if (!nipopowProviders.contains(peer)) {
         nipopowProviders += peer
         hr.nipopowSerializer.parseBytesTry(proofBytes) match {
           case Success(proof) if proof.isValid =>

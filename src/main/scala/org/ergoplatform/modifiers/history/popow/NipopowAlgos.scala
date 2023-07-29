@@ -30,7 +30,7 @@ import scala.util.{Failure, Success, Try}
 class NipopowAlgos(val chainSettings: ChainSettings) {
   import NipopowAlgos._
 
-  private val powScheme: AutolykosPowScheme = chainSettings.powScheme
+  private def powScheme: AutolykosPowScheme = chainSettings.powScheme
 
   private val diffAdjustment = new DifficultyAdjustment(chainSettings)
 

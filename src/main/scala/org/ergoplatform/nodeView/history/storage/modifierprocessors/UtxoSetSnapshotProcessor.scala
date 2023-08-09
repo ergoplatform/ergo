@@ -53,7 +53,7 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     * Writes that UTXO set snapshot applied at height `height`. Starts full blocks applications since the next block
     * after.
     */
-  def utxoSnapshotApplied(height: Height): Unit = {
+  def onUtxoSnapshotApplied(height: Height): Unit = {
     val utxoPhaseTime = {
       _cachedDownloadPlan.map(_.latestUpdateTime).getOrElse(0L) - _cachedDownloadPlan.map(_.createdTime).getOrElse(0L)
     }

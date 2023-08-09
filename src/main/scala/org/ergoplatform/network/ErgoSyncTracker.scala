@@ -1,7 +1,7 @@
 package org.ergoplatform.network
 
 
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV3, HeadersBasedSyncInfo}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history.ErgoHistory.{Height, Time}
 import scorex.core.consensus.{Fork, Older, PeerChainStatus, Unknown}
 import scorex.core.network.ConnectedPeer
@@ -71,17 +71,9 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
 
     val height = syncInfo match {
       case _: ErgoSyncInfoV1 => None
-      case otherVersion: HeadersBasedSyncInfo => otherVersion.height
+      case sv2: ErgoSyncInfoV2 => sv2.height
     }
-    val peerHeaders = syncInfo match {
-      case v3: ErgoSyncInfoV3 => v3.headersRanges
-      case _ => Seq.empty
-    }
-    val peerFullBlocks = syncInfo match {
-      case v3: ErgoSyncInfoV3 => v3.fullBlocksRanges
-      case _ => Seq.empty
-    }
-    updateStatus(peer, status, height, peerHeaders, peerFullBlocks)
+    updateStatus(peer, status, height)
 
     val syncSendNeeded = (oldStatus != status) || notSyncedOrOutdated(peer) || status == Older || status == Fork
 
@@ -90,20 +82,13 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
 
   def updateStatus(peer: ConnectedPeer,
                    status: PeerChainStatus,
-                   height: Option[Height],
-                   peerHeaders: Seq[(Height, Height)],
-                   peerFullblocks: Seq[(Height, Height)]): Unit = {
+                   height: Option[Height]): Unit = {
     val seniorsBefore = numOfSeniors()
     statuses.adjust(peer){
       case None =>
-        ErgoPeerStatus(peer, status, height.getOrElse(ErgoHistory.EmptyHistoryHeight), peerHeaders, peerFullblocks, None, None)
+        ErgoPeerStatus(peer, status, height.getOrElse(ErgoHistory.EmptyHistoryHeight), None, None)
       case Some(existingPeer) =>
-        existingPeer.copy(
-          status = status,
-          headersHeight = height.getOrElse(existingPeer.headersHeight),
-          storedHeaders = peerHeaders,
-          storedFullblocks = peerFullblocks
-        )
+        existingPeer.copy(status = status, height = height.getOrElse(existingPeer.height))
     }
 
     val seniorsAfter = numOfSeniors()
@@ -152,7 +137,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
     if (peersToClear.nonEmpty) {
       log.debug(s"Clearing stalled statuses for $peersToClear")
       // we set status to `Unknown` and reset peer's height
-      peersToClear.foreach(p => updateStatus(p, Unknown, None, Seq(0 -> 0), Seq(0 -> 0)))
+      peersToClear.foreach(p => updateStatus(p, Unknown, None))
     }
   }
 
@@ -175,7 +160,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
 
   def maxHeight(): Option[Int] = {
     if (statuses.nonEmpty) {
-      Some(statuses.maxBy(_._2.headersHeight)._2.headersHeight)
+      Some(statuses.maxBy(_._2.height)._2.height)
     } else {
       None
     }
@@ -225,7 +210,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
       case (peer, status) =>
         (peer.connectionId.remoteAddress, statuses.get(peer), status.lastSyncSentTime.map(now - _))
     }.map { case (address, status, millisSinceLastSync) =>
-      s"$address, height: ${status.map(_.headersHeight)}, status: ${status.map(_.status)}, lastSync: $millisSinceLastSync ms ago"
+      s"$address, height: ${status.map(_.height)}, status: ${status.map(_.status)}, lastSync: $millisSinceLastSync ms ago"
     }.mkString("\n")
   }
 

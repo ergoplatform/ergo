@@ -76,7 +76,7 @@ class InfoApiRoutesSpec extends AnyFlatSpec
     val emptyHistory = generateHistory(
       verifyTransactions = settings.nodeSettings.verifyTransactions,
       stateType = settings.nodeSettings.stateType,
-      poPoWBootstrap = settings.nodeSettings.popowBootstrap,
+      poPoWBootstrap = settings.nodeSettings.nipopowSettings.nipopowBootstrap,
       blocksToKeep = settings.nodeSettings.blocksToKeep
     )
     val nBits = DifficultySerializer.encodeCompactBits(difficulty)

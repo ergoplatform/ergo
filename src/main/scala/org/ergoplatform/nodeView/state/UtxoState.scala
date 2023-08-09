@@ -215,16 +215,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         }
       }
 
-    case h: Header =>
-      log.warn("Only full-blocks are expected (before UTXO snapshot downloading implementation")
-      //todo: update state context with headers (when snapshot downloading is done), so
-      //todo: application of the first full block after the snapshot should have correct state context
-      //todo: (in particular, "lastHeaders" field of it)
-      Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, ergoSettings))
-
-    case a: Any =>
-      log.error(s"Unhandled unknown modifier: $a")
-      Failure(new Exception("unknown modifier"))
+    case bs: BlockSection =>
+      log.warn(s"Only full-blocks are expected, found $bs")
+      Success(this)
   }
 
   @SuppressWarnings(Array("OptionGet"))

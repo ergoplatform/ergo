@@ -27,10 +27,10 @@ import scala.util.{Failure, Success, Try}
   * Please note that for [KMZ17] we're using the version published @ Financial Cryptography 2020, which is different
   * from previously published versions on IACR eprint.
   */
-class NipopowAlgos(chainSettings: ChainSettings) {
+class NipopowAlgos(val chainSettings: ChainSettings) {
   import NipopowAlgos._
 
-  private val powScheme: AutolykosPowScheme = chainSettings.powScheme
+  private def powScheme: AutolykosPowScheme = chainSettings.powScheme
 
   private val diffAdjustment = new DifficultyAdjustment(chainSettings)
 
@@ -128,8 +128,9 @@ class NipopowAlgos(chainSettings: ChainSettings) {
 
   /**
     * Computes NiPoPow proof for the given `chain` according to given `params`.
+    *
+    * todo: Paper-like code used in tests only, so maybe better to replace it in tests with prove (histReader)
     */
-    //todo: remove this prove?
   def prove(chain: Seq[PoPowHeader])(params: PoPowParams): Try[NipopowProof] = Try {
     val k = params.k
     val m = params.m
@@ -159,7 +160,7 @@ class NipopowAlgos(chainSettings: ChainSettings) {
     val suffixTail = suffix.tail.map(_.header)
     val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, Seq.empty)
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, params.continuous)
   }
 
   /**
@@ -229,21 +230,37 @@ class NipopowAlgos(chainSettings: ChainSettings) {
         histReader.popowHeader(suffix.head.id).get -> suffix.tail // .get to be caught in outer (prove's) Try
     }
 
-    //todo: epoch length fix
-    //todo: filter out headers already in prefix ?
-    val diffHeaders = if(params.continuous) {
-      diffAdjustment.heightsForNextRecalculation(suffixHead.height, 128).flatMap { height =>
-        histReader.bestHeaderAtHeight(height)
-      }
-    } else {
-      Seq.empty
-    }
+    val storedHeights = mutable.Set[Height]() // cache to filter out duplicate headers
+    val prefixBuilder = mutable.ArrayBuilder.make[PoPowHeader]()
 
     val genesisHeight = 1
-    val genesisPopowHeader = histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
-    val prefix = (genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)).distinct.sortBy(_.height)
+    prefixBuilder += histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
+    storedHeights += genesisHeight
 
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, diffHeaders)
+    if (params.continuous) {
+      // put headers needed to check difficulty of new blocks after suffix into prefix
+      val epochLength = chainSettings.eip37EpochLength.getOrElse(chainSettings.epochLength)
+      diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).foreach { height =>
+        // check that header in or after suffix is not included, otherwise, sorting by height would be broken
+        if (height < suffixHead.height) {
+          histReader.popowHeader(height).foreach { ph =>
+            prefixBuilder += ph
+            storedHeights += ph.height
+          }
+        }
+      }
+    }
+
+    provePrefix(genesisHeight, suffixHead).foreach { ph =>
+      if (!storedHeights.contains(ph.height)) {
+        prefixBuilder += ph
+        storedHeights += ph.height
+      }
+    }
+
+    val prefix = prefixBuilder.result().sortBy(_.height)
+
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, params.continuous)
   }
 
 }

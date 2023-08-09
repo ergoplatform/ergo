@@ -39,7 +39,7 @@ object Constants {
 
   //For how many blocks a box could be put into the state with no paying.
   //4 years
-  val StoragePeriod: Int = 4 * BlocksPerYear
+  val StoragePeriod: Int = 4 * BlocksPerYear // 1,051,200 blocks
 
   val StorageContractCost: Long = 50
 
@@ -74,24 +74,9 @@ object Constants {
   val MaxExtensionSizeMax: Int = 1024 * 1024
 
   /**
-    * UTXO set snapshot to be taken every this number of blocks.
-    * The value MUST be divisible by voting epoch length (chainSettings.voting.votingLength),
-    * so after snapshot the state is corresponding to a moment before applying first block of a voting epoch,
-    * and then the first block sets current validation parameters.
-    *
-    * So for the Ergo mainnet the value should be divisible by 1024 (for testnet, 128, any number divisible by
-    * 1024 is divisible by 128 also.
-    */
-  // todo: change before deployment to 52224
-  val MakeSnapshotEvery = 1024
-
-  /**
     * AVL+ tree node parameters. The tree is used to authenticate UTXO set.
     * Keys and hashes are 256-bits long, values are boxes, so value size is dynamic.
     */
   object StateTreeParameters extends AvlTreeParameters(keySize = HashLength, valueSize = None, labelSize = HashLength)
 
-  def timeToTakeSnapshot(height: Int): Boolean = {
-    height % MakeSnapshotEvery == MakeSnapshotEvery - 1
-  }
 }

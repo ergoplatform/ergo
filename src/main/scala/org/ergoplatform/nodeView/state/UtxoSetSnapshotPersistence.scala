@@ -6,7 +6,6 @@ import org.ergoplatform.settings.Algos.HF
 import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
-import org.ergoplatform.settings.Constants.MakeSnapshotEvery
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.serialization.ManifestSerializer
 
@@ -44,14 +43,15 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
     * @param estimatedTip - estimated height of best blockchain in the network
     */
   protected def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
+    val makeSnapshotEvery = ergoSettings.chainSettings.makeSnapshotEvery
     def timeToTakeSnapshot(height: Int): Boolean = {
-      height % MakeSnapshotEvery == MakeSnapshotEvery - 1
+      height % makeSnapshotEvery == makeSnapshotEvery - 1
     }
     log.info(s"checking snapshot for $height, simple check: " + timeToTakeSnapshot(height))
     if (ergoSettings.nodeSettings.areSnapshotsStored &&
         timeToTakeSnapshot(height) &&
         estimatedTip.nonEmpty &&
-        estimatedTip.get - height <= MakeSnapshotEvery) {
+        estimatedTip.get - height <= makeSnapshotEvery) {
 
       val ms0 = System.currentTimeMillis()
 

@@ -287,7 +287,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         history().createPersistentProver(store, history(), height, blockId) match {
           case Success(pp) =>
             log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
-            history().utxoSnapshotApplied(height)
+            history().onUtxoSnapshotApplied(height)
             val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
             updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
           case Failure(t) =>
@@ -296,10 +296,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       } else {
         log.warn("InitStateFromSnapshot arrived when state already initialized")
       }
-    case InitHistoryFromNipopow(proof) =>
-      history().applyPopowProof(proof)
-      updateNodeView(updatedHistory = Some(history()))
-      // todo: publish signal, send sync immediately in ENVS after getting it
+    // Process NiPoPoW proof, initialize history if enough proofs collected
+    case ProcessNipopow(proof) =>
+      if (history().isEmpty) {
+        history().applyPopowProof(proof)
+        if (!history().isEmpty) {
+          updateNodeView(updatedHistory = Some(history()))
+        }
+      }
   }
 
   /**

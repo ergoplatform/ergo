@@ -68,8 +68,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
     }
   }
 
-  private val nipopowProofSpec = NipopowProofSpec(ergoSettings)
-
   // descriptors of p2p networking protocol messages
   private val p2pMessageSpecifications = {
     Seq(
@@ -86,7 +84,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
       GetUtxoSnapshotChunkSpec,
       UtxoSnapshotChunkSpec,
       GetNipopowProofSpec,
-      nipopowProofSpec
+      NipopowProofSpec
     )
   }
 
@@ -149,7 +147,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
         GetUtxoSnapshotChunkSpec.messageCode-> ergoNodeViewSynchronizerRef,
         UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef,
         GetNipopowProofSpec.messageCode     -> ergoNodeViewSynchronizerRef,
-        nipopowProofSpec.messageCode        -> ergoNodeViewSynchronizerRef
+        NipopowProofSpec.messageCode        -> ergoNodeViewSynchronizerRef
       )
       // Launching PeerSynchronizer actor which is then registering itself at network controller
       if (ergoSettings.scorexSettings.network.peerDiscovery) {

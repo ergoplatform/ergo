@@ -21,7 +21,7 @@ trait CheckpointingSettingsReader extends ModifierIdReader {
 }
 
 /**
-  * Settings related to bootstrapping with UTXO set snapshots. See ergo.node.utxo section for settings description.
+  * Settings related to state bootstrapping with UTXO set snapshots. See ergo.node.utxo section for settings description.
   */
 case class UtxoSettings(utxoBootstrap: Boolean, storingUtxoSnapshots: Int, p2pUtxoSnapshots: Int)
 
@@ -38,6 +38,25 @@ trait UtxoSettingsReader {
   }
 }
 
+
+/**
+  * Settings related to headers-chain bootstrapping with NiPoPoWs. See ergo.node.nipopow section for settings description.
+  */
+case class NipopowSettings(nipopowBootstrap: Boolean, p2pNipopows: Int, nipopowSuffix: Int)
+
+/**
+  * Custom settings reader for `NipopowSettings`
+  */
+trait NipopowSettingsReader {
+  implicit val nipopowSettingsReader: ValueReader[NipopowSettings] = { (cfg, path) =>
+    NipopowSettings(
+      cfg.as[Boolean](s"$path.nipopowBootstrap"),
+      cfg.as[Int](s"$path.p2pNipopows"),
+      cfg.as[Int](s"$path.nipopowSuffix")
+    )
+  }
+}
+
 /**
   * Configuration file for Ergo node regime
   *
@@ -47,8 +66,7 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      verifyTransactions: Boolean,
                                      blocksToKeep: Int,
                                      utxoSettings: UtxoSettings,
-                                     popowBootstrap: Boolean,
-                                     popowSuffix: Int,
+                                     nipopowSettings: NipopowSettings,
                                      mining: Boolean,
                                      maxTransactionCost: Int,
                                      maxTransactionSize: Int,
@@ -82,7 +100,7 @@ case class NodeConfigurationSettings(stateType: StateType,
   * Custom config reader for ergo.node settings section
   */
 trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettingsReader
-                                  with UtxoSettingsReader with ModifierIdReader {
+                                  with UtxoSettingsReader with NipopowSettingsReader with ModifierIdReader {
 
   implicit val nodeConfigurationReader: ValueReader[NodeConfigurationSettings] = { (cfg, path) =>
     val stateTypeKey = s"$path.stateType"
@@ -92,8 +110,7 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       cfg.as[Boolean](s"$path.verifyTransactions"),
       cfg.as[Int](s"$path.blocksToKeep"),
       cfg.as[UtxoSettings](s"$path.utxo"),
-      cfg.as[Boolean](s"$path.popowBootstrap"),
-      cfg.as[Int](s"$path.popowSuffix"),
+      cfg.as[NipopowSettings](s"$path.nipopow"),
       cfg.as[Boolean](s"$path.mining"),
       cfg.as[Int](s"$path.maxTransactionCost"),
       cfg.as[Int](s"$path.maxTransactionSize"),
@@ -125,4 +142,5 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       case _ => SortingOption.random()
     }
   }
+
 }

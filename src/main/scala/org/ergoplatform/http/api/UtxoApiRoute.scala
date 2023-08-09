@@ -94,4 +94,5 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
       case _ => None
     })
   }
+
 }

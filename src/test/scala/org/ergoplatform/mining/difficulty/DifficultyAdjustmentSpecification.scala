@@ -30,6 +30,20 @@ class DifficultyAdjustmentSpecification extends ErgoPropertyTest {
     control.nextRecalculationHeight(926977, epochLength) shouldBe 927105
     control.nextRecalculationHeight(926975, epochLength) shouldBe 926977
     control.nextRecalculationHeight(926950, epochLength) shouldBe 926977
+    control.nextRecalculationHeight(1, epochLength) shouldBe 129
+    control.nextRecalculationHeight(129, epochLength) shouldBe 257
+    control.nextRecalculationHeight(256, epochLength) shouldBe 257
+  }
+
+  property("heightsForNextRecalculation vectors") {
+    val epochLength = 128
+    control.heightsForNextRecalculation(926976, epochLength) shouldBe Seq(926464, 926592, 926720, 926848, 926976)
+    control.heightsForNextRecalculation(926977, epochLength) shouldBe Seq(926592, 926720, 926848, 926976, 927104)
+    control.heightsForNextRecalculation(926975, epochLength) shouldBe Seq(926464, 926592, 926720, 926848, 926976)
+    control.heightsForNextRecalculation(926950, epochLength) shouldBe Seq(926464, 926592, 926720, 926848, 926976)
+    control.heightsForNextRecalculation(1, epochLength) shouldBe Seq(0, 128)
+    control.heightsForNextRecalculation(129, epochLength) shouldBe Seq(0, 128, 256)
+    control.heightsForNextRecalculation(256, epochLength) shouldBe Seq(0, 128, 256)
   }
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {

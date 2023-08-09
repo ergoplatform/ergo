@@ -3,12 +3,12 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection, NetworkObjectTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
 import scorex.core.NodeViewComponent
 import scorex.core.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
 import scorex.core.utils.ScorexEncoding
@@ -35,6 +35,8 @@ trait ErgoHistoryReader
   protected[history] val historyStorage: HistoryStorage
 
   protected val settings: ErgoSettings
+
+  override protected def nipopowSettings: NipopowSettings = settings.nodeSettings.nipopowSettings
 
   private val Valid = 1.toByte
   private val Invalid = 0.toByte
@@ -143,8 +145,8 @@ trait ErgoHistoryReader
     info match {
       case syncV1: ErgoSyncInfoV1 =>
         compareV1(syncV1)
-      case otherVersion: HeadersBasedSyncInfo =>
-        compareV2(otherVersion)
+      case syncV2: ErgoSyncInfoV2 =>
+        compareV2(syncV2)
     }
   }
 
@@ -157,7 +159,7 @@ trait ErgoHistoryReader
     *         Older if the neighbour is ahead,
     *         Fork if the neighbour is on a fork
     */
-  def compareV2(info: HeadersBasedSyncInfo): PeerChainStatus = {
+  def compareV2(info: ErgoSyncInfoV2): PeerChainStatus = {
     bestHeaderOpt.map { myLastHeader =>
       if (info.lastHeaders.isEmpty) {
         Younger
@@ -269,7 +271,7 @@ trait ErgoHistoryReader
     * Calculating continuation from common header which will be sent to another node
     * if comparison status is YOUNGER of FORK, for sync message V2.
     */
-  def continuationIdsV2(syncV2: HeadersBasedSyncInfo, size: Int): ModifierIds = {
+  def continuationIdsV2(syncV2: ErgoSyncInfoV2, size: Int): ModifierIds = {
     if (syncV2.lastHeaders.isEmpty) {
       // if other node has no headers yet, send up to `size` headers from genesis
       val heightTo = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
@@ -294,7 +296,7 @@ trait ErgoHistoryReader
     * @param syncInfo  other's node sync info
     * @return maybe continuation header
     */
-  def continuationHeaderV2(syncInfo: HeadersBasedSyncInfo): Option[Header] = {
+  def continuationHeaderV2(syncInfo: ErgoSyncInfoV2): Option[Header] = {
     if (syncInfo.lastHeaders.isEmpty) {
       Option.empty
     } else {
@@ -319,7 +321,7 @@ trait ErgoHistoryReader
   def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => continuationIdsV1(syncV1, size)
-      case otherVersion: HeadersBasedSyncInfo => continuationIdsV2(otherVersion, size)
+      case syncV2: ErgoSyncInfoV2 => continuationIdsV2(syncV2, size)
     }
   }
 
@@ -378,13 +380,19 @@ trait ErgoHistoryReader
     if (isEmpty) {
       ErgoSyncInfoV1(Nil)
     } else {
-      ErgoSyncInfoV1(lastHeaderIds(ErgoSyncInfoV1.MaxBlockIds))
+      ErgoSyncInfoV1(lastHeaderIds(ErgoSyncInfo.MaxBlockIds))
     }
   }
 
-  private def headersForSyncInfo(full: Boolean): Array[Header] = {
+
+  /**
+    * @return sync info for neigbour peers, V2 message
+    * @param full - if false, only last header to be sent, otherwise, multiple headers
+    *               full info is needed when
+    */
+  def syncInfoV2(full: Boolean): ErgoSyncInfoV2 = {
     if (isEmpty) {
-      Array.empty
+      ErgoSyncInfoV2(Nil)
     } else {
       val h = headersHeight
 
@@ -394,22 +402,10 @@ trait ErgoHistoryReader
         ErgoHistoryReader.ReducedV2SyncOffsets
       }
 
-      offsets.flatMap(offset => bestHeaderAtHeight(h - offset))
+      val headers = offsets.flatMap(offset => bestHeaderAtHeight(h - offset))
+
+      ErgoSyncInfoV2(headers)
     }
-  }
-
-  /**
-    * @return sync info for neigbour peers, V2 message
-    * @param full - if false, only last header to be sent, otherwise, multiple headers
-    *               full info is needed when
-    */
-  def syncInfoV2(full: Boolean): ErgoSyncInfoV2 = {
-    ErgoSyncInfoV2(headersForSyncInfo(full))
-  }
-
-  def syncInfoV3(full: Boolean): ErgoSyncInfoV3 = {
-    val headers = headersForSyncInfo(full)
-    ErgoSyncInfoV3(headers, Seq(1 -> headersHeight), Seq(minFullBlockAvailable -> fullBlockHeight))
   }
 
   /**
@@ -587,6 +583,13 @@ trait ErgoHistoryReader
         None
       }
     }.getOrElse(None)
+  }
+
+  /**
+    * @return serialized NiPoPoW proof store in database
+    */
+  def readPopowProofBytesFromDb(): Option[Array[Byte]] = {
+    historyStorage.getIndex(NipopowSnapshotHeightKey)
   }
 
 }

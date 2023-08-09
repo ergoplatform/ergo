@@ -74,7 +74,9 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
   override def writeMinimalFullBlockHeight(height: Height): Unit = {
-    historyStorage.insert(Array(MinFullBlockHeightKey -> Ints.toByteArray(height)), Array.empty[BlockSection])
+    historyStorage.insert(
+      indexesToInsert = Array(MinFullBlockHeightKey -> Ints.toByteArray(height)),
+      objectsToInsert = BlockSection.emptyArray)
   }
 
   override def readMinimalFullBlockHeight(): Height = {
@@ -109,11 +111,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
 
   def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
-  /**
-    * @param h - header to process
-    * @return ProgressInfo - info required for State to be consistent with History
-    */
-  protected def process(h: Header, nipopowMode: Boolean = false): Try[ProgressInfo[BlockSection]] = synchronized {
+  override protected def process(h: Header, nipopowMode: Boolean = false): Try[ProgressInfo[BlockSection]] = synchronized {
     val dataToInsert: (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = toInsert(h, nipopowMode)
 
     historyStorage.insert(dataToInsert._1, dataToInsert._2).flatMap { _ =>
@@ -130,7 +128,10 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   }
 
   /**
-    * Data to add to and remove from the storage to process this modifier
+    * Data to add to and remove from the storage to process a header
+    * @param h - header to be written into the storage
+    * @param nipopowMode - flag showing whether header `h` is applied sequentially (so parent is already there), or
+    *                     coming after a possible gap (during nipopow application). If true, a gap is possible.
     */
   private def toInsert(h: Header, nipopowMode: Boolean): (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = {
     //todo: construct resulting Array without ++
@@ -138,8 +139,9 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
 
-    // todo: comment
-    val bestHeader = if(nipopowMode) {
+    // in nipopow comment, we consider that header we got is in best chain (which is guaranteed by the proof),
+    // so we do not check chain's score (and we do not have it)
+    val bestHeader = if (nipopowMode) {
       true
     } else {
       score > bestHeadersChainScore
@@ -158,12 +160,40 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
       orphanedBlockHeaderIdsRow(h, score)
     }
 
-    val nipopowsRow = if (Constants.timeToTakeSnapshot(h.height) && settings.nodeSettings.popowBootstrap == false) { //todo: fix condition
-      val pbs = popowProofBytes().get // todo: .get  , measure time
-      log.info(s"Dumping nipopow proof (size: ${pbs.length}) @ ${h.height}")
-      Array(NipopowSnapshotHeightKey -> pbs)
+    // checks if it is time to take nipopow proof
+    // UTXO set snapshot is taken on last block of a UtXO set snapshot epoch
+    // e.g. on a height h , where h % MakeSnapshotEvery == MakeSnapshotEvery - 1
+    // and NiPoPoW proof is taken Constants.LastHeadersInContext before to have Constants.LastHeadersInContext
+    // (actually, Constants.LastHeadersInContext + 1 even) consecutive headers before first full block to be validated
+    val timeToTakeNipopowProof: Boolean = if (settings.nodeSettings.nipopowSettings.nipopowBootstrap) {
+      // currently, the node is not taking NiPoPoW proof if was bootstrapped via a NiPoPoW itself,
+      // as no extension sections (with interlinks) available for headers downloaded via nipopows
+      false
+    } else  {
+      // the node is currently storing one nipopow proof and possibly spreading it over p2p network only
+      // for the case of bootstrapping nodes which will download UTXO set snapshot after
+      // (stateless clients with suffix length resulting to applying full blocks after that height are ok also)
+      // so nipopow proof is taken at Constants.LastHeadersInContext blocks before UTXO set snapshot height,
+      // to have enough headers to apply full blocks after snapshot (Constants.LastHeadersInContext headers will make
+      // execution context whole)
+      val makeSnapshotEvery = chainSettings.makeSnapshotEvery
+      this.isHeadersChainSynced &&
+        h.height % makeSnapshotEvery == makeSnapshotEvery - 1 - Constants.LastHeadersInContext
+    }
+
+    val nipopowsRow: Seq[(ByteArrayWrapper, Array[Byte])] = if (timeToTakeNipopowProof) {
+      val ts0 = System.currentTimeMillis()
+      popowProofBytes() match {
+        case Success(pbs) =>
+          val ts = System.currentTimeMillis()
+          log.info(s"Dumping nipopow proof (size: ${pbs.length}) @ ${h.height}, generated in ${ts - ts0} ms.")
+          Array(NipopowSnapshotHeightKey -> pbs)
+        case Failure(e) =>
+          log.error("Nipopow proof generation failed ", e)
+          Array.empty[(ByteArrayWrapper, Array[Byte])]
+      }
     } else {
-      Array.empty
+      Array.empty[(ByteArrayWrapper, Array[Byte])]
     }
 
     (Array(scoreRow, heightRow) ++ bestRow ++ headerIdsRow ++ nipopowsRow, Array(h))
@@ -319,7 +349,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
           val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
           chain.headers.filter(p => heights.contains(p.height))
         }
-        difficultyCalculator.eip37Calculate(headers, epochLength)
+        difficultyCalculator.eip37Calculate(headers, chainSettings.eip37EpochLength.get) // .get is ok for the mainnet
       } else {
         parent.requiredDifficulty
       }

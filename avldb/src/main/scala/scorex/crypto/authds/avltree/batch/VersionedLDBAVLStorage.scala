@@ -5,7 +5,7 @@ import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, has
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
 import scorex.crypto.authds.{ADDigest, ADKey}
-import scorex.util.encode.Base58
+import scorex.util.encode.Base16
 import scorex.crypto.hash
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBKVStore, LDBVersionedStore}
@@ -42,11 +42,12 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
 
   override def rollback(version: ADDigest): Try[(ProverNodes[DigestType], Int)] = Try {
     if (!this.version.contains(version)) { // do not rollback to self
+      log.info(s"Doing rollback from ${this.version.map(Base16.encode)} to ${Base16.encode(version)}:")
       store.rollbackTo(version)
     }
   }.flatMap(_ => restorePrunedRootNode())
     .recoverWith { case e =>
-      log.warn(s"Failed to recover tree for digest ${Base58.encode(version)}:", e)
+      log.warn(s"Failed to recover tree for digest ${Base16.encode(version)}:", e)
       Failure(e)
     }
 

@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
+import scorex.core.app.Version.Eip37ForkVersion
 import scorex.core.app.{ScorexContext, Version}
 import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
 import scorex.core.network.PeerConnectionHandler.ReceivableMessages
@@ -11,6 +12,7 @@ import scorex.core.network.message.{HandshakeSerializer, MessageSerializer}
 import scorex.core.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.settings.ScorexSettings
 import scorex.util.ScorexLogging
+import sun.security.ssl.ProtocolVersion
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap
@@ -61,8 +63,8 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   override def postStop(): Unit = log.info(s"Peer handler to $connectionId destroyed")
 
   private def handshaking: Receive = {
-    handshakeTimeoutCancellableOpt = Some(context.system.scheduler.scheduleOnce(networkSettings.handshakeTimeout)
-    (self ! HandshakeTimeout))
+    handshakeTimeoutCancellableOpt =
+      Some(context.system.scheduler.scheduleOnce(networkSettings.handshakeTimeout)(self ! HandshakeTimeout))
     val hb = HandshakeSerializer.toBytes(createHandshakeMessage())
     connection ! Tcp.Write(ByteString(hb))
     log.info(s"Handshake sent to $connectionId")
@@ -70,11 +72,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
     receiveAndHandleHandshake { receivedHandshake =>
       log.info(s"Got a Handshake from $connectionId")
 
-      val peerInfo = PeerInfo(
-        receivedHandshake.peerSpec,
-        System.currentTimeMillis(),
-        Some(direction)
-      )
+      val peerInfo = PeerInfo(receivedHandshake.peerSpec, System.currentTimeMillis(), Some(direction))
       val peer = ConnectedPeer(connectionDescription.connectionId, self, 0, Some(peerInfo))
       selfPeer = Some(peer)
 
@@ -85,17 +83,26 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
     } orElse handshakeTimeout orElse closeCommands
   }
 
+  //ban this peer for the wrong handshake message
+  //peer will be added to the blacklist and the network controller will send CloseConnection
+  private def banPeer(): Unit = {
+    selfPeer.foreach(c => networkControllerRef ! PenalizePeer(c.connectionId.remoteAddress, PenaltyType.PermanentPenalty))
+  }
+
   private def receiveAndHandleHandshake(handler: Handshake => Unit): Receive = {
     case Received(data) =>
       HandshakeSerializer.parseBytesTry(data.toArray) match {
         case Success(handshake) =>
-          handler(handshake)
+          if (handshake.peerSpec.protocolVersion < Eip37ForkVersion) {
+            log.info(s"Peer of version < 4.0.100 sent a handshake")
+            banPeer()
+          } else {
+            handler(handshake)
+          }
 
         case Failure(t) =>
-          log.info(s"Error during parsing a handshake: ${t.getMessage}")
-          //ban the peer for the wrong handshake message
-          //peer will be added to the blacklist and the network controller will send CloseConnection
-          selfPeer.foreach(c => networkControllerRef ! PenalizePeer(c.connectionId.remoteAddress, PenaltyType.PermanentPenalty))
+          log.info(s"Error during parsing a handshake: ${t.getMessage}", t)
+          banPeer()
       }
   }
 
@@ -234,7 +241,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
     }
   }
 
-  private def createHandshakeMessage() = {
+  private def createHandshakeMessage(): Handshake = {
     Handshake(
       PeerSpec(
         networkSettings.agentName,

@@ -12,7 +12,6 @@ import scorex.core.network.message.{HandshakeSerializer, MessageSerializer}
 import scorex.core.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.settings.ScorexSettings
 import scorex.util.ScorexLogging
-import sun.security.ssl.ProtocolVersion
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap
@@ -94,6 +93,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
       HandshakeSerializer.parseBytesTry(data.toArray) match {
         case Success(handshake) =>
           if (handshake.peerSpec.protocolVersion < Eip37ForkVersion) {
+            // peers not suporting EIP-37 hard-fork are stuck on another chain
             log.info(s"Peer of version < 4.0.100 sent a handshake")
             banPeer()
           } else {

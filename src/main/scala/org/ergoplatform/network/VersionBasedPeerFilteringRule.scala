@@ -1,6 +1,5 @@
 package org.ergoplatform.network
 
-import org.ergoplatform.nodeView.state.StateType
 import scorex.core.app.Version
 import scorex.core.network.ConnectedPeer
 
@@ -48,44 +47,6 @@ trait VersionBasedPeerFilteringRule extends PeerFilteringRule {
 
 }
 
-
-/**
-  * 4.0.22+ allow for downloading ADProofs that are too big in block at 667614
-  * for prior versions, a peer will not deliver block # 667614 and some other blocks
-  */
-object DigestModeFilter extends VersionBasedPeerFilteringRule {
-
-  override def condition(version: Version): Boolean = {
-      version.compare(Version.v4022) >= 0
-  }
-
-}
-
-/**
-  * Filter out peers of 4.0.17 or 4.0.18 version as they are delivering broken block sections
-  */
-object BrokenModifiersFilter extends VersionBasedPeerFilteringRule {
-
-  override def condition(version: Version): Boolean = {
-    version != Version.v4017 && version != Version.v4018
-  }
-
-}
-
-/**
-  * Filter to download block sections, combining `DigestModeFilter` and `BrokenModifiersFilter`
-  * @param stateType - own (node's) state type
-  */
-final case class BlockSectionsDownloadFilter(stateType: StateType) extends VersionBasedPeerFilteringRule {
-  override def condition(version: Version): Boolean = {
-    if (stateType == StateType.Digest) {
-      DigestModeFilter.condition(version)
-    } else {
-      BrokenModifiersFilter.condition(version)
-    }
-  }
-}
-
 /**
   * If peer's version is >= 4.0.16, the peer is supporting sync V2
   */
@@ -129,4 +90,22 @@ object NipopowSupportFilter extends PeerFilteringRule {
       version.compare(Version.NipopowActivationVersion) >= 0
   }
 
+}
+
+/**
+  * Filter to download block sections (except of headers)
+  */
+object BlockSectionsDownloadFilter extends PeerFilteringRule {
+  override def condition(peer: ConnectedPeer): Boolean = {
+    peer.mode.exists(_.allBlocksAvailable)
+  }
+}
+
+/**
+  * Filter to download headers
+  */
+object HeadersDownloadFilter extends PeerFilteringRule {
+  override def condition(peer: ConnectedPeer): Boolean = {
+    peer.mode.exists(_.allHeadersAvailable)
+  }
 }

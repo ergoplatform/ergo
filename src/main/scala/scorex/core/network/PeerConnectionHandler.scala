@@ -94,7 +94,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
         case Success(handshake) =>
           if (handshake.peerSpec.protocolVersion < Eip37ForkVersion) {
             // peers not suporting EIP-37 hard-fork are stuck on another chain
-            log.info(s"Peer of version < 4.0.100 sent a handshake")
+            log.info(s"Peer of version < 4.0.100 sent handshake $handshake")
             banPeer()
           } else {
             handler(handshake)

@@ -125,7 +125,7 @@ object NipopowSupportFilter extends PeerFilteringRule {
   override def condition(peer: ConnectedPeer): Boolean = {
     val version = peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
 
-    peer.mode.flatMap(_.nipopowSuffix).isEmpty &&
+    peer.mode.flatMap(_.nipopowBootstrapped).isEmpty &&
       version.compare(Version.NipopowActivationVersion) >= 0
   }
 

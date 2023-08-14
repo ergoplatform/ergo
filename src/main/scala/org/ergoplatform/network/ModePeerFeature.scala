@@ -15,12 +15,12 @@ import scorex.util.serialization.{Reader, Writer}
   *
   * @param stateType - information on whether UTXO set is store (so state type is UTXO/Digest)
   * @param verifyingTransactions - whether the peer is verifying transactions
-  * @param nipopowSuffix - whether the peer has has bootstrapped via Nipopows, and length of proof suffix
+  * @param nipopowBootstrapped - whether the peer has bootstrapped via Nipopows
   * @param blocksToKeep - how many last full blocks the peer is storing
   */
 case class ModePeerFeature(stateType: StateType,
                            verifyingTransactions: Boolean,
-                           nipopowSuffix: Option[Int],
+                           nipopowBootstrapped: Option[Int],
                            blocksToKeep: Int) extends PeerFeature {
   override type M = ModePeerFeature
 
@@ -33,9 +33,11 @@ object ModePeerFeature {
 
   import io.circe.syntax._
 
+  val NiPoPoWNormalFlag = 1
+
   def apply(nodeSettings: NodeConfigurationSettings): ModePeerFeature = {
     val popowSuffix = if (nodeSettings.nipopowSettings.nipopowBootstrap) {
-      Some(nodeSettings.nipopowSettings.nipopowSuffix)
+      Some(NiPoPoWNormalFlag)
     } else {
       None
     }
@@ -76,7 +78,7 @@ object ModeFeatureSerializer extends ErgoSerializer[ModePeerFeature] {
   override def serialize(mf: ModePeerFeature, w: Writer): Unit = {
     w.put(mf.stateType.stateTypeCode)
     w.put(booleanToByte(mf.verifyingTransactions))
-    w.putOption(mf.nipopowSuffix)(_.putInt(_))
+    w.putOption(mf.nipopowBootstrapped)(_.putInt(_))
     w.putInt(mf.blocksToKeep) // todo: put -2 if bootstrapped via utxo set snapshot? https://github.com/ergoplatform/ergo/issues/2014
   }
 

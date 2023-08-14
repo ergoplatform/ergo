@@ -27,6 +27,8 @@ case class ModePeerFeature(stateType: StateType,
   override val featureId: Id = PeerFeatureDescriptors.ModeFeatureId
 
   override def serializer: ErgoSerializer[ModePeerFeature] = ModeFeatureSerializer
+
+  def allBlocksAvailable: Boolean = blocksToKeep == ModePeerFeature.AllBlocksKept
 }
 
 object ModePeerFeature {
@@ -35,18 +37,27 @@ object ModePeerFeature {
 
   val NiPoPoWNormalFlag = 1
 
+  val AllBlocksKept = -1
+  val UTXOSetBootstrapped = -2
+
   def apply(nodeSettings: NodeConfigurationSettings): ModePeerFeature = {
-    val popowSuffix = if (nodeSettings.nipopowSettings.nipopowBootstrap) {
+    val popowBootstrapped = if (nodeSettings.nipopowSettings.nipopowBootstrap) {
       Some(NiPoPoWNormalFlag)
     } else {
       None
     }
 
+    val blocksKept = if (nodeSettings.utxoSettings.utxoBootstrap) {
+      UTXOSetBootstrapped
+    } else {
+      nodeSettings.blocksToKeep
+    }
+
     new ModePeerFeature(
       nodeSettings.stateType,
       nodeSettings.verifyTransactions,
-      popowSuffix,
-      nodeSettings.blocksToKeep
+      popowBootstrapped,
+      blocksKept
     )
   }
 
@@ -79,7 +90,7 @@ object ModeFeatureSerializer extends ErgoSerializer[ModePeerFeature] {
     w.put(mf.stateType.stateTypeCode)
     w.put(booleanToByte(mf.verifyingTransactions))
     w.putOption(mf.nipopowBootstrapped)(_.putInt(_))
-    w.putInt(mf.blocksToKeep) // todo: put -2 if bootstrapped via utxo set snapshot? https://github.com/ergoplatform/ergo/issues/2014
+    w.putInt(mf.blocksToKeep)
   }
 
   override def parse(r: Reader): ModePeerFeature = {

@@ -311,6 +311,19 @@ class NetworkController(ergoSettings: ErgoSettings,
   }
 
   /**
+   * Check if a given IPv4 or IPv6 address is local.
+   * @param remote - address to check
+   * @return true if the address is local, false otherwise
+   */
+  private def checkLocalOnly(remote: InetSocketAddress): Boolean =
+    if(!networkSettings.localOnly) { // not only accept local
+      val address = remote.getAddress
+      address.isSiteLocalAddress || address.isLinkLocalAddress
+    } else {
+      false
+    }
+
+  /**
     * Connect to peer
     *
     * @param peer - PeerInfo
@@ -320,13 +333,17 @@ class NetworkController(ergoSettings: ErgoSettings,
     getPeerAddress(peer) match {
       case Some(remote) =>
         if (connectionForPeerAddress(remote).isEmpty && !unconfirmedConnections.contains(remote)) {
-          unconfirmedConnections += remote
-          tcpManager ! Connect(
-            remoteAddress = remote,
-            options = Nil,
-            timeout = Some(networkSettings.connectionTimeout),
-            pullMode = true
-          )
+          if(checkLocalOnly(remote)) {
+            log.error(s"Prevented attempt to connect to local peer $remote. (scorex.network.localOnly is false)")
+          } else {
+            unconfirmedConnections += remote
+            tcpManager ! Connect(
+              remoteAddress = remote,
+              options = Nil,
+              timeout = Some(networkSettings.connectionTimeout),
+              pullMode = true
+            )
+          }
         } else {
           log.warn(s"Connection to peer $remote is already established")
         }

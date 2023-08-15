@@ -38,7 +38,7 @@ object Version {
 
   val UtxoSnapsnotActivationVersion: Version = Version(5, 0, 12)
 
-  val NipopowActivationVersion: Version = Version(5, 0, 13) // todo: set proper version around release
+  val NipopowActivationVersion: Version = Version(5, 0, 13)
 }
 
 object ApplicationVersionSerializer extends ErgoSerializer[Version] {

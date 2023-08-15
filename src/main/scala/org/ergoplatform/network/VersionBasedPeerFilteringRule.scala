@@ -93,7 +93,9 @@ object NipopowSupportFilter extends PeerFilteringRule {
 }
 
 /**
-  * Filter to download block sections (except of headers)
+  * Filter to download block sections (except of headers).
+  * Currently, it is accepting peers which do have all the full blocks (so not bootstrapped via UTXO set snapshot
+  * or stateless client with full blocks suffix)
   */
 object BlockSectionsDownloadFilter extends PeerFilteringRule {
   override def condition(peer: ConnectedPeer): Boolean = {
@@ -102,7 +104,8 @@ object BlockSectionsDownloadFilter extends PeerFilteringRule {
 }
 
 /**
-  * Filter to download headers
+  * Filter to download headers.
+  * Currently, it is accepting peers which do have all the headers (so not bootstrapped via NiPoPoWs.
   */
 object HeadersDownloadFilter extends PeerFilteringRule {
   override def condition(peer: ConnectedPeer): Boolean = {

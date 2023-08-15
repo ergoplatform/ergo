@@ -28,8 +28,15 @@ case class ModePeerFeature(stateType: StateType,
 
   override def serializer: ErgoSerializer[ModePeerFeature] = ModeFeatureSerializer
 
+  /**
+    * @return whether the peer has all the full blocks
+    */
   def allBlocksAvailable: Boolean = blocksToKeep == ModePeerFeature.AllBlocksKept
 
+
+  /**
+    * @return whether the peer has all the headers
+    */
   def allHeadersAvailable: Boolean = nipopowBootstrapped.isEmpty
 }
 

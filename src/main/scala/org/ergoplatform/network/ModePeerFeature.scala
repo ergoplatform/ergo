@@ -15,7 +15,8 @@ import scorex.util.serialization.{Reader, Writer}
   *
   * @param stateType - information on whether UTXO set is store (so state type is UTXO/Digest)
   * @param verifyingTransactions - whether the peer is verifying transactions
-  * @param nipopowBootstrapped - whether the peer has bootstrapped via Nipopows
+  * @param nipopowBootstrapped - whether the peer has bootstrapped via Nipopows,
+  *                              and if so, boostrapping option (only one currently)
   * @param blocksToKeep - how many last full blocks the peer is storing
   */
 case class ModePeerFeature(stateType: StateType,
@@ -44,14 +45,28 @@ object ModePeerFeature {
 
   import io.circe.syntax._
 
-  val NiPoPoWNormalFlag = 1
+  /**
+    * Flag which is indicating NiPoPoW bootstrap mode. Currently there is only one option (suffix proof done
+    * according to KMZ17 paper), which does not exclude possibility for more options in future
+    */
+  val NiPoPoWDefaultFlag = 1
 
+  /**
+    * Flag value which is when used as length of blockchain suffix kept locally means that all the full blocks are
+    * stored
+    */
   val AllBlocksKept = -1
+
+  /**
+    * Flag value which is when used as length of blockchain suffix kept locally means that a node was bootstrapped
+    * via UTXO set snapshot, so not all the full blocks stored, but at the same time there is no fixed-length suffix
+    * as after bootstrapping there is no pruning
+    */
   val UTXOSetBootstrapped = -2
 
   def apply(nodeSettings: NodeConfigurationSettings): ModePeerFeature = {
     val popowBootstrapped = if (nodeSettings.nipopowSettings.nipopowBootstrap) {
-      Some(NiPoPoWNormalFlag)
+      Some(NiPoPoWDefaultFlag)
     } else {
       None
     }
@@ -107,13 +122,13 @@ object ModeFeatureSerializer extends ErgoSerializer[ModePeerFeature] {
 
     val stateType = StateType.fromCode(r.getByte())
     val verifyingTransactions = byteToBoolean(r.getByte())
-    val popowSuffix = r.getOption(r.getInt())
+    val popowBootstrapped = r.getOption(r.getInt())
     val blocksToKeep = r.getInt()
 
     new ModePeerFeature(
       stateType,
       verifyingTransactions,
-      popowSuffix,
+      popowBootstrapped,
       blocksToKeep
     )
   }

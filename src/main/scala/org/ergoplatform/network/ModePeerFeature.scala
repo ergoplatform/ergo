@@ -16,7 +16,7 @@ import scorex.util.serialization.{Reader, Writer}
   * @param stateType - information on whether UTXO set is store (so state type is UTXO/Digest)
   * @param verifyingTransactions - whether the peer is verifying transactions
   * @param nipopowBootstrapped - whether the peer has bootstrapped via Nipopows,
-  *                              and if so, boostrapping option (only one currently)
+  *                              and if so, supported bootstrapping options (only one currently)
   * @param blocksToKeep - how many last full blocks the peer is storing
   */
 case class ModePeerFeature(stateType: StateType,

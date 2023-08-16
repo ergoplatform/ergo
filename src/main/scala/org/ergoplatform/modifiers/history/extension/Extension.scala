@@ -14,7 +14,7 @@ import scorex.util.ModifierId
 
 /**
   * Extension section of Ergo block. Contains key-value storage
-  * represented as Seq[(Array[Byte], Array[Byte])] with mandatory and optional fields.
+  * represented as Seq[(Array[Byte], Array[Byte])] with mandatory (consensus-critical) and optional fields.
   *
   * @param headerId - id of corresponding header
   * @param fields   - fields as a sequence of key -> value records. A key is 2-bytes long, value is 64 bytes max.
@@ -47,14 +47,23 @@ object Extension extends ApiCodecs {
   val InterlinksVectorPrefix: Byte = 0x01
   val ValidationRulesPrefix: Byte = 0x02
 
+  /**
+    * Id a type of network object encoding extension
+    */
+  val modifierTypeId: NetworkObjectTypeId.Value = ExtensionTypeId.value
+
+  /**
+    * @return key-value pair `kv` encoded as Merkle tree leaf (byte array)
+    */
   def kvToLeaf(kv: (Array[Byte], Array[Byte])): Array[Byte] =
     Bytes.concat(Array(kv._1.length.toByte), kv._1, kv._2)
 
+  /**
+    * @return Merkle tree built on top of key-value pairs
+    */
   def merkleTree(fields: Seq[(Array[Byte], Array[Byte])]): MerkleTree[Digest32] = {
     Algos.merkleTree(LeafData @@ fields.map(kvToLeaf))
   }
-
-  val modifierTypeId: NetworkObjectTypeId.Value = ExtensionTypeId.value
 
   implicit val jsonEncoder: Encoder[Extension] = { e: Extension =>
     Map(

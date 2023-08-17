@@ -32,7 +32,7 @@ case class Extension(headerId: ModifierId,
 
   override def toString: String = {
     val fieldsEncoded = fields.map(kv => s"${Algos.encode(kv._1)} -> ${Algos.encode(kv._2)}")
-    s"Extension(id: $id, headerId: $headerId, fields: $fieldsEncoded"
+    s"Extension(id: $id, headerId: $headerId, fields: $fieldsEncoded)"
   }
 
 }

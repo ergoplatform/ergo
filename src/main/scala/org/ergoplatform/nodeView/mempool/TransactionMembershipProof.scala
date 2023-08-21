@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import io.circe.{Encoder, Json}
-import org.ergoplatform.JsonCodecs
+import org.ergoplatform.sdk.JsonCodecs
 import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32

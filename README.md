@@ -1,15 +1,15 @@
 # Ergo
 
 This repository contains the reference client (aka the node) implementation for 
-[Ergo, a cryptocurrency protocol](https://ergoplatform.org/) aiming to be secure peer-to-peer environment programmable
-scarce money. 
+[Ergo, a cryptocurrency protocol](https://ergoplatform.org/) aiming to be secure peer-to-peer environment for programmable
+scarce money (Ergo) and other financial tools. 
 
-The reference client implementation is done in Scala. There are parts of the protocol done in other languages (such as [sigma-rust](https://github.com/ergoplatform/sigma-rust), Rust implementation of ErgoScript cryptocurrency scripting language), but this is the only full-fledged Ergo client at the moment.
+The reference client implementation is done in Scala. There are parts of the protocol done in other languages (such as [sigma-rust](https://github.com/ergoplatform/sigma-rust), Rust implementation of ErgoScript cryptocurrency scripting language), but the reference client is the only full-fledged Ergo protocol client at the moment.
 
 ## Differences from Bitcoin
 
 Ergo is UTXO Proof-of-Work cryptocurrency like Bitcoin, but there are a lot of differences (and Ergo was designed 
-and implemented from scratch).
+and implemented from scratch):
 
 * Powerful contracts in the multi-stage extended UTXO model (see [ErgoScript whitepaper](https://ergoplatform.org/docs/ErgoScript.pdf)) 
 * Memory-hard Proof-of-Work function [Autolykos2](https://docs.ergoplatform.com/ErgoPow.pdf)
@@ -30,7 +30,7 @@ More papers can be found at [https://docs.ergoplatform.com/documents/](https://d
 
 This client relies on some assumptions in regards with its environment:
 
-* execution environment is trusted. While seed is stored in encrypted files, and the client's 
+* execution environment is trusted. While seed is stored in an encrypted file, and the client's 
   wallet tries to remove secret key from memory as soon as possible when it is not needed, the
   client has no protection from side-channel attacks, memory scans etc.
 * clocks should be more or less synchronized. If timestamp of a block is more than 20 minutes
@@ -43,7 +43,9 @@ See [documentation](https://docs.ergoplatform.com/node/install/).
 
 By default, the node is processing all the blocks since genesis. There are other options available, which could be especially useful on limited hardware.
 
-* bootstrapping with UTXO set snapshot - similar to snap-sync in Ethereum. To enable: 
+* bootstrapping with UTXO set snapshot - working similarly to snap-sync in Ethereum. The node first downloading UTXO 
+set snapshot from secure point in the past and then downloading blocks after the UTXO set snapshot and applying to the set.
+Details and security proofs can be found in the ["Multi-mode cryptocurrency systems" paper](https://eprint.iacr.org/2018/129.pdf). To enable: 
 ```
 
 ergo {
@@ -53,7 +55,7 @@ ergo {
 }
 ```
 
-* bootstrapping with UTXO set snapshot can be combined with NiPoPoW (non-interactive proofs-of-proof-of-work) for 
+* bootstrapping with UTXO set snapshot can be combined with NiPoPoW (non-interactive proofs-of-proof-of-work, see [https://eprint.iacr.org/2017/963.pdf](https://eprint.iacr.org/2017/963.pdf) for details) for 
 syncing headers-chain (in logarithmic time vs ordinary SPV sync for headers), to do that:
 ```
 

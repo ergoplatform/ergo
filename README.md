@@ -1,12 +1,15 @@
 # Ergo
 
-This repository contains the reference implementation of the
-Ergo Platform protocol, which is an alternative to
-the [Bitcoin protocol](https://bitcoin.org/bitcoin.pdf).
+This repository contains the reference client (aka the node) implementation for 
+[Ergo, a cryptocurrency protocol](https://ergoplatform.org/) aiming to be secure peer-to-peer environment programmable
+scarce money. 
 
-Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
+The reference client implementation is done in Scala. There are parts of the protocol done in other languages (such as [sigma-rust](https://github.com/ergoplatform/sigma-rust), Rust implementation of ErgoScript cryptocurrency scripting language), but this is the only full-fledged Ergo client at the moment.
 
 ## Differences from Bitcoin
+
+Ergo is UTXO Proof-of-Work cryptocurrency like Bitcoin, but there are a lot of differences (and Ergo was designed 
+and implemented from scratch).
 
 * Powerful contracts in the multi-stage extended UTXO model (see [ErgoScript whitepaper](https://ergoplatform.org/docs/ErgoScript.pdf)) 
 * Memory-hard Proof-of-Work function [Autolykos2](https://docs.ergoplatform.com/ErgoPow.pdf)
@@ -14,12 +17,14 @@ Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
 [NiPoPoWs](https://eprint.iacr.org/2017/963.pdf), hybrid modes
 * [Alternative transactional language](https://github.com/ScorexFoundation/sigmastate-interpreter), which is more powerful than Bitcoin Script but also safe against
 heavy validation attacks
-* Alternative fee model with [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf )
+* Alternative fee model with [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf ) (aka demurrage)
 
 ## Specifications
 
-A [White Paper](https://ergoplatform.org/docs/whitepaper.pdf) with a brief description is available. A Yellow Paper with detailed specification is underway and will be available shortly. At the moment, there are [drafts of the Yellow Paper](https://github.com/ergoplatform/ergo/tree/master/papers/yellow) available,
-and currently the reference implementation code should be considered as the specification.
+* [white paper](https://ergoplatform.org/docs/whitepaper.pdf) - a brief description of the protocol
+* [ErgoScript white paper](https://ergoplatform.org/docs/ErgoScript.pdf) - describes ErgoScript, a Cryptocurrency Scripting Language Supporting Noninteractive Zero-Knowledge Proofs used in Ergo
+
+More papers can be found at [https://docs.ergoplatform.com/documents/](https://docs.ergoplatform.com/documents/).
 
 ## Security assumptions
 
@@ -34,7 +39,44 @@ This client relies on some assumptions in regards with its environment:
 
 ## Building and Running Node and UI
 
-See [documentation](https://docs.ergoplatform.com/node/install/)
+See [documentation](https://docs.ergoplatform.com/node/install/). 
+
+By default, the node is processing all the blocks since genesis. There are other options available, which could be especially useful on limited hardware.
+
+* bootstrapping with UTXO set snapshot - similar to snap-sync in Ethereum. To enable: 
+```
+
+ergo {
+  ...
+  node.utxoBootstrap = true
+  ...
+}
+```
+
+* bootstrapping with UTXO set snapshot can be combined with NiPoPoW (non-interactive proofs-of-proof-of-work) for 
+syncing headers-chain (in logarithmic time vs ordinary SPV sync for headers), to do that:
+```
+
+ergo{
+  ...
+  node.nipopow.nipopowBootstrap = true
+  node.utxo.utxoBootstrap = true
+  ...
+}
+```
+
+* stateless mode allows to have full-node security without holding UTXO set even! Details are provided in ["Improving Authenticated Dynamic Dictionaries,
+  with Applications to Cryptocurrencies" paper](https://eprint.iacr.org/2016/994.pdf). This mode allows to download and validate arbitrary-sized suffix of the blockchain. Config example:
+
+```
+ergo {
+   ...
+   node.stateType = "digest"
+   node.blocksToKeep = 2160 # store and process last three days only
+   node.nipopow.nipopowBootstrap = true   # compatible with NiPoPoWs 
+   ...
+}
+```
 
 ## Testing
 

@@ -34,7 +34,7 @@ For instructions on how to build and run the node and UI, refer to the [official
 
 By default, the node processes all blocks from the genesis block. However, there are other options available that may be more suitable for hardware with limited resources.
 
-* **Bootstrapping with a UTXO set snapshot:** This works similarly to Ethereum's snap-sync. The node first downloads a UTXO set snapshot from a secure point in the past, then downloads blocks following the UTXO set snapshot and applies them to the set. For more details and security proofs, refer to the ["Multi-mode cryptocurrency systems" paper](https://eprint.iacr.org/2018/129.pdf). To enable this feature: 
+* **Bootstrapping with a UTXO set snapshot:** This works similarly to Ethereum's snap-sync. The node first downloads a UTXO set snapshot from a secure point in the past, then downloads blocks following the UTXO set snapshot and applies them to the set. For more details and security proofs, refer to the ["Multi-mode cryptocurrency systems" paper](https://eprint.iacr.org/2018/129.pdf). To enable this feature add the following to your configuration file: 
 ```
 
 ergo {

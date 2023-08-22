@@ -78,6 +78,11 @@ ergo {
 }
 ```
 
+
+
+
+*More info on different modes of node operation can be found at [https://docs.ergoplatform.com/node/modes/](https://docs.ergoplatform.com/node/modes/)*
+
 ## Testing
 
 There are three kinds of tests: 

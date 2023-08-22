@@ -1,27 +1,18 @@
 package org.ergoplatform.modifiers.history.popow
 
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.mining.difficulty.DifficultySerializer
+import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, DifficultySerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, ChainSettings, Constants}
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
-
-/**
-  * NiPoPoW proof params from the KMZ17 paper
-  *
-  * @param m - minimal superchain length
-  * @param k - suffix length
-  */
-case class PoPowParams(m: Int, k: Int)
-
 
 /**
   * A set of utilities for working with NiPoPoW protocol.
@@ -36,8 +27,12 @@ case class PoPowParams(m: Int, k: Int)
   * Please note that for [KMZ17] we're using the version published @ Financial Cryptography 2020, which is different
   * from previously published versions on IACR eprint.
   */
-class NipopowAlgos(powScheme: AutolykosPowScheme) {
+class NipopowAlgos(val chainSettings: ChainSettings) {
   import NipopowAlgos._
+
+  private def powScheme: AutolykosPowScheme = chainSettings.powScheme
+
+  private val diffAdjustment = new DifficultyAdjustment(chainSettings)
 
   /**
     * Computes interlinks vector for a header next to `prevHeader`.
@@ -133,6 +128,8 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
 
   /**
     * Computes NiPoPow proof for the given `chain` according to given `params`.
+    *
+    * todo: Paper-like code used in tests only, so maybe better to replace it in tests with prove (histReader)
     */
   def prove(chain: Seq[PoPowHeader])(params: PoPowParams): Try[NipopowProof] = Try {
     val k = params.k
@@ -163,7 +160,7 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
     val suffixTail = suffix.tail.map(_.header)
     val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, params.continuous)
   }
 
   /**
@@ -233,11 +230,37 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
         histReader.popowHeader(suffix.head.id).get -> suffix.tail // .get to be caught in outer (prove's) Try
     }
 
-    val genesisPopowHeader = histReader.popowHeader(1).get // to be caught in outer (prove's) Try
-    val genesisHeight = 1
-    val prefix = genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)
+    val storedHeights = mutable.Set[Height]() // cache to filter out duplicate headers
+    val prefixBuilder = mutable.ArrayBuilder.make[PoPowHeader]()
 
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
+    val genesisHeight = 1
+    prefixBuilder += histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
+    storedHeights += genesisHeight
+
+    if (params.continuous) {
+      // put headers needed to check difficulty of new blocks after suffix into prefix
+      val epochLength = chainSettings.eip37EpochLength.getOrElse(chainSettings.epochLength)
+      diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).foreach { height =>
+        // check that header in or after suffix is not included, otherwise, sorting by height would be broken
+        if (height < suffixHead.height) {
+          histReader.popowHeader(height).foreach { ph =>
+            prefixBuilder += ph
+            storedHeights += ph.height
+          }
+        }
+      }
+    }
+
+    provePrefix(genesisHeight, suffixHead).foreach { ph =>
+      if (!storedHeights.contains(ph.height)) {
+        prefixBuilder += ph
+        storedHeights += ph.height
+      }
+    }
+
+    val prefix = prefixBuilder.result().sortBy(_.height)
+
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, params.continuous)
   }
 
 }

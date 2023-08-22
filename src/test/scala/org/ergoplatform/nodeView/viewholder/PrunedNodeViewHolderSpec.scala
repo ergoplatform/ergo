@@ -30,7 +30,6 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = StateType.Digest,
         verifyTransactions = true,
-        poPoWBootstrap = false,
         blocksToKeep = blocksToKeep
       )
     )

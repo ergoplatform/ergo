@@ -9,7 +9,8 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
 /**
-  * Information on sync status to be sent to peer over the wire
+  * Information on sync status to be sent to peer over the wire. It should provide an answer to the question how
+  * other peer's chain is developed in comparison with best local one.
   *
   */
 sealed trait ErgoSyncInfo extends SyncInfo {
@@ -24,6 +25,7 @@ sealed trait ErgoSyncInfo extends SyncInfo {
 }
 
 /**
+  * Initial sync info clients used before 4.0.16 release. Contains just last headers ids.
   * @param lastHeaderIds - last header ids known to a peer
   */
 case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {

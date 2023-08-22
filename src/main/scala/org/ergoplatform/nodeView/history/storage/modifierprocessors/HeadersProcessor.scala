@@ -8,7 +8,6 @@ import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -30,7 +29,7 @@ import scala.util.{Failure, Success, Try}
 /**
   * Contains all functions required by History to process Headers.
   */
-trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
+trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with ScorexLogging with ScorexEncoding {
 
   /**
     * Key for database record storing ID of best block header
@@ -56,8 +55,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   protected val settings: ErgoSettings
 
   val powScheme: AutolykosPowScheme
-
-  val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
 
   // Maximum time in future block header may have
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
@@ -114,12 +111,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
-  /**
-    * @param h - header to process
-    * @return ProgressInfo - info required for State to be consistent with History
-    */
-  protected def process(h: Header): Try[ProgressInfo[BlockSection]] = synchronized {
-    val dataToInsert: (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = toInsert(h)
+  override protected def process(h: Header, nipopowMode: Boolean = false): Try[ProgressInfo[BlockSection]] = synchronized {
+    val dataToInsert: (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = toInsert(h, nipopowMode)
 
     historyStorage.insert(dataToInsert._1, dataToInsert._2).flatMap { _ =>
       bestHeaderIdOpt match {
@@ -135,23 +128,75 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   }
 
   /**
-    * Data to add to and remove from the storage to process this modifier
+    * Data to add to and remove from the storage to process a header
+    * @param h - header to be written into the storage
+    * @param nipopowMode - flag showing whether header `h` is applied sequentially (so parent is already there), or
+    *                     coming after a possible gap (during nipopow application). If true, a gap is possible.
     */
-  private def toInsert(h: Header): (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = {
+  private def toInsert(h: Header, nipopowMode: Boolean): (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = {
+    //todo: construct resulting Array without ++
+
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
+
+    // in nipopow comment, we consider that header we got is in best chain (which is guaranteed by the proof),
+    // so we do not check chain's score (and we do not have it)
+    val bestHeader = if (nipopowMode) {
+      true
+    } else {
+      score > bestHeadersChainScore
+    }
+
     val bestRow: Seq[(ByteArrayWrapper, Array[Byte])] =
-      if (score > bestHeadersChainScore) Seq(BestHeaderKey -> idToBytes(h.id)) else Seq.empty
+      if (bestHeader) Seq(BestHeaderKey -> idToBytes(h.id)) else Seq.empty
     val scoreRow = headerScoreKey(h.id) -> score.toByteArray
     val heightRow = headerHeightKey(h.id) -> Ints.toByteArray(h.height)
-    val headerIdsRow = if (score > bestHeadersChainScore) {
+
+    val headerIdsRow = if (bestHeader) {
       if (h.isGenesis) log.info(s"Processing genesis header ${h.encodedId}")
+      if(nipopowMode) log.info(s"Processing nipopow header ${h.encodedId}")
       bestBlockHeaderIdsRow(h, score)
     } else {
       orphanedBlockHeaderIdsRow(h, score)
     }
 
-    (Array(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Array(h))
+    // checks if it is time to take nipopow proof
+    // UTXO set snapshot is taken on last block of a UtXO set snapshot epoch
+    // e.g. on a height h , where h % MakeSnapshotEvery == MakeSnapshotEvery - 1
+    // and NiPoPoW proof is taken Constants.LastHeadersInContext before to have Constants.LastHeadersInContext
+    // (actually, Constants.LastHeadersInContext + 1 even) consecutive headers before first full block to be validated
+    val timeToTakeNipopowProof: Boolean = if (settings.nodeSettings.nipopowSettings.nipopowBootstrap) {
+      // currently, the node is not taking NiPoPoW proof if was bootstrapped via a NiPoPoW itself,
+      // as no extension sections (with interlinks) available for headers downloaded via nipopows
+      false
+    } else  {
+      // the node is currently storing one nipopow proof and possibly spreading it over p2p network only
+      // for the case of bootstrapping nodes which will download UTXO set snapshot after
+      // (stateless clients with suffix length resulting to applying full blocks after that height are ok also)
+      // so nipopow proof is taken at Constants.LastHeadersInContext blocks before UTXO set snapshot height,
+      // to have enough headers to apply full blocks after snapshot (Constants.LastHeadersInContext headers will make
+      // execution context whole)
+      val makeSnapshotEvery = chainSettings.makeSnapshotEvery
+      this.isHeadersChainSynced &&
+        h.height % makeSnapshotEvery == makeSnapshotEvery - 1 - Constants.LastHeadersInContext
+    }
+
+    val nipopowsRow: Seq[(ByteArrayWrapper, Array[Byte])] = if (timeToTakeNipopowProof) {
+      val ts0 = System.currentTimeMillis()
+      popowProofBytes() match {
+        case Success(pbs) =>
+          val ts = System.currentTimeMillis()
+          log.info(s"Dumping nipopow proof (size: ${pbs.length}) @ ${h.height}, generated in ${ts - ts0} ms.")
+          Array(NipopowSnapshotHeightKey -> pbs)
+        case Failure(e) =>
+          log.error("Nipopow proof generation failed ", e)
+          Array.empty[(ByteArrayWrapper, Array[Byte])]
+      }
+    } else {
+      Array.empty[(ByteArrayWrapper, Array[Byte])]
+    }
+
+    (Array(scoreRow, heightRow) ++ bestRow ++ headerIdsRow ++ nipopowsRow, Array(h))
   }
 
   /**
@@ -297,11 +342,14 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     if (settings.networkType.isMainNet && parentHeight + 1 >= eip37ActivationHeight) {
       val epochLength = 128 // epoch length after EIP-37 activation
       if (parentHeight % epochLength == 0) {
-        val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
-        // todo: if parent is on best chain, read headers directly, not via headerChainBack
-        val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
-        val headers = chain.headers.filter(p => heights.contains(p.height))
-        difficultyCalculator.eip37Calculate(headers, epochLength)
+        val heights = difficultyCalculator.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
+        val headers = if (historyReader.isInBestChain(parent)) {
+          heights.flatMap(height => historyReader.bestHeaderAtHeight(height))
+        } else {
+          val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+          chain.headers.filter(p => heights.contains(p.height))
+        }
+        difficultyCalculator.eip37Calculate(headers, chainSettings.eip37EpochLength.get) // .get is ok for the mainnet
       } else {
         parent.requiredDifficulty
       }
@@ -314,16 +362,17 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         val epochLength = settings.chainSettings.epochLength
 
         if (parentHeight % epochLength == 0) {
-          //todo: it is slow to read thousands headers from database for each header
-          //todo; consider caching here
-          //todo: https://github.com/ergoplatform/ergo/issues/872
-          val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
+          val heights = difficultyCalculator.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
             .ensuring(_.last == parentHeight)
           if (heights.lengthCompare(1) == 0) {
             difficultyCalculator.calculate(Array(parent), epochLength)
           } else {
-            val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
-            val headers = chain.headers.filter(p => heights.contains(p.height))
+            val headers = if (historyReader.isInBestChain(parent)) {
+              heights.flatMap(height => historyReader.bestHeaderAtHeight(height))
+            } else {
+              val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+              chain.headers.filter(p => heights.contains(p.height))
+            }
             difficultyCalculator.calculate(headers, epochLength)
           }
         } else {

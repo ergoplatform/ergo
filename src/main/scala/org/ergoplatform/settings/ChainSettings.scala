@@ -19,6 +19,7 @@ case class ChainSettings(protocolVersion: Byte,
                          addressPrefix: Byte,
                          blockInterval: FiniteDuration,
                          epochLength: Int,
+                         eip37EpochLength: Option[Int],
                          useLastEpochs: Int,
                          voting: VotingSettings,
                          powScheme: AutolykosPowScheme,
@@ -28,6 +29,7 @@ case class ChainSettings(protocolVersion: Byte,
                          foundersPubkeys: Seq[String],
                          genesisStateDigestHex: String,
                          initialDifficultyHex: String,
+                         makeSnapshotEvery: Int,
                          genesisId: Option[ModifierId] = None) {
 
   val isMainnet: Boolean = addressPrefix == ErgoAddressEncoder.MainnetNetworkPrefix

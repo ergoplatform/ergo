@@ -333,8 +333,8 @@ class NetworkController(ergoSettings: ErgoSettings,
     getPeerAddress(peer) match {
       case Some(remote) =>
         if (connectionForPeerAddress(remote).isEmpty && !unconfirmedConnections.contains(remote)) {
-          if(checkLocalOnly(remote)) {
-            log.error(s"Prevented attempt to connect to local peer $remote. (scorex.network.localOnly is false)")
+          if (checkLocalOnly(remote)) {
+            log.warn(s"Prevented attempt to connect to local peer $remote. (scorex.network.localOnly is false)")
           } else {
             unconfirmedConnections += remote
             tcpManager ! Connect(

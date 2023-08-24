@@ -12,7 +12,9 @@ import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.concurrent.Future
 import scala.util.{Failure, Success}
+import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
   * Performs mempool transactions re-validation. Called on a new block coming.
@@ -33,26 +35,25 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
   override def receive: Receive = {
     case RunCleanup(validator, mempool) =>
-      runCleanup(validator, mempool)
-      sender() ! CleanupDone
+      val s = sender()
+      validatePool(validator, mempool)
+        .map { case (validated, toEliminate) =>
+          log.debug(s"${validated.size} re-checked mempool transactions were ok, " +
+            s"${toEliminate.size} transactions were invalidated")
+
+          if (validated.nonEmpty) {
+            nodeViewHolderRef ! RecheckedTransactions(validated)
+          }
+          if (toEliminate.nonEmpty) {
+            nodeViewHolderRef ! EliminateTransactions(toEliminate)
+          }
+          s ! CleanupDone
+        }.andThen { case Failure(ex) =>
+          logger.error("Mempool validation failed", ex)
+        }
 
     //Should not be here, if non-expected signal comes, check logic
     case a: Any => log.warn(s"Strange input: $a")
-  }
-
-  private def runCleanup(validator: UtxoStateReader,
-                         mempool: ErgoMemPoolReader): Unit = {
-    val (validated, toEliminate) = validatePool(validator, mempool)
-
-    log.debug(s"${validated.size} re-checked mempool transactions were ok, " +
-              s"${toEliminate.size} transactions were invalidated")
-
-    if (validated.nonEmpty) {
-      nodeViewHolderRef ! RecheckedTransactions(validated)
-    }
-    if (toEliminate.nonEmpty) {
-      nodeViewHolderRef ! EliminateTransactions(toEliminate)
-    }
   }
 
   /**
@@ -61,7 +62,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     * @return - updated valid transactions and invalidated transaction ids
     */
   private def validatePool(validator: UtxoStateReader,
-                           mempool: ErgoMemPoolReader): (Seq[UnconfirmedTransaction], Seq[ModifierId]) = {
+                           mempool: ErgoMemPoolReader): Future[(Seq[UnconfirmedTransaction], Seq[ModifierId])] = Future {
 
     val now = System.currentTimeMillis()
 

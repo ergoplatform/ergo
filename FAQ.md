@@ -44,14 +44,16 @@ The details of the Ergo emission schedule and monetary supply can be found in th
 
 * Website: https://ergoplatform.org/
 
+* ErgoDocs: https://docs.ergoplatform.com
+
+* Twitter: https://twitter.com/Ergo_Platform
+
+* Telegram: https://t.me/ergoplatform
+
 * Ecosystem: https://sigmaverse.io
-
-* Twitter: https://twitter.com/ergoplatformorg
-
-* Wiki: https://github.com/ergoplatform/ergo/wiki
-
+* 
 * Github: https://github.com/ergoplatform/ergo
 
 * Documents: https://ergoplatform.org/en/documents/
 
-* Telegram: https://t.me/ergoplatform
+* Wiki: https://github.com/ergoplatform/ergo/wiki

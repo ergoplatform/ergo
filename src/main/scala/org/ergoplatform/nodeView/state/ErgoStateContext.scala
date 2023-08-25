@@ -18,6 +18,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.basics.CryptoConstants.EcPointType
+import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.eval.SigmaDsl
 import special.collection.Coll
 
@@ -83,10 +84,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
-  override def previousStateDigest: ADDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
-    ADDigest @@ sigmaLastHeaders.toArray.head.stateRoot.digest.toArray
+  override def previousStateDigest: Coll[Byte] = if (sigmaLastHeaders.toArray.nonEmpty) {
+    sigmaLastHeaders.toArray.head.stateRoot.digest
   } else {
-    genesisStateDigest
+    genesisStateDigest.toColl
   }
 
   /* NOHF PROOF:
@@ -274,7 +275,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }.flatten
 
   override def toString: String =
-    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
+    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest.toArray)}, $lastHeaders, $currentParameters)"
 
 
   /**

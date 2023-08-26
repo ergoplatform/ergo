@@ -1,8 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.NodeViewComponent
 import scorex.core.consensus.ContainsModifiers
 import scorex.util.ModifierId
@@ -45,13 +44,12 @@ trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTra
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 
   /**
-    * Returns transaction ids with weights. Weight depends on a fee a transaction is paying.
-    * Resulting transactions are sorted by weight in descending order.
+    * Returns an array of tuples representing transaction creation times with weights. Weight depends on a fee a transaction is paying.
+    * Resulting array is are sorted by weight in descending order.
     *
-    * @param limit - number of weighted transactions to return
     * @return an ordered sequence of transaction ids with weights
     */
-  def weightedTransactionIds(limit: Int): Seq[WeightedTxId]
+  def txTimesAndWeights: Seq[(Long,Long)]
 
   /**
     * Get expected wait time for the transaction with specified fee and size

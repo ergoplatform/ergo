@@ -3,8 +3,7 @@ package org.ergoplatform.local
 import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
-import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.settings.NodeConfigurationSettings
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, RecheckedTransactions}

@@ -7,7 +7,7 @@ import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.http.api.requests.HintExtractionRequest
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
@@ -25,6 +25,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 import akka.http.scaladsl.server.MissingQueryParamRejection
+import org.ergoplatform.nodeView.mempool.UnconfirmedTransaction
 
 case class WalletApiRoute(readersHolder: ActorRef,
                           nodeViewActorRef: ActorRef,

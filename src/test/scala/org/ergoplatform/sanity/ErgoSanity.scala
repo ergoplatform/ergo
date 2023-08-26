@@ -1,15 +1,15 @@
 package org.ergoplatform.sanity
 
 import akka.actor.ActorRef
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, nodeView}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.NodeViewSynchronizerTests
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
@@ -43,7 +43,7 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
   //Generators
   override lazy val transactionGenerator: Gen[ErgoTransaction] = invalidErgoTransactionGen
   override lazy val unconfirmedTxGenerator: Gen[UnconfirmedTransaction] =
-    invalidErgoTransactionGen.map(tx => UnconfirmedTransaction(tx, None))
+    invalidErgoTransactionGen.map(tx => nodeView.mempool.UnconfirmedTransaction(tx, None))
   override lazy val memPoolGenerator: Gen[MPool] = emptyMemPoolGen
 
   override def syntacticallyValidModifier(history: HT): Header = {

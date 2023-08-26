@@ -3,9 +3,9 @@ package org.ergoplatform.http.api
 import akka.actor.ActorRef
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.{Directive1, ValidationRejection}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiError, ApiRoute}

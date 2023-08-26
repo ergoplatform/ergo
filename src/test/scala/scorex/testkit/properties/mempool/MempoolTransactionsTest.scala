@@ -1,7 +1,8 @@
 package scorex.testkit.properties.mempool
 
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, UnconfirmedTransaction}
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -16,7 +17,7 @@ trait MempoolTransactionsTest
 
   val transactionSeqGenerator: Gen[Seq[ErgoTransaction]] = Gen.nonEmptyContainerOf[Seq, ErgoTransaction](transactionGenerator)
   val unconfirmedTxSeqGenerator: Gen[Seq[UnconfirmedTransaction]] =
-    transactionSeqGenerator.map(txs => txs.map(tx => UnconfirmedTransaction(tx, None)))
+    transactionSeqGenerator.map(txs => txs.map(tx => mempool.UnconfirmedTransaction(tx, None)))
 
   property("Size of mempool should increase when adding a non-present transaction") {
     forAll(memPoolGenerator, unconfirmedTxGenerator) { (mp: ErgoMemPool, unconfirmedTx: UnconfirmedTransaction) =>
@@ -84,7 +85,7 @@ trait MempoolTransactionsTest
   property("Size of mempool should decrease when removing a present transaction") {
     forAll(memPoolGenerator, unconfirmedTxSeqGenerator) { (mp: ErgoMemPool, unconfirmedTxs: Seq[UnconfirmedTransaction]) =>
       val m: ErgoMemPool = mp.put(unconfirmedTxs)
-      val m2: ErgoMemPool = m.remove(unconfirmedTxs.headOption.get.transaction)
+      val m2: ErgoMemPool = m.remove(unconfirmedTxs.headOption.get)
       m2.size shouldBe unconfirmedTxs.size - 1
     }
   }
@@ -92,7 +93,7 @@ trait MempoolTransactionsTest
   property("Size of mempool should not decrease when removing a non-present transaction") {
     forAll(memPoolGenerator, unconfirmedTxSeqGenerator, unconfirmedTxGenerator) { (mp: ErgoMemPool, unconfirmedTxs: Seq[UnconfirmedTransaction], unconfirmedTx: UnconfirmedTransaction) =>
       val m: ErgoMemPool = mp.put(unconfirmedTxs)
-      val m2: ErgoMemPool = m.remove(unconfirmedTx.transaction)
+      val m2: ErgoMemPool = m.remove(unconfirmedTx)
       m2.size shouldBe unconfirmedTxs.size
     }
   }

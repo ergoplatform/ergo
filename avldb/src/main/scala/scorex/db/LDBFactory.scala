@@ -6,6 +6,7 @@ import org.iq80.leveldb.{DB, DBFactory, DBIterator, Options, Range, ReadOptions,
 import scorex.util.ScorexLogging
 
 import scala.collection.mutable
+import scala.reflect.runtime.universe.Try
 
 /**
   * Registry of opened LevelDB instances.
@@ -86,10 +87,12 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
   def open(path: File, options: Options): DB = {
     lock.writeLock().lock()
     try {
+      repair(path, options)
       add(path, factory.open(path, options))
     } catch {
-      case x: Throwable =>
-        log.error(s"Failed to initialize storage: $x. Please check that directory $path exists and is not used by some other active node")
+      case t: Throwable =>
+        log.error(s"Failed to initialize storage: ${t.getMessage}. " +
+                  s"Please check that directory $path exists and is not used by some other active node ", t)
         java.lang.System.exit(2)
         null
     } finally {

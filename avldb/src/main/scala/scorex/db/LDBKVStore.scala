@@ -13,6 +13,9 @@ import spire.syntax.all.cfor
   * Both keys and values are var-sized byte arrays.
   */
 class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging {
+
+  db.compactRange(null, null)
+
   /** Immutable empty array can be shared to avoid allocations. */
   private val emptyArrayOfByteArray = Array.empty[Array[Byte]]
 

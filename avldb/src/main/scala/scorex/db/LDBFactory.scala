@@ -6,7 +6,6 @@ import org.iq80.leveldb.{DB, DBFactory, DBIterator, Options, Range, ReadOptions,
 import scorex.util.ScorexLogging
 
 import scala.collection.mutable
-import scala.reflect.runtime.universe.Try
 
 /**
   * Registry of opened LevelDB instances.
@@ -84,20 +83,33 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
     }
   }
 
-  def open(path: File, options: Options): DB = {
+  private def openOrRepair(path: File, options: Options, afterRepair: Boolean): DB = {
     lock.writeLock().lock()
     try {
-      repair(path, options)
       add(path, factory.open(path, options))
     } catch {
       case t: Throwable =>
-        log.error(s"Failed to initialize storage: ${t.getMessage}. " +
-                  s"Please check that directory $path exists and is not used by some other active node ", t)
-        java.lang.System.exit(2)
-        null
+        if(!afterRepair) {
+          log.info(s"Database repair for $path is needed, starting repair")
+          val t0 = System.currentTimeMillis()
+          repair(path, options)
+          val t = System.currentTimeMillis()
+          log.info("Repair time: " + (t - t0))
+          lock.writeLock().unlock()
+          openOrRepair(path, options, afterRepair = true)
+        } else {
+          log.error(s"Failed to initialize storage: ${t.getMessage}. " +
+            s"Please check that directory $path exists and is not used by some other active node ", t)
+          java.lang.System.exit(2)
+          null
+        }
     } finally {
       lock.writeLock().unlock()
     }
+  }
+
+  def open(path: File, options: Options): DB = {
+    openOrRepair(path, options, afterRepair = false)
   }
 
   def destroy(path: File, options: Options): Unit = {

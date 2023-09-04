@@ -86,7 +86,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
                       ): (mutable.ArrayBuilder[UnconfirmedTransaction], mutable.ArrayBuilder[ModifierId]) = {
       txs match {
         case head :: tail if costAcc < CostLimit =>
-          state.validateWithCost(head.transaction, nodeSettings.maxTransactionCost) match {
+          val validationContext = state.stateContext.simplifiedUpcoming()
+          state.validateWithCost(head.transaction, Some(validationContext), nodeSettings.maxTransactionCost, None) match {
             case Success(txCost) =>
               val updTx = head.withCost(txCost)
               validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)

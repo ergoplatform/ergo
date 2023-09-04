@@ -34,7 +34,7 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
-import scorex.core.transaction.state.TransactionValidation.TooHighCostError
+import scorex.core.transaction.state.TooHighCostError
 import scorex.core.app.Version
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}

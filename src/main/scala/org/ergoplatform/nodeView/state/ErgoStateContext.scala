@@ -123,6 +123,21 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                           calculatedValidationSettings, votingData)
   }
 
+  def simplifiedUpcoming(): UpcomingStateContext = {
+    val minerPk = org.ergoplatform.mining.group.generator
+    val version = lastHeaderOpt.map(_.version).getOrElse(Header.InitialVersion)
+    val nBits = lastHeaderOpt.map(_.nBits).getOrElse(ergoSettings.chainSettings.initialNBits)
+    val timestamp = System.currentTimeMillis()
+    val votes = Array.emptyByteArray
+    val proposedUpdate = ErgoValidationSettingsUpdate.empty
+    val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
+    val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
+    val (calculatedParams, updated) = currentParameters.update(height, forkVote = false, votingData.epochVotes, proposedUpdate, votingSettings)
+    val calculatedValidationSettings = validationSettings.updated(updated)
+    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
+      calculatedValidationSettings, votingData)
+  }
+
   protected def checkForkVote(height: Height): Unit = {
     if (currentParameters.softForkStartingHeight.nonEmpty) {
       val startingHeight = currentParameters.softForkStartingHeight.get

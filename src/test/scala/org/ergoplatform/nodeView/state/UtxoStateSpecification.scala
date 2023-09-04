@@ -15,7 +15,7 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
-import scorex.core.transaction.state.TransactionValidation.TooHighCostError
+import scorex.core.transaction.state.TooHighCostError
 import scorex.crypto.authds.ADKey
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId}
@@ -94,17 +94,18 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
-      val validationRes1 = us.validateWithCost(tx, 100000)
+      val validationContext = us.stateContext.simplifiedUpcoming()
+      val validationRes1 = us.validateWithCost(tx, Some(validationContext), 100000, None)
       validationRes1 shouldBe 'success
       val txCost = validationRes1.get
 
-      val validationRes2 = us.validateWithCost(tx, txCost - 1)
+      val validationRes2 = us.validateWithCost(tx, Some(validationContext), txCost - 1, None)
       validationRes2 shouldBe 'failure
       validationRes2.toEither.left.get.isInstanceOf[TooHighCostError] shouldBe true
 
-      us.validateWithCost(tx, txCost + 1) shouldBe 'success
+      us.validateWithCost(tx, Some(validationContext), txCost + 1, None) shouldBe 'success
 
-      us.validateWithCost(tx, txCost) shouldBe 'success
+      us.validateWithCost(tx, Some(validationContext), txCost, None) shouldBe 'success
 
       height = height + 1
     }

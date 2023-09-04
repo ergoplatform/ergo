@@ -9,8 +9,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.transaction.state.TransactionValidation
-import scorex.core.transaction.state.TransactionValidation.TooHighCostError
+import scorex.core.transaction.state.TooHighCostError
 import scorex.core.validation.MalformedModifierError
 import scorex.crypto.authds.avltree.batch.{Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
@@ -23,7 +22,7 @@ import scala.util.{Failure, Success, Try}
   * state representation (so functions to generate UTXO set modifiction proofs, do stateful transaction validation,
   * get UTXOs are there
   */
-trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence with TransactionValidation {
+trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
 
   protected implicit val hf: HF = Algos.hash
 
@@ -69,17 +68,6 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence wi
         case f: Failure[_] => f
       }
     }
-  }
-
-  /**
-    * Validate transaction as if it was included at the end of the last block.
-    * This validation does not guarantee that transaction will be valid in future
-    * as soon as state (both UTXO set and state context) will change.
-    *
-    * Used in mempool.
-    */
-  override def validateWithCost(tx: ErgoTransaction, maxTxCost: Int): Try[Int] = {
-    validateWithCost(tx, None, maxTxCost, None)
   }
 
   /**

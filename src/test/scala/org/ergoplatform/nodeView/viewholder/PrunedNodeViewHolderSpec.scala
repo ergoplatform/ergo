@@ -30,7 +30,6 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = StateType.Digest,
         verifyTransactions = true,
-        poPoWBootstrap = false,
         blocksToKeep = blocksToKeep
       )
     )
@@ -48,8 +47,8 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
   private def testCode(fixture: NodeViewFixture, toSkip: Int, totalBlocks: Int = 20) = {
     import fixture._
 
-    val (us, bh) = createUtxoState(stateConstants, parameters)
-    val wus = WrappedUtxoState(us, bh, stateConstants, parameters)
+    val (us, bh) = createUtxoState(fixture.settings)
+    val wus = WrappedUtxoState(us, bh, fixture.settings, parameters)
 
     val fullChain = genFullChain(wus, totalBlocks, nodeViewHolderRef)
 

@@ -1,7 +1,6 @@
 package org.ergoplatform.modifiers
 
 import org.ergoplatform.settings.Algos
-import scorex.core.ModifierTypeId
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
@@ -10,7 +9,8 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
   */
 trait NonHeaderBlockSection extends BlockSection {
 
-  override lazy val serializedId: Array[Byte] = NonHeaderBlockSection.computeIdBytes(modifierTypeId, headerId, digest)
+  override lazy val serializedId: Array[Byte] =
+    NonHeaderBlockSection.computeIdBytes(modifierTypeId, headerId, digest)
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
@@ -22,9 +22,9 @@ trait NonHeaderBlockSection extends BlockSection {
 }
 
 object NonHeaderBlockSection {
-  def computeId(modifierType: ModifierTypeId, headerId: ModifierId, digest: Array[Byte]): ModifierId =
+  def computeId(modifierType: NetworkObjectTypeId.Value, headerId: ModifierId, digest: Array[Byte]): ModifierId =
     bytesToId(computeIdBytes(modifierType, headerId, digest))
 
-  def computeIdBytes(modifierType: ModifierTypeId, headerId: ModifierId, digest: Array[Byte]): Array[Byte] =
+  def computeIdBytes(modifierType: NetworkObjectTypeId.Value, headerId: ModifierId, digest: Array[Byte]): Array[Byte] =
       Algos.hash.prefixedHash(modifierType, idToBytes(headerId), digest)
 }

@@ -44,4 +44,32 @@ class PeerFilteringRuleSpecification extends ErgoPropertyTest {
       Seq(outPeer0, outPeer1, outPeer2)
   }
 
+  property("utxo set snapshot filter") {
+    val peer0 = peerWithVersion(Version(4, 0, 17))
+    val peer1 = peerWithVersion(Version(4, 0, 18))
+    val peer2 = peerWithVersion(Version(4, 0, 16))
+    val peer3 = peerWithVersion(Version(4, 0, 19))
+    val peer4 = peerWithVersion(Version(5, 0, 0))
+    val peer5 = peerWithVersion(Version(5, 0, 5))
+    val peer6 = peerWithVersion(Version(5, 0, 15))
+    val peer7 = peerWithVersion(Version(5, 0, 25))
+
+    UtxoSetNetworkingFilter.filter(Seq(peer0, peer1, peer2, peer3, peer4, peer5, peer6, peer7)) shouldBe
+      Seq(peer6, peer7)
+  }
+
+  property("nipopow support filter") {
+    val peer0 = peerWithVersion(Version(4, 0, 17))
+    val peer1 = peerWithVersion(Version(4, 0, 18))
+    val peer2 = peerWithVersion(Version(4, 0, 16))
+    val peer3 = peerWithVersion(Version(4, 0, 19))
+    val peer4 = peerWithVersion(Version(5, 0, 0))
+    val peer5 = peerWithVersion(Version(5, 0, 12))
+    val peer6 = peerWithVersion(Version(5, 0, 13))
+    val peer7 = peerWithVersion(Version(5, 0, 25))
+
+    NipopowSupportFilter.filter(Seq(peer0, peer1, peer2, peer3, peer4, peer5, peer6, peer7)) shouldBe
+      Seq(peer6, peer7)
+  }
+
 }

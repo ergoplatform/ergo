@@ -1,16 +1,18 @@
 package org.ergoplatform.wallet.secrets
 
+import io.circe.parser._
+import io.circe.syntax._
+import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
+import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
+import org.ergoplatform.wallet.crypto
+import org.ergoplatform.wallet.interface4j.SecretString
+import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.settings.SecretStorageSettings
+import scorex.util.encode.Base16
+
 import java.io.{File, FileNotFoundException, PrintWriter}
 import java.util
 import java.util.UUID
-import io.circe.parser._
-import io.circe.syntax._
-import org.ergoplatform.wallet.crypto
-import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.interface4j.SecretString
-import org.ergoplatform.wallet.settings.{EncryptionSettings, SecretStorageSettings}
-import scorex.util.encode.Base16
-
 import scala.util.{Failure, Success, Try}
 
 /**

@@ -1,31 +1,30 @@
 package org.ergoplatform.nodeView.wallet
 
-import cats.implicits._
 import cats.Traverse
+import cats.implicits._
 import org.ergoplatform.ErgoBox.{BoxId, R4, R5, R6}
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoBox, ErgoBoxAssets, ErgoBoxCandidate, P2PKAddress, UnsignedInput}
+import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
-import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.settings.Parameters
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.wallet.{AssetUtils, Constants, TokensMap}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
-import scorex.crypto.hash.Digest32
-import scorex.util.{ScorexLogging, idToBytes}
+import scorex.util.ScorexLogging
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
+import sigmastate.utils.Extensions._
 
 import scala.util.{Failure, Success, Try}
 
@@ -44,7 +43,7 @@ trait ErgoWalletSupport extends ScorexLogging {
 
   protected def addSecretToStorage(state: ErgoWalletState, secret: ExtendedSecretKey): Try[ErgoWalletState] =
     state.walletVars.withExtendedKey(secret).flatMap { newWalletVars =>
-      state.storage.addPublicKeys(secret.publicKey).flatMap { _ =>
+      state.storage.addPublicKey(secret.publicKey).flatMap { _ =>
         newWalletVars.stateCacheOpt.get.withNewPubkey(secret.publicKey).map { updCache =>
           state.copy(walletVars = newWalletVars.copy(stateCacheProvided = Some(updCache))(newWalletVars.settings))
         }
@@ -94,7 +93,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         path => masterKey.derive(path)
       }
       val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
-      oldPubKeys.foreach(storage.addPublicKeys(_).get)
+      oldPubKeys.foreach(storage.addPublicKey(_).get)
       storage.removePaths().get
     }
   }
@@ -135,7 +134,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         if (usePreEip3Derivation) {
           // If usePreEip3Derivation flag is set in the wallet settings, the first key is the master key
           val masterPubKey = masterKey.publicKey
-          state.storage.addPublicKeys(masterPubKey).map { _ =>
+          state.storage.addPublicKey(masterPubKey).map { _ =>
             log.info("Wallet unlock finished using usePreEip3Derivation")
             updatePublicKeys(state, masterKey, Vector(masterPubKey))
           }
@@ -150,7 +149,7 @@ trait ErgoWalletSupport extends ScorexLogging {
           deriveNextKeyForMasterKey(sp, masterKey, usePreEip3Derivation).flatMap { case (derivationResult, newState) =>
             derivationResult.result.flatMap { case (_, _, firstSk) =>
               val firstPk = firstSk.publicKey
-              newState.storage.addPublicKeys(firstPk).flatMap { _ =>
+              newState.storage.addPublicKey(firstPk).flatMap { _ =>
                 newState.storage.updateChangeAddress(P2PKAddress(firstPk.key)(addressEncoder)).map { _ =>
                   log.info("Wallet unlock finished")
                   updatePublicKeys(newState, masterKey, Vector(firstPk))
@@ -161,7 +160,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         }
       } else {
         if (pubKeys.size == 1 &&
-              pubKeys.head.path == Constants.eip3DerivationPath.toPublicBranch &&
+              pubKeys.head.path == sdk.wallet.Constants.eip3DerivationPath.toPublicBranch &&
               state.storage.readChangeAddress.isEmpty) {
           val changeAddress = P2PKAddress(pubKeys.head.key)(addressEncoder)
           log.info(s"Update change address to $changeAddress")
@@ -169,7 +168,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         }
         // Add master key's public key to the storage to track payments to it when the wallet is locked
         if (!state.storage.containsPublicKey(masterKey.path.toPublicBranch)) {
-          state.storage.addPublicKeys(masterKey.publicKey)
+          state.storage.addPublicKey(masterKey.publicKey)
         }
         log.info("Wallet unlock finished using existing keys in storage")
         Try(updatePublicKeys(state, masterKey, pubKeys))
@@ -212,7 +211,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                   def minimalErgoAmount: Long =
                     BoxUtils.minimalErgoAmountSimulated(
                       lockWithAddress.script,
-                      Colls.fromItems((Digest32 @@ assetId) -> amount),
+                      Colls.fromItems(assetId.toTokenId -> amount),
                       nonMandatoryRegisters,
                       parameters
                     )
@@ -221,7 +220,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                     valueOpt.getOrElse(minimalErgoAmount),
                     lockWithAddress.script,
                     fullHeight,
-                    Colls.fromItems((Digest32 @@ assetId) -> amount),
+                    Colls.fromItems(assetId.toTokenId -> amount),
                     nonMandatoryRegisters
                   )
                 }
@@ -248,17 +247,14 @@ trait ErgoWalletSupport extends ScorexLogging {
         val p2r = ergoSettings.chainSettings.reemission.reemissionRules.payToReemission
         new ErgoBoxCandidate(eip27OutputAssets.value, p2r, walletHeight)
       }
-    } ++ selectionResult.changeBoxes.map { changeBoxAssets =>
-      changeBoxAssets match {
-        case candidate: ErgoBoxCandidate =>
-          candidate
-        case changeBox: ErgoBoxAssets =>
-          // todo: is this extra check needed ?
-          val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
-          val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-
-          new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
-      }
+    } ++ selectionResult.changeBoxes.map {
+      case candidate: ErgoBoxCandidate =>
+        candidate
+      case changeBox: ErgoBoxAssets =>
+        // todo: is this extra check needed ?
+        val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
+        val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => t._1.toTokenId -> t._2).toIndexedSeq
+        new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
     }
     val inputBoxes = selectionResult.inputBoxes.toIndexedSeq
     new UnsignedErgoTransaction(

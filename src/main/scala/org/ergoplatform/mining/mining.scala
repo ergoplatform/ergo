@@ -2,10 +2,9 @@ package org.ergoplatform
 
 import org.bouncycastle.util.BigIntegers
 import scorex.crypto.hash.Blake2b256
-import sigmastate.basics.BcDlogGroup
+import sigmastate.basics.CryptoConstants.EcPointType
+import sigmastate.basics.{BcDlogGroup, CryptoConstants}
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.interpreter.CryptoConstants
-import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.serialization.{GroupElementSerializer, SigmaSerializer}
 
 package object mining {
@@ -14,7 +13,7 @@ package object mining {
 
   val PublicKeyLength: Byte = 33
 
-  val group: BcDlogGroup[EcPointType] = CryptoConstants.dlogGroup
+  val group: BcDlogGroup = CryptoConstants.dlogGroup
 
   // Group order, used in Autolykos V.1 for non-outsourceability,
   // and also to obtain target in both Autolykos v1 and v2

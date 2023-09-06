@@ -5,32 +5,39 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.validation.MalformedModifierError
-import scorex.crypto.authds.avltree.batch.{Lookup, NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
+/**
+  * State reader (i.e. state functions not modifying underlying data) with specialization towards UTXO set as a
+  * state representation (so functions to generate UTXO set modifiction proofs, do stateful transaction validation,
+  * get UTXOs are there
+  */
+trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence with TransactionValidation {
 
   protected implicit val hf: HF = Algos.hash
 
-  val constants: StateConstants
+  protected def ergoSettings: ErgoSettings
 
-  private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-  protected lazy val storage = new VersionedLDBAVLStorage(store, np)
+  /**
+    * Versioned database where UTXO set and its authenticating AVL+ tree are stored
+    */
+  protected lazy val storage = new VersionedLDBAVLStorage(store)
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
   def generateBatchProofForBoxes(boxes: Seq[ErgoBox.BoxId]): SerializedAdProof = persistentProver.synchronized {
-    boxes.map { box => persistentProver.performOneOperation(Lookup(ADKey @@ box)) }
+    boxes.map { box => persistentProver.performOneOperation(Lookup(ADKey @@@ box)) }
     persistentProver.prover().generateProof()
   }
 
@@ -82,13 +89,14 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     */
   protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = {
     def hasEmissionBox(tx: ErgoTransaction): Boolean =
-      if(fb.height > constants.settings.chainSettings.reemission.activationHeight) {
+      if(fb.height > ergoSettings.chainSettings.reemission.activationHeight) {
         // after EIP-27 we search for emission box NFT for efficiency's sake
+        val emissionNftId = ergoSettings.chainSettings.reemission.emissionNftIdBytes
+        val outTokens = tx.outputs.head.additionalTokens
         tx.outputs.size == 2 &&
-          !tx.outputs.head.additionalTokens.isEmpty &&
-          java.util.Arrays.equals(tx.outputs.head.additionalTokens(0)._1, constants.settings.chainSettings.reemission.emissionNftIdBytes)
+          !outTokens.isEmpty && outTokens(0)._1 == emissionNftId
       } else {
-        tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition
+        tx.outputs.head.ergoTree == ergoSettings.chainSettings.monetary.emissionBoxProposition
       }
 
     def fullSearch(fb: ErgoFullBlock): Option[ErgoBox] = {
@@ -167,7 +175,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * Useful when checking mempool transactions.
     */
   def withUnconfirmedTransactions(unconfirmedTxs: Seq[UnconfirmedTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, constants) {
+    new UtxoState(persistentProver, version, store, ergoSettings) {
       lazy val createdBoxes: Seq[ErgoBox] = unconfirmedTxs.map(_.transaction).flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {
@@ -181,7 +189,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
    * Useful when checking mempool transactions.
    */
   def withTransactions(transactions: Seq[ErgoTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, constants) {
+    new UtxoState(persistentProver, version, store, ergoSettings) {
       lazy val createdBoxes: Seq[ErgoBox] = transactions.flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {

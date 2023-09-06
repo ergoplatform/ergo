@@ -3,12 +3,13 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import scorex.core.consensus.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, _}
+import scorex.db.ByteArrayWrapper
 import scorex.util.ModifierId
 
 import scala.reflect.ClassTag
@@ -82,7 +83,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   }
 
   private def justPutToHistory(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] = {
-    historyStorage.insert(Seq.empty, Seq(m)).map { _ =>
+    historyStorage.insert(Array.empty[(ByteArrayWrapper, Array[Byte])], Array[BlockSection](m)).map { _ =>
       ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
     }
   }
@@ -98,7 +99,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
         .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
         .validate(bsHeadersChainSynced, isHeadersChainSynced, InvalidModifier(header.id, m.id, m.modifierTypeId))
-        .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height),
+        .validate(bsTooOld, isHistoryADProof(m, header) || shouldDownloadBlockAtHeight(header.height),
           InvalidModifier(s"header=${header.encodedId}, id=${m.encodedId}", m.id, m.modifierTypeId))
         .result
     }

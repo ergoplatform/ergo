@@ -3,11 +3,12 @@ package org.ergoplatform.nodeView.wallet.persistence
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.settings.Constants
-import scorex.core.serialization.ScorexSerializer
-import scorex.crypto.hash.Digest32
-import scorex.util.serialization.{Reader, Writer}
-import scala.collection.mutable
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.Extensions._
+import scorex.util.serialization.{Reader, Writer}
+import sigmastate.eval.Extensions.ArrayByteOps
+
+import scala.collection.mutable
 
 /**
   * Holds aggregate wallet data (including off-chain) with no need fo re-processing it on each request.
@@ -27,7 +28,7 @@ object WalletDigest {
 
 }
 
-object WalletDigestSerializer extends ScorexSerializer[WalletDigest] {
+object WalletDigestSerializer extends ErgoSerializer[WalletDigest] {
 
   override def serialize(obj: WalletDigest, w: Writer): Unit = {
     w.putUInt(obj.height)
@@ -35,7 +36,7 @@ object WalletDigestSerializer extends ScorexSerializer[WalletDigest] {
 
     w.putUInt(obj.walletAssetBalances.size)
     obj.walletAssetBalances.foreach { case (id, amt) =>
-      w.putBytes(decodedTokenId(id))
+      w.putBytes(decodedTokenId(id).toArray)
       w.putULong(amt)
     }
   }
@@ -48,7 +49,7 @@ object WalletDigestSerializer extends ScorexSerializer[WalletDigest] {
 
     val walletAssetBalances = mutable.LinkedHashMap.empty[EncodedTokenId, Long]
     (0 until walletAssetBalancesSize).foreach { _ =>
-      val kv = encodedTokenId(Digest32 @@ r.getBytes(Constants.ModifierIdSize)) -> r.getULong()
+      val kv = encodedTokenId(r.getBytes(Constants.ModifierIdSize).toTokenId) -> r.getULong()
       walletAssetBalances += kv
     }
 

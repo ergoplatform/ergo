@@ -21,6 +21,43 @@ trait CheckpointingSettingsReader extends ModifierIdReader {
 }
 
 /**
+  * Settings related to state bootstrapping with UTXO set snapshots. See ergo.node.utxo section for settings description.
+  */
+case class UtxoSettings(utxoBootstrap: Boolean, storingUtxoSnapshots: Int, p2pUtxoSnapshots: Int)
+
+/**
+  * Custom settings reader for `UtxoSettings`
+  */
+trait UtxoSettingsReader {
+  implicit val utxoSettingsReader: ValueReader[UtxoSettings] = { (cfg, path) =>
+    UtxoSettings(
+      cfg.as[Boolean](s"$path.utxoBootstrap"),
+      cfg.as[Int](s"$path.storingUtxoSnapshots"),
+      cfg.as[Int](s"$path.p2pUtxoSnapshots")
+    )
+  }
+}
+
+
+/**
+  * Settings related to headers-chain bootstrapping with NiPoPoWs. See ergo.node.nipopow section for settings description.
+  */
+case class NipopowSettings(nipopowBootstrap: Boolean, p2pNipopows: Int, nipopowSuffix: Int)
+
+/**
+  * Custom settings reader for `NipopowSettings`
+  */
+trait NipopowSettingsReader {
+  implicit val nipopowSettingsReader: ValueReader[NipopowSettings] = { (cfg, path) =>
+    NipopowSettings(
+      cfg.as[Boolean](s"$path.nipopowBootstrap"),
+      cfg.as[Int](s"$path.p2pNipopows"),
+      cfg.as[Int](s"$path.nipopowSuffix")
+    )
+  }
+}
+
+/**
   * Configuration file for Ergo node regime
   *
   * @see src/main/resources/application.conf for parameters description
@@ -28,8 +65,8 @@ trait CheckpointingSettingsReader extends ModifierIdReader {
 case class NodeConfigurationSettings(stateType: StateType,
                                      verifyTransactions: Boolean,
                                      blocksToKeep: Int,
-                                     poPoWBootstrap: Boolean,
-                                     minimalSuffix: Int,
+                                     utxoSettings: UtxoSettings,
+                                     nipopowSettings: NipopowSettings,
                                      mining: Boolean,
                                      maxTransactionCost: Int,
                                      maxTransactionSize: Int,
@@ -47,16 +84,23 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      minimalFeeAmount: Long,
                                      headerChainDiff: Int,
                                      adProofsSuffixLength: Int,
+                                     extraIndex: Boolean,
                                      blacklistedTransactions: Seq[String] = Seq.empty,
                                      checkpoint: Option[CheckpointSettings] = None) {
   /**
     * Whether the node keeping all the full blocks of the blockchain or not.
     * @return true if the blockchain is pruned, false if not
     */
-  val isFullBlocksPruned: Boolean = blocksToKeep >= 0
+  val isFullBlocksPruned: Boolean = blocksToKeep >= 0 || utxoSettings.utxoBootstrap
+
+  val areSnapshotsStored = utxoSettings.storingUtxoSnapshots > 0
 }
 
-trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettingsReader with ModifierIdReader {
+/**
+  * Custom config reader for ergo.node settings section
+  */
+trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettingsReader
+                                  with UtxoSettingsReader with NipopowSettingsReader with ModifierIdReader {
 
   implicit val nodeConfigurationReader: ValueReader[NodeConfigurationSettings] = { (cfg, path) =>
     val stateTypeKey = s"$path.stateType"
@@ -65,8 +109,8 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       stateType,
       cfg.as[Boolean](s"$path.verifyTransactions"),
       cfg.as[Int](s"$path.blocksToKeep"),
-      cfg.as[Boolean](s"$path.PoPoWBootstrap"),
-      cfg.as[Int](s"$path.minimalSuffix"),
+      cfg.as[UtxoSettings](s"$path.utxo"),
+      cfg.as[NipopowSettings](s"$path.nipopow"),
       cfg.as[Boolean](s"$path.mining"),
       cfg.as[Int](s"$path.maxTransactionCost"),
       cfg.as[Int](s"$path.maxTransactionSize"),
@@ -84,6 +128,7 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       cfg.as[Long](s"$path.minimalFeeAmount"),
       cfg.as[Int](s"$path.headerChainDiff"),
       cfg.as[Int](s"$path.adProofsSuffixLength"),
+      cfg.as[Boolean](s"$path.extraIndex"),
       cfg.as[Seq[String]](s"$path.blacklistedTransactions"),
       cfg.as[Option[CheckpointSettings]](s"$path.checkpoint")
     )
@@ -97,4 +142,5 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       case _ => SortingOption.random()
     }
   }
+
 }

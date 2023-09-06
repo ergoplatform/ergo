@@ -3,7 +3,7 @@ package org.ergoplatform.settings
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.validation.SigmaValidationSettings
-import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
+import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
 import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.util.serialization.{Reader, Writer}
 
@@ -77,7 +77,7 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
 
   def isInitial: Boolean = this == ErgoValidationSettings.initial
 
-  override def serializer: ScorexSerializer[ErgoValidationSettings] = ErgoValidationSettingsSerializer
+  override def serializer: ErgoSerializer[ErgoValidationSettings] = ErgoValidationSettingsSerializer
 
   /**
     * We only cares about `updateFromInitial`, as far as `rules` and `sigmaSettings` may be
@@ -120,7 +120,7 @@ object ErgoValidationSettings {
 
 }
 
-object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationSettings] with ApiCodecs {
+object ErgoValidationSettingsSerializer extends ErgoSerializer[ErgoValidationSettings] with ApiCodecs {
   override def serialize(obj: ErgoValidationSettings, w: Writer): Unit = {
     ErgoValidationSettingsUpdateSerializer.serialize(obj.updateFromInitial, w)
   }

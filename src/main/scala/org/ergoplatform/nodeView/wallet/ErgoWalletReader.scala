@@ -1,26 +1,28 @@
 package org.ergoplatform.nodeView.wallet
 
-import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
-import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
-import org.ergoplatform.wallet.interface4j.SecretString
+import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey}
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
-import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
+import org.ergoplatform.{ErgoBox, P2PKAddress}
 import scorex.core.NodeViewComponent
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
+import sigmastate.basics.DLogProtocol.DLogProverInput
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
 import scala.util.Try
 
@@ -71,6 +73,12 @@ trait ErgoWalletReader extends NodeViewComponent {
 
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] =
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
+
+  def allExtendedPublicKeys(): Future[Seq[ExtendedPublicKey]] =
+    (walletActor ? ReadExtendedPublicKeys()).mapTo[Seq[ExtendedPublicKey]]
+
+  def getPrivateKeyFromPath(path: DerivationPath): Future[Try[DLogProverInput]] =
+    (walletActor ? GetPrivateKeyFromPath(path)).mapTo[Try[DLogProverInput]]
 
   def walletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]

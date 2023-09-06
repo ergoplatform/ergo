@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, Parameters}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
@@ -26,19 +26,15 @@ import scala.util.{Failure, Random, Success}
 trait ValidBlocksGenerators
   extends TestkitHelpers with TestFileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
-  def createUtxoState(parameters: Parameters): (UtxoState, BoxHolder) = {
-    createUtxoState(StateConstants(settings), parameters)
-  }
-
-  def createUtxoState(constants: StateConstants, parameters: Parameters): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, constants)
+  def createUtxoState(settings: ErgoSettings): (UtxoState, BoxHolder) = {
+    ErgoState.generateGenesisUtxoState(createTempDir, settings)
   }
 
   def createUtxoState(bh: BoxHolder, parameters: Parameters): UtxoState =
-    UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants, parameters)
+    UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
 
-  def createDigestState(version: VersionTag, digest: ADDigest, parameters: Parameters): DigestState =
-    DigestState.create(Some(version), Some(digest), createTempDir, stateConstants)
+  def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
+    DigestState.create(Some(version), Some(digest), createTempDir, settings)
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new RandomWrapper)
@@ -70,7 +66,7 @@ trait ValidBlocksGenerators
       val currentSize = acc.map(_.size).sum
       val averageSize = if (currentSize > 0) currentSize / acc.length else 1000
       val customTokens = (stateBoxes ++ selfBoxes).flatMap(_.additionalTokens.toArray)
-      val customTokensNum = customTokens.map(ct => ByteArrayWrapper(ct._1)).toSet.size
+      val customTokensNum = customTokens.map(ct => ByteArrayWrapper(ct._1.toArray)).toSet.size
       val issueNew = customTokensNum == 0
 
       stateBoxes.find(isEmissionBox) match {
@@ -202,7 +198,7 @@ trait ValidBlocksGenerators
 
     val (adProofBytes, updStateDigest) = utxoState.proofsForTransactions(transactions).get
 
-    val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(timeProvider.time())
+    val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(System.currentTimeMillis())
     val interlinks = parentOpt.toSeq.flatMap { block =>
       nipopowAlgos.updateInterlinks(block.header, NipopowAlgos.unpackInterlinks(block.extension.fields).get)
     }
@@ -231,7 +227,7 @@ trait ValidBlocksGenerators
 
     val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
 
-    val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
+    val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(System.currentTimeMillis())
     val interlinksExtension = nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
     val extension: ExtensionCandidate = parameters.toExtensionCandidate ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)

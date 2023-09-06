@@ -17,10 +17,10 @@ import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.{ApiError, ApiResponse}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
+import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
@@ -48,9 +48,9 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   val tokenId: Directive1[TokenId] = pathPrefix(Segment).flatMap(handleTokenId)
 
   private def handleTokenId(value: String): Directive1[TokenId] = {
-    Digest32 @@ Algos.decode(value) match {
+    Algos.decode(value) match {
       case Success(tokenId) =>
-        provide(tokenId)
+        provide(tokenId.toTokenId)
       case _ =>
         reject(ValidationRejection(s"tokenId $value is invalid, it should be 64 chars long hex string"))
     }
@@ -108,7 +108,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     * Validate and broadcast transaction given as hex-encoded bytes
     */
   def sendTransactionAsBytesR: Route = (path("bytes") & pathEnd & post & entity(as[String])) { txBytesStr =>
-    Base16.decode(txBytesStr).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
+    Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
       case Success(tx) =>
         validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
       case Failure(e) =>
@@ -124,7 +124,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     * Check transaction given as hex-encoded bytes
     */
   def checkTransactionAsBytesR: Route = (path("checkBytes") & post & entity(as[String])) { txBytesStr =>
-    Base16.decode(txBytesStr).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
+    Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
       case Success(tx) =>
         validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
       case Failure(e) =>
@@ -244,7 +244,8 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   def getUnconfirmedOutputByTokenIdR: Route =
     (pathPrefix("unconfirmed" / "outputs" / "byTokenId") & get & tokenId) { tokenId =>
       ApiResponse(
-        getMemPool.map(_.getAll.flatMap(_.transaction.outputs.filter(_.additionalTokens.exists(_._1.sameElements(tokenId)))))
+        getMemPool.map(_.getAll.flatMap(unconfirmed =>
+          unconfirmed.transaction.outputs.filter(_.additionalTokens.exists(_._1 == tokenId))))
       )
     }
 

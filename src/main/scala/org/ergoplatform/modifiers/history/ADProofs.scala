@@ -3,12 +3,11 @@ package org.ergoplatform.modifiers.history
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.NonHeaderBlockSection
+import org.ergoplatform.modifiers.{NetworkObjectTypeId, NonHeaderBlockSection, ProofsTypeId}
 import org.ergoplatform.modifiers.state._
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.ModifierTypeId
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.avltree.batch.{Lookup => _, _}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -24,11 +23,11 @@ case class ADProofs(headerId: ModifierId,
 
   override def digest: Digest32 = ADProofs.proofDigest(proofBytes)
 
-  override val modifierTypeId: ModifierTypeId = ADProofs.modifierTypeId
+  override val modifierTypeId: NetworkObjectTypeId.Value = ADProofs.modifierTypeId
 
   override type M = ADProofs
 
-  override lazy val serializer: ScorexSerializer[ADProofs] = ADProofsSerializer
+  override lazy val serializer: ErgoSerializer[ADProofs] = ADProofsSerializer
 
   override def toString: String = s"ADProofs(Id:$id,HeaderId:$headerId)"
 
@@ -69,7 +68,8 @@ case class ADProofs(headerId: ModifierId,
 }
 
 object ADProofs extends ApiCodecs {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (104: Byte)
+
+  val modifierTypeId: NetworkObjectTypeId.Value = ProofsTypeId.value
 
   val KL = 32
 
@@ -93,7 +93,7 @@ object ADProofs extends ApiCodecs {
   }
 }
 
-object ADProofsSerializer extends ScorexSerializer[ADProofs] {
+object ADProofsSerializer extends ErgoSerializer[ADProofs] {
 
   override def serialize(obj: ADProofs, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.headerId))

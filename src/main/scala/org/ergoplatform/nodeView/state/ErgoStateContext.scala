@@ -8,17 +8,17 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
+import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeStateContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
-import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
+import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.eval.SigmaDsl
-import sigmastate.interpreter.CryptoConstants.EcPointType
 import special.collection.Coll
 
 import scala.util.{Failure, Success, Try}
@@ -73,8 +73,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   override type M = ErgoStateContext
 
   private val votingSettings = ergoSettings.chainSettings.voting
-  private val powScheme = ergoSettings.chainSettings.powScheme
-  private val popowAlgos = new NipopowAlgos(powScheme)
+  private val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
 
   override def sigmaPreHeader: special.sigma.PreHeader =
     PreHeader.toSigma(lastHeaders.headOption.getOrElse(PreHeader.fake))
@@ -107,7 +106,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
-  override def serializer: ScorexSerializer[M] = ErgoStateContextSerializer(ergoSettings)
+  override def serializer: ErgoSerializer[M] = ErgoStateContextSerializer(ergoSettings)
 
   def upcoming(minerPk: EcPointType,
                timestamp: Long,
@@ -310,10 +309,6 @@ object ErgoStateContext {
     */
   val eip27Vote: Byte = 8
 
-  def empty(constants: StateConstants, parameters: Parameters): ErgoStateContext = {
-    empty(constants.settings.chainSettings.genesisStateDigest, constants.settings, parameters)
-  }
-
   def empty(settings: ErgoSettings, parameters: Parameters): ErgoStateContext = {
     empty(settings.chainSettings.genesisStateDigest, settings, parameters)
   }
@@ -351,7 +346,7 @@ object ErgoStateContext {
 
 }
 
-case class ErgoStateContextSerializer(ergoSettings: ErgoSettings) extends ScorexSerializer[ErgoStateContext] {
+case class ErgoStateContextSerializer(ergoSettings: ErgoSettings) extends ErgoSerializer[ErgoStateContext] {
 
   private val Eip27SupportValue = 100 // see comment in serialize()
 

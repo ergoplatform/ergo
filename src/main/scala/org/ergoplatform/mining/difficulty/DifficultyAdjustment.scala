@@ -20,9 +20,22 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
   require(chainSettings.epochLength < Int.MaxValue / useLastEpochs, s"diff epoch length is too high for $useLastEpochs epochs")
 
   /**
+    * @param height - height of a block
+    * @param epochLength - difficulty readjustment epoch length
+    * @return - height when difficulty will be recalculated after `height`
+    */
+  def nextRecalculationHeight(height: Height, epochLength: Int): Height = {
+    if (height % epochLength == 0) {
+      height + 1
+    } else {
+      (height / epochLength + 1) * epochLength + 1
+    }
+  }
+
+  /**
     * @return heights of previous headers required for block recalculation
     */
-  def previousHeadersRequiredForRecalculation(height: Height, epochLength: Int): Seq[Int] = {
+  def previousHeightsRequiredForRecalculation(height: Height, epochLength: Int): Seq[Height] = {
     if ((height - 1) % epochLength == 0 && epochLength > 1) {
       (0 to useLastEpochs).map(i => (height - 1) - i * epochLength).filter(_ >= 0).reverse
     } else if ((height - 1) % epochLength == 0 && height > epochLength * useLastEpochs) {
@@ -30,6 +43,15 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     } else {
       Seq(height - 1)
     }
+  }
+
+  /**
+    * @param height - height of a block
+    * @param epochLength - difficulty readjustment epoch length
+    * @return - heights needed to calculate difficulty after `height`
+    */
+  def heightsForNextRecalculation(height: Height, epochLength: Int): Seq[Height] = {
+    previousHeightsRequiredForRecalculation(nextRecalculationHeight(height, epochLength), epochLength)
   }
 
   /** @param previousHeaders  should be last headers of the previous epochs */
@@ -56,7 +78,7 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     * @param epochLength - epoch length
     */
   def eip37Calculate(previousHeaders: Seq[Header], epochLength: Int): Difficulty = {
-    require(previousHeaders.size >= 2, "at least two headers needed for diff recalc")
+    require(previousHeaders.size >= 2, s"at least two headers needed for diff recalc, have $previousHeaders")
     val lastDiff = previousHeaders.last.requiredDifficulty
 
     val predictiveDiff = calculate(previousHeaders, epochLength)
@@ -72,12 +94,11 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
     } else {
       avg.max(lastDiff / 2)
     }
-    //todo: downgrade log level after testing
-    log.debug(s"Difficulty for ${previousHeaders.last.height + 1}: predictive $predictiveDiff, limited predictive: $limitedPredictiveDiff, classic: $classicDiff, " +
-             s"resulting uncompressed: $uncompressedDiff")
+    log.debug(s"Difficulty for ${previousHeaders.last.height + 1}: predictive $predictiveDiff, " +
+      s"limited predictive: $limitedPredictiveDiff, classic: $classicDiff, resulting uncompressed: $uncompressedDiff")
     // perform serialization cycle in order to normalize resulted difficulty
-    RequiredDifficulty.decodeCompactBits(
-      RequiredDifficulty.encodeCompactBits(uncompressedDiff)
+    DifficultySerializer.decodeCompactBits(
+      DifficultySerializer.encodeCompactBits(uncompressedDiff)
     )
   }
 
@@ -101,8 +122,8 @@ class DifficultyAdjustment(val chainSettings: ChainSettings) extends ScorexLoggi
       }
     }
     // perform serialization cycle in order to normalize resulted difficulty
-    RequiredDifficulty.decodeCompactBits(
-      RequiredDifficulty.encodeCompactBits(uncompressedDiff)
+    DifficultySerializer.decodeCompactBits(
+      DifficultySerializer.encodeCompactBits(uncompressedDiff)
     )
   }
 

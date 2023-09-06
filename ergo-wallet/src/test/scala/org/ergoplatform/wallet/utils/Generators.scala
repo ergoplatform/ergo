@@ -1,32 +1,24 @@
 package org.ergoplatform.wallet.utils
 
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
+import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.sdk.wallet.secrets._
+import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.mnemonic.{Mnemonic, WordList}
-import org.ergoplatform.wallet.secrets.ExtendedPublicKey
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, SecretKey}
-import org.ergoplatform.wallet.settings.EncryptionSettings
+import org.ergoplatform._
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.ADKey
+import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.{SByte, SType}
-import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
-import scorex.util._
-import scala.collection.IndexedSeq
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.ErgoScriptPredef
-import org.ergoplatform.UnsignedErgoLikeTransaction
-import org.ergoplatform.UnsignedInput
+import sigmastate.crypto.CryptoFacade.SecretKeyLength
 import sigmastate.eval.Extensions._
-import scorex.util.{ModifierId, bytesToId}
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
-import org.ergoplatform.ErgoBox.TokenId
-import scorex.crypto.hash.Digest32
+import sigmastate.{SByte, SType}
 
 
 trait Generators {
@@ -69,16 +61,16 @@ trait Generators {
   def genExactSizeBytes(size: Int): Gen[Array[Byte]] = genLimitedSizedBytes(size, size)
 
   val boxIdGen: Gen[BoxId] = {
-    val x = ADKey @@ genExactSizeBytes(Constants.ModifierIdLength)
+    val x = ADKey @@ genExactSizeBytes(sdk.wallet.Constants.ModifierIdLength)
     x
   }
 
-  val modIdGen: Gen[ModifierId] = genExactSizeBytes(Constants.ModifierIdLength).map(bytesToId)
+  val modIdGen: Gen[ModifierId] = genExactSizeBytes(sdk.wallet.Constants.ModifierIdLength).map(bytesToId)
 
   val assetGen: Gen[(TokenId, Long)] = for {
     id <- boxIdGen
     amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
-  } yield Digest32 @@ id -> amt
+  } yield id.toTokenId -> amt
 
   def additionalTokensGen(cnt: Int): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
 
@@ -121,7 +113,7 @@ trait Generators {
                  heightGen: Gen[Int] = heightGen): Gen[ErgoBox] = for {
     h <- heightGen
     prop <- propGen
-    transactionId: Array[Byte] <- genExactSizeBytes(Constants.ModifierIdLength)
+    transactionId: Array[Byte] <- genExactSizeBytes(sdk.wallet.Constants.ModifierIdLength)
     boxId: Short <- boxIndexGen
     ar <- additionalRegistersGen
     tokens <- tokensGen
@@ -144,7 +136,7 @@ trait Generators {
   } yield DerivationPath(0 +: indices, isPublic)
 
   def extendedSecretGen: Gen[ExtendedSecretKey] = for {
-    seed <- Gen.const(Constants.SecretKeyLength).map(scorex.utils.Random.randomBytes)
+    seed <- Gen.const(SecretKeyLength).map(scorex.utils.Random.randomBytes)
   } yield ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation = false)
 
   def extendedPubKeyGen: Gen[ExtendedPublicKey] = extendedSecretGen.map(_.publicKey)
@@ -190,7 +182,7 @@ trait Generators {
       h <- Gen.posNum[Int]
       out = new ErgoBoxCandidate(
         value,
-        ErgoScriptPredef.feeProposition(),
+        ErgoTreePredef.feeProposition(),
         h,
         Seq.empty[(ErgoBox.TokenId, Long)].toColl,
         Map.empty

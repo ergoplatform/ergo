@@ -22,8 +22,8 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
                          minFullHeight: Option[Int] = Some(ErgoHistory.GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     minFullHeight.foreach { h =>
-      inHistory.pruningProcessor.minimalFullBlockHeightVar = h
-      inHistory.pruningProcessor.isHeadersChainSyncedVar = true
+      inHistory.writeMinimalFullBlockHeight(h)
+      inHistory.isHeadersChainSyncedVar = true
     }
 
     if (blocksNum > 0) {
@@ -87,7 +87,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     history.bestFullBlockOpt shouldBe None
 
     val fullBlocksToApply = chain.tail
-    history.pruningProcessor.updateBestFullBlock(fullBlocksToApply(BlocksToKeep - 1).header)
+    history.updateBestFullBlock(fullBlocksToApply(BlocksToKeep - 1).header)
 
     history.applicable(chain.head.blockTransactions) shouldBe false
 
@@ -200,7 +200,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     history.bestHeaderOpt.value shouldBe chain.last.header
     history.bestFullBlockOpt shouldBe None
-    history.pruningProcessor.updateBestFullBlock(chain.last.header)
+    history.updateBestFullBlock(chain.last.header)
 
     val fullBlocksToApply = chain.takeRight(BlocksToKeep)
 

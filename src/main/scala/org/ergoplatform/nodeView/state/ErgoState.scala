@@ -64,6 +64,14 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
     */
   def getReader: ErgoStateReader = this
 
+  /**
+    * Close database where state-related data lives
+    */
+  def closeStorage(): Unit = {
+    log.warn("Closing state's store.")
+    store.close()
+  }
+
 }
 
 object ErgoState extends ScorexLogging {
@@ -222,7 +230,7 @@ object ErgoState extends ScorexLogging {
     val protection = AtLeast(IntConstant(2), pks)
     val protectionBytes = ValueSerializer.serialize(protection)
     val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
-    val prop = ErgoScriptPredef.foundationScript(settings.monetary)
+    val prop = ErgoTreePredef.foundationScript(settings.monetary)
     createGenesisBox(value, prop, Seq.empty, Map(R4 -> ByteArrayConstant(protectionBytes)))
   }
 
@@ -247,44 +255,53 @@ object ErgoState extends ScorexLogging {
   }
 
   /**
-    * All boxes of genesis state.
-    * Emission box is always the first.
+    * Genesis state boxes generator.
+    * Genesis state is corresponding to the state before the very first block processed.
+    * For Ergo mainnet, contains emission contract box, proof-of-no--premine box, and treasury contract box
     */
   def genesisBoxes(chainSettings: ChainSettings): Seq[ErgoBox] = {
     Seq(genesisEmissionBox(chainSettings), noPremineBox(chainSettings), genesisFoundersBox(chainSettings))
   }
 
-  def generateGenesisUtxoState(stateDir: File,
-                               constants: StateConstants): (UtxoState, BoxHolder) = {
+  /**
+    * Generate genesis full (UTXO-set) state by inserting genesis boxes into empty UTXO set.
+    * Assign `genesisStateDigest` from config as its version.
+    */
+  def generateGenesisUtxoState(stateDir: File, settings: ErgoSettings): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
-    val boxes = genesisBoxes(constants.settings.chainSettings)
+    val boxes = genesisBoxes(settings.chainSettings)
     val bh = BoxHolder(boxes)
 
-    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants, LaunchParameters).ensuring(us => {
-      log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      java.util.Arrays.equals(us.rootHash, constants.settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
+    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, settings, LaunchParameters).ensuring(us => {
+      log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootDigest)}")
+      java.util.Arrays.equals(us.rootDigest, settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 
+  /**
+    * Generate genesis digest state similarly to `generateGenesisUtxoState`, but without really storing boxes
+    */
   def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
-    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest),
-      stateDir, StateConstants(settings))
+    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest), stateDir, settings)
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
   lazy val genesisStateVersion: VersionTag = idToVersion(Header.GenesisParentId)
 
-  def readOrGenerate(settings: ErgoSettings,
-                     constants: StateConstants): ErgoState[_] = {
+  /**
+    * Read from disk or generate genesis UTXO-set or digest based state
+    * @param settings - config used to find state database or extract genesis boxes data
+    */
+  def readOrGenerate(settings: ErgoSettings): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
-      case StateType.Digest => DigestState.create(None, None, dir, constants)
-      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
-      case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
+      case StateType.Digest => DigestState.create(None, None, dir, settings)
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, settings)
+      case _ => ErgoState.generateGenesisUtxoState(dir, settings)._1
     }
   }
 

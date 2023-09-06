@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{NodeConfigurationSettings, PeerFeatureDescriptors}
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -15,18 +15,18 @@ import scorex.util.serialization.{Reader, Writer}
   *
   * @param stateType - information on whether UTXO set is store (so state type is UTXO/Digest)
   * @param verifyingTransactions - whether the peer is verifying transactions
-  * @param popowSuffix - whether the peer has has bootstrapped via PoPoW suffix, and its length
+  * @param nipopowSuffix - whether the peer has has bootstrapped via Nipopows, and length of proof suffix
   * @param blocksToKeep - how many last full blocks the peer is storing
   */
 case class ModePeerFeature(stateType: StateType,
                            verifyingTransactions: Boolean,
-                           popowSuffix: Option[Int],
+                           nipopowSuffix: Option[Int],
                            blocksToKeep: Int) extends PeerFeature {
   override type M = ModePeerFeature
 
   override val featureId: Id = PeerFeatureDescriptors.ModeFeatureId
 
-  override def serializer: ScorexSerializer[ModePeerFeature] = ModeFeatureSerializer
+  override def serializer: ErgoSerializer[ModePeerFeature] = ModeFeatureSerializer
 }
 
 object ModePeerFeature {
@@ -34,7 +34,11 @@ object ModePeerFeature {
   import io.circe.syntax._
 
   def apply(nodeSettings: NodeConfigurationSettings): ModePeerFeature = {
-    val popowSuffix = if (nodeSettings.poPoWBootstrap) Some(nodeSettings.minimalSuffix) else None
+    val popowSuffix = if (nodeSettings.nipopowSettings.nipopowBootstrap) {
+      Some(nodeSettings.nipopowSettings.nipopowSuffix)
+    } else {
+      None
+    }
 
     new ModePeerFeature(
       nodeSettings.stateType,
@@ -60,7 +64,7 @@ object ModePeerFeature {
   * handshake which contains mode information (along with other features supported by the peer) has separate length
   * limit provided in settings ("maxHandshakeSize" field in network settings).
   */
-object ModeFeatureSerializer extends ScorexSerializer[ModePeerFeature] {
+object ModeFeatureSerializer extends ErgoSerializer[ModePeerFeature] {
 
   val MaxSize = 512
 
@@ -72,8 +76,8 @@ object ModeFeatureSerializer extends ScorexSerializer[ModePeerFeature] {
   override def serialize(mf: ModePeerFeature, w: Writer): Unit = {
     w.put(mf.stateType.stateTypeCode)
     w.put(booleanToByte(mf.verifyingTransactions))
-    w.putOption(mf.popowSuffix)(_.putInt(_))
-    w.putInt(mf.blocksToKeep)
+    w.putOption(mf.nipopowSuffix)(_.putInt(_))
+    w.putInt(mf.blocksToKeep) // todo: put -2 if bootstrapped via utxo set snapshot? https://github.com/ergoplatform/ergo/issues/2014
   }
 
   override def parse(r: Reader): ModePeerFeature = {

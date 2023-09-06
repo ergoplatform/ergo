@@ -11,9 +11,13 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.{ApiError, ApiRoute}
 import scorex.util.{ModifierId, bytesToId}
 import akka.pattern.ask
+import io.circe.syntax.EncoderOps
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome._
+import scorex.util.encode.Base16
+import sigmastate.Values.ErgoTree
+import sigmastate.serialization.ErgoTreeSerializer
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Success, Try}
@@ -32,6 +36,23 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
       case Success(bytes) => provide(bytesToId(bytes))
       case _ => reject(ValidationRejection("Wrong modifierId format"))
     }
+  }
+
+  def fromJsonOrPlain(str: String): String =
+    str.asJson.as[String] match {
+      case Right(value) if value.startsWith("\"") && value.endsWith("\"") =>
+        value.substring(1, value.length - 1)
+      case _ => str
+    }
+
+  val ergoTree: Directive1[ErgoTree] = entity(as[String]).flatMap(handleErgoTree)
+
+  private def handleErgoTree(value: String): Directive1[ErgoTree] = {
+    Base16.decode(fromJsonOrPlain(value)) match {
+      case Success(bytes) => provide(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bytes))
+      case _ => reject(ValidationRejection("Invalid hex data"))
+    }
+
   }
 
   private def getStateAndPool(readersHolder: ActorRef): Future[(ErgoStateReader, ErgoMemPoolReader)] = {
@@ -78,9 +99,9 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
           val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
           utxo.withMempool(mp)
             .validateWithCost(tx, maxTxCost)
-            .map(cost => UnconfirmedTransaction(tx, Some(cost), now, now, bytes, source = None))
+            .map(cost => new UnconfirmedTransaction(tx, Some(cost), now, now, bytes, source = None))
         case _ =>
-          tx.statelessValidity().map(_ => UnconfirmedTransaction(tx, None, now, now, bytes, source = None))
+          tx.statelessValidity().map(_ => new UnconfirmedTransaction(tx, None, now, now, bytes, source = None))
       }
   }
 

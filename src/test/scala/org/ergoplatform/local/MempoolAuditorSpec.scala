@@ -41,15 +41,15 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val testProbe = new TestProbe(actorSystem)
     actorSystem.eventStream.subscribe(testProbe.ref, newTx)
 
-    val (us, bh) = createUtxoState(parameters)
+    val (us, bh) = createUtxoState(settingsToTest)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
-      WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis) { mod =>
+      WrappedUtxoState(us, bh, settingsToTest, parameters).applyModifier(genesis) { mod =>
         nodeViewHolderRef ! mod
       } .get
 
     applyBlock(genesis) shouldBe 'success
-    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
+    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootDigest)
 
     val boxes = ErgoState.newBoxes(genesis.transactions).find(_.ergoTree == Constants.TrueLeaf)
     boxes.nonEmpty shouldBe true
@@ -95,7 +95,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
   it should "rebroadcast transactions correctly" in {
 
-    val (us0, bh0) = createUtxoState(parameters)
+    val (us0, bh0) = createUtxoState(settingsToTest)
     val (txs0, bh1) = validTransactionsFromBoxHolder(bh0)
     val b1 = validFullBlock(None, us0, txs0)
 

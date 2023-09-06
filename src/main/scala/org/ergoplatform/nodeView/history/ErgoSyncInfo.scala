@@ -4,26 +4,28 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import scorex.core.NodeViewModifier
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.message.SyncInfoMessageSpec
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
 /**
-  * Information on sync status to be sent to peer over the wire
+  * Information on sync status to be sent to peer over the wire. It should provide an answer to the question how
+  * other peer's chain is developed in comparison with best local one.
   *
   */
 sealed trait ErgoSyncInfo extends SyncInfo {
-  /*
+  /**
    * Whether sync info message corresponds to non-empty blockchain
    */
   val nonEmpty: Boolean
 
   override type M = ErgoSyncInfo
 
-  override lazy val serializer: ScorexSerializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
+  override lazy val serializer: ErgoSerializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
 }
 
 /**
+  * Initial sync info clients used before 4.0.16 release. Contains just last headers ids.
   * @param lastHeaderIds - last header ids known to a peer
   */
 case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {
@@ -46,7 +48,7 @@ object ErgoSyncInfo {
   val MaxBlockIds = 1000
 }
 
-object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with ScorexLogging {
+object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLogging {
 
   val v2HeaderMode: Byte = -1 // used to mark sync v2 messages
 

@@ -22,15 +22,15 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.sanity.ErgoSanity.HT
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
 import scorex.core.app.Version
@@ -58,7 +58,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val digestState: DigestState = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
-      DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
+      DigestState.create(Some(wus.version), Some(wus.rootDigest), createTempDir, settings)
     }
   }.sample.value
 
@@ -257,7 +257,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! Success(tx)
 
       case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
-        val sc = ErgoStateContext.empty(stateConstants, parameters)
+        val sc = ErgoStateContext.empty(settings, parameters)
         sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
           utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
         }
@@ -361,7 +361,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   def generateHistory(verifyTransactions: Boolean = true,
                       stateType: StateType = StateType.Digest,
-                      PoPoWBootstrap: Boolean = false,
+                      poPoWBootstrap: Boolean = false,
                       blocksToKeep: Int = 100,
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
@@ -370,10 +370,10 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
     val txSizeLimit      = initSettings.nodeSettings.maxTransactionSize
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
+      UtxoSettings(false, 0, 2), NipopowSettings(poPoWBootstrap, 1, minimalSuffix), mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
       offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
-      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024
+      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false
 )
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
@@ -383,11 +383,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
       nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 
-    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+    ErgoHistory.readOrGenerate(fullHistorySettings)(null)
   }
 
   def syntacticallyValidModifier(history: HT): Header = {
-    val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(timeProvider.time())
+    val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
 
     powScheme.prove(
       history.bestHeaderOpt,
@@ -396,7 +396,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
-      Math.max(timeProvider.time(), bestTimestamp),
+      Math.max(System.currentTimeMillis(), bestTimestamp),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber

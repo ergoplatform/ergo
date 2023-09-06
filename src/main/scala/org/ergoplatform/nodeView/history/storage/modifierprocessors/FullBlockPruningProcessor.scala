@@ -2,18 +2,22 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.ErgoSettings
 
 /**
   * A class that keeps and calculates minimal height for full blocks starting from which we need to download these full
   * blocks from the network and keep them in our history.
   */
-class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSettings: ChainSettings) {
+trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
+
+  protected def settings: ErgoSettings
+
+  private def nodeConfig = settings.nodeSettings
+  private def chainSettings = settings.chainSettings
+
+  private def VotingEpochLength = chainSettings.voting.votingLength
 
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
-  @volatile private[history] var minimalFullBlockHeightVar: Int = ErgoHistory.GenesisHeight
-
-  private val VotingEpochLength = chainSettings.voting.votingLength
 
   private def extensionWithParametersHeight(height: Int): Int = {
     require(height >= VotingEpochLength)
@@ -28,7 +32,7 @@ class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSett
 
   /** Start height to download full blocks from
     */
-  def minimalFullBlockHeight: Int = minimalFullBlockHeightVar
+  def minimalFullBlockHeight: Int = readMinimalFullBlockHeight()
 
   /** Check if headers chain is synchronized with the network and modifier is not too old
     */
@@ -42,15 +46,16 @@ class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSett
     * @return minimal height to process best full block
     */
   def updateBestFullBlock(header: Header): Int = {
-    minimalFullBlockHeightVar = if (!nodeConfig.isFullBlocksPruned) {
-      ErgoHistory.GenesisHeight // keep all blocks in history
-    } else if (!isHeadersChainSynced && !nodeConfig.stateType.requireProofs) {
-      // just synced with the headers chain - determine first full block to apply
-      //TODO start with the height of UTXO snapshot applied. For now we start from genesis until this is implemented
-      ErgoHistory.GenesisHeight
+    val minimalFullBlockHeight = if (nodeConfig.blocksToKeep < 0) {
+      if (nodeConfig.utxoSettings.utxoBootstrap) {
+        // we have constant min full block height corresponding to first block after utxo set snapshot
+        readMinimalFullBlockHeight()
+      } else {
+        ErgoHistory.GenesisHeight // keep all blocks in history as no pruning set
+      }
     } else {
       // Start from config.blocksToKeep blocks back
-      val h = Math.max(minimalFullBlockHeight, header.height - nodeConfig.blocksToKeep + 1)
+      val h = Math.max(readMinimalFullBlockHeight(), header.height - nodeConfig.blocksToKeep + 1)
       // ... but not later than the beginning of a voting epoch
       if (h > VotingEpochLength) {
         Math.min(h, extensionWithParametersHeight(h))
@@ -59,7 +64,8 @@ class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSett
       }
     }
     if (!isHeadersChainSynced) isHeadersChainSyncedVar = true
-    minimalFullBlockHeightVar
+    writeMinimalFullBlockHeight(minimalFullBlockHeight)
+    minimalFullBlockHeight
   }
 
 }

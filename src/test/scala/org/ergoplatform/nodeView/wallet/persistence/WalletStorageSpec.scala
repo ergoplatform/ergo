@@ -4,8 +4,8 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
 import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.ergoplatform.utils.generators.WalletGenerators
-import org.ergoplatform.wallet.secrets.{DerivationPathSerializer, DerivationPath}
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -27,7 +27,7 @@ class WalletStorageSpec
           val bytes = DerivationPathSerializer.toBytes(path)
           acc ++ Ints.toByteArray(bytes.length) ++ bytes
         }
-      store.insert(Seq(SecretPathsKey -> toInsert)).get
+      store.insert(SecretPathsKey, toInsert).get
     }
 
     forAll(Gen.nonEmptyListOf(derivationPathGen)) { paths =>
@@ -43,7 +43,7 @@ class WalletStorageSpec
     forAll(extendedPubKeyListGen) { pubKeys =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        pubKeys.foreach(storage.addPublicKeys(_).get)
+        pubKeys.foreach(storage.addPublicKey(_).get)
         val keysRead = storage.readAllKeys()
         keysRead.length shouldBe pubKeys.length
         keysRead should contain theSameElementsAs pubKeys.toSet

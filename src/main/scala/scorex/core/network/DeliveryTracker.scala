@@ -2,11 +2,11 @@ package scorex.core.network
 
 import akka.actor.Cancellable
 import io.circe.{Encoder, Json}
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.CheckDelivery
 import org.ergoplatform.nodeView.mempool.ExpiringApproximateCache
 import org.ergoplatform.settings.{ErgoSettings, NetworkCacheSettings}
-import scorex.core.ModifierTypeId
 import scorex.core.consensus.ContainsModifiers
 import scorex.core.network.DeliveryTracker._
 import scorex.core.network.ModifiersStatus._
@@ -45,10 +45,10 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
                       desiredSizeOfExpectingModifierQueue: Int) extends ScorexLogging with ScorexEncoding {
 
   // when a remote peer is asked for a modifier we add the requested data to `requested`
-  protected val requested: mutable.Map[ModifierTypeId, Map[ModifierId, RequestedInfo]] = mutable.Map()
+  protected val requested: mutable.Map[NetworkObjectTypeId.Value, Map[ModifierId, RequestedInfo]] = mutable.Map()
 
   // when our node received a modifier we put it to `received`
-  protected val received: mutable.Map[ModifierTypeId, Map[ModifierId, ConnectedPeer]] = mutable.Map()
+  protected val received: mutable.Map[NetworkObjectTypeId.Value, Map[ModifierId, ConnectedPeer]] = mutable.Map()
 
   private val desiredSizeOfExpectingHeaderQueue: Int = desiredSizeOfExpectingModifierQueue * 8
 
@@ -84,8 +84,10 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
       requested.foldLeft(0) {
         case (sum, (modTypeId, _)) if modTypeId == Header.modifierTypeId =>
           sum
-        case (sum, (_, mid)) =>
+        case (sum, (modTypeId, mid)) if NetworkObjectTypeId.isBlockSection(modTypeId) =>
           sum + mid.size
+        case (sum, _) =>
+          sum
       }
     Math.max(0, desiredSizeOfExpectingModifierQueue - nonHeaderModifiersCount)
   }
@@ -95,7 +97,9 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     *         Since this class do not keep statuses for modifiers that are already in NodeViewHolder,
     *         `modifierKeepers` are required here to check that modifier is in `Held` status
     */
-  def status(modifierId: ModifierId, modifierTypeId: ModifierTypeId, modifierKeepers: Seq[ContainsModifiers[_]]): ModifiersStatus =
+  def status(modifierId: ModifierId,
+             modifierTypeId: NetworkObjectTypeId.Value,
+             modifierKeepers: Seq[ContainsModifiers[_]]): ModifiersStatus =
     if (received.get(modifierTypeId).exists(_.contains(modifierId))) Received
     else if (requested.get(modifierTypeId).exists(_.contains(modifierId))) Requested
     else if (invalidModifierCache.mightContain(modifierId)) Invalid
@@ -112,7 +116,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
   /**
     * Set status of modifier with id `id` to `Requested`
     */
-  def setRequested(typeId: ModifierTypeId,
+  def setRequested(typeId: NetworkObjectTypeId.Value,
                    id: ModifierId,
                    supplier: ConnectedPeer,
                    checksDone: Int = 0)
@@ -128,12 +132,12 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
   /**
     * @return - information on requested modifier delivery tracker potentially has
     */
-  def getRequestedInfo(typeId: ModifierTypeId, id: ModifierId): Option[RequestedInfo] = {
+  def getRequestedInfo(typeId: NetworkObjectTypeId.Value, id: ModifierId): Option[RequestedInfo] = {
     requested.get(typeId).flatMap(_.get(id))
   }
 
   /** Get peer we're communicating with in regards with modifier `id` **/
-  def getSource(id: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
+  def getSource(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Option[ConnectedPeer] = {
     status(id, modifierTypeId, Seq.empty) match {
       case Requested => requested.get(modifierTypeId).flatMap(_.get(id)).map(_.peer)
       case Received => received.get(modifierTypeId).flatMap(_.get(id))
@@ -145,7 +149,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     * Modified with id `id` is permanently invalid - set its status to `Invalid`
     * and return [[ConnectedPeer]] which sent bad modifier.
     */
-  def setInvalid(id: ModifierId, modifierTypeId: ModifierTypeId): Option[ConnectedPeer] = {
+  def setInvalid(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Option[ConnectedPeer] = {
     val oldStatus: ModifiersStatus = status(id, modifierTypeId, Seq.empty)
     val transitionCheck = tryWithLogging {
       checkStatusTransition(oldStatus, Invalid)
@@ -188,7 +192,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
   /**
     * Modifier with id `id` was successfully applied to history - set its status to `Held`.
     */
-  def setHeld(id: ModifierId, modifierTypeId: ModifierTypeId): Unit =
+  def setHeld(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Unit =
     tryWithLogging {
       val oldStatus = status(id, modifierTypeId, Seq.empty)
       checkStatusTransition(oldStatus, Held)
@@ -203,7 +207,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     * this modifier was removed from cache because cache is overfull or
     * we stop trying to download this modifiers due to exceeded number of retries
     */
-  def setUnknown(id: ModifierId, modifierTypeId: ModifierTypeId): Unit =
+  def setUnknown(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Unit =
     tryWithLogging {
       val oldStatus = status(id, modifierTypeId, Seq.empty)
       checkStatusTransition(oldStatus, Unknown)
@@ -213,7 +217,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
   /**
     * Modifier with id `id`  was received from remote peer - set its status to `Received`.
     */
-  def setReceived(id: ModifierId, modifierTypeId: ModifierTypeId, sender: ConnectedPeer): Unit =
+  def setReceived(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value, sender: ConnectedPeer): Unit =
     tryWithLogging {
       val oldStatus = status(id, modifierTypeId, Seq.empty)
       checkStatusTransition(oldStatus, Received)
@@ -251,7 +255,10 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
       case _ => false
     }
 
-  def clearStatusForModifier(id: ModifierId, modifierTypeId: ModifierTypeId, oldStatus: ModifiersStatus): Unit =
+  /**
+    * Clear old known status `oldStatus` from tracked block section `modifierId` of type `modifierTypeId`
+    */
+  def clearStatusForModifier(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value, oldStatus: ModifiersStatus): Unit =
     oldStatus match {
       case Requested =>
         requested.flatAdjust(modifierTypeId)(_.map { infoById =>
@@ -325,16 +332,16 @@ object DeliveryTracker {
   }
 
   case class FullInfo(
-    invalidModifierApproxSize: Long,
-    requested: Seq[(ModifierTypeId, Map[ModifierId, RequestedInfo])],
-    received: Seq[(ModifierTypeId, Map[ModifierId, ConnectedPeer])]
+                       invalidModifierApproxSize: Long,
+                       requested: Seq[(NetworkObjectTypeId.Value, Map[ModifierId, RequestedInfo])],
+                       received: Seq[(NetworkObjectTypeId.Value, Map[ModifierId, ConnectedPeer])]
   )
 
   object FullInfo {
     import io.circe.syntax._
     implicit val encodeState: Encoder[FullInfo] = new Encoder[FullInfo] {
 
-      def nestedMapAsJson[T : Encoder](requested: Seq[(ModifierTypeId, Map[ModifierId, T])]): Json =
+      def nestedMapAsJson[T : Encoder](requested: Seq[(NetworkObjectTypeId.Value, Map[ModifierId, T])]): Json =
         Json.obj(
           requested.map { case (k, v) =>
             k.toString -> Json.obj(v.mapValues(_.asJson).toSeq:_*)

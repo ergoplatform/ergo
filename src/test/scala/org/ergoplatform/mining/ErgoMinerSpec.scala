@@ -10,6 +10,8 @@ import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state._
@@ -18,12 +20,10 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
-import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import sigmastate.SigmaAnd
 import sigmastate.Values.{ErgoTree, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol
@@ -68,14 +68,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     }
     complexScript.complexity shouldBe 28077
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     val minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
     expectNoMessage(1 second)
@@ -86,7 +85,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     val boxToSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToSpend.propositionBytes shouldBe ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
+    boxToSpend.propositionBytes shouldBe ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
     val input = Input(boxToSpend.id, emptyProverResult)
 
@@ -145,7 +144,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     expectNoMessage(1 second)
     val r: Readers = requestReaders
@@ -155,7 +154,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
     minerRef ! StartMining
@@ -220,14 +218,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     val minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
     expectNoMessage(1 second)
@@ -244,7 +241,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToDoubleSpend.propositionBytes shouldBe ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
+    boxToDoubleSpend.propositionBytes shouldBe ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
     val input = Input(boxToDoubleSpend.id, emptyProverResult)
 
@@ -296,14 +293,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
   it should "prepare external candidate" in new TestKit(ActorSystem()) {
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     def minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
 
@@ -320,14 +316,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     val minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
     expectNoMessage(1 second)
@@ -399,14 +394,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
       empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings, directory = createTempDir.getAbsolutePath)
     }
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(forkSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(forkSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     val minerRef: ActorRef = ErgoMiner(
       forkSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
 

@@ -2,7 +2,7 @@ package org.ergoplatform.utils.generators
 
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -23,10 +23,10 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate.Values.ErgoTree
+import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
-import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{CryptoConstants, ProverResult}
+import sigmastate.basics.{CryptoConstants, DiffieHellmanTupleProverInput, ProveDHTuple}
+import sigmastate.interpreter.ProverResult
 
 import scala.util.Random
 
@@ -145,7 +145,7 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
     stateRoot,
     transactionsRoot,
     timestamp,
-    RequiredDifficulty.encodeCompactBits(requiredDifficulty),
+    DifficultySerializer.encodeCompactBits(requiredDifficulty),
     height,
     extensionHash,
     powSolution,
@@ -209,7 +209,7 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
   } yield {
     val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false)
     val popowChain = popowHeaderChain(chain)
-    val params = PoPowParams(m, k)
+    val params = PoPowParams(m, k, continuous = false)
     nipopowAlgos.prove(popowChain)(params).get
   }
 

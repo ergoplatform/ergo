@@ -24,8 +24,8 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       StateType.Utxo,
       verifyTransactions = true,
       1000,
-      poPoWBootstrap = false,
-      10,
+      utxoSettings = UtxoSettings(false, 0, 2),
+      nipopowSettings = NipopowSettings(false, 1, 10),
       mining = true,
       txCostLimit,
       txSizeLimit,
@@ -42,11 +42,12 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
-      adProofsSuffixLength                      = 112*1024
+      adProofsSuffixLength                      = 112*1024,
+      extraIndex                                = false
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersCacheSize                 = 10000,
@@ -72,8 +73,8 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       StateType.Utxo,
       verifyTransactions = true,
       12,
-      poPoWBootstrap = false,
-      10,
+      utxoSettings = UtxoSettings(false, 0, 2),
+      nipopowSettings = NipopowSettings(false, 1, 10),
       mining = true,
       txCostLimit,
       txSizeLimit,
@@ -90,11 +91,12 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
-      adProofsSuffixLength                      = 112*1024
+      adProofsSuffixLength                      = 112*1024,
+      extraIndex                                = false
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersCacheSize                 = 10000,
@@ -113,8 +115,8 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       StateType.Utxo,
       verifyTransactions = true,
       13,
-      poPoWBootstrap = false,
-      10,
+      utxoSettings = UtxoSettings(false, 0, 2),
+      nipopowSettings = NipopowSettings(false, 1, 10),
       mining = true,
       txCostLimit,
       txSizeLimit,
@@ -131,11 +133,12 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100,
-      adProofsSuffixLength                      = 112*1024
+      adProofsSuffixLength                      = 112*1024,
+      extraIndex                                = false
     )
     settings.cacheSettings shouldBe CacheSettings(
       HistoryCacheSettings(
-        12, 100, 1000
+        12, 1000, 100, 1000
       ),
       NetworkCacheSettings(
         invalidModifiersCacheSize                 = 10000,

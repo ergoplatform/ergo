@@ -11,7 +11,7 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     val peerInfo = PeerInfo(defaultPeerSpec, time, Some(Incoming))
     val cid = ConnectionId(inetAddr1, inetAddr2, Incoming)
     val connectedPeer = ConnectedPeer(cid, handlerRef = null, lastMessage = 5L, Some(peerInfo))
-    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
 
     val height = 1000
     // add peer to sync
@@ -22,7 +22,6 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     syncTracker.updateStatus(connectedPeer, Older, Some(height+1))
     syncTracker.maxHeight() shouldBe Some(height + 1)
     syncTracker.getStatus(connectedPeer) shouldBe Some(Older)
-    syncTracker.fullInfo().head.height shouldBe height+1
 
     syncTracker.peersByStatus.apply(Older).head shouldBe connectedPeer
     // peer should not be synced yet

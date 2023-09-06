@@ -3,6 +3,7 @@ package scorex.testkit.generators
 import java.net.{InetAddress, InetSocketAddress, URL}
 import akka.actor.ActorRef
 import akka.util.ByteString
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.network.ModePeerFeature
 import org.ergoplatform.nodeView.state.StateType
 import org.scalacheck.Gen.{const, some}
@@ -11,7 +12,7 @@ import scorex.core.app.Version
 import scorex.core.network.message.{InvData, ModifiersData}
 import scorex.core.network._
 import scorex.core.network.peer.{PeerInfo, RestApiUrlPeerFeature}
-import scorex.core.{ModifierTypeId, NodeViewModifier}
+import scorex.core.NodeViewModifier
 import scorex.util.{ModifierId, bytesToId}
 
 trait ObjectGenerators {
@@ -49,10 +50,10 @@ trait ObjectGenerators {
   lazy val modifierIdGen: Gen[ModifierId] = Gen.listOfN(NodeViewModifier.ModifierIdSize, Arbitrary.arbitrary[Byte])
     .map(id => bytesToId(id.toArray))
 
-  lazy val modifierTypeIdGen: Gen[ModifierTypeId] = Arbitrary.arbitrary[Byte].map(t => ModifierTypeId @@ t)
+  lazy val modifierTypeIdGen: Gen[NetworkObjectTypeId.Value] = Arbitrary.arbitrary[Byte].map(t => NetworkObjectTypeId.fromByte(t))
 
   lazy val invDataGen: Gen[InvData] = for {
-    modifierTypeId: ModifierTypeId <- modifierTypeIdGen
+    modifierTypeId: NetworkObjectTypeId.Value <- modifierTypeIdGen
     modifierIds: Seq[ModifierId] <- Gen.nonEmptyListOf(modifierIdGen) if modifierIds.nonEmpty
   } yield InvData(modifierTypeId, modifierIds)
 
@@ -62,7 +63,7 @@ trait ObjectGenerators {
   } yield id -> mod
 
   lazy val modifiersGen: Gen[ModifiersData] = for {
-    modifierTypeId: ModifierTypeId <- modifierTypeIdGen
+    modifierTypeId: NetworkObjectTypeId.Value <- modifierTypeIdGen
     modifiers: Map[ModifierId, Array[Byte]] <- Gen.nonEmptyMap(modifierWithIdGen).suchThat(_.nonEmpty)
   } yield ModifiersData(modifierTypeId, modifiers)
 

@@ -99,7 +99,8 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   /**
     * API method to get tracking rule corresponding to p2s address
     */
-  def p2sRuleR: Route = (path("p2sRule") & post & entity(as[String])) { p2s =>
+  def p2sRuleR: Route = (path("p2sRule") & post & entity(as[String])) { p2sRaw =>
+    val p2s = fromJsonOrPlain(p2sRaw)
     addressEncoder.fromString(p2s) match {
       case Success(p2sAddr) =>
         val scriptBytes = ByteArrayConstant(ValueSerializer.serialize(p2sAddr.script.toProposition(replaceConstants = true).propBytes))
@@ -113,3 +114,5 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 }
+
+

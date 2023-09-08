@@ -16,7 +16,7 @@ import ScanEntities._
 import org.ergoplatform.ErgoBox.R1
 import org.ergoplatform.wallet.Constants.ScanId
 import sigmastate.Values.ByteArrayConstant
-import sigmastate.serialization.ValueSerializer
+import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
 
 /**
   * This class contains methods to register / deregister and list external scans, and also to serve them.
@@ -103,7 +103,8 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     val p2s = fromJsonOrPlain(p2sRaw)
     addressEncoder.fromString(p2s) match {
       case Success(p2sAddr) =>
-        val scriptBytes = ByteArrayConstant(ValueSerializer.serialize(p2sAddr.script.toProposition(replaceConstants = true).propBytes))
+        val script = p2sAddr.script
+        val scriptBytes = ByteArrayConstant(ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(script))
         val trackingRule = EqualsScanningPredicate(R1, scriptBytes)
         val request = ScanRequest(p2s, trackingRule, Some(ScanWalletInteraction.Off), Some(true))
         withWalletOp(_.addScan(request).map(_.response)) {

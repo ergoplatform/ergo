@@ -5554,7 +5554,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Create custom scan to track P2S address
+      summary: Create and register a scan to track P2S address provided
       operationId: scriptP2SRule
       tags:
         - scan

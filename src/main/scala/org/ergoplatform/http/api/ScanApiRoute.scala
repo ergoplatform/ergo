@@ -16,7 +16,7 @@ import ScanEntities._
 import org.ergoplatform.ErgoBox.R1
 import org.ergoplatform.wallet.Constants.ScanId
 import sigmastate.Values.ByteArrayConstant
-import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
+import sigmastate.serialization.ErgoTreeSerializer
 
 /**
   * This class contains methods to register / deregister and list external scans, and also to serve them.

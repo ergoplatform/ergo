@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.20"
+  version: "5.0.15"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -11,6 +11,12 @@ info:
   license:
     name: CC0 1.0 Universal
     url: https://raw.githubusercontent.com/ergoplatform/ergo/master/LICENSE
+
+servers:
+  - url: /
+    description: Local full node
+  - url: http://213.239.193.208:9053
+    description: Known public node
 
 components:
   securitySchemes:
@@ -31,12 +37,6 @@ components:
           $ref: '#/components/schemas/TransactionBoxId'
         spendingProof:
           $ref: '#/components/schemas/SpendingProof'
-        extension:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/SValue'
-          example:
-            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     ErgoTransactionDataInput:
       type: object
@@ -45,12 +45,6 @@ components:
       properties:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
-        extension:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/SValue'
-          example:
-            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     ErgoTransactionUnsignedInput:
       type: object
@@ -93,6 +87,25 @@ components:
           $ref: '#/components/schemas/TransactionBoxId'
         bytes:
           $ref: '#/components/schemas/HexString'
+
+    ScriptBytes:
+      type: object
+      required:
+        - bytes
+      properties:
+        bytes:
+          $ref: '#/components/schemas/HexString'
+
+    SnapshotsInfo:
+      type: object
+      required:
+        - availableManifests
+      properties:
+        availableManifests:
+          description: Map of available manifests height -> manifestId
+          type: array
+          items:
+            type: object
 
     ErgoTransactionOutput:
       type: object
@@ -197,6 +210,129 @@ components:
             type: integer
             example: 1
             default: 1
+
+    BalanceInfo:
+      type: object
+      description: Balance information
+      required:
+        - nanoErgs
+        - tokens
+      properties:
+        nanoErgs:
+          type: integer
+          format: int64
+          description: Balance of nanoERGs
+        tokens:
+          type: array
+          description: Balance of tokens
+          items:
+            type: object
+            properties:
+              tokenId:
+                $ref: '#/components/schemas/ModifierId'
+                description: Identifier of the token
+              amount:
+                type: integer
+                format: int64
+                description: Amount of the token
+              decimals:
+                type: integer
+                description: Number of decimals of the token
+              name:
+                type: string
+                description: Name of the token, if any
+
+    IndexedErgoBox:
+      type: object
+      description: Box indexed with extra information
+      required:
+        - box
+        - confirmationsNum
+        - address
+        - creationTransaction
+        - spendingTransaction
+        - spendingHeight
+        - inclusionHeight
+        - spent
+        - globalIndex
+      properties:
+        box:
+          $ref: '#/components/schemas/ErgoTransactionOutput'
+        confirmationsNum:
+          description: Number of confirmations, if the box is included into the blockchain
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+          nullable: true
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+        creationTransaction:
+          description: Transaction which created the box
+          $ref: '#/components/schemas/ModifierId'
+        spendingTransaction:
+          description: Transaction which created the box
+          nullable: true
+          $ref: '#/components/schemas/ModifierId'
+        spendingHeight:
+          description: The height the box was spent at
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+          nullable: true
+        inclusionHeight:
+          description: The height the transaction containing the box was included in a block at
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+        spent:
+          description: A flag signalling whether the box was spent
+          type: boolean
+          example: false
+        globalIndex:
+          description: Global index of the output in the blockchain
+          type: integer
+          format: int64
+          minimum: 0
+          example: 83927
+
+    IndexedToken:
+      type: object
+      description: Token indexed with extra information
+      required:
+        -id
+        -boxId
+        -emissionAmount
+        -name
+        -description
+        -decimals
+      properties:
+        id:
+          description: Id of the token
+          $ref: '#/components/schemas/ModifierId'
+        boxId:
+          description: Id of the box that created the token
+          $ref: '#/components/schemas/ModifierId'
+        emissionAmount:
+          description: The total supply of the token
+          type: integer
+          format: int64
+          minimum: 1
+          example: 3500000
+        name:
+          description: The name of the token
+          type: string
+        description:
+          description: The description of the token
+          type: string
+        decimals:
+          description: The number of decimals the token supports
+          type: integer
+          format: int32
+          minimum: 0
+          example: 8
 
     UnsignedErgoTransaction:
       type: object
@@ -304,10 +440,91 @@ components:
           type: integer
           format: int32
 
+    IndexedErgoTransaction:
+      type: object
+      description: Transaction indexed with extra information
+      required:
+        - id
+        - inputs
+        - dataInputs
+        - outputs
+        - inclusionHeight
+        - numConfirmations
+        - blockId
+        - timestamp
+        - index
+        - globalIndex
+        - size
+      properties:
+        id:
+          $ref: '#/components/schemas/TransactionId'
+        inputs:
+          description: Transaction inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          description: Transaction data inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          description: Transaction outputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        inclusionHeight:
+          description: Height of a block the transaction was included in
+          type: integer
+          format: int32
+          example: 20998
+        numConfirmations:
+          description: Number of transaction confirmations
+          type: integer
+          format: int32
+          example: 20998
+        blockId:
+          description: Id of the block the transaction was included in
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        index:
+          description: index of the transaction in the block it was included in
+          type: integer
+          format: int32
+          example: 3
+        globalIndex:
+          description: Global index of the transaction in the blockchain
+          type: integer
+          format: int64
+          example: 3565445
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+
     ErgoAddress:
       description: Encoded Ergo Address
       type: string
       example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
+
+    RewardAddress:
+      type: object
+      required:
+        - rewardAddress
+      properties:
+        rewardAddress:
+          $ref: '#/components/schemas/ErgoAddress'
+
+    RewardPubKey:
+      type: object
+      required:
+        - rewardPubkey
+      properties:
+        rewardPubkey:
+          type: string
+          example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
 
     DlogSecret:
       description: Hex-encoded big-endian 256-bits secret exponent
@@ -409,6 +626,15 @@ components:
           items:
             description: Pair of TokenId and Long
             type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              description: TokenId or Long
+              anyOf:
+                - description: TokenId
+                  type: string
+                - description: Long
+                  type: integer
         targetBalance:
           description: Target balance
           type: integer
@@ -426,6 +652,7 @@ components:
           items:
             anyOf:
               - $ref: '#/components/schemas/PaymentRequest'
+              - $ref: '#/components/schemas/BurnTokensRequest'
               - $ref: '#/components/schemas/AssetIssueRequest'
         fee:
           description: Transaction fee
@@ -772,7 +999,7 @@ components:
         - $ref: '#/components/schemas/ScanningPredicate'
         - type: object
         - required:
-          - bytes
+            - bytes
         - properties:
             register:
               type: string
@@ -1053,7 +1280,7 @@ components:
           description: Hints which contain public data only, share them freely!
           type: array
           items:
-              $ref: '#/components/schemas/InputHints'
+            $ref: '#/components/schemas/InputHints'
 
     GenerateCommitmentsRequest:
       description: request to generate commitments to sign a transaction
@@ -1114,6 +1341,18 @@ components:
         registers:
           $ref: '#/components/schemas/Registers'
 
+    BurnTokensRequest:
+      description: Request for burning tokens in wallet
+      type: object
+      required:
+        - assetsToBurn
+      properties:
+        assetsToBurn:
+          description: Assets list to burn in the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+
     AssetIssueRequest:
       description: Request for generation of asset issue transaction
       type: object
@@ -1128,7 +1367,8 @@ components:
           $ref: '#/components/schemas/ErgoAddress'
         ergValue:
           description: Optional, amount of ergs to be put into box with issued assets
-          type: int64
+          format: int64
+          type: integer
         amount:
           description: Supply amount
           type: integer
@@ -1343,10 +1583,8 @@ components:
           minimum: 0
           example: 667
         difficulty:
-          type: integer
-          format: int32
-          minimum: 0
-          example: 62
+          type: string
+          example: '9575989248'
         parentId:
           $ref: '#/components/schemas/ModifierId'
         votes:
@@ -1456,6 +1694,137 @@ components:
         votes:
           $ref: '#/components/schemas/Votes'
 
+    PassphraseMatch:
+      type: object
+      required:
+        - matched
+      properties:
+        matched:
+          type: boolean
+          description: true if passphrase matches wallet, false otherwise
+
+    WalletStatus:
+      description: Status of the node wallet
+      type: object
+      required:
+        - isInitialized
+        - isUnlocked
+        - changeAddress
+        - walletHeight
+        - error
+      properties:
+        isInitialized:
+          type: boolean
+          description: true if wallet is initialized, false otherwise
+        isUnlocked:
+          type: boolean
+          description: true if wallet is unlocked, false otherwise
+        changeAddress:
+          type: string
+          description: address to send change to. Empty when wallet is not initialized or locked.
+            By default change address correponds to root key address, could be set via
+            /wallet/updateChangeAddress method.
+          example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
+        walletHeight:
+          type: integer
+          description: last scanned height for the wallet (and external scans)
+        error:
+          type: string
+          description: last wallet error caught
+
+    InitWallet:
+      type: object
+      required:
+        - pass
+      properties:
+        pass:
+          type: string
+          description: Password to encrypt wallet file with
+        mnemonicPass:
+          type: string
+          description: Optional pass to password-protect mnemonic seed
+
+    InitWalletResult:
+      type: object
+      required:
+        - mnemonic
+      properties:
+        mnemonic:
+          type: string
+          description: Mnemonic seed phrase
+
+    RestoreWallet:
+      type: object
+      required:
+        - pass
+        - mnemonic
+        - usePre1627KeyDerivation
+      properties:
+        pass:
+          type: string
+          description: Password to encrypt wallet file with
+        mnemonic:
+          type: string
+          description: Mnemonic seed
+        mnemonicPass:
+          type: string
+          description: Optional pass to password-protect mnemonic seed
+        usePre1627KeyDerivation:
+          type: boolean
+          description: use incorrect(previous) BIP32 key derivation (see https://github.com/ergoplatform/ergo/issues/1627 for details). It's recommended to set to 'true' if the original wallet was created by ergo node before v4.0.105.
+
+    CheckWallet:
+      type: object
+      required:
+        - mnemonic
+      properties:
+        mnemonic:
+          type: string
+          description: Mnemonic seed (optional)
+        mnemonicPass:
+          type: string
+          description: Optional pass to password-protect mnemonic seed
+
+    UnlockWallet:
+      type: object
+      required:
+        - pass
+      properties:
+        pass:
+          type: string
+          description: Password to decrypt wallet file with
+
+    DeriveKey:
+      type: object
+      required:
+        - derivationPath
+      properties:
+        derivationPath:
+          type: string
+          description: Derivation path for a new secret to derive
+          example: 'm/1/2'
+
+    DeriveKeyResult:
+      type: object
+      required:
+        - address
+      properties:
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+
+    DeriveNextKeyResult:
+      type: object
+      required:
+        - derivationPath
+        - address
+      properties:
+        derivationPath:
+          type: string
+          description: Derivation path of the resulted secret
+          example: 'm/1/2'
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+
     MerkleProof:
       type: object
       description: Merkle proof for a leaf, which is an array of bytes (e.g. a transaction identifier)
@@ -1473,6 +1842,12 @@ components:
             type: array
             description: pairs of hash and side of hash
             example: ['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337', 0]
+            items:
+              anyOf:
+                - description: hash
+                  type: string
+                - description: side of hash
+                  type: integer
           example: [['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337', 0]]
 
     ProofOfUpcomingTransactions:
@@ -1524,6 +1899,10 @@ components:
         address:
           type: string
           example: '127.0.0.1:5673'
+        restApiUrl:
+          type: string
+          example: 'https://example.com'
+          nullable: true
         name:
           type: string
           example: mynode
@@ -1569,7 +1948,7 @@ components:
           type: integer
           example: 2880
 
-    PeerInfo:
+    SyncInfo:
       type: object
       required:
         - address
@@ -1595,6 +1974,67 @@ components:
           type: integer
           example: 65780
 
+    RequestedInfo:
+      type: object
+      required:
+        - checks
+      properties:
+        address:
+          type: string
+          example: '127.0.0.1:5673'
+        version:
+          type: string
+          example: '4.0.26'
+        checks:
+          type: integer
+          description: How many times we checked for modifier delivery status
+          example: 4
+
+    RequestedInfoByModifierId:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/RequestedInfo'
+
+    ConnectedPeer:
+      type: object
+      required:
+        - address
+      properties:
+        address:
+          type: string
+          example: '127.0.0.1:5673'
+        version:
+          type: string
+          example: '4.0.26'
+        lastMessage:
+          $ref: '#/components/schemas/Timestamp'
+
+    ConnectedPeerByModifierId:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/ConnectedPeer'
+
+    TrackInfo:
+      type: object
+      required:
+        - invalidModifierApproxSize
+        - requested
+        - received
+      properties:
+        invalidModifierApproxSize:
+          type: integer
+          example: 65780
+        requested:
+          type: object
+          description: Currently requested modifiers
+          additionalProperties:
+            $ref: '#/components/schemas/RequestedInfoByModifierId'
+        received:
+          type: object
+          description: Received modifiers
+          additionalProperties:
+            $ref: '#/components/schemas/ConnectedPeerByModifierId'
+
     BlacklistedPeers:
       type: object
       required:
@@ -1613,6 +2053,7 @@ components:
         - appVersion
         - fullHeight
         - headersHeight
+        - maxPeerHeight
         - bestFullHeaderId
         - previousFullHeaderId
         - bestHeaderId
@@ -1649,6 +2090,13 @@ components:
           description: Can be 'null' if state is empty (no header applied since node launch)
           minimum: 0
           example: 667
+          nullable: true
+        maxPeerHeight:
+          type: integer
+          format: int32
+          description: Maximum block height of connected peers. Can be 'null' if state is empty (no peer connected since node launch)
+          minimum: 0
+          example: 706162
           nullable: true
         bestFullHeaderId:
           type: string
@@ -1701,11 +2149,12 @@ components:
           example: 327
         difficulty:
           type: integer
-          format: int32
           minimum: 0
           nullable: true
           example: 667
-          description: Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch
+          description: >
+            Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch.
+            Difficulty is a BigInt integer.
         currentTime:
           type: integer
           description: Current internal node time
@@ -1718,11 +2167,11 @@ components:
             - $ref: '#/components/schemas/Timestamp'
         headersScore:
           type: integer
-          description: Can be 'null' if no headers is applied since node launch
+          description: Can be 'null' if no headers is applied since node launch. headersScore is a BigInt integer.
           nullable: true
         fullBlocksScore:
           type: integer
-          description: Can be 'null' if no full block is applied since node launch
+          description: Can be 'null' if no full block is applied since node launch. fullBlocksScore is a BigInt integer.
           nullable: true
         genesisBlockId:
           type: string
@@ -1734,6 +2183,14 @@ components:
           type: object
           description: current parameters
           $ref: '#/components/schemas/Parameters'
+        eip27Supported:
+          type: boolean
+          example: true
+          description: Whether EIP-27 locked in
+        restApiUrl:
+          type: string
+          example: 'https://example.com'
+          description: Publicly accessible url of node which exposes restApi in firewall
 
     Parameters:
       type: object
@@ -1839,6 +2296,14 @@ components:
       type: string
       format: base16
       example: '0008cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041'
+
+    ErgoTreeObject:
+      type: object
+      properties:
+        tree:
+          type: string
+          description: serialized Ergo tree
+          example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
 
     Transactions:
       description: Ergo transaction objects
@@ -1959,6 +2424,20 @@ components:
         totalRemainCoins:
           type: integer
           format: int64
+        reemitted:
+          type: integer
+          format: int64
+
+    EmissionScripts:
+      description: Emission related scripts
+      type: object
+      properties:
+        emission:
+          type: string
+        reemission:
+          type: string
+        pay2Reemission:
+          type: string
 
     BalancesSnapshot:
       description: Amount of Ergo tokens and assets
@@ -2536,10 +3015,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /transactions/bytes:
+      post:
+        summary: Submit an Ergo transaction given as hex-encoded transaction bytes to unconfirmed pool to send it over the network
+        operationId: sendTransactionAsBytes
+        tags:
+          - transactions
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: string
+                example: '"02c9e71790399816b3e40b2207e9ade19a9b7fe0600186cfb8e2b115bfdb34b57f38cd3c9f2890d11720eb3bb993993f00ededf812a590d2993df094a7ca4f0213e4820e1ab831eed5dc5c72665396d3a01d2a12900f1c3ab77700b284ae24fa8e8f7754f86f2282c795db6b0b17df1c29cc0552e59d01f7d777c638a813333277271c2f8b4d99d01ff0e6ee8695697bdd5b568089395620d7198c6093ce8bc59b928611b1b12452c05addaa42f4beff6a0a6fe90000000380d0dbc3f40210090402040005c801040205c8010500040004000e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04d807d601e4c6a70408d602b2a5730000d603e4c6a70601d604e4c6a7080ed605e4c6a70505d606e4c6a70705d60795720399c1a7c1720299c17202c1a7eb027201d1ededededededededed93c27202c2a793e4c672020408720193e4c6720205059572039d9c72057eb272047301000573029d9c72057eb2720473030005730494e4c672020601720393e4c672020705720693e4c67202080e720493e4c67202090ec5a79572039072079c720672059272079c72067205917207730595ef720393b1db630872027306d801d608b2db63087202730700ed938c7208017308938c7208027206c8df35000508cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba0405c8a8c105010105dc8b020e0266608cdea8baf0380008cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04c8df350000c0843d1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304c8df350000"'
+        responses:
+          '200':
+            description: JSON with ID of the new transaction
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/TransactionId'
+          default:
+            description: Error
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ApiError'
+
   /transactions/check:
     post:
       summary: Checks an Ergo transaction without sending it over the network. Checks that transaction is valid and
-                its inputs are in the UTXO set. Returns transaction identifier if the transaction is passing the checks.
+        its inputs are in the UTXO set. Returns transaction identifier if the transaction is passing the checks.
       operationId: checkTransaction
       tags:
         - transactions
@@ -2562,6 +3068,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /transactions/checkBytes:
+      post:
+        summary: Checks an Ergo transaction without sending it over the network given in form of hex-encoded transaction
+          bytes. Checks that transaction is valid and its inputs are in the UTXO set. Returns transaction identifier
+          if the transaction is passing the checks.
+        operationId: checkTransactionAsBytes
+        tags:
+          - transactions
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: string
+                example: '"02c9e71790399816b3e40b2207e9ade19a9b7fe0600186cfb8e2b115bfdb34b57f38cd3c9f2890d11720eb3bb993993f00ededf812a590d2993df094a7ca4f0213e4820e1ab831eed5dc5c72665396d3a01d2a12900f1c3ab77700b284ae24fa8e8f7754f86f2282c795db6b0b17df1c29cc0552e59d01f7d777c638a813333277271c2f8b4d99d01ff0e6ee8695697bdd5b568089395620d7198c6093ce8bc59b928611b1b12452c05addaa42f4beff6a0a6fe90000000380d0dbc3f40210090402040005c801040205c8010500040004000e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04d807d601e4c6a70408d602b2a5730000d603e4c6a70601d604e4c6a7080ed605e4c6a70505d606e4c6a70705d60795720399c1a7c1720299c17202c1a7eb027201d1ededededededededed93c27202c2a793e4c672020408720193e4c6720205059572039d9c72057eb272047301000573029d9c72057eb2720473030005730494e4c672020601720393e4c672020705720693e4c67202080e720493e4c67202090ec5a79572039072079c720672059272079c72067205917207730595ef720393b1db630872027306d801d608b2db63087202730700ed938c7208017308938c7208027206c8df35000508cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba0405c8a8c105010105dc8b020e0266608cdea8baf0380008cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04c8df350000c0843d1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304c8df350000"'
+        responses:
+          '200':
+            description: JSON with ID of the new transaction
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/TransactionId'
+          default:
+            description: Error
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ApiError'
 
   /transactions/unconfirmed:
     parameters:
@@ -2595,6 +3130,279 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Transactions'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/{txId}:
+    parameters:
+      - in: path
+        name: txId
+        required: true
+        description: ID of a transaction in question
+        schema:
+          type: string
+    head:
+      summary: Check if given transaction is unconfirmed in pool
+      operationId: checkUnconfirmedTransaction
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Transaction is in pool
+        '404':
+          description: Transaction is not in pool
+
+  /transactions/unconfirmed/byTransactionId/{txId}:
+    parameters:
+      - in: path
+        name: txId
+        required: true
+        description: ID of a transaction in question
+        schema:
+          type: string
+    get:
+      summary: Get unconfirmed transaction from pool
+      operationId: getUnconfirmedTransactionById
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransaction'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/byErgoTree:
+    parameters:
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
+    post:
+      summary: Finds unconfirmed transactions by ErgoTree hex of one of its output or input boxes (if present in UtxoState)
+      operationId: getUnconfirmedTransactionsByErgoTree
+      tags:
+        - transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: string
+              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+      responses:
+        '200':
+          description: Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transactions'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/inputs/byBoxId/{boxId}:
+    parameters:
+      - in: path
+        name: boxId
+        required: true
+        description: ID of an input box in question
+        schema:
+          type: string
+    get:
+      summary: Get input box from unconfirmed transactions in pool
+      operationId: getUnconfirmedTransactionInputBoxById
+      tags:
+        - inputs
+      responses:
+        '200':
+          description: Unspent Ergo Box that is to be used as Input in unconfirmed tx
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransactionOutput'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/outputs/byBoxId/{boxId}:
+    parameters:
+      - in: path
+        name: boxId
+        required: true
+        description: ID of an output box in question
+        schema:
+          type: string
+    get:
+      summary: Get output box from unconfirmed transactions in pool
+      operationId: getUnconfirmedTransactionOutputBoxById
+      tags:
+        - outputs
+      responses:
+        '200':
+          description: Unspent Ergo Box that is to be created by unconfirmed tx
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransactionOutput'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/outputs/byErgoTree:
+    parameters:
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
+    post:
+      summary: Finds all output boxes by ErgoTree hex among unconfirmed transactions
+      operationId: getUnconfirmedTransactionOutputBoxesByErgoTree
+      tags:
+        - outputs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: string
+              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+      responses:
+        '200':
+          description: Unconfirmed transaction output boxes that correspond to given ErgoTree hex
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: ErgoBox
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/outputs/byTokenId/{tokenId}:
+    parameters:
+      - in: path
+        name: tokenId
+        required: true
+        description: ID of a token in question
+        schema:
+          type: string
+    get:
+      summary: Get output box from unconfirmed transactions in pool by tokenId
+      operationId: getUnconfirmedTransactionOutputBoxesByTokenId
+      tags:
+        - outputs
+      responses:
+        '200':
+          description: Unspent Ergo Boxes that are to be created by unconfirmed tx and contain given token
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: ErgoBox
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/outputs/byRegisters:
+    parameters:
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
+    post:
+      summary: Finds all output boxes among unconfirmed transactions that contain given registers
+      operationId: getUnconfirmedTransactionOutputBoxesByRegisters
+      tags:
+        - outputs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Registers'
+      responses:
+        '200':
+          description: Unconfirmed transaction output boxes that contain given registers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: ErgoBox
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
         default:
           description: Error
           content:
@@ -2836,7 +3644,7 @@ paths:
   /peers/syncInfo:
     get:
       summary: Get sync info reported by peers, including versions, current status and height (if available)
-      operationId: getPeersFullInfo
+      operationId: getPeersSyncInfo
       tags:
         - peers
       responses:
@@ -2847,7 +3655,29 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PeerInfo'
+                  $ref: '#/components/schemas/SyncInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /peers/trackInfo:
+    get:
+      summary: Get track info reported by peers, including count of invalid modifiers and details of requested and received modifiers
+      operationId: getPeersTrackInfo
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Network status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrackInfo'
         default:
           description: Error
           content:
@@ -2878,8 +3708,8 @@ paths:
 
   /utils/address/{address}:
     get:
-      summary: Check address validity
-      operationId: CheckAddressValidity
+      summary: Check address validity (prefer POST request as addresses can be too big)
+      operationId: CheckAddressValidityWithGet
       tags:
         - utils
       parameters:
@@ -2889,6 +3719,35 @@ paths:
           description: address to check
           schema:
             $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Address validity with validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressValidity'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utils/address:
+    post:
+      summary: Checks address validity
+      operationId: CheckAddressValidity
+      tags:
+        - utils
+      requestBody:
+        required: true
+        description: address to check
+        content:
+          application/json:
+            schema:
+              description: Encoded Ergo Address
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
       responses:
         '200':
           description: Address validity with validation error
@@ -2961,8 +3820,8 @@ paths:
 
   /utils/ergoTreeToAddress/{ergoTreeHex}:
     get:
-      summary: Generate Ergo address from hex-encoded ErgoTree
-      operationId: ErgoTreeToAddress
+      summary: Generate Ergo address from hex-encoded ErgoTree (prefer POST request as ErgoTree can be too big)
+      operationId: ErgoTreeToAddressWithGet
       tags:
         - utils
       parameters:
@@ -2973,6 +3832,34 @@ paths:
           schema:
             type: string
             example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
+      responses:
+        '200':
+          description: Ergo address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoAddress'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utils/ergoTreeToAddress:
+    post:
+      summary: Generate Ergo address from hex-encoded ErgoTree
+      operationId: ErgoTreeToAddress
+      tags:
+        - utils
+      requestBody:
+        required: true
+        description: ErgoTree hex to derive an address from
+        content:
+          application/json:
+            schema:
+              type: string
+              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
       responses:
         '200':
           description: Ergo address
@@ -3056,29 +3943,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - pass
-              properties:
-                pass:
-                  type: string
-                  description: Password to encrypt wallet file with
-                mnemonicPass:
-                  type: string
-                  description: Optional pass to password-protect mnemonic seed
+              $ref: '#/components/schemas/InitWallet'
       responses:
         '200':
           description: New wallet with randomly generated seed created successfully
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - mnemonic
-                properties:
-                  mnemonic:
-                    type: string
-                    description: Mnemonic seed phrase
+                $ref: '#/components/schemas/InitWalletResult'
         default:
           description: Error
           content:
@@ -3099,20 +3971,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - pass
-                - mnemonic
-              properties:
-                pass:
-                  type: string
-                  description: Password to encrypt wallet file with
-                mnemonic:
-                  type: string
-                  description: Mnemonic seed
-                mnemonicPass:
-                  type: string
-                  description: Optional pass to password-protect mnemonic seed
+              $ref: '#/components/schemas/RestoreWallet'
       responses:
         '200':
           description: Wallet restored successfully
@@ -3136,29 +3995,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - mnemonic
-              properties:
-                mnemonic:
-                  type: string
-                  description: Mnemonic seed (optional)
-                mnemonicPass:
-                  type: string
-                  description: Optional pass to password-protect mnemonic seed
+              $ref: '#/components/schemas/CheckWallet'
       responses:
         '200':
           description: Whether passphrase match wallet
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - matched
-                properties:
-                  matched:
-                    type: boolean
-                    description: true if passphrase matches wallet, false otherwise
+                $ref: '#/components/schemas/PassphraseMatch'
         default:
           description: Error
           content:
@@ -3179,13 +4023,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - pass
-              properties:
-                pass:
-                  type: string
-                  description: Password to decrypt wallet file with
+              $ref: '#/components/schemas/UnlockWallet'
       responses:
         '200':
           description: Wallet unlocked successfully
@@ -3215,22 +4053,36 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /wallet/rescan:
-    get:
+    post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Rescan wallet (all the available full blocks)
+      summary: Rescan wallet (all the available full blocks). When fromHeight is set wallet would not see any boxes below it.
       operationId: walletRescan
       tags:
         - wallet
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fromHeight
+              properties:
+                fromHeight:
+                  type: integer
+                  format: int32
+                  minimum: 0
       responses:
         '200':
-          description: Wallet storage recreated
+          description: Wallet rescanned
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
 
   /wallet/status:
     get:
@@ -3246,32 +4098,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - isInitialized
-                  - isUnlocked
-                  - changeAddress
-                  - walletHeight
-                  - error
-                properties:
-                  isInitialized:
-                    type: boolean
-                    description: true if wallet is initialized, false otherwise
-                  isUnlocked:
-                    type: boolean
-                    description: true if wallet is unlocked, false otherwise
-                  changeAddress:
-                    type: string
-                    description: address to send change to. Empty when wallet is not initialized or locked.
-                                 By default change address correponds to root key address, could be set via
-                                 /wallet/updateChangeAddress method.
-                    example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
-                  walletHeight:
-                    type: integer
-                    description: last scanned height for the wallet (and external scans)
-                  error:
-                    type: string
-                    description: last wallet error caught
+                $ref: '#/components/schemas/WalletStatus'
         default:
           description: Error
           content:
@@ -3292,14 +4119,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - address
-              properties:
-                address:
-                  type: string
-                  description: Pay2PubKey address
-                  example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
+              $ref: "#/components/schemas/ErgoAddress"
       responses:
         '200':
           description: Change address updated successfully
@@ -3323,26 +4143,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - derivationPath
-              properties:
-                derivationPath:
-                  type: string
-                  description: Derivation path for a new secret to derive
-                  example: 'm/1/2'
+              $ref: '#/components/schemas/DeriveKey'
       responses:
         '200':
           description: Resulted address
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - address
-                properties:
-                  address:
-                    $ref: '#/components/schemas/ErgoAddress'
+                $ref: '#/components/schemas/DeriveKeyResult'
         default:
           description: Error
           content:
@@ -3364,17 +4172,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - derivationPath
-                  - address
-                properties:
-                  derivationPath:
-                    type: string
-                    description: Derivation path of the resulted secret
-                    example: 'm/1/2'
-                  address:
-                    $ref: '#/components/schemas/ErgoAddress'
+                $ref: '#/components/schemas/DeriveNextKeyResult'
         default:
           description: Error
           content:
@@ -3532,6 +4330,13 @@ paths:
           type: integer
           format: int32
           minimum: 0
+      - in: query
+        name: includeUnconfirmed
+        required: false
+        description: Include transactions from mempool
+        schema:
+          type: boolean
+          default: false
     get:
       security:
         - ApiKeyAuth: [ api_key ]
@@ -3574,12 +4379,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -3589,11 +4402,19 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]
       summary: Get a list of all wallet-related boxes, both spent and unspent. Set minConfirmations to -1 to get
-               mempool boxes included.
+        mempool boxes included.
       operationId: walletBoxes
       tags:
         - wallet
@@ -3649,12 +4470,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -3664,6 +4493,14 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -3924,6 +4761,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/getPrivateKey:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get the private key corresponding to a known address
+      operationId: walletGetPrivateKey
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErgoAddress"
+      responses:
+        '200':
+          description: Successfully retrieved secret key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DlogSecret'
+        '404':
+          description: Address not found in wallet database
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /mining/candidate:
     get:
       security:
@@ -3988,12 +4859,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - rewardAddress
-                properties:
-                  rewardAddress:
-                    $ref: '#/components/schemas/ErgoAddress'
+                $ref: '#/components/schemas/RewardAddress'
         default:
           description: Error
           content:
@@ -4015,13 +4881,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - rewardPubkey
-                properties:
-                  rewardAddress:
-                    type: string
-                    example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+                $ref: '#/components/schemas/RewardPubKey'
         default:
           description: Error
           content:
@@ -4048,6 +4908,42 @@ paths:
           description: Solution is valid
         '400':
           description: Solution is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/getBoxesBinaryProof:
+    post:
+      security:
+        -  ApiKeyAuth: [api_key]
+      summary: Get serialized batch proof for given set of boxes
+      operationId: getBoxesBinaryProof
+      tags:
+        - utxo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/TransactionBoxId'
+      responses:
+        '200':
+          description: Serialized batch proof
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerializedAdProof'
+        '400':
+          description: Prove error
           content:
             application/json:
               schema:
@@ -4192,6 +5088,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /utxo/getSnapshotsInfo:
+    get:
+      summary: Get information about locally stored UTXO snapshots
+      operationId: getSnapshotsInfo
+      tags:
+        - utxo
+      responses:
+        '200':
+          description: A list of saved snapshots
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SnapshotsInfo'
+    default:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+
+
   /utxo/genesis:
     get:
       summary: Get genesis boxes (boxes existed before the very first block)
@@ -4309,12 +5227,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  tree:
-                    type: string
-                    description: serialized Ergo tree
-                    example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+                $ref: '#/components/schemas/ErgoTreeObject'
         default:
           description: Error
           content:
@@ -4341,12 +5254,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  tree:
-                    type: string
-                    description: Base16-encoded bytes
-                    example: '0e0710010101d17300'
+                $ref: '#/components/schemas/ScriptBytes'
         default:
           description: Error
           content:
@@ -4485,12 +5393,20 @@ paths:
       - in: query
         name: minConfirmations
         required: false
-        description: Minimal number of confirmations
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
         schema:
           type: integer
           format: int32
           minimum: -1
           default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
       - in: query
         name: minInclusionHeight
         required: false
@@ -4500,6 +5416,14 @@ paths:
           format: int32
           minimum: 0
           default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -4518,6 +5442,73 @@ paths:
       responses:
         '200':
           description: List of unspent boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/spentBoxes/{scanId}:
+    parameters:
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations, -1 means we consider unconfirmed
+        schema:
+          type: integer
+          format: int32
+          minimum: -1
+          default: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximum number of confirmations, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximum box inclusion height, -1 means unlimited
+        schema:
+          type: integer
+          format: int32
+          default: -1
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: List boxes which are spent.
+      operationId: listSpentScans
+      tags:
+        - scan
+      parameters:
+        - in: path
+          name: scanId
+          required: true
+          description: identifier of a scan
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: List of spent boxes
           content:
             application/json:
               schema:
@@ -4552,6 +5543,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScanIdBoxId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/p2sRule:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create and register a scan to track P2S address provided
+      operationId: scriptP2SRule
+      tags:
+        - scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                type: string
+                example: '4MQyML64GnzMxZgm'
+      responses:
+        '200':
+          description: Id of custom scan generated and registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanId'
+        '400':
+          description: Bad source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
@@ -4669,6 +5695,655 @@ paths:
       responses:
         '200':
           description: The node will be shut down in 5 seconds
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /emission/at/{blockHeight}:
+    get:
+      summary: Get emission data for a given height
+      operationId: emissionAt
+      tags:
+        - emission
+      parameters:
+        - in: path
+          name: blockHeight
+          required: true
+          description: Height to get emission data for
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: Emission data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmissionInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /emission/scripts:
+    get:
+      summary: Print emission-related scripts
+      operationId: emissionScripts
+      tags:
+        - emission
+      responses:
+        '200':
+          description: Emission-related scripts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmissionScripts'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/indexedHeight:
+    get:
+      summary: Get current block height the indexer is at
+      operationId: getIndexedHeight
+      tags:
+        - blockchain
+      responses:
+        '200':
+          description: height of the indexer and full height
+          content:
+            application/json:
+              schema:
+                properties:
+                  indexedHeight:
+                    type: integer
+                    default: 0
+                    description: number of blocks indexed
+                  fullHeight:
+                    type: integer
+                    description: number of all known blocks
+
+  /blockchain/transaction/byId/{txId}:
+    get:
+      summary: Retrieve a transaction by its id
+      operationId: getTxById
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: txId
+          required: true
+          description: id of the wanted transaction
+          schema:
+            type: string
+      responses:
+        '200':
+          description: transaction with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoTransaction'
+        '404':
+          description: Transaction with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/transaction/byIndex/{txIndex}:
+    get:
+      summary: Retrieve a transaction by global index number
+      operationId: getTxByIndex
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: txIndex
+          required: true
+          description: index of the wanted transaction
+          schema:
+            type: number
+      responses:
+        '200':
+          description: transaction with wanted index
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoTransaction'
+        '404':
+          description: Transaction with this index doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/transaction/byAddress:
+    post:
+      summary: Retrieve transactions by their associated address
+      operationId: getTxsByAddress
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: adderess associated with transactions
+            schema:
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
+      parameters:
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: transactions associated with wanted address
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of transactions
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoTransaction'
+                  total:
+                    type: integer
+                    description: Total count of retreived transactions
+        '404':
+          description: No transactions found for wanted address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/transaction/range:
+    get:
+      summary: Get a range of transaction ids
+      operationId: getTxRange
+      tags:
+        - blockchain
+      parameters:
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: transactions ids in wanted range
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of transaction ids
+                items:
+                  $ref: '#/components/schemas/ModifierId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/byId/{boxId}:
+    get:
+      summary: Retrieve a box by its id
+      operationId: getBoxById
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: id of the wanted box
+          schema:
+            type: string
+      responses:
+        '200':
+          description: box with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No box found with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/byIndex/{boxIndex}:
+    get:
+      summary: Retrieve a box by global index number
+      operationId: getBoxByIndex
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: boxIndex
+          required: true
+          description: index of the wanted box
+          schema:
+            type: number
+      responses:
+        '200':
+          description: box with wanted index
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: Box with this index doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/byAddress:
+    post:
+      summary: Retrieve boxes by their associated address
+      operationId: getBoxesByAddress
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: adderess associated with boxes
+            schema:
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
+      parameters:
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: boxes associated with wanted address
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoBox'
+                  total:
+                    type: integer
+                    description: Total number of retreived boxes
+        '404':
+          description: No boxes found for wanted address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/unspent/byAddress:
+    post:
+      summary: Retrieve unspent boxes by their associated address
+      operationId: getBoxesByAddressUnspent
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: adderess associated with unspent boxes
+            schema:
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
+      parameters:
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
+      responses:
+        '200':
+          description: unspent boxes associated with wanted address
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of boxes
+                items:
+                  $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No unspent boxes found for wanted address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/range:
+    get:
+      summary: Get a range of box ids
+      operationId: getBoxRange
+      tags:
+        - blockchain
+      parameters:
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: box ids in wanted range
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of box ids
+                items:
+                  $ref: '#/components/schemas/ModifierId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/byErgoTree:
+    post:
+      summary: Retrieve boxes by their associated ergotree
+      operationId: getBoxesByErgoTree
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: hex encoded ergotree
+            schema:
+              type: string
+              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+      parameters:
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: boxes with wanted ergotree
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoBox'
+                  total:
+                    type: integer
+                    description: Total number of retreived boxes
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/unspent/byErgoTree:
+    post:
+      summary: Retrieve unspent boxes by their associated ergotree
+      operationId: getBoxesByErgoTreeUnspent
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: hex encoded ergotree
+            schema:
+              type: string
+              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+      parameters:
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
+      responses:
+        '200':
+          description: unspent boxes with wanted ergotree
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoBox'
+                  total:
+                    type: integer
+                    description: Total number of retreived boxes
+        '404':
+          description: No unspent box found with wanted ergotree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/token/byId/{tokenId}:
+    get:
+      summary: Retrieve minting information about a token
+      operationId: getTokenById
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: tokenId
+          required: true
+          description: id of the wanted token
+          schema:
+            type: string
+      responses:
+        '200':
+          description: token with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedToken'
+        '404':
+          description: No token found with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/balance:
+    post:
+      summary: Retrieve confirmed and unconfirmed balance of an address
+      operationId: getAddressBalanceTotal
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            description: adderess with balance
+            schema:
+              type: string
+              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
+      responses:
+        '200':
+          description: balance information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  confirmed:
+                    $ref: '#/components/schemas/BalanceInfo'
+                  unconfirmed:
+                    $ref: '#/components/schemas/BalanceInfo'
         default:
           description: Error
           content:

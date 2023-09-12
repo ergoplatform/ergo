@@ -5,7 +5,8 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
-import org.ergoplatform.http.api.UtxoApiRoute
+import io.circe.syntax._
+import org.ergoplatform.http.api.{ApiCodecs, UtxoApiRoute}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalatest.flatspec.AnyFlatSpec
@@ -17,7 +18,8 @@ class UtxoApiRouteSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs
-  with FailFastCirceSupport {
+  with FailFastCirceSupport
+  with ApiCodecs {
 
   val prefix = "/utxo"
 
@@ -34,7 +36,7 @@ class UtxoApiRouteSpec extends AnyFlatSpec
   }
 
   it should "get mempool box with withPool/byId" in {
-    val box = memPool.getAll.flatMap(_.outputs).head
+    val box = memPool.getAll.map(utx => utx.transaction).flatMap(_.outputs).head
     val boxId = Base16.encode(box.id)
     Get(prefix + s"/byId/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.NotFound
@@ -73,7 +75,7 @@ class UtxoApiRouteSpec extends AnyFlatSpec
   }
 
   it should "get pool box with /withPool/byIdBinary" in {
-    val box = memPool.getAll.flatMap(_.outputs).head
+    val box = memPool.getAll.map(utx => utx.transaction).flatMap(_.outputs).head
     val boxId = Base16.encode(box.id)
     Get(prefix + s"/byIdBinary/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.NotFound
@@ -95,4 +97,10 @@ class UtxoApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "get serialized proof for given boxes" in {
+    val boxes = utxoState.takeBoxes(10).map(box => Base16.encode(box.id))
+    Post(prefix + s"/getBoxesBinaryProof", boxes.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
 }

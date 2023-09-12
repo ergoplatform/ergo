@@ -1,27 +1,18 @@
 package org.ergoplatform.modifiers.history.popow
 
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, DifficultySerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.settings.Constants
-import scorex.crypto.authds.merkle.MerkleProof
+import org.ergoplatform.settings.{Algos, ChainSettings, Constants}
+import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
-
-/**
-  * NiPoPoW proof params from the KMZ17 paper
-  *
-  * @param m - minimal superchain length
-  * @param k - suffix length
-  */
-case class PoPowParams(m: Int, k: Int)
-
 
 /**
   * A set of utilities for working with NiPoPoW protocol.
@@ -36,8 +27,12 @@ case class PoPowParams(m: Int, k: Int)
   * Please note that for [KMZ17] we're using the version published @ Financial Cryptography 2020, which is different
   * from previously published versions on IACR eprint.
   */
-class NipopowAlgos(powScheme: AutolykosPowScheme) {
+class NipopowAlgos(val chainSettings: ChainSettings) {
   import NipopowAlgos._
+
+  private def powScheme: AutolykosPowScheme = chainSettings.powScheme
+
+  private val diffAdjustment = new DifficultyAdjustment(chainSettings)
 
   /**
     * Computes interlinks vector for a header next to `prevHeader`.
@@ -67,25 +62,6 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
       Seq(prevHeader.id)
     }
 
-  /**
-    * Packs interlinks into key-value format of the block extension.
-    */
-  @inline def packInterlinks(links: Seq[ModifierId]): Seq[(Array[Byte], Array[Byte])] = {
-    @scala.annotation.tailrec
-    def loop(rem: List[(ModifierId, Int)],
-             acc: Seq[(Array[Byte], Array[Byte])]): Seq[(Array[Byte], Array[Byte])] =
-      rem match {
-        case (headLink, idx) :: _ =>
-          val duplicatesQty = links.count(_ == headLink)
-          val filled = Array(InterlinksVectorPrefix, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
-          loop(rem.drop(duplicatesQty), acc :+ filled)
-        case Nil =>
-          acc
-      }
-
-    loop(links.zipWithIndex.toList, Seq.empty)
-  }
-
   @inline
   def interlinksToExtension(links: Seq[ModifierId]): ExtensionCandidate = {
     ExtensionCandidate(packInterlinks(links))
@@ -96,7 +72,7 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
     */
   def maxLevelOf(header: Header): Int =
     if (!header.isGenesis) {
-      val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
+      val requiredTarget = org.ergoplatform.mining.q / DifficultySerializer.decodeCompactBits(header.nBits)
       val realTarget = powScheme.powHit(header).doubleValue
       val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
       level.toInt
@@ -152,6 +128,8 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
 
   /**
     * Computes NiPoPow proof for the given `chain` according to given `params`.
+    *
+    * todo: Paper-like code used in tests only, so maybe better to replace it in tests with prove (histReader)
     */
   def prove(chain: Seq[PoPowHeader])(params: PoPowParams): Try[NipopowProof] = Try {
     val k = params.k
@@ -182,7 +160,7 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
     val suffixTail = suffix.tail.map(_.header)
     val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, params.continuous)
   }
 
   /**
@@ -252,20 +230,37 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
         histReader.popowHeader(suffix.head.id).get -> suffix.tail // .get to be caught in outer (prove's) Try
     }
 
-    val genesisPopowHeader = histReader.popowHeader(1).get // to be caught in outer (prove's) Try
+    val storedHeights = mutable.Set[Height]() // cache to filter out duplicate headers
+    val prefixBuilder = mutable.ArrayBuilder.make[PoPowHeader]()
+
     val genesisHeight = 1
-    val prefix = genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)
+    prefixBuilder += histReader.popowHeader(genesisHeight).get // to be caught in outer (prove's) Try
+    storedHeights += genesisHeight
 
-    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
-  }
+    if (params.continuous) {
+      // put headers needed to check difficulty of new blocks after suffix into prefix
+      val epochLength = chainSettings.eip37EpochLength.getOrElse(chainSettings.epochLength)
+      diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).foreach { height =>
+        // check that header in or after suffix is not included, otherwise, sorting by height would be broken
+        if (height < suffixHead.height) {
+          histReader.popowHeader(height).foreach { ph =>
+            prefixBuilder += ph
+            storedHeights += ph.height
+          }
+        }
+      }
+    }
 
-  /**
-    * Proves the inclusion of an interlink pointer to blockId in the Merkle Tree of the given extension.
-    */
-  def proofForInterlink(ext: ExtensionCandidate, blockId: ModifierId): Option[MerkleProof[Digest32]] = {
-    ext.fields
-      .find({ case (key, value) => key.head == InterlinksVectorPrefix && (value.tail sameElements idToBytes(blockId)) })
-      .flatMap({ case (key, _) => ext.proofFor(key) })
+    provePrefix(genesisHeight, suffixHead).foreach { ph =>
+      if (!storedHeights.contains(ph.height)) {
+        prefixBuilder += ph
+        storedHeights += ph.height
+      }
+    }
+
+    val prefix = prefixBuilder.result().sortBy(_.height)
+
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail, params.continuous)
   }
 
 }
@@ -274,6 +269,25 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
 object NipopowAlgos {
 
   private def log2(x: Double): Double = math.log(x) / math.log(2)
+
+  /**
+    * Packs interlinks into key-value format of the block extension.
+    */
+  @inline def packInterlinks(links: Seq[ModifierId]): Seq[(Array[Byte], Array[Byte])] = {
+    @scala.annotation.tailrec
+    def loop(rem: List[(ModifierId, Int)],
+             acc: Seq[(Array[Byte], Array[Byte])]): Seq[(Array[Byte], Array[Byte])] =
+      rem match {
+        case (headLink, idx) :: _ =>
+          val duplicatesQty = links.count(_ == headLink)
+          val filled = Array(InterlinksVectorPrefix, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
+          loop(rem.drop(duplicatesQty), acc :+ filled)
+        case Nil =>
+          acc
+      }
+
+    loop(links.zipWithIndex.toList, Seq.empty)
+  }
 
   /**
     * Unpacks interlinks from key-value format of block extension.
@@ -298,4 +312,19 @@ object NipopowAlgos {
 
     loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
   }
+
+  /**
+    * Proves the inclusion of the interlink vector in the Merkle Tree of the given extension.
+    */
+  def proofForInterlinkVector(ext: ExtensionCandidate): Option[BatchMerkleProof[Digest32]] = {
+    val keys = ext.fields
+      .filter({ case (key, _) => key.head == InterlinksVectorPrefix })
+      .map(_._1)
+    if (keys.isEmpty) {
+      Some(BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash))
+    } else {
+      ext.batchProofFor(keys: _*)
+    }
+  }
+
 }

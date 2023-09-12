@@ -3,11 +3,11 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistoryTestHelpers
-import scorex.core.consensus.History.ProgressInfo
+import scorex.core.consensus.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity.{Absent, Invalid, Unknown, Valid}
 import scorex.testkit.utils.NoShrink
 
@@ -16,14 +16,14 @@ import scala.util.Random
 
 class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
 
-  type PM = ErgoPersistentModifier
+  type PM = BlockSection
 
   private def genHistory(blocksNum: Int = 0,
                          minFullHeight: Option[Int] = Some(ErgoHistory.GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     minFullHeight.foreach { h =>
-      inHistory.pruningProcessor.minimalFullBlockHeightVar = h
-      inHistory.pruningProcessor.isHeadersChainSyncedVar = true
+      inHistory.writeMinimalFullBlockHeight(h)
+      inHistory.isHeadersChainSyncedVar = true
     }
 
     if (blocksNum > 0) {
@@ -87,7 +87,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     history.bestFullBlockOpt shouldBe None
 
     val fullBlocksToApply = chain.tail
-    history.pruningProcessor.updateBestFullBlock(fullBlocksToApply(BlocksToKeep - 1).header)
+    history.updateBestFullBlock(fullBlocksToApply(BlocksToKeep - 1).header)
 
     history.applicable(chain.head.blockTransactions) shouldBe false
 
@@ -200,7 +200,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     history.bestHeaderOpt.value shouldBe chain.last.header
     history.bestFullBlockOpt shouldBe None
-    history.pruningProcessor.updateBestFullBlock(chain.last.header)
+    history.updateBestFullBlock(chain.last.header)
 
     val fullBlocksToApply = chain.takeRight(BlocksToKeep)
 

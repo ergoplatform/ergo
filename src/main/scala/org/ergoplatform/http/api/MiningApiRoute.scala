@@ -10,7 +10,7 @@ import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddress, ErgoScriptPredef, Pay2SAddress}
+import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import sigmastate.basics.DLogProtocol.ProveDlog
@@ -68,7 +68,7 @@ case class MiningApiRoute(miner: ActorRef,
       miner.askWithStatus(ErgoMiner.ReadMinerPk)
         .mapTo[ProveDlog]
         .map { pk =>
-          val script = ErgoScriptPredef.rewardOutputScript(ergoSettings.chainSettings.monetary.minerRewardDelay, pk)
+          val script = ErgoTreePredef.rewardOutputScript(ergoSettings.chainSettings.monetary.minerRewardDelay, pk)
           Pay2SAddress(script)(ergoSettings.addressEncoder)
         }
 

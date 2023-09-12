@@ -9,7 +9,9 @@ import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state._
@@ -18,16 +20,14 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.SigmaAnd
 import sigmastate.Values.{ErgoTree, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.utxo.CostTable
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -38,7 +38,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
   implicit private val timeout: Timeout = defaultTimeout
 
-  private val newBlockSignal: Class[SemanticallySuccessfulModifier] = classOf[SemanticallySuccessfulModifier]
+  private val newBlockSignal: Class[FullBlockApplied] = classOf[FullBlockApplied]
   private val newBlockDelay: FiniteDuration = 30 seconds
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
@@ -52,13 +52,14 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val nodeSettings = empty.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,
       internalMinerPollingInterval = 2.second,
+      maxTransactionCost = 100000,
       offlineGeneration = true,
       verifyTransactions = true)
     val chainSettings = empty.chainSettings.copy(blockInterval = 2.seconds)
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
 
-  it should "not include too complex transactions" in new TestKit(ActorSystem()) {
+  it should "not include too costly transactions" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
@@ -67,14 +68,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     }
     complexScript.complexity shouldBe 28077
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     val minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
     expectNoMessage(1 second)
@@ -85,16 +85,16 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     val boxToSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToSpend.propositionBytes shouldBe ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
+    boxToSpend.propositionBytes shouldBe ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
     val input = Input(boxToSpend.id, emptyProverResult)
 
-    // create transaction with output with complex proposition
+    // create transaction with output with costly proposition
     val output = new ErgoBoxCandidate(boxToSpend.value / 10, complexScript, r.s.stateContext.currentHeight)
     val outputs = (0 until 10).map(_ => output)
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
     val tx = defaultProver.sign(unsignedTx, IndexedSeq(boxToSpend), IndexedSeq(), r.s.stateContext).get
-    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(tx), None))
     expectNoMessage(1 seconds)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
@@ -106,36 +106,45 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     tx.outputs.foreach(o => state.boxById(o.id).get shouldBe o)
 
     // try to spend all the boxes with complex scripts
-    val complexInputs = tx.outputs.map(o => Input(o.id, emptyProverResult))
-    val complexOut = new ErgoBoxCandidate(tx.outputs.map(_.value).sum, complexScript, r.s.stateContext.currentHeight)
-    val unsignedComplexTx = new UnsignedErgoTransaction(complexInputs, IndexedSeq(), IndexedSeq(complexOut))
-    val complexTx = defaultProver.sign(unsignedComplexTx, tx.outputs, IndexedSeq(), r.s.stateContext).get
-    tx.outputs.map(_.ergoTree.complexity).sum should be > ergoSettings.nodeSettings.maxTransactionComplexity
-    // send complex transaction to the mempool
-    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(complexTx))
+    val costlyInputs = tx.outputs.map(o => Input(o.id, emptyProverResult))
+    val costlyOut = new ErgoBoxCandidate(tx.outputs.map(_.value).sum, complexScript, r.s.stateContext.currentHeight)
+    val unsignedComplexTx = new UnsignedErgoTransaction(costlyInputs, IndexedSeq(), IndexedSeq(costlyOut))
+    val costlyTx = defaultProver.sign(unsignedComplexTx, tx.outputs, IndexedSeq(), r.s.stateContext).get
+
+    val txCost =
+      state.validateWithCost(
+        ErgoTransaction(costlyTx.inputs, costlyTx.dataInputs, costlyTx.outputCandidates),
+        Some(r.s.stateContext),
+        costLimit = 440000,
+        None
+      ).get
+    txCost shouldBe 439080
+
+    // send costly transaction to the mempool
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(costlyTx), None))
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    // complex tx was removed from mempool
+    // costly tx was removed from mempool
     expectNoMessage(1 second)
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
-    // complex tx was not included
+    // costly tx was not included
     val state2 = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
     tx.outputs.foreach(o => state2.boxById(o.id) should not be None)
-    complexTx.outputs.foreach(o => state2.boxById(o.id) shouldBe None)
+    costlyTx.outputs.foreach(o => state2.boxById(o.id) shouldBe None)
   }
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
-    val desiredSize: Int = ((parameters.maxBlockCost / CostTable.interpreterInitCost) * 2).toInt
+    val desiredSize: Int = Math.ceil((parameters.maxBlockCost / ErgoInterpreter.interpreterInitCost) * 1.2).toInt
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     expectNoMessage(1 second)
     val r: Readers = requestReaders
@@ -145,7 +154,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
     minerRef ! StartMining
@@ -178,7 +186,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
         )
       }
 
-      txs.foreach(nodeViewHolderRef ! LocallyGeneratedTransaction(_))
+      txs.map(tx => UnconfirmedTransaction(tx, None)).foreach(nodeViewHolderRef ! LocallyGeneratedTransaction(_))
 
       if (toSend > toSpend.size) {
         // wait for the next block
@@ -210,14 +218,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     val minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
     expectNoMessage(1 second)
@@ -234,7 +241,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToDoubleSpend.propositionBytes shouldBe ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
+    boxToDoubleSpend.propositionBytes shouldBe ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
     val input = Input(boxToDoubleSpend.id, emptyProverResult)
 
@@ -247,7 +254,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
     // As double-spending transactions are filtered out in the mempool, the only way to push them is to order to
     // include double-spending transaction directly via mandatoryTransactions argument of PrepareCandidate command
-    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx1))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(tx1), None))
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     testProbe.expectNoMessage(200.millis)
@@ -264,10 +271,10 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
         testProbe.fishForMessage(blockValidationDelay) {
           case StatusReply.Success(()) =>
             testProbe.expectMsgPF(candidateGenDelay) {
-              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+              case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
-          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+          case FullBlockApplied(header) if header.id != block.header.parentId =>
             testProbe.expectMsg(StatusReply.Success(()))
             true
         }
@@ -286,14 +293,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
   it should "prepare external candidate" in new TestKit(ActorSystem()) {
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     def minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
 
@@ -310,14 +316,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     val minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
     expectNoMessage(1 second)
@@ -389,14 +394,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
       empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings, directory = createTempDir.getAbsolutePath)
     }
 
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(forkSettings, timeProvider)
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(forkSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
     val minerRef: ActorRef = ErgoMiner(
       forkSettings,
       nodeViewHolderRef,
       readersHolderRef,
-      timeProvider,
       Some(defaultMinerSecret)
     )
 
@@ -419,7 +423,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
       val v2Block = testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-      val h2 = v2Block.modifier.asInstanceOf[ErgoFullBlock].header
+      val h2 = v2Block.header
       h2.version shouldBe 2
       h2.minerPk shouldBe defaultMinerPk.value
     }

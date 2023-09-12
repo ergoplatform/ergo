@@ -1,8 +1,10 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.ErgoBoxCandidate
-import sigmastate.eval.Extensions._
 import java7.compat.Math
+import org.ergoplatform.ErgoBoxCandidate
+import special.collection.Extensions._
+
+import scala.collection.compat.immutable.ArraySeq
 import scala.collection.mutable
 import scala.util.Try
 
@@ -29,7 +31,7 @@ object ErgoBoxAssetExtractor {
         )
         box.additionalTokens.foreach {
           case (assetId, amount) =>
-            val aiWrapped = mutable.WrappedArray.make(assetId)
+            val aiWrapped = ArraySeq.unsafeWrapArray(assetId.toArray)
             val total     = map.getOrElse(aiWrapped, 0L)
             map.put(aiWrapped, Math.addExact(total, amount))
         }

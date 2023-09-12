@@ -38,12 +38,12 @@ class VotingSpecification extends ErgoPropertyTest {
     Seq(VR.CheckDeserializedScriptType.id -> DisabledRule, VR.CheckValidOpCode.id -> ReplacedRule((VR.FirstRuleId + 11).toShort)))
   private val proposedUpdate2 = ErgoValidationSettingsUpdate(Seq(ValidationRules.fbOperationFailed), Seq())
   val ctx: ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, validationSettingsNoIl, VotingData.empty)(updSettings)
+    new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters, validationSettingsNoIl, VotingData.empty)(updSettings)
       .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), emptyVSUpdate, 0.toByte)
   }
   val initialVs: ErgoValidationSettings = ctx.validationSettings
   val extensionWithAllParams: ExtensionCandidate = {
-    LaunchParameters.toExtensionCandidate ++ initialVs.toExtensionCandidate
+    parameters.toExtensionCandidate ++ initialVs.toExtensionCandidate
   }
 
   val emptyParameters = Parameters(0, Map.empty, ErgoValidationSettingsUpdate.empty)
@@ -84,7 +84,7 @@ class VotingSpecification extends ErgoPropertyTest {
     }
     val invalidExtBlock2 = { // extension contains redundant parameter
       lastBlock.copy(extension = lastBlock.extension.copy(
-        fields = LaunchParameters.toExtensionCandidate.fields :+ Array(0: Byte, 99: Byte) -> Array.fill(4)(2: Byte))
+        fields = parameters.toExtensionCandidate.fields :+ Array(0: Byte, 99: Byte) -> Array.fill(4)(2: Byte))
       )
     }
     val invalidExtBlock3 = { // extension does not contain params at all
@@ -97,6 +97,21 @@ class VotingSpecification extends ErgoPropertyTest {
     validCtx.appendFullBlock(lastBlock) shouldBe 'success
   }
 
+  property("voting for non-existing parameter") {
+    val p: Parameters = Parameters(2, Map(BlockVersion -> 0), proposedUpdate)
+    val vr: VotingData = VotingData.empty
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
+    val invalidVote = 100: Byte
+    val votes = Array(invalidVote , NoParameter, NoParameter)
+
+    // voting for non-existing param is okay if not start of an epoch
+    val h = defaultHeaderGen.sample.get.copy(height = 1, votes = votes, version = 0: Byte)
+    val esc2 = esc.appendHeader(h).get
+
+    // proposing a vote for non-existing param is not allowed
+    val h2 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
+    esc2.appendHeader(h2).toEither.left.get.getMessage.contains("Incorrect vote") shouldBe true
+  }
 
   //Simple checks for votes in header could be found also in NonVerifyADHistorySpecification("Header votes")
   property("simple voting - start - conditions") {
@@ -302,7 +317,7 @@ class VotingSpecification extends ErgoPropertyTest {
 
   property("hardfork - v2 - activation") {
     val vr: VotingData = VotingData.empty
-    val esc0 = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), LaunchParameters, ErgoValidationSettings.initial, vr)(updSettings)
+    val esc0 = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), parameters, ErgoValidationSettings.initial, vr)(updSettings)
     val h1 = defaultHeaderGen.sample.get.copy(votes = Array.empty, version = 1: Byte, height = hfActivationHeight - 1)
     val expectedParameters1 = Parameters(hfActivationHeight - 1, DefaultParameters, ErgoValidationSettingsUpdate.empty)
     val esc1 = process(esc0, expectedParameters1, h1).get
@@ -326,7 +341,7 @@ class VotingSpecification extends ErgoPropertyTest {
                       header: Header): Try[ErgoStateContext] = {
     val upcoming = esc.upcoming(header.minerPk, header.timestamp, header.nBits, header.votes, expectedParameters.proposedUpdate, header.version)
     val calculatedParams = upcoming.currentParameters
-    expectedParameters.parametersTable.foreach{case (paramId, paramValue) =>
+    expectedParameters.parametersTable.foreach { case (paramId, paramValue) =>
       calculatedParams.parametersTable(paramId) shouldBe paramValue
     }
     val extension = (upcoming.currentParameters.toExtensionCandidate ++ upcoming.validationSettings.toExtensionCandidate).toExtension(headerId)

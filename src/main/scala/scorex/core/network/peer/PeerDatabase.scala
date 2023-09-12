@@ -1,28 +1,36 @@
 package scorex.core.network.peer
 
+import org.ergoplatform.nodeView.history.ErgoHistory
+
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.net.{InetAddress, InetSocketAddress}
-
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.utils.TimeProvider
 import scorex.db.LDBFactory
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
 
 /**
   * In-memory peer database implementation supporting temporal blacklisting.
   */
-final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) extends ScorexLogging {
+final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
 
-  private val objectStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
+  private val persistentStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
 
-  private var peers = loadPeers()
+  private var peers =
+    loadPeers match {
+      case Success(loadedPeers) =>
+        loadedPeers
+      case Failure(ex) =>
+        log.error("Unable to load peers from database, loading from network only", ex)
+        Map.empty[InetSocketAddress, PeerInfo]
+    }
 
   /**
     * banned peer ip -> ban expiration timestamp
     */
-  private var blacklist = Map.empty[InetAddress, TimeProvider.Time]
+  private var blacklist = Map.empty[InetAddress, ErgoHistory.Time]
 
   /**
     * penalized peer ip -> (accumulated penalty score, last penalty timestamp)
@@ -51,9 +59,9 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
   /*
    * Load peers from persistent storage
    */
-  private def loadPeers(): Map[InetSocketAddress, PeerInfo] = {
+  private def loadPeers: Try[Map[InetSocketAddress, PeerInfo]] = Try {
     var peers = Map.empty[InetSocketAddress, PeerInfo]
-    for ((addr,peer) <- objectStore.getAll) {
+    for ((addr,peer) <- persistentStore.getAll) {
       val address = deserialize(addr).asInstanceOf[InetSocketAddress]
       val peerInfo = PeerInfoSerializer.parseBytes(peer)
       peers += address -> peerInfo
@@ -68,7 +76,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
       peerInfo.peerSpec.address.foreach { address =>
         log.debug(s"Updating peer info for $address")
         peers += address -> peerInfo
-        objectStore.insert(Seq((serialize(address), PeerInfoSerializer.toBytes(peerInfo))))
+        persistentStore.insert(serialize(address), PeerInfoSerializer.toBytes(peerInfo))
       }
     }
   }
@@ -78,7 +86,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
     Option(socketAddress.getAddress).foreach { address =>
       penaltyBook -= address
       if (!blacklist.keySet.contains(address)){
-        blacklist += address -> (timeProvider.time() + penaltyDuration(penaltyType))
+        blacklist += address -> (System.currentTimeMillis() + penaltyDuration(penaltyType))
       } else {
         log.warn(s"${address.toString} is already blacklisted")
       }
@@ -92,7 +100,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
 
   def remove(address: InetSocketAddress): Unit = {
     peers -= address
-    objectStore.remove(Seq(serialize(address)))
+    persistentStore.remove(Array(serialize(address)))
   }
 
   def knownPeers: Map[InetSocketAddress, PeerInfo] = peers
@@ -119,7 +127,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
     */
   def penalize(socketAddress: InetSocketAddress, penaltyType: PenaltyType): Boolean =
     Option(socketAddress.getAddress).exists { address =>
-      val currentTime = timeProvider.time()
+      val currentTime = System.currentTimeMillis()
       val safeInterval = settings.scorexSettings.network.penaltySafeInterval.toMillis
       val (penaltyScoreAcc, lastPenaltyTs) = penaltyBook.getOrElse(address, (0, 0L))
       val applyPenalty = currentTime - lastPenaltyTs - safeInterval > 0 || penaltyType.isPermanent
@@ -132,7 +140,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
       if (newPenaltyScore > settings.scorexSettings.network.penaltyScoreThreshold) {
         true
       } else {
-        penaltyBook += address -> (newPenaltyScore -> timeProvider.time())
+        penaltyBook += address -> (newPenaltyScore -> System.currentTimeMillis())
         false
       }
     }
@@ -147,7 +155,7 @@ final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) ext
     Option(socketAddress.getAddress).map(penaltyScore).getOrElse(0)
 
   private def checkBanned(address: InetAddress, bannedTill: Long): Boolean = {
-    val stillBanned = timeProvider.time() < bannedTill
+    val stillBanned = System.currentTimeMillis() < bannedTill
     if (!stillBanned) removeFromBlacklist(address)
     stillBanned
   }

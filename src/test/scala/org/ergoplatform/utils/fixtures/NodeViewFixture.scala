@@ -4,17 +4,16 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.ErgoNodeViewRef
-import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestContext}
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
+import org.ergoplatform.utils.NodeViewTestContext
 import org.ergoplatform.wallet.utils.TestFileUtils
-import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.ExecutionContext
 
 /** This uses TestProbe to receive messages from actor.
   * To make TestProbe work `defaultSender` implicit should be imported
   */
-class NodeViewFixture(protoSettings: ErgoSettings) extends NodeViewTestContext with TestFileUtils { self =>
+class NodeViewFixture(protoSettings: ErgoSettings, parameters: Parameters) extends NodeViewTestContext with TestFileUtils { self =>
 
   implicit val actorSystem: ActorSystem = ActorSystem()
   implicit val executionContext: ExecutionContext = actorSystem.dispatchers.lookup("scorex.executionContext")
@@ -22,9 +21,8 @@ class NodeViewFixture(protoSettings: ErgoSettings) extends NodeViewTestContext w
 
   val nodeViewDir: java.io.File = createTempDir
   @volatile var settings: ErgoSettings = protoSettings.copy(directory = nodeViewDir.getAbsolutePath)
-  val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val emission: EmissionRules = new EmissionRules(settings.chainSettings.monetary)
-  @volatile var nodeViewHolderRef: ActorRef = ErgoNodeViewRef(settings, timeProvider)
+  @volatile var nodeViewHolderRef: ActorRef = ErgoNodeViewRef(settings)
   val testProbe = new TestProbe(actorSystem)
 
   /** This sender should be imported to make TestProbe work! */
@@ -33,7 +31,7 @@ class NodeViewFixture(protoSettings: ErgoSettings) extends NodeViewTestContext w
   def apply[T](test: self.type => T): T = try test(self) finally stop()
 
   def startNodeViewHolder(): Unit = {
-    nodeViewHolderRef = ErgoNodeViewRef(settings, timeProvider)
+    nodeViewHolderRef = ErgoNodeViewRef(settings)
   }
 
   def stopNodeViewHolder(): Unit = {
@@ -56,5 +54,6 @@ class NodeViewFixture(protoSettings: ErgoSettings) extends NodeViewTestContext w
 }
 
 object NodeViewFixture {
-  def apply(protoSettings: ErgoSettings): NodeViewFixture = new NodeViewFixture(protoSettings)
+  def apply(protoSettings: ErgoSettings, parameters: Parameters): NodeViewFixture =
+    new NodeViewFixture(protoSettings, parameters)
 }

@@ -7,20 +7,20 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import scorex.core.serialization.ScorexSerializer
-import scorex.core.{ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
+import scorex.core.serialization.ErgoSerializer
+import scorex.core.TransactionsCarryingPersistentNodeViewModifier
 import scorex.util.ModifierId
 
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
                          extension: Extension,
                          adProofs: Option[ADProofs])
-  extends ErgoPersistentModifier
+  extends BlockSection
     with TransactionsCarryingPersistentNodeViewModifier {
 
   override type M = ErgoFullBlock
 
-  override val modifierTypeId: ModifierTypeId = ErgoFullBlock.modifierTypeId
+  override val modifierTypeId: NetworkObjectTypeId.Value = ErgoFullBlock.modifierTypeId
 
   override def serializedId: Array[Byte] = header.serializedId
 
@@ -28,11 +28,11 @@ case class ErgoFullBlock(header: Header,
 
   override def parentId: ModifierId = header.parentId
 
-  lazy val mandatoryBlockSections: Seq[BlockSection] = Seq(blockTransactions, extension)
+  lazy val mandatoryBlockSections: Seq[NonHeaderBlockSection] = Seq(blockTransactions, extension)
 
-  lazy val blockSections: Seq[BlockSection] = adProofs.toSeq ++ mandatoryBlockSections
+  lazy val blockSections: Seq[NonHeaderBlockSection] = adProofs.toSeq ++ mandatoryBlockSections
 
-  lazy val toSeq: Seq[ErgoPersistentModifier] = header +: blockSections
+  lazy val toSeq: Seq[BlockSection] = header +: blockSections
 
   override lazy val transactions: Seq[ErgoTransaction] = blockTransactions.txs
 
@@ -40,7 +40,7 @@ case class ErgoFullBlock(header: Header,
 
   override lazy val size: Int = header.size + blockTransactions.size + adProofs.map(_.size).getOrElse(0)
 
-  override def serializer: ScorexSerializer[ErgoFullBlock] =
+  override def serializer: ErgoSerializer[ErgoFullBlock] =
     throw new Error("Serialization for ErgoFullBlock is not (and will be not) implemented")
 
   def height: Int = header.height
@@ -49,7 +49,7 @@ case class ErgoFullBlock(header: Header,
 
 object ErgoFullBlock extends ApiCodecs {
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (-127: Byte)
+  val modifierTypeId: NetworkObjectTypeId.Value = FullBlockTypeId.value
 
   implicit val jsonEncoder: Encoder[ErgoFullBlock] = { b: ErgoFullBlock =>
     Json.obj(

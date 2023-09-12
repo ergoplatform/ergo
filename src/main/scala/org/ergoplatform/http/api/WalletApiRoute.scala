@@ -1,13 +1,13 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive, Directive1, Route}
+import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.http.api.requests.HintExtractionRequest
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
@@ -16,7 +16,6 @@ import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -25,8 +24,11 @@ import scorex.util.encode.Base16
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+import akka.http.scaladsl.server.MissingQueryParamRejection
 
-case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
+case class WalletApiRoute(readersHolder: ActorRef,
+                          nodeViewActorRef: ActorRef,
+                          ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
@@ -65,7 +67,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         signTransactionR ~
         checkSeedR ~
         rescanWalletR ~
-        extractHintsR
+        extractHintsR ~
+        getPrivateKeyR
     }
   }
 
@@ -79,14 +82,16 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       .fold(_ => reject, s => provide(s))
   }
 
-  private val restoreRequest: Directive1[(String, String, Option[String])] = entity(as[Json]).flatMap { p =>
+  private val restoreRequest: Directive1[(Boolean, String, String, Option[String])] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("pass").as[String]
-      .flatMap(pass => p.hcursor.downField("mnemonic").as[String]
-        .flatMap(mnemo => p.hcursor.downField("mnemonicPass").as[Option[String]]
-          .map(mnemoPassOpt => (pass, mnemo, mnemoPassOpt))
+      .flatMap(usePre1627KeyDerivation => p.hcursor.downField("usePre1627KeyDerivation").as[Boolean]
+        .flatMap(pass => p.hcursor.downField("mnemonic").as[String]
+          .flatMap(mnemo => p.hcursor.downField("mnemonicPass").as[Option[String]]
+            .map(mnemoPassOpt => (pass, usePre1627KeyDerivation, mnemo, mnemoPassOpt))
+          )
         )
       )
-      .fold(_ => reject, s => provide(s))
+      .fold(e => reject(MissingQueryParamRejection(e.toString())), s => provide(s))
   }
 
   private val checkRequest: Directive1[(String, Option[String])] = entity(as[Json]).flatMap { p =>
@@ -111,6 +116,15 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     "maxConfirmations".as[Int] ? Int.MaxValue
   )
 
+  private val txsByScanIdParams: Directive[(Int, Int, Int, Int, Boolean)] = parameters(
+    "minInclusionHeight".as[Int] ? 0,
+    "maxInclusionHeight".as[Int] ? Int.MaxValue,
+    "minConfirmations".as[Int] ? 0,
+    "maxConfirmations".as[Int] ? Int.MaxValue,
+    "includeUnconfirmed".as[Boolean] ? false
+  )
+
+
   private val p2pkAddress: Directive1[P2PKAddress] = entity(as[Json])
     .flatMap {
       _.hcursor.downField("address").as[String]
@@ -122,6 +136,21 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       }
     }
 
+  /** POST body field - from what height to rescan wallet */
+  private val heightEntityField: Directive1[Int] = entity(as[Option[Json]])
+    .flatMap {
+      _.map[Directive1[Int]] { entity =>
+        entity.hcursor.downField("fromHeight").as[Int] match {
+          case Right(fromHeight) if fromHeight >= 0 =>
+            provide(fromHeight)
+          case Right(_) =>
+            reject(ValidationRejection("fromHeight field must be >= 0"))
+          case Left(_) =>
+            reject
+        }
+      }.getOrElse(provide(0))
+    }
+
   private def withFee(requests: Seq[TransactionGenerationRequest]): Seq[TransactionGenerationRequest] = {
     requests :+ PaymentRequest(Pay2SAddress(ergoSettings.chainSettings.monetary.feeProposition),
       ergoSettings.walletSettings.defaultTransactionFee, Seq.empty, Map.empty)
@@ -130,8 +159,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def generateTransactionAndProcess(requests: Seq[TransactionGenerationRequest],
                                             inputsRaw: Seq[String],
                                             dataInputsRaw: Seq[String],
-                                            processFn: ErgoTransaction => Route): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw)) {
+                                            verifyFn: ErgoTransaction => Future[Try[UnconfirmedTransaction]],
+                                            processFn: UnconfirmedTransaction => Route): Route = {
+    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap(txTry => txTry match {
+      case Success(tx) => verifyFn(tx)
+      case Failure(e) => Future(Failure[UnconfirmedTransaction](e))
+    })) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => processFn(tx)
     }
@@ -140,7 +173,13 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def generateTransaction(requests: Seq[TransactionGenerationRequest],
                                   inputsRaw: Seq[String],
                                   dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => ApiResponse(tx))
+    generateTransactionAndProcess(
+      requests,
+      inputsRaw,
+      dataInputsRaw,
+      tx => Future(Success(UnconfirmedTransaction(tx, source = None))),
+      utx => ApiResponse(utx.transaction)
+    )
   }
 
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
@@ -155,10 +194,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def sendTransaction(requests: Seq[TransactionGenerationRequest],
                               inputsRaw: Seq[String],
                               dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, { tx =>
-      nodeViewActorRef ! LocallyGeneratedTransaction(tx)
-      ApiResponse(tx.id)
-    })
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw,
+      tx => verifyTransaction(tx, readersHolder, ergoSettings),
+      validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx)
+    )
   }
 
   def sendTransactionR: Route =
@@ -266,24 +305,26 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.publicKeys(0, Int.MaxValue): Future[Seq[ErgoAddress]])
   }
 
-  def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) { (minConfNum, minHeight) =>
-    val considerUnconfirmed = minConfNum == -1
-    withWallet {
-      _.walletBoxes(unspentOnly = true, considerUnconfirmed)
-        .map {
-          _.filter(boxFilterPredicate(_, minConfNum, minHeight))
-        }
-    }
+  def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) {
+    (minConfNum, maxConfNum, minHeight, maxHeight) =>
+      val considerUnconfirmed = minConfNum == -1
+      withWallet {
+        _.walletBoxes(unspentOnly = true, considerUnconfirmed)
+          .map {
+            _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
+          }
+      }
   }
 
-  def boxesR: Route = (path("boxes") & get & boxParams) { (minConfNum, minHeight) =>
-    val considerUnconfirmed = minConfNum == -1
-    withWallet {
-      _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
-        .map {
-          _.filter(boxFilterPredicate(_, minConfNum, minHeight))
-        }
-    }
+  def boxesR: Route = (path("boxes") & get & boxParams) {
+    (minConfNum, maxConfNum, minHeight, maxHeight) =>
+      val considerUnconfirmed = minConfNum == -1
+      withWallet {
+        _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
+          .map {
+            _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
+          }
+      }
   }
 
   def transactionsR: Route = (path("transactions") & get & txParams) {
@@ -304,7 +345,14 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         }
       } else {
         withWallet {
-          _.filteredScanTransactions(List(Constants.PaymentsScanId, Constants.MiningScanId), minHeight, maxHeight, minConfNum, maxConfNum)
+          _.filteredScanTransactions(
+            List(Constants.PaymentsScanId, Constants.MiningScanId),
+            minHeight,
+            maxHeight,
+            minConfNum,
+            maxConfNum,
+            includeUnconfirmed = false
+          )
         }
       }
   }
@@ -315,17 +363,24 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get & txParams) {
-    case (id, minHeight, maxHeight, minConfNum, maxConfNum) =>
+  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get & txsByScanIdParams) {
+    case (id, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed) =>
       if ((minHeight > 0 || maxHeight < Int.MaxValue) && (minConfNum > 0 || maxConfNum < Int.MaxValue))
         BadRequest("Bad request: both heights and confirmations set")
       else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
-        withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort)) {
+        withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort, includeUnconfirmed)) {
           resp => ApiResponse(resp.result.asJson)
         }
       }
       else {
-        withWalletOp(_.filteredScanTransactions(List(ScanId @@ id.toShort), minHeight, maxHeight, minConfNum, maxConfNum)) {
+        withWalletOp(_.filteredScanTransactions(
+          List(ScanId @@ id.toShort),
+          minHeight,
+          maxHeight,
+          minConfNum,
+          maxConfNum,
+          includeUnconfirmed)
+        ) {
           resp => ApiResponse(resp.asJson)
         }
       }
@@ -346,8 +401,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def restoreWalletR: Route = (path("restore") & post & restoreRequest) {
-    case (pass, mnemo, mnemoPassOpt) =>
-      withWalletOp(_.restoreWallet(SecretString.create(pass), SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)))) {
+    case (usePre1627KeyDerivation, pass, mnemo, mnemoPassOpt) =>
+      withWalletOp(_.restoreWallet(SecretString.create(pass), SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)), usePre1627KeyDerivation)) {
         _.fold(
           e => BadRequest(e.getMessage),
           _ => ApiResponse.toRoute(ApiResponse.OK)
@@ -411,8 +466,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def rescanWalletR: Route = (path("rescan") & get) {
-    withWalletOp(_.rescanWallet()) {
+  def rescanWalletR: Route = (path("rescan") & post & heightEntityField) { fromHeight =>
+    withWalletOp(_.rescanWallet(fromHeight)) {
       _.fold(
         e => BadRequest(e.getMessage),
         _ => ApiResponse.toRoute(ApiResponse.OK)
@@ -426,6 +481,19 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       val extDataInputsOpt = her.dataInputs.map(ErgoWalletService.stringsToBoxes)
 
       w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
+    }
+  }
+
+  def getPrivateKeyR: Route = (path("getPrivateKey") & post & p2pkAddress) { p2pk =>
+    withWalletOp(_.allExtendedPublicKeys()) { extKeys =>
+      extKeys.find(_.key.value.equals(p2pk.pubkey.value)).map(_.path) match {
+        case Some(path) =>
+          withWalletOp(_.getPrivateKeyFromPath(path)) {
+            case Success(secret) => ApiResponse(secret.w)
+            case Failure(f) => BadRequest(f.getMessage)
+          }
+        case None => NotExists("Address not found in wallet database.")
+      }
     }
   }
 

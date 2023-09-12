@@ -6,6 +6,7 @@ import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
@@ -13,14 +14,14 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
+import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings._
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus}
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, ErgoBox, GlobalConstants, P2PKAddress}
+import org.ergoplatform._
 import scorex.core.VersionTag
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.Values.SigmaBoolean
@@ -31,6 +32,7 @@ import scala.util.{Failure, Success, Try}
 
 
 class ErgoWalletActor(settings: ErgoSettings,
+                      parameters: Parameters,
                       ergoWalletService: ErgoWalletService,
                       boxSelector: BoxSelector,
                       historyReader: ErgoHistoryReader)
@@ -38,7 +40,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   import ErgoWalletActor._
 
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
+  private val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy(maxNrOfRetries = 5, withinTimeRange = 1.minute) {
@@ -68,10 +70,10 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   override def preStart(): Unit = {
     log.info("Initializing wallet actor")
-    ErgoWalletState.initial(settings) match {
+    ErgoWalletState.initial(settings, parameters) match {
       case Success(state) =>
         context.system.eventStream.subscribe(self, classOf[ChangedState])
-        context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
+        context.system.eventStream.subscribe(self, classOf[ChangedMempool])
         self ! ReadWallet(state)
       case Failure(ex) =>
         log.error("Unable to initialize wallet", ex)
@@ -92,28 +94,30 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private def loadedWallet(state: ErgoWalletState): Receive = {
     // Init wallet (w. mnemonic generation) if secret is not set yet
-    case InitWallet(pass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.initWallet(state, settings, pass, mnemonicPassOpt) match {
+    case InitWallet(walletPass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
+      ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt) match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
           context.become(loadedWallet(newState))
-          self ! UnlockWallet(pass)
+          self ! UnlockWallet(walletPass)
           sender() ! Success(mnemonic)
         case Failure(t) =>
+          walletPass.erase()
           val f = wrapLegalExc(t) // getting nicer message for illegal key size exception
           log.error(s"Wallet initialization is failed, details: ${f.exception.getMessage}")
           sender() ! f
       }
 
     // Restore wallet with mnemonic if secret is not set yet
-    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass) match {
+    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
+      ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) match {
         case Success(newState) =>
           log.info("Wallet is restored")
           context.become(loadedWallet(newState))
           self ! UnlockWallet(walletPass)
           sender() ! Success(())
         case Failure(t) =>
+          walletPass.erase()
           val f = wrapLegalExc(t) //getting nicer message for illegal key size exception
           log.error(s"Wallet restoration is failed, details: ${f.exception.getMessage}")
           sender() ! f
@@ -125,10 +129,35 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     /** READERS */
     case ReadBalances(chainStatus) =>
-      sender() ! (if (chainStatus.onChain) state.registry.fetchDigest() else state.offChainRegistry.digest)
+      val walletDigest = if (chainStatus.onChain) {
+        state.registry.fetchDigest()
+      } else {
+        state.offChainRegistry.digest
+      }
+      val res = if (settings.walletSettings.checkEIP27) {
+        // If re-emission token in the wallet, subtract it from ERG balance
+        val reemissionAmt = walletDigest.walletAssetBalances
+          .find(_._1 == settings.chainSettings.reemission.reemissionTokenId)
+          .map(_._2)
+          .getOrElse(0L)
+        if (reemissionAmt == 0) {
+          walletDigest
+        } else {
+          walletDigest.copy(walletBalance = walletDigest.walletBalance - reemissionAmt)
+        }
+      } else {
+        walletDigest
+      }
+      sender() ! res
 
     case ReadPublicKeys(from, until) =>
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)
+
+    case ReadExtendedPublicKeys() =>
+      sender() ! state.storage.readAllKeys()
+
+    case GetPrivateKeyFromPath(path: DerivationPath) =>
+      sender() ! ergoWalletService.getPrivateKeyFromPath(state, path)
 
     case GetMiningPubKey =>
       state.walletVars.trackedPubKeys.headOption match {
@@ -159,8 +188,12 @@ class ErgoWalletActor(settings: ErgoSettings,
       val boxes = ergoWalletService.getWalletBoxes(state, unspent, considerUnconfirmed)
       sender() ! boxes
 
-    case GetScanBoxes(scanId, unspent, considerUnconfirmed) =>
-      val boxes = ergoWalletService.getScanBoxes(state, scanId, unspent, considerUnconfirmed)
+    case GetScanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight) =>
+      val boxes = ergoWalletService.getScanUnspentBoxes(state, scanId, considerUnconfirmed, minHeight, maxHeight)
+      sender() ! boxes
+
+    case GetScanSpentBoxes(scanId) =>
+      val boxes = ergoWalletService.getScanSpentBoxes(state, scanId)
       sender() ! boxes
 
     case GetTransactions =>
@@ -181,7 +214,15 @@ class ErgoWalletActor(settings: ErgoSettings,
       state.storage.updateStateContext(s.stateContext) match {
         case Success(_) =>
           val cp = s.stateContext.currentParameters
-          val newState = ergoWalletService.updateUtxoState(state.copy(stateReaderOpt = Some(s), parameters = cp))
+
+          val newWalletVars = state.walletVars.withParameters(cp) match {
+            case Success(res) => res
+            case Failure(t) =>
+              log.warn("Can not update wallet vars: ", t)
+              state.walletVars
+          }
+          val updState = state.copy(stateReaderOpt = Some(s), parameters = cp, walletVars = newWalletVars)
+          val newState = ergoWalletService.updateUtxoState(updState)
           context.become(loadedWallet(newState))
         case Failure(t) =>
           val errorMsg = s"Updating wallet state context failed : ${t.getMessage}"
@@ -192,23 +233,26 @@ class ErgoWalletActor(settings: ErgoSettings,
     /** SCAN COMMANDS */
     //scan mempool transaction
     case ScanOffChain(tx) =>
-      val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars)
+      val dustLimit = settings.walletSettings.dustLimit
+      val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
       val inputs = WalletScanLogic.extractInputBoxes(tx)
       val newState = state.copy(offChainRegistry =
         state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
       )
       context.become(loadedWallet(newState))
 
-    case ScanInThePast(blockHeight) =>
+    // rescan=true means we serve a user request for rescan from arbitrary height
+    case ScanInThePast(blockHeight, rescan) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
-      if (nextBlockHeight == blockHeight) {
+      if (nextBlockHeight == blockHeight || rescan) {
         val newState =
           historyReader.bestFullBlockAt(blockHeight) match {
             case Some(block) =>
-              log.info(s"Wallet is going to scan a block ${block.id} in the past at height ${block.height}")
-              ergoWalletService.scanBlockUpdate(state, block) match {
+              val operation = if (rescan) "rescanning" else "scanning"
+              log.info(s"Wallet is $operation a block ${block.id} in the past at height ${block.height}")
+              ergoWalletService.scanBlockUpdate(state, block, settings.walletSettings.dustLimit) match {
                 case Failure(ex) =>
-                  val errorMsg = s"Scanning block ${block.id} at height $blockHeight failed : ${ex.getMessage}"
+                  val errorMsg = s"Block ${block.id} $operation at height $blockHeight failed : ${ex.getMessage}"
                   log.error(errorMsg, ex)
                   state.copy(error = Some(errorMsg))
                 case Success(updatedState) =>
@@ -219,7 +263,10 @@ class ErgoWalletActor(settings: ErgoSettings,
         }
         context.become(loadedWallet(newState))
         if (blockHeight < newState.fullHeight) {
-          self ! ScanInThePast(blockHeight + 1)
+          self ! ScanInThePast(blockHeight + 1, rescan)
+        } else if (rescan) {
+          log.info(s"Rescanning finished at height $blockHeight")
+          context.become(loadedWallet(newState.copy(rescanInProgress = false)))
         }
       }
 
@@ -230,7 +277,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         if (nextBlockHeight == newBlock.height) {
           log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
           val newState =
-            ergoWalletService.scanBlockUpdate(state, newBlock) match {
+            ergoWalletService.scanBlockUpdate(state, newBlock, settings.walletSettings.dustLimit) match {
               case Failure(ex) =>
                 val errorMsg = s"Scanning new block ${newBlock.id} on chain at height ${newBlock.height} failed : ${ex.getMessage}"
                 log.error(errorMsg, ex)
@@ -241,22 +288,27 @@ class ErgoWalletActor(settings: ErgoSettings,
           context.become(loadedWallet(newState))
         } else if (nextBlockHeight < newBlock.height) {
           log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
-          self ! ScanInThePast(nextBlockHeight)
+          self ! ScanInThePast(nextBlockHeight, false)
         } else {
           log.warn(s"Wallet: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
         }
       }
 
     case Rollback(version: VersionTag) =>
-      state.registry.rollback(version) match {
-        case Failure(t) =>
-          val errorMsg = s"Failed to rollback wallet registry to version $version due to: ${t.getMessage}"
-          log.error(errorMsg, t)
-          context.become(loadedWallet(state.copy(error = Some(errorMsg))))
-        case _: Success[Unit] =>
-          // Reset outputs Bloom filter to have it initialized again on next block scanned
-          // todo: for offchain registry, refresh is also needed, https://github.com/ergoplatform/ergo/issues/1180
-          context.become(loadedWallet(state.copy(outputsFilter = None)))
+      // wallet must be initialized for wallet registry rollback
+      if (state.secretStorageOpt.isDefined || settings.walletSettings.testMnemonic.isDefined) {
+        state.registry.rollback(version) match {
+          case Failure(t) =>
+            val errorMsg = s"Failed to rollback wallet registry to version $version due to: ${t.getMessage}"
+            log.error(errorMsg, t)
+            context.become(loadedWallet(state.copy(error = Some(errorMsg))))
+          case _: Success[Unit] =>
+            // Reset outputs Bloom filter to have it initialized again on next block scanned
+            // todo: for offchain registry, refresh is also needed, https://github.com/ergoplatform/ergo/issues/1180
+            context.become(loadedWallet(state.copy(outputsFilter = None)))
+        }
+      } else {
+        log.warn("Avoiding rollback as wallet is not initialized yet")
       }
 
       /** WALLET COMMANDS */
@@ -269,14 +321,16 @@ class ErgoWalletActor(settings: ErgoSettings,
           sender() ! Failure(new Exception("Wallet not initialized"))
       }
 
-    case UnlockWallet(encPass) =>
+    case UnlockWallet(walletPass) =>
       log.info("Unlocking wallet")
-      ergoWalletService.unlockWallet(state, encPass, settings.walletSettings.usePreEip3Derivation) match {
+      ergoWalletService.unlockWallet(state, walletPass, settings.walletSettings.usePreEip3Derivation) match {
         case Success(newState) =>
           log.info("Wallet successfully unlocked")
+          walletPass.erase()
           context.become(loadedWallet(newState))
           sender() ! Success(())
         case f@Failure(t) =>
+          walletPass.erase()
           log.warn("Wallet unlock failed with: ", t)
           sender() ! f
       }
@@ -292,21 +346,28 @@ class ErgoWalletActor(settings: ErgoSettings,
       context stop self
 
     // We do wallet rescan by closing the wallet's database, deleting it from the disk, then reopening it and sending a rescan signal.
-    case RescanWallet =>
-      log.info(s"Rescanning the wallet")
-      ergoWalletService.recreateRegistry(state, settings) match {
-        case Success(newState) =>
-          context.become(loadedWallet(newState))
-          self ! ScanInThePast(newState.getWalletHeight) // walletHeight() corresponds to empty wallet state now
-        case f@Failure(t) =>
-          log.error("Error during rescan attempt: ", t)
-          sender() ! f
+    case RescanWallet(fromHeight) =>
+      if (!state.rescanInProgress) {
+        log.info(s"Rescanning the wallet from height: $fromHeight")
+        ergoWalletService.recreateRegistry(state, settings) match {
+          case Success(newState) =>
+            context.become(loadedWallet(newState.copy(rescanInProgress = true)))
+            val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
+            self ! ScanInThePast(heightToScanFrom, rescan = true)
+            sender() ! Success(())
+          case f@Failure(t) =>
+            log.error("Error during rescan attempt: ", t)
+            sender() ! f
+        }
+      } else {
+        log.info(s"Skipping rescan request from height: $fromHeight as one is already in progress")
+        sender() ! Failure(new IllegalStateException("Rescan already in progress"))
       }
 
     case GetWalletStatus =>
       val isSecretSet = state.secretIsSet(settings.walletSettings.testMnemonic)
       val isUnlocked = state.walletVars.proverOpt.isDefined
-      val changeAddress = state.getChangeAddress
+      val changeAddress = state.getChangeAddress(ergoAddressEncoder)
       val height = state.getWalletHeight
       val lastError = state.error
       val status = WalletStatus(isSecretSet, isUnlocked, changeAddress, height, lastError)
@@ -339,7 +400,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! ExtractHintsResult(bag)
 
     case DeriveKey(encodedPath) =>
-      ergoWalletService.deriveKeyFromPath(state, encodedPath) match {
+      ergoWalletService.deriveKeyFromPath(state, encodedPath, ergoAddressEncoder) match {
         case Success((p2pkAddress, newState)) =>
           context.become(loadedWallet(newState))
           sender() ! Success(p2pkAddress)
@@ -395,11 +456,12 @@ class ErgoWalletActor(settings: ErgoSettings,
     case CollectWalletBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]) =>
       sender() ! ReqBoxesResponse(ergoWalletService.collectBoxes(state, boxSelector, targetBalance, targetAssets))
 
-    case GetScanTransactions(scanId: ScanId) =>
-      sender() ! ScanRelatedTxsResponse(ergoWalletService.getScanTransactions(scanId, state.registry, state.fullHeight))
+    case GetScanTransactions(scanId: ScanId, includeUnconfirmed) =>
+      val scanTxs = ergoWalletService.getScanTransactions(state, scanId, state.fullHeight, includeUnconfirmed)
+      sender() ! ScanRelatedTxsResponse(scanTxs)
 
-    case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)  =>
-      readFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum)
+    case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed)  =>
+      readFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed)
 
   }
 
@@ -408,7 +470,8 @@ class ErgoWalletActor(settings: ErgoSettings,
                    minHeight: Int,
                    maxHeight: Int,
                    minConfNum: Int,
-                   maxConfNum: Int): Unit = {
+                   maxConfNum: Int,
+                   includeUnconfirmed: Boolean): Unit = {
     val heightFrom = if (maxConfNum == Int.MaxValue) {
       minHeight
     } else {
@@ -425,8 +488,15 @@ class ErgoWalletActor(settings: ErgoSettings,
       .sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, state.fullHeight - tx.inclusionHeight))
     val ts = System.currentTimeMillis()
-    log.debug(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
-    sender() ! txs
+    val txsToSend =
+      if (includeUnconfirmed && heightTo > state.fullHeight) {
+        // in order to include unconfirmed txs, heightTo should be grater than current height
+        txs ++ scanIds.flatMap( scanId => ergoWalletService.getUnconfirmedTransactions(state, scanId) )
+      } else {
+        txs
+      }
+    log.debug(s"Wallet: ${txsToSend.size} read in ${ts-ts0} ms")
+    sender() ! txsToSend
   }
 
   override def receive: Receive = emptyWallet
@@ -445,10 +515,11 @@ object ErgoWalletActor extends ScorexLogging {
 
   /** Start actor and register its proper closing into coordinated shutdown */
   def apply(settings: ErgoSettings,
+            parameters: Parameters,
             service: ErgoWalletService,
             boxSelector: BoxSelector,
             historyReader: ErgoHistoryReader)(implicit actorSystem: ActorSystem): ActorRef = {
-    val props = Props(classOf[ErgoWalletActor], settings, service, boxSelector, historyReader)
+    val props = Props(classOf[ErgoWalletActor], settings, parameters, service, boxSelector, historyReader)
       .withDispatcher(GlobalConstants.ApiDispatcher)
     val walletActorRef = actorSystem.actorOf(props)
     CoordinatedShutdown(actorSystem).addActorTerminationTask(
@@ -465,8 +536,9 @@ object ErgoWalletActor extends ScorexLogging {
     * A signal the wallet actor sends to itself to scan a block in the past
     *
     * @param blockHeight - height of a block to scan
+    * @param rescan - scan a block even if height is out of order, to serve rescan requests from arbitrary height
     */
-  private final case class ScanInThePast(blockHeight: ErgoHistory.Height)
+  private final case class ScanInThePast(blockHeight: ErgoHistory.Height, rescan: Boolean)
 
 
   // Publicly available signals for the wallet actor
@@ -555,6 +627,16 @@ object ErgoWalletActor extends ScorexLogging {
   final case class ReadPublicKeys(from: Int, until: Int)
 
   /**
+   * Read all wallet public keys
+   */
+  final case class ReadExtendedPublicKeys()
+
+  /**
+   * Get the private key from seed based on a given derivation path
+   */
+  final case class GetPrivateKeyFromPath(path: DerivationPath)
+
+  /**
     * Read wallet either from mnemonic or from secret storage
     */
   final case class ReadWallet(state: ErgoWalletState)
@@ -574,7 +656,7 @@ object ErgoWalletActor extends ScorexLogging {
     * @param mnemonicPassOpt
     * @param walletPass
     */
-  final case class RestoreWallet(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString], walletPass: SecretString)
+  final case class RestoreWallet(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString], walletPass: SecretString, usePre1627KeyDerivation: Boolean)
 
   /**
     * Unlock wallet with wallet password
@@ -618,8 +700,9 @@ object ErgoWalletActor extends ScorexLogging {
     * Get scan related transactions
     *
     * @param scanId  - Scan identifier
+    * @param includeUnconfirmed  - whether to include transactions from mempool that match given scanId
     */
-  final case class GetScanTransactions(scanId: ScanId)
+  final case class GetScanTransactions(scanId: ScanId, includeUnconfirmed: Boolean)
 
   /**
     * Response for requested scan related transactions
@@ -629,14 +712,21 @@ object ErgoWalletActor extends ScorexLogging {
   final case class ScanRelatedTxsResponse(result: Seq[AugWalletTransaction])
 
   /**
-    * Get boxes related to a scan
+    * Get unspent boxes related to a scan
     *
     * @param scanId              - scan identifier
-    * @param unspentOnly         - return only unspent boxes
-    * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
-    *                            boxes created in the pool for both values of unspentOnly).
+    * @param considerUnconfirmed - consider boxes from mempool
+    * @param minHeight - min inclusion height of unspent boxes
+    * @param maxHeight - max inclusion height of unspent boxes
     */
-  final case class GetScanBoxes(scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean)
+  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int)
+
+  /**
+    * Get spent boxes related to a scan
+    *
+    * @param scanId - scan identifier
+    */
+  final case class GetScanSpentBoxes(scanId: ScanId)
 
   /**
     * Set or update address for change outputs. Initially the address is set to root key address
@@ -689,8 +779,19 @@ object ErgoWalletActor extends ScorexLogging {
 
   /**
     * Get filtered scan-related txs
+    * @param scanIds - scan identifiers
+    * @param minHeight - minimal tx inclusion height
+    * @param maxHeight - maximal tx inclusion height
+    * @param minConfNum - minimal confirmations number
+    * @param maxConfNum - maximal confirmations number
+    * @param includeUnconfirmed - whether to include transactions from mempool that match given scanId
     */
-  case class GetFilteredScanTxs(scanId: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
+  case class GetFilteredScanTxs(scanIds: List[ScanId],
+                                minHeight: Int,
+                                maxHeight: Int,
+                                minConfNum: Int,
+                                maxConfNum: Int,
+                                includeUnconfirmed: Boolean)
 
   /**
     * Derive next key-pair according to BIP-32
@@ -711,7 +812,7 @@ object ErgoWalletActor extends ScorexLogging {
   /**
     * Rescan wallet
     */
-  case object RescanWallet
+  case class RescanWallet(fromHeight: Int)
 
   /**
     * Get wallet status

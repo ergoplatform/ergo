@@ -1,29 +1,37 @@
 package org.ergoplatform.wallet.boxes
 
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
+import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
+import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
+import org.ergoplatform.wallet.transactions.TransactionBuilder._
+import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder}
 import scorex.util.ModifierId
-import org.ergoplatform.ErgoBoxAssets
-import org.ergoplatform.ErgoBoxAssetsHolder
-import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
-import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import org.ergoplatform.wallet.Utils._
 
 /**
   * Default implementation of the box selector. It simply picks boxes till sum of their monetary values
   * meets target Ergo balance, then it checks which assets are not fulfilled and adds boxes till target
   * asset values are met.
+  *
+  * @param reemissionDataOpt - reemission parameters, if wallet is checking re-emission rules
   */
-object DefaultBoxSelector extends BoxSelector {
+class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData]) extends BoxSelector {
 
   import BoxSelector._
+  import DefaultBoxSelector._
 
-  final case class NotEnoughErgsError(message: String, balanceFound: Long) extends BoxSelectionError
-
-  final case class NotEnoughTokensError(message: String, tokensFound: Map[ModifierId, Long]) extends BoxSelectionError
-
-  final case class NotEnoughCoinsForChangeBoxesError(message: String) extends BoxSelectionError
+  // helper function which returns count of assets in `initialMap` not fully spent in `subtractor`
+  private def diffCount(initialMap: mutable.Map[ModifierId, Long], subtractor: TokensMap): Int = {
+    initialMap.foldLeft(0){case (cnt, (tokenId, tokenAmt)) =>
+      if (tokenAmt - subtractor.getOrElse(tokenId, 0L) > 0) {
+        cnt + 1
+      } else {
+        cnt
+      }
+    }
+  }
 
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                                           externalFilter: T => Boolean,
@@ -35,15 +43,35 @@ object DefaultBoxSelector extends BoxSelector {
     val currentAssets = mutable.Map[ModifierId, Long]()
 
     def pickUp(unspentBox: T) = {
-      currentBalance = currentBalance + unspentBox.value
+      currentBalance = currentBalance + valueOf(unspentBox, reemissionDataOpt)
       AssetUtils.mergeAssetsMut(currentAssets, unspentBox.tokens)
       res += unspentBox
     }
 
-    def balanceMet = currentBalance >= targetBalance
+    /**
+      * Helper functions which checks whether enough ERGs collected
+      */
+    def balanceMet: Boolean = {
+      val diff = currentBalance - targetBalance
 
-    def assetsMet = targetAssets.forall {
-      case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
+      // We estimate how many ERG needed for assets in change boxes
+      val assetsDiff = diffCount(currentAssets, targetAssets)
+      val diffThreshold = if (assetsDiff <= 0) {
+        0
+      } else {
+        MinBoxValue * (assetsDiff / MaxAssetsPerBox + 1)
+      }
+
+      diff >= diffThreshold
+    }
+
+    /**
+      * Helper functions which checks whether enough assets collected
+      */
+    def assetsMet: Boolean = {
+      targetAssets.forall {
+        case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
+      }
     }
 
     @tailrec
@@ -75,7 +103,7 @@ object DefaultBoxSelector extends BoxSelector {
         assetsMet
       )) {
         formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBoxes =>
-          BoxSelectionResult(res, changeBoxes)
+          selectionResultWithEip27Output(res.toSeq, changeBoxes)
         }
       } else {
         Left(NotEnoughTokensError(
@@ -89,14 +117,22 @@ object DefaultBoxSelector extends BoxSelector {
     }
   }
 
-  def formChangeBoxes(
-                       foundBalance: Long,
-                       targetBalance: Long,
-                       foundBoxAssets: mutable.Map[ModifierId, Long],
-                       targetBoxAssets: TokensMap
-                     ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+  /**
+    * Helper method to construct change outputs
+    *
+    * @param foundBalance - ERG balance of boxes collected
+    *                       (spendable only, so after possibly deducting re-emission tokens)
+    * @param targetBalance - ERG amount to be transferred to recipients
+    * @param foundBoxAssets - assets balances of boxes
+    * @param targetBoxAssets - assets amounts to be transferred to recipients
+    * @return
+    */
+  def formChangeBoxes(foundBalance: Long,
+                      targetBalance: Long,
+                      foundBoxAssets: mutable.Map[ModifierId, Long],
+                      targetBoxAssets: TokensMap): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     AssetUtils.subtractAssetsMut(foundBoxAssets, targetBoxAssets)
-    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxAssetsPerBox).toSeq
+    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxAssetsPerBox).toIndexedSeq
     val changeBalance = foundBalance - targetBalance
     //at least a minimum amount of ERG should be assigned per a created box
     if (changeBoxesAssets.size * MinBoxValue > changeBalance) {
@@ -127,5 +163,15 @@ object DefaultBoxSelector extends BoxSelector {
       Right(changeBoxes)
     }
   }
+
+}
+
+object DefaultBoxSelector {
+
+  final case class NotEnoughErgsError(message: String, balanceFound: Long) extends BoxSelectionError
+
+  final case class NotEnoughTokensError(message: String, tokensFound: Map[ModifierId, Long]) extends BoxSelectionError
+
+  final case class NotEnoughCoinsForChangeBoxesError(message: String) extends BoxSelectionError
 
 }

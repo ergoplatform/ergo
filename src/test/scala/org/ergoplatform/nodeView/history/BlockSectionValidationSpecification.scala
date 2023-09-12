@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -57,7 +57,7 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     commonChecks(history, block.extension, block.header)
   }
 
-  private def init(version: Header.Version = Header.InitialVersion): (ErgoHistory, ErgoFullBlock) = {
+  private def init(version: Header.Version = Header.InitialVersion) = {
     var history = genHistory()
     val chain = genChain(2, history, version)
     history = applyBlock(history, chain.head)
@@ -65,24 +65,24 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     (history, chain.last)
   }
 
-  private def commonChecks(history: ErgoHistory, section: BlockSection, header: Header) = {
+  private def commonChecks(history: ErgoHistory, section: NonHeaderBlockSection, header: Header) = {
     history.applicableTry(section) shouldBe 'success
     // header should contain correct digest
     history.applicableTry(withUpdatedHeaderId(section, section.id)) shouldBe 'failure
 
     // should not be able to apply when blocks at this height are already pruned
     history.applicableTry(section) shouldBe 'success
-    history.pruningProcessor.minimalFullBlockHeightVar = history.bestHeaderOpt.get.height + 1
-    history.pruningProcessor.isHeadersChainSyncedVar = true
+    history.writeMinimalFullBlockHeight(history.bestHeaderOpt.get.height + 1)
+    history.isHeadersChainSyncedVar = true
     history.applicableTry(section) shouldBe 'failure
-    history.pruningProcessor.minimalFullBlockHeightVar = ErgoHistory.GenesisHeight
+    history.writeMinimalFullBlockHeight(ErgoHistory.GenesisHeight)
 
     // should not be able to apply if corresponding header is marked as invalid
     history.applicableTry(section) shouldBe 'success
-    history.historyStorage.insert(Seq(history.validityKey(header.id) -> Array(0.toByte)), Seq.empty).get
+    history.historyStorage.insert(Array(history.validityKey(header.id) -> Array(0.toByte)), Array.empty[BlockSection]).get
     history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Invalid
     history.applicableTry(section) shouldBe 'failure
-    history.historyStorage.insert(Seq(history.validityKey(header.id) -> Array(1.toByte)), Seq.empty).get
+    history.historyStorage.insert(Array(history.validityKey(header.id) -> Array(1.toByte)), Array.empty[BlockSection]).get
 
     // should not be able to apply if already in history
     history.applicableTry(section) shouldBe 'success
@@ -93,7 +93,7 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
 
-  private def withUpdatedHeaderId[T <: BlockSection](section: T, newId: ModifierId): T = section match {
+  private def withUpdatedHeaderId[T <: NonHeaderBlockSection](section: T, newId: ModifierId): T = section match {
     case s: Extension => s.copy(headerId = newId).asInstanceOf[T]
     case s: BlockTransactions => s.copy(headerId = newId).asInstanceOf[T]
     case s: ADProofs => s.copy(headerId = newId).asInstanceOf[T]

@@ -95,25 +95,20 @@ trait KVStoreReader extends AutoCloseable {
     * @param end - end of the range (inclusive)
     * @return
     */
-  def getRange(start: K, end: K): Seq[(K, V)] = {
+  def getRange(start: K, end: K, limit: Int = Int.MaxValue): Array[(K, V)] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
     val iter = db.iterator(ro)
     try {
-      def check(key:Array[Byte]) = {
-        if (ByteArrayUtils.compare(key, end) <= 0) {
-          true
-        } else {
-          false
-        }
-      }
       iter.seek(start)
       val bf = mutable.ArrayBuffer.empty[(K, V)]
-      while (iter.hasNext && check(iter.peekNext.getKey)) {
+      var elemCounter = 0
+      while (iter.hasNext && elemCounter < limit) {
         val next = iter.next()
-        val key = next.getKey
-        val value = next.getValue
-        bf += (key -> value)
+        if(ByteArrayUtils.compare(next.getKey, end) <= 0) {
+          elemCounter += 1
+          bf += (next.getKey -> next.getValue)
+        } else elemCounter = limit // break
       }
       bf.toArray[(K,V)]
     } finally {

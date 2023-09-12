@@ -1,10 +1,11 @@
 package scorex.core.network.peer
 
+import org.ergoplatform.settings.PeerFeatureDescriptors
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
 import scorex.core.network.message.Message
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization._
-import scorex.core.serialization.ScorexSerializer
 
 /**
   * This peer feature allows to more reliably detect connections to self node and connections from other networks
@@ -16,19 +17,14 @@ case class SessionIdPeerFeature(networkMagic: Array[Byte],
                                 sessionId: Long = scala.util.Random.nextLong()) extends PeerFeature {
 
   override type M = SessionIdPeerFeature
-  override val featureId: Id = SessionIdPeerFeature.featureId
+  override val featureId: Id = PeerFeatureDescriptors.SessionIdPeerFeatureId
 
   override def serializer: SessionIdPeerFeatureSerializer.type = SessionIdPeerFeatureSerializer
 
 }
 
-object SessionIdPeerFeature {
 
-  val featureId: Id = 3: Byte
-
-}
-
-object SessionIdPeerFeatureSerializer extends ScorexSerializer[SessionIdPeerFeature] {
+object SessionIdPeerFeatureSerializer extends ErgoSerializer[SessionIdPeerFeature] {
 
   override def serialize(obj: SessionIdPeerFeature, w: Writer): Unit = {
     w.putBytes(obj.networkMagic)

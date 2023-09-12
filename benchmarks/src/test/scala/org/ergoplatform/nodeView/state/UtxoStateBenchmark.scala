@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.Utils
 import org.ergoplatform.Utils.BenchReport
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.NVBenchmark
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.HistoryTestHelpers
@@ -21,11 +21,11 @@ object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark {
 
     val transactionsQty = blocks.flatMap(_.transactions).size
 
-    def bench(mods: Seq[ErgoPersistentModifier]): Long = {
-      val state = ErgoState.generateGenesisUtxoState(createTempDir, StateConstants(None, realNetworkSetting))._1
+    def bench(mods: Seq[BlockSection]): Long = {
+      val state = ErgoState.generateGenesisUtxoState(createTempDir, realNetworkSetting)._1
       Utils.time {
         mods.foldLeft(state) { case (st, mod) =>
-          st.applyModifier(mod).get
+          st.applyModifier(mod, None)(_ => ()).get
         }
       }.toLong
     }

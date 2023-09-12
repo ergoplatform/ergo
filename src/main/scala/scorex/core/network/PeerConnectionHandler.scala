@@ -1,17 +1,16 @@
 package scorex.core.network
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Cancellable, Props, SupervisorStrategy}
+import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
+import scorex.core.app.Version.Eip37ForkVersion
 import scorex.core.app.{ScorexContext, Version}
 import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
 import scorex.core.network.PeerConnectionHandler.ReceivableMessages
-import scorex.core.network.PeerFeature.Serializers
-import scorex.core.network.message.{HandshakeSpec, MessageSerializer}
+import scorex.core.network.message.{HandshakeSerializer, MessageSerializer}
 import scorex.core.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.serialization.ScorexSerializer
-import scorex.core.settings.NetworkSettings
+import scorex.core.settings.ScorexSettings
 import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
@@ -19,7 +18,7 @@ import scala.collection.immutable.TreeMap
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
-class PeerConnectionHandler(val settings: NetworkSettings,
+class PeerConnectionHandler(scorexSettings: ScorexSettings,
                             networkControllerRef: ActorRef,
                             scorexContext: ScorexContext,
                             connectionDescription: ConnectionDescription
@@ -28,17 +27,14 @@ class PeerConnectionHandler(val settings: NetworkSettings,
 
   import PeerConnectionHandler.ReceivableMessages._
 
+  private val networkSettings = scorexSettings.network
   private val connection = connectionDescription.connection
   private val connectionId = connectionDescription.connectionId
   private val direction = connectionDescription.connectionId.direction
   private val ownSocketAddress = connectionDescription.ownSocketAddress
   private val localFeatures = connectionDescription.localFeatures
 
-  private val featureSerializers: Serializers =
-    localFeatures.map(f => f.featureId -> (f.serializer: ScorexSerializer[_ <: PeerFeature])).toMap
-
-  private val handshakeSerializer = new HandshakeSpec(featureSerializers, settings.maxHandshakeSize)
-  private val messageSerializer = new MessageSerializer(scorexContext.messageSpecs, settings.magicBytes)
+  private val messageSerializer = new MessageSerializer(scorexContext.messageSpecs, networkSettings.magicBytes)
 
   // there is no recovery for broken connections
   override val supervisorStrategy: SupervisorStrategy = SupervisorStrategy.stoppingStrategy
@@ -66,20 +62,16 @@ class PeerConnectionHandler(val settings: NetworkSettings,
   override def postStop(): Unit = log.info(s"Peer handler to $connectionId destroyed")
 
   private def handshaking: Receive = {
-    handshakeTimeoutCancellableOpt = Some(context.system.scheduler.scheduleOnce(settings.handshakeTimeout)
-    (self ! HandshakeTimeout))
-    val hb = handshakeSerializer.toBytes(createHandshakeMessage())
+    handshakeTimeoutCancellableOpt =
+      Some(context.system.scheduler.scheduleOnce(networkSettings.handshakeTimeout)(self ! HandshakeTimeout))
+    val hb = HandshakeSerializer.toBytes(createHandshakeMessage())
     connection ! Tcp.Write(ByteString(hb))
     log.info(s"Handshake sent to $connectionId")
 
     receiveAndHandleHandshake { receivedHandshake =>
       log.info(s"Got a Handshake from $connectionId")
 
-      val peerInfo = PeerInfo(
-        receivedHandshake.peerSpec,
-        scorexContext.timeProvider.time(),
-        Some(direction)
-      )
+      val peerInfo = PeerInfo(receivedHandshake.peerSpec, System.currentTimeMillis(), Some(direction))
       val peer = ConnectedPeer(connectionDescription.connectionId, self, 0, Some(peerInfo))
       selfPeer = Some(peer)
 
@@ -90,17 +82,27 @@ class PeerConnectionHandler(val settings: NetworkSettings,
     } orElse handshakeTimeout orElse closeCommands
   }
 
+  //ban this peer for the wrong handshake message
+  //peer will be added to the blacklist and the network controller will send CloseConnection
+  private def banPeer(): Unit = {
+    selfPeer.foreach(c => networkControllerRef ! PenalizePeer(c.connectionId.remoteAddress, PenaltyType.PermanentPenalty))
+  }
+
   private def receiveAndHandleHandshake(handler: Handshake => Unit): Receive = {
     case Received(data) =>
-      handshakeSerializer.parseBytesTry(data.toArray) match {
+      HandshakeSerializer.parseBytesTry(data.toArray) match {
         case Success(handshake) =>
-          handler(handshake)
+          if (handshake.peerSpec.protocolVersion < Eip37ForkVersion) {
+            // peers not suporting EIP-37 hard-fork are stuck on another chain
+            log.info(s"Peer of version < 4.0.100 sent handshake $handshake")
+            banPeer()
+          } else {
+            handler(handshake)
+          }
 
         case Failure(t) =>
-          log.info(s"Error during parsing a handshake", t)
-          //ban the peer for the wrong handshake message
-          //peer will be added to the blacklist and the network controller will send CloseConnection
-          selfPeer.foreach(c => networkControllerRef ! PenalizePeer(c.connectionId.remoteAddress, PenaltyType.PermanentPenalty))
+          log.info(s"Error during parsing a handshake: ${t.getMessage}", t)
+          banPeer()
       }
   }
 
@@ -136,7 +138,9 @@ class PeerConnectionHandler(val settings: NetworkSettings,
         "closed by the peer"
       } else if (cc.isAborted) {
         "aborted locally"
-      } else ""
+      } else {
+        ""
+      }
       log.info(s"Connection closed to $connectionId, reason: " + reason)
       context stop self
   }
@@ -192,7 +196,7 @@ class PeerConnectionHandler(val settings: NetworkSettings,
       def process(): Unit = {
         messageSerializer.deserialize(chunksBuffer, selfPeer) match {
           case Success(Some(message)) =>
-            log.info("Received message " + message.spec + " from " + connectionId)
+            log.debug("Received message " + message.spec + " from " + connectionId)
             networkControllerRef ! message
             chunksBuffer = chunksBuffer.drop(message.messageLength)
             process()
@@ -240,13 +244,13 @@ class PeerConnectionHandler(val settings: NetworkSettings,
   private def createHandshakeMessage(): Handshake = {
     Handshake(
       PeerSpec(
-        settings.agentName,
-        Version(settings.appVersion),
-        settings.nodeName,
+        networkSettings.agentName,
+        Version(networkSettings.appVersion),
+        networkSettings.nodeName,
         ownSocketAddress,
         localFeatures
       ),
-      scorexContext.timeProvider.time()
+      System.currentTimeMillis()
     )
   }
 
@@ -255,7 +259,7 @@ class PeerConnectionHandler(val settings: NetworkSettings,
 object PeerConnectionHandler {
 
   object ReceivableMessages {
-
+    
     case object HandshakeTimeout
 
     case object CloseConnection
@@ -268,21 +272,11 @@ object PeerConnectionHandler {
 
 object PeerConnectionHandlerRef {
 
-  def props(settings: NetworkSettings,
+  def props(settings: ScorexSettings,
             networkControllerRef: ActorRef,
             scorexContext: ScorexContext,
             connectionDescription: ConnectionDescription
-           )(implicit ec: ExecutionContext): Props = {
+           )(implicit ec: ExecutionContext): Props =
     Props(new PeerConnectionHandler(settings, networkControllerRef, scorexContext, connectionDescription))
-  }
-
-  def apply(name: String,
-            settings: NetworkSettings,
-            networkControllerRef: ActorRef,
-            scorexContext: ScorexContext,
-            connectionDescription: ConnectionDescription)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
-    system.actorOf(props(settings, networkControllerRef, scorexContext, connectionDescription), name)
-  }
 
 }

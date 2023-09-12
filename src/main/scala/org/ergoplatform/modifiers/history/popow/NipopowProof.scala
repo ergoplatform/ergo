@@ -1,8 +1,9 @@
 package org.ergoplatform.modifiers.history.popow
 
 import io.circe.{Decoder, Encoder}
+import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps
 
@@ -18,21 +19,24 @@ import scorex.util.Extensions.LongOps
   * @param prefix     - proof prefix headers
   * @param suffixHead - first header of the suffix
   * @param suffixTail - tail of the proof suffix headers
+  * @param continuous - if the proof in continuous mode, see `org.ergoplatform.modifiers.history.popow.PoPowParams`
+  *                     scaladoc for details
   */
 case class NipopowProof(popowAlgos: NipopowAlgos,
                         m: Int,
                         k: Int,
                         prefix: Seq[PoPowHeader],
                         suffixHead: PoPowHeader,
-                        suffixTail: Seq[Header]) {
+                        suffixTail: Seq[Header],
+                        continuous: Boolean) {
 
-  def serializer: ScorexSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
+  lazy val serializer: ErgoSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
 
-  def headersChain: Seq[Header] = prefixHeaders ++ suffixHeaders
+  lazy val headersChain: Seq[Header] = prefixHeaders ++ suffixHeaders
 
-  def prefixHeaders: Seq[Header] = prefix.map(_.header)
+  lazy val prefixHeaders: Seq[Header] = prefix.map(_.header)
 
-  def suffixHeaders: Seq[Header] = suffixHead.header +: suffixTail
+  lazy val suffixHeaders: Seq[Header] = suffixHead.header +: suffixTail
 
   def chainOfLevel(l: Int): Seq[PoPowHeader] = prefix.filter(x => popowAlgos.maxLevelOf(x.header) >= l)
 
@@ -57,8 +61,37 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * Checks if the proof is valid: if the heights are consistent and the connections are valid.
     * @return true if the proof is valid
     */
-  def isValid: Boolean = {
-    this.hasValidConnections && this.hasValidHeights
+  lazy val isValid: Boolean = {
+    this.hasValidConnections && this.hasValidHeights && this.hasValidProofs && this.hasValidDifficultyHeaders
+  }
+
+  /**
+    * @return true if proof contains headers needed to check difficulty after the suffix,
+    *         or if the proof is for non-continuous mode, false otherwise
+    */
+  lazy val hasValidDifficultyHeaders: Boolean = {
+    if (continuous) {
+      // check that headers needed to check difficulty are in the proof
+      val chainSettings = popowAlgos.chainSettings
+      val epochLength = chainSettings.eip37EpochLength.getOrElse(chainSettings.epochLength)
+      val diffAdjustment = new DifficultyAdjustment(chainSettings)
+      var lastIndex = 0
+      diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).forall { height =>
+        if (height > 0 && height < suffixHead.height) {
+          lastIndex = headersChain.indexWhere(_.height == height, lastIndex)
+          if (lastIndex == -1) {
+            false
+          } else {
+            true
+          }
+        } else {
+          true
+        }
+      }
+    } else {
+      // if the proof is for non-continuous mode, not checking difficulty headers membership in the proof
+      true
+    }
   }
 
   /**
@@ -67,25 +100,51 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     *
     * @return true if the heights of the header-chain are consistent
     */
-  def hasValidHeights: Boolean = {
+  lazy val hasValidHeights: Boolean = {
     headersChain.zip(headersChain.tail).forall({
       case (prev, next) => prev.height < next.height
     })
   }
 
   /**
-    * Checks the connections of the blocks in the proof. Adjacent blocks should be linked either via interlink
-    * or parent block id.
+    * Checks the connections of the blocks in the proof.
+    *
+    * Adjacent blocks in the suffix should be linked either via interlink or parent block id.
+    *
+    * The same is true for prefix as well, with an exeption for difficulty headers (which are skipped during checks)
     *
     * @return true if all adjacent blocks are correctly connected
     */
-  def hasValidConnections: Boolean = {
-    prefix.zip(prefix.tail :+ suffixHead).forall({
-      case (prev, next) => next.interlinks.contains(prev.id)
-    }) && (suffixHead.header +: suffixTail).zip(suffixTail).forall({
+  lazy val hasValidConnections: Boolean = {
+    val maxDiffHeaders = popowAlgos.chainSettings.useLastEpochs + 1
+
+    val prefixToCheck = prefix :+ suffixHead
+
+    val prefixConnections = (1 until prefixToCheck.length).forall { checkIdx =>
+      val next = prefixToCheck(checkIdx)
+      (checkIdx - 1).to(Math.max(0, checkIdx - maxDiffHeaders - 1 - 1), -1).exists { prevIdx =>
+        val prev = prefixToCheck(prevIdx)
+        // Note that blocks with level 0 do not appear at all within interlinks, which is why we need to check the parent
+        // block id as well.
+        next.interlinks.contains(prev.id) || next.header.parentId == prev.id
+      }
+    }
+
+    val suffixConnections = (suffixHead.header +: suffixTail).zip(suffixTail).forall({
       case (prev, next) => next.parentId == prev.id
     })
+
+    prefixConnections && suffixConnections
   }
+
+  /**
+   * Checks the interlink proofs of the blocks in the proof.
+   */
+  lazy val hasValidProofs: Boolean = {
+    prefix.forall(_.checkInterlinksProof()) &&
+      suffixHead.checkInterlinksProof()
+  }
+
 }
 
 object NipopowProof {
@@ -98,7 +157,8 @@ object NipopowProof {
       "k" -> proof.k.asJson,
       "prefix" -> proof.prefix.asJson,
       "suffixHead" -> proof.suffixHead.asJson,
-      "suffixTail" -> proof.suffixTail.asJson
+      "suffixTail" -> proof.suffixTail.asJson,
+      "continuous" -> proof.continuous.asJson
     ).asJson
   }
 
@@ -109,12 +169,13 @@ object NipopowProof {
       prefix <- c.downField("prefix").as[Seq[PoPowHeader]]
       suffixHead <- c.downField("suffixHead").as[PoPowHeader]
       suffixTail <- c.downField("suffixTail").as[Seq[Header]]
-    } yield NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
+      continuous <- c.downField("continuous").as[Boolean]
+    } yield NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail, continuous)
   }
 
 }
 
-class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ScorexSerializer[NipopowProof] {
+class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[NipopowProof] {
 
   override def serialize(obj: NipopowProof, w: Writer): Unit = {
     w.putUInt(obj.m)
@@ -134,6 +195,7 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ScorexSerializer[
       w.putUInt(hBytes.length)
       w.putBytes(hBytes)
     }
+    w.put(if (obj.continuous) 1 else 0)
   }
 
   override def parse(r: Reader): NipopowProof = {
@@ -151,7 +213,8 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ScorexSerializer[
       val size = r.getUInt().toIntExact
       HeaderSerializer.parseBytes(r.getBytes(size))
     }
-    NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
+    val continuous = if (r.getByte() == 1) true else false
+    NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail, continuous)
   }
 
 }

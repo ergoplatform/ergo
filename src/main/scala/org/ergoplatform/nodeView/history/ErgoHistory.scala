@@ -1,28 +1,37 @@
 package org.ergoplatform.nodeView.history
 
-import java.io.File
+import akka.actor.ActorContext
 
+import java.io.File
 import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
-import scorex.core.consensus.History
-import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.NetworkTimeProvider
+import scorex.core.consensus.ProgressInfo
 import scorex.core.validation.RecoverableModifierError
-import scorex.db.LDBFactory
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
 
 /**
+  *
+  * History of a blockchain system is some blocktree in fact
+  * (like this: http://image.slidesharecdn.com/sfbitcoindev-chepurnoy-2015-150322043044-conversion-gate01/95/proofofstake-its-improvements-san-francisco-bitcoin-devs-hackathon-12-638.jpg),
+  * where longest chain is being considered as canonical one, containing right kind of history.
+  *
+  * In cryptocurrencies of today blocktree view is usually implicit, means code supports only linear history,
+  * but other options are possible.
+  *
+  * To say "longest chain" is the canonical one is simplification, usually some kind of "cumulative difficulty"
+  * function has been used instead.
+  *
   * History implementation. It is processing persistent modifiers generated locally or coming from the network.
   * Depending on chosen node settings, it will process modifiers in a different way, different processors define how to
   * process different type of modifiers.
@@ -40,28 +49,36 @@ import scala.util.{Failure, Success, Try}
   *   2. Be ignored by history (verifyTransactions == false)
   */
 trait ErgoHistory
-  extends History[ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
-    with ErgoHistoryReader {
+  extends ErgoHistoryReader {
 
   override protected lazy val requireProofs: Boolean = nodeSettings.stateType.requireProofs
 
   def closeStorage(): Unit = historyStorage.close()
 
   /**
+    * Dump modifier identifier and bytes to database.
+    *
+    * Used to dump ADProofs generated locally.
+    *
+    * @param mId - modifier identifier
+    * @param bytes - modifier bytes
+    * @return Success if modifier inserted into database successfully, Failure otherwise
+    */
+  def dumpToDb(mId: Array[Byte], bytes: Array[Byte]): Try[Unit] = {
+    historyStorage.insert(mId, bytes)
+  }
+
+  /**
     * Append ErgoPersistentModifier to History if valid
     */
-  override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
+  def append(modifier: BlockSection): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {
     log.debug(s"Trying to append modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} to history")
     applicableTry(modifier).flatMap { _ =>
       modifier match {
         case header: Header =>
           process(header)
-        case section: BlockSection =>
+        case section: NonHeaderBlockSection =>
           process(section)
-        case poPoWProof: NipopowProofModifier =>
-          process(poPoWProof)
-        case chunk: UTXOSnapshotChunk =>
-          process(chunk)
       }
     }.map(this -> _).recoverWith { case e =>
       if (!e.isInstanceOf[RecoverableModifierError]) {
@@ -75,24 +92,24 @@ trait ErgoHistory
   /**
     * Mark modifier as valid
     */
-  override def reportModifierIsValid(modifier: ErgoPersistentModifier): Try[ErgoHistory] = synchronized {
+  def reportModifierIsValid(modifier: BlockSection): Try[ErgoHistory] = synchronized {
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
     modifier match {
       case fb: ErgoFullBlock =>
         val nonMarkedIds = (fb.header.id +: fb.header.sectionIds.map(_._2))
-          .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty)
+          .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty).toArray
 
         if (nonMarkedIds.nonEmpty) {
           historyStorage.insert(
-            indexesToInsert = nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
-            objectsToInsert = Seq.empty).map(_ => this)
+            nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
+            BlockSection.emptyArray).map(_ => this)
         } else {
           Success(this)
         }
       case _ =>
         historyStorage.insert(
-          indexesToInsert = Seq(validityKey(modifier.id) -> Array(1.toByte)),
-          objectsToInsert = Seq.empty).map(_ => this)
+          Array(validityKey(modifier.id) -> Array(1.toByte)),
+          BlockSection.emptyArray).map(_ => this)
     }
   }
 
@@ -103,24 +120,24 @@ trait ErgoHistory
     * @return ProgressInfo with next modifier to try to apply
     */
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
-  override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
-                                       progressInfo: ProgressInfo[ErgoPersistentModifier]
-                                      ): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
+  def reportModifierIsInvalid(modifier: BlockSection,
+                              progressInfo: ProgressInfo[BlockSection]
+                             ): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {
     log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
-        val invalidatedHeaders = continuationHeaderChains(invalidatedHeader, _ => true).flatten.distinct
+        val invalidatedHeaders = continuationHeaderChains(invalidatedHeader, _ => true).flatten.distinct.toArray
         val invalidatedIds = invalidatedHeaders.map(_.id).toSet
         val validityRow = invalidatedHeaders.flatMap(h => Seq(h.id, h.transactionsId, h.ADProofsId)
           .map(id => validityKey(id) -> Array(0.toByte)))
-        log.info(s"Going to invalidate ${invalidatedHeader.encodedId} and ${invalidatedHeaders.map(_.encodedId)}")
+        log.info(s"Going to invalidate ${invalidatedHeader.encodedId} and ${invalidatedHeaders.map(_.encodedId).mkString("Array(", ", ", ")")}")
         val bestHeaderIsInvalidated = bestHeaderIdOpt.exists(id => invalidatedIds.contains(id))
         val bestFullIsInvalidated = bestFullBlockIdOpt.exists(id => invalidatedIds.contains(id))
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
-            historyStorage.insert(validityRow, Seq.empty).map { _ =>
-              this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+            historyStorage.insert(validityRow, BlockSection.emptyArray).map { _ =>
+              this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
             }
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
@@ -129,10 +146,10 @@ trait ErgoHistory
             if (!bestFullIsInvalidated) {
               //Only headers chain involved
               historyStorage.insert(
-                newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq,
-                Seq.empty
+                newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toArray,
+                BlockSection.emptyArray
               ).map { _ =>
-                this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+                this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
               }
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
@@ -158,7 +175,7 @@ trait ErgoHistory
               val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
-              historyStorage.insert(toInsert, Seq.empty).map { _ =>
+              historyStorage.insert(toInsert, BlockSection.emptyArray).map { _ =>
                 val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
                 this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
               }
@@ -167,18 +184,16 @@ trait ErgoHistory
       case None =>
         //No headers become invalid. Just mark this modifier as invalid
         log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
-        historyStorage.insert(
-          Seq(validityKey(modifier.id) -> Array(0.toByte)),
-          Seq.empty).map { _ =>
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
-         }
+        historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), BlockSection.emptyArray).map { _ =>
+          this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
+        }
     }
   }
 
   /**
     * @return header, that corresponds to modifier
     */
-  protected def correspondingHeader(modifier: ErgoPersistentModifier): Option[Header] = modifier match {
+  protected def correspondingHeader(modifier: BlockSection): Option[Header] = modifier match {
     case h: Header => Some(h)
     case full: ErgoFullBlock => Some(full.header)
     case proof: ADProofs => typedModifierById[Header](proof.headerId)
@@ -192,22 +207,39 @@ trait ErgoHistory
     * @return
     */
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
-    typedModifierById[Header](headerId).foreach { h =>
-      historyStorage.remove(
-        indicesToRemove = Seq(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
-        idsToRemove = Seq(headerId)
-      ).get
+    val hOpt = typedModifierById[Header](headerId)
+      val hRes = historyStorage.remove(
+        indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
+        idsToRemove = Array(headerId)
+      )
+    log.info(s"Result of removing header $headerId: " + hRes)
+
+    hOpt.foreach { h =>
       requiredModifiersForHeader(h).foreach { case (_, mId) =>
-        historyStorage.remove(
-          indicesToRemove = Seq(validityKey(mId)),
-          idsToRemove = Seq(mId)
-        ).get
+        val mRes = historyStorage.remove(
+          indicesToRemove = Array(validityKey(mId)),
+          idsToRemove = Array(mId)
+        )
+        log.info(s"Result of removing modifier $mId: " + mRes)
       }
     }
   }
+
+  /**
+    * @return read-only copy of this history
+    */
+  def getReader: ErgoHistoryReader = this
+
 }
 
 object ErgoHistory extends ScorexLogging {
+
+  /**
+    * Type for time, represents machine-specific timestamp of a transaction
+    * or block section, as miliseconds passed since beginning of UNIX
+    * epoch on the machine
+    */
+  type Time = Long
 
   type Height = ErgoLikeContext.Height // Int
   type Score = BigInt
@@ -229,66 +261,82 @@ object ErgoHistory extends ScorexLogging {
 
   // check if there is possible database corruption when there is header after
   // recognized blockchain tip marked as invalid
-  private def repairIfNeeded(history: ErgoHistory): Unit = {
+  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
+    val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
-    if (afterHeaders.nonEmpty) {
+    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
       log.warn("Found suspicious continuation, clearing it...")
       afterHeaders.map { hId =>
         history.forgetHeader(hId)
       }
-      history.historyStorage.remove(Seq(history.heightIdsKey(bestHeaderHeight + 1)), Seq.empty)
+      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId])
+      true
+    } else {
+      false
     }
   }
 
-  def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
-    val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
-    val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
-    val db = new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
+  /**
+    * @return ErgoHistory instance with new database or database read from existing folder
+    */
+  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
+    var db = HistoryStorage(ergoSettings)
+
+    // ExtraIndexer db check
+    if(ergoSettings.nodeSettings.extraIndex) { // check db schema
+      val schemaVersion: Int = getIndex(SchemaVersionKey, db).getInt
+      if (schemaVersion != NewestVersion) {
+        if(getIndex(IndexedHeightKey, db).getInt > 0)
+          db = db.deleteExtraDB(ergoSettings) // older schema -> delete and reopen db
+        db.insertExtra(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty) // update version key
+      }
+    }
+
     val nodeSettings = ergoSettings.nodeSettings
 
-    val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {
-      case (true, true) =>
-        new ErgoHistory with FullBlockSectionProcessor
-          with FullPoPoWProofsProcessor {
+    val history: ErgoHistory = nodeSettings.verifyTransactions match {
+      case true =>
+        new ErgoHistory with FullBlockSectionProcessor {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
         }
 
-      case (false, true) =>
-        new ErgoHistory with EmptyBlockSectionProcessor
-          with FullPoPoWProofsProcessor {
+      case false =>
+        new ErgoHistory with EmptyBlockSectionProcessor {
           override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
-        }
-
-      case (true, false) =>
-        new ErgoHistory with FullBlockSectionProcessor
-          with EmptyPoPoWProofsProcessor {
-          override protected val settings: ErgoSettings = ergoSettings
-          override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
-        }
-
-      case (false, false) =>
-        new ErgoHistory with EmptyBlockSectionProcessor
-          with EmptyPoPoWProofsProcessor {
-          override protected val settings: ErgoSettings = ergoSettings
-          override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
         }
     }
 
     repairIfNeeded(history)
 
+    // temporary hack which is injecting nipopow proof to the database to make it possible to bootstrap with
+    // nipopows + utxo set snapshot soon after 5.0.13 release
+    // todo: remove after height 1,096,693 on the mainnet
+    val bestHeaderHeight = history.headersHeight
+    if (bestHeaderHeight > 1054000 && bestHeaderHeight < 1096693 && history.readPopowProofBytesFromDb().isEmpty) {
+      // we store nipopow proof for height 1,044,469 corresponding to UTXO set snapshot
+      // @ # 1,044,479 already taken by 5.0.12 nodes
+      val block1044469Id = "25a11667e38e62412522c062d90b073afd9ed9551080ff4e0a67d1757ce18b98"
+      history.popowProofBytes(
+        history.P2PNipopowProofM,
+        history.P2PNipopowProofK,
+        Some(ModifierId @@ block1044469Id)) match {
+        case Success(proofBytes) =>
+          log.info("Writing nipopow proof bytes for height 1,044,469")
+          db.insert(Array(history.NipopowSnapshotHeightKey -> proofBytes), Array.empty[BlockSection])
+        case Failure(e) =>
+          log.warn("Can't dump NiPoPoW proof bytes for height 1,044,469", e)
+      }
+    }
+
     log.info("History database read")
+    if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled
+      context.system.eventStream.publish(StartExtraIndexer(history))
     history
   }
 

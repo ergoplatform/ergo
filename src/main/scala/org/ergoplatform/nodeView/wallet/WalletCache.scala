@@ -1,9 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
 import com.google.common.hash.{BloomFilter, Funnels}
-import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef, P2PKAddress}
+import org.ergoplatform.sdk.wallet.secrets.ExtendedPublicKey
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.wallet.secrets.ExtendedPublicKey
+import org.ergoplatform.{ErgoAddressEncoder, ErgoTreePredef, P2PKAddress}
 import sigmastate.Values
 import sigmastate.eval._
 
@@ -15,7 +15,7 @@ import scala.util.Try
 final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
                              trackedPubKeys: Seq[ExtendedPublicKey],
                              trackedBytes: Seq[Array[Byte]],
-                             filter: BloomFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
+                             scriptsFilter: BloomFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
 
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
@@ -37,9 +37,9 @@ final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
     val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
 
     // update filter
-    filter.put(newPkBytes)
+    scriptsFilter.put(newPkBytes)
 
-    WalletCache(updAddresses, updTrackedPubKeys, updTrackedBytes, filter)
+    WalletCache(updAddresses, updTrackedPubKeys, updTrackedBytes, scriptsFilter)
   }
 
 }
@@ -49,7 +49,7 @@ object WalletCache {
   def miningScripts(trackedPubKeys: Seq[ExtendedPublicKey],
                     settings: ErgoSettings): Seq[Values.ErgoTree] = {
     trackedPubKeys.map { pk =>
-      ErgoScriptPredef.rewardOutputScript(settings.miningRewardDelay, pk.key)
+      ErgoTreePredef.rewardOutputScript(settings.miningRewardDelay, pk.key)
     }
   }
 
@@ -57,17 +57,18 @@ object WalletCache {
     * Create empty bloom filter
     * @return a Bloom filter instance
     */
-  def emptyFilter(expectedKeys: Int = 100000): BloomFilter[Array[Byte]] = {
-    val falsePositiveRate = 0.01
+  def emptyFilter(expectedKeys: Int): BloomFilter[Array[Byte]] = {
+    val falsePositiveRate = 0.001
     BloomFilter.create[Array[Byte]](Funnels.byteArrayFunnel(), expectedKeys, falsePositiveRate)
   }
 
   /**
-    * Constructing a Bloom filter for scanning the boxes efficiently
+    * Constructing a Bloom filter for scanning wallet-related scripts efficiently
     */
-  def createFilter(trackedBytes: Seq[Array[Byte]],
-                   miningScriptsBytes: Seq[Array[Byte]]): BloomFilter[Array[Byte]] = {
-    val f = emptyFilter()
+  def createScriptsFilter(trackedBytes: Seq[Array[Byte]],
+                          miningScriptsBytes: Seq[Array[Byte]],
+                          walletProfile: WalletProfile): BloomFilter[Array[Byte]] = {
+    val f = emptyFilter(walletProfile.scriptsFilterSize)
     trackedBytes.foreach(bs => f.put(bs))
     miningScriptsBytes.foreach(msb => f.put(msb))
     f
@@ -93,10 +94,10 @@ object WalletCache {
   def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): WalletCache = {
     val tbs = trackedBytes(trackedPubKeys)
     val msBytes = miningScripts(trackedPubKeys, settings).map(_.bytes)
-    val f = createFilter(tbs, msBytes)
+    val scriptsFilter = createScriptsFilter(tbs, msBytes, settings.walletSettings.walletProfile)
     val pka = publicKeyAddresses(trackedPubKeys, settings.addressEncoder)
 
-    WalletCache(pka, trackedPubKeys, tbs, f)(settings)
+    WalletCache(pka, trackedPubKeys, tbs, scriptsFilter)(settings)
   }
 
 }

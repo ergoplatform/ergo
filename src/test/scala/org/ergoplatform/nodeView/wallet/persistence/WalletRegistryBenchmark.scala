@@ -1,19 +1,21 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input}
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, TokenId}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletVars}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.utils.ErgoTestConstants
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input}
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 import sigmastate.Values.ErgoTree
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+
+import scala.collection.compat.immutable.ArraySeq
 
 object WalletRegistryBenchmark extends App with ErgoTestConstants {
 
@@ -34,13 +36,13 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   implicit val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
 
   val registry = WalletRegistry(settings).get
-  val storage = WalletStorage.readOrCreate(settings)(enc)
+  val storage = WalletStorage.readOrCreate(settings)
 
-  val rootSecret = ExtendedSecretKey.deriveMasterKey(Array.fill(32)(0: Byte))
+  val rootSecret = ExtendedSecretKey.deriveMasterKey(Array.fill(32)(0: Byte), usePre1627KeyDerivation = false)
 
   val derivedSecrets = (1 to 15000).map { i =>
     val k = rootSecret.derive(DerivationPath.fromEncoded(s"m/44'/429'/0'/0/$i").get)
-    storage.addPublicKeys(k.publicKey).get
+    storage.addPublicKey(k.publicKey).get
     k
   }
 
@@ -53,7 +55,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
     TrackedBox(box, 2, Set(Constants.PaymentsScanId))
   }
 
-  val scanResults0 = ScanResults(boxes, Seq.empty, Seq.empty)
+  val scanResults0 = ScanResults(boxes, ArraySeq.empty, ArraySeq.empty)
   registry.updateOnBlock(scanResults0, ModifierId @@ Base16.encode(Array.fill(32)(0: Byte)), 1).get
   println("keys: " + walletVars.proverOpt.get.secretKeys.size)
 
@@ -63,7 +65,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   println("boxes read: " + boxesRead.size)
   println("boxes read time: " + (bts - bts0) + " ms")
 
-  val stateContext = storage.readStateContext
+  val stateContext = storage.readStateContext(parameters)
 
   val txs = boxes.map { tb =>
     val bx = tb.box
@@ -72,7 +74,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
     WalletTransaction(tx, 2, Seq(Constants.PaymentsScanId))
   }
 
-  val scanResults1 = ScanResults(Seq.empty, Seq.empty, txs)
+  val scanResults1 = ScanResults(ArraySeq.empty, ArraySeq.empty, txs)
   registry.updateOnBlock(scanResults1, ModifierId @@ Base16.encode(Array.fill(32)(1: Byte)), 2).get
 
   val tts0 = System.currentTimeMillis()

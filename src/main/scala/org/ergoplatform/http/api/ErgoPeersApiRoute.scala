@@ -1,7 +1,6 @@
 package org.ergoplatform.http.api
 
 import java.net.{InetAddress, InetSocketAddress}
-
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.util.Timeout
@@ -10,12 +9,11 @@ import io.circe.{Encoder, Json}
 import io.circe.generic.semiauto.deriveEncoder
 import org.ergoplatform.network.ErgoSyncTracker
 import scorex.core.api.http.{ApiError, ApiResponse, ApiRoute}
-import scorex.core.network.ConnectedPeer
+import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.network.NetworkController.ReceivableMessages.{ConnectTo, GetConnectedPeers, GetPeersStatus}
 import scorex.core.network.peer.{PeerInfo, PeersStatus}
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
 import scorex.core.settings.RESTApiSettings
-import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
@@ -23,7 +21,7 @@ import scala.concurrent.ExecutionContext
 class ErgoPeersApiRoute(peerManager: ActorRef,
                         networkController: ActorRef,
                         syncTracker: ErgoSyncTracker,
-                        timeProvider: NetworkTimeProvider,
+                        deliveryTracker: DeliveryTracker,
                         override val settings: RESTApiSettings)
                        (implicit val context: ActorRefFactory, val ec: ExecutionContext)
   extends ApiRoute {
@@ -32,11 +30,15 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
   override implicit lazy val timeout: Timeout = Timeout(1.minute)
 
   override lazy val route: Route = pathPrefix("peers") {
-    allPeers ~ connectedPeers ~ blacklistedPeers ~ connect ~ peersStatus ~ syncInfo
+    allPeers ~ connectedPeers ~ blacklistedPeers ~ connect ~ peersStatus ~ syncInfo ~ trackInfo
   }
 
   def syncInfo: Route = (path("syncInfo") & get) {
-    ApiResponse(syncTracker.fullInfo())
+    ApiResponse(syncTracker.fullInfo)
+  }
+
+  def trackInfo: Route = (path("trackInfo") & get) {
+    ApiResponse(deliveryTracker.fullInfo)
   }
 
   def allPeers: Route = (path("all") & get) {
@@ -57,7 +59,8 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
             lastMessage = con.lastMessage,
             lastHandshake = peerInfo.lastHandshake,
             name = peerInfo.peerSpec.nodeName,
-            connectionType = peerInfo.connectionType.map(_.toString)
+            connectionType = peerInfo.connectionType.map(_.toString),
+            restApiUrl = peerInfo.peerSpec.publicUrlOpt.map(_.toString)
           )
         }
       }
@@ -105,16 +108,17 @@ object ErgoPeersApiRoute {
   def apply(peerManager: ActorRef,
             networkController: ActorRef,
             syncTracker: ErgoSyncTracker,
-            timeProvider: NetworkTimeProvider,
+            deliveryTracker: DeliveryTracker,
             settings: RESTApiSettings)
            (implicit context: ActorRefFactory, ec: ExecutionContext): ErgoPeersApiRoute =
-    new ErgoPeersApiRoute(peerManager, networkController, syncTracker, timeProvider, settings)(context, ec)
+    new ErgoPeersApiRoute(peerManager, networkController, syncTracker, deliveryTracker, settings)(context, ec)
 
   case class PeerInfoResponse(address: String,
                               lastMessage: Long,
                               lastHandshake: Long,
                               name: String,
-                              connectionType: Option[String])
+                              connectionType: Option[String],
+                              restApiUrl: Option[String])
 
   object PeerInfoResponse {
     def fromAddressAndInfo(address: InetSocketAddress, peerInfo: PeerInfo): PeerInfoResponse = PeerInfoResponse(
@@ -122,16 +126,20 @@ object ErgoPeersApiRoute {
       0,
       peerInfo.lastHandshake,
       peerInfo.peerSpec.nodeName,
-      peerInfo.connectionType.map(_.toString)
+      peerInfo.connectionType.map(_.toString),
+      peerInfo.peerSpec.publicUrlOpt.map(_.toString)
     )
+
+    @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
+    implicit val encodePeerInfoResponse: Encoder[PeerInfoResponse] =
+      deriveEncoder[PeerInfoResponse].mapJsonObject { jsonObj =>
+        jsonObj.filter { case (_, v) => !v.isNull }
+      }
   }
 
   case class PeersStatusResponse(lastIncomingMessage: Long, currentSystemTime: Long)
 
   case class BlacklistedPeers(addresses: Seq[String])
-
-  @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
-  implicit val encodePeerInfoResponse: Encoder[PeerInfoResponse] = deriveEncoder
 
   @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
   implicit val encodeBlackListedPeers: Encoder[BlacklistedPeers] = deriveEncoder

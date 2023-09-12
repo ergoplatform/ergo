@@ -3,9 +3,10 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoSetSnapshotPersistence, UtxoStateReader}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -23,7 +24,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
 
   override val route: Route = pathPrefix("utxo") {
-    byId ~ serializedById ~ genesis ~ withPoolById ~ withPoolSerializedById
+    byId ~ serializedById ~ genesis ~ withPoolById ~ withPoolSerializedById ~ getBoxesBinaryProof ~ getSnapshotsInfo
   }
 
   def withPoolById: Route = (get & path("withPool" / "byId" / Segment)) { id =>
@@ -72,6 +73,26 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
 
   def genesis: Route = (get & path("genesis")) {
     ApiResponse(getState.map(_.genesisBoxes))
+  }
+
+  def getBoxesBinaryProof: Route = (post & path("getBoxesBinaryProof") & entity(as[Seq[ErgoBox.BoxId]])) { boxes =>
+    ApiResponse(getState.map {
+      case usr: UtxoStateReader =>
+        Some(Base16.encode(usr.generateBatchProofForBoxes(boxes)))
+      case _ => None
+    })
+  }
+
+  /**
+    * Handler for /utxo/getSnapshotsInfo API call which is providing list of
+    * UTXO set snapshots stored locally
+    */
+  def getSnapshotsInfo: Route = (get & path("getSnapshotsInfo")) {
+    ApiResponse(getState.map {
+      case usr: UtxoSetSnapshotPersistence =>
+        Some(usr.getSnapshotInfo())
+      case _ => None
+    })
   }
 
 }

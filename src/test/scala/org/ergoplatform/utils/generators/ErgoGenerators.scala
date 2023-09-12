@@ -2,13 +2,13 @@ package org.ergoplatform.utils.generators
 
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowParams}
-import org.ergoplatform.network.ModeFeature
+import org.ergoplatform.network.ModePeerFeature
 import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
@@ -23,10 +23,10 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate.Values.ErgoTree
+import sigmastate.basics.CryptoConstants.EcPointType
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
-import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{CryptoConstants, ProverResult}
+import sigmastate.basics.{CryptoConstants, DiffieHellmanTupleProverInput, ProveDHTuple}
+import sigmastate.interpreter.ProverResult
 
 import scala.util.Random
 
@@ -145,7 +145,7 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
     stateRoot,
     transactionsRoot,
     timestamp,
-    RequiredDifficulty.encodeCompactBits(requiredDifficulty),
+    DifficultySerializer.encodeCompactBits(requiredDifficulty),
     height,
     extensionHash,
     powSolution,
@@ -168,11 +168,11 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
   lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
     Gen.resultOf({ _: Unit => ErgoMemPool.empty(settings) })(Arbitrary(Gen.const(())))
 
-  lazy val modeFeatureGen: Gen[ModeFeature] = for {
+  lazy val modeFeatureGen: Gen[ModePeerFeature] = for {
     stateTypeCode <- Gen.choose(StateType.Utxo.stateTypeCode, StateType.Utxo.stateTypeCode)
     popowSuffix <- Gen.choose(1, 10)
     blocksToKeep <- Gen.choose(1, 100000)
-  } yield ModeFeature(
+  } yield ModePeerFeature(
     StateType.fromCode(stateTypeCode),
     Random.nextBoolean(),
     if (Random.nextBoolean()) Some(popowSuffix) else None,
@@ -209,8 +209,8 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
   } yield {
     val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false)
     val popowChain = popowHeaderChain(chain)
-    val params = PoPowParams(m, k)
-    popowAlgos.prove(popowChain)(params).get
+    val params = PoPowParams(m, k, continuous = false)
+    nipopowAlgos.prove(popowChain)(params).get
   }
 
 }

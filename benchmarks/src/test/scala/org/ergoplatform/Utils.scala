@@ -5,7 +5,7 @@ import java.net.URL
 
 import com.google.common.primitives.Ints
 import javax.net.ssl.HttpsURLConnection
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 
 object Utils {
@@ -31,7 +31,7 @@ object Utils {
   def readBytes(length: Int)(implicit fis: InputStream): Option[Array[Byte]] =
     Some(Stream.continually(fis.read().toByte).take(length).toArray)
 
-  def readModifier[M <: ErgoPersistentModifier](implicit fis: InputStream): Option[M] = {
+  def readModifier[M <: BlockSection](implicit fis: InputStream): Option[M] = {
     for {
       length <- readLength
       bytes <- readBytes(length)

@@ -13,6 +13,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.VersionTag
 import scorex.util.encode.Base16
 
+import scala.collection.compat.immutable.ArraySeq
 import scala.util.Success
 
 class WalletRegistrySpec
@@ -108,7 +109,7 @@ class WalletRegistrySpec
         val registry = new WalletRegistry(store)(settings.walletSettings)
         val blockId = modifierIdGen.sample.get
         val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus))
-        registry.updateOnBlock(ScanResults(unspentBoxes, Seq.empty, Seq.empty), blockId, 100).get
+        registry.updateOnBlock(ScanResults(unspentBoxes, ArraySeq.empty, ArraySeq.empty), blockId, 100).get
         registry.walletUnspentBoxes().toList should contain theSameElementsAs unspentBoxes
       }
     }
@@ -123,7 +124,7 @@ class WalletRegistrySpec
         bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
       }
       val inputs = outs.map(tb => SpentInputData(fakeTxId, tb))
-      registry.updateOnBlock(ScanResults(outs, inputs, Seq.empty), blockId, 100).get
+      registry.updateOnBlock(ScanResults(outs, inputs, ArraySeq.empty), blockId, 100).get
       registry.walletUnspentBoxes() shouldBe Seq.empty
     }
   }
@@ -140,6 +141,7 @@ class WalletRegistrySpec
 
         WalletRegistry.putBox(emptyBag, tb).transact(store).get
         reg.getBox(tb.box.id) shouldBe Some(tb)
+        reg.cache -= tb.boxId
         WalletRegistry.removeBoxes(emptyBag, Seq(tb)).transact(store).get
         reg.getBox(tb.box.id) shouldBe None
       }
@@ -174,6 +176,7 @@ class WalletRegistrySpec
           scans = Set(PaymentsScanId, ScanId @@ 2.toShort))
         val updatedBoxes = tbs.map(updateFn)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)
+        reg.cache --= tbs.map(_.boxId)
         WalletRegistry.removeBoxes(emptyBag, tbs).transact(store).get
         reg.getBoxes(tbs.map(_.box.id)).flatten shouldBe Seq()
       }
@@ -236,6 +239,52 @@ class WalletRegistrySpec
         reg.getBox(tb1.box.id).get.scans shouldBe Set(appId1)
         reg.unspentBoxes(appId1).length shouldBe 1
         reg.unspentBoxes(appId2).length shouldBe 0
+        // limit should by applied
+        reg.unspentBoxes(appId1, limit = 1).length shouldBe 1
+        reg.unspentBoxes(appId1, limit = 0).length shouldBe 0
+      }
+    }
+  }
+
+  it should "get unspent boxes by height from/to inclusive" in {
+    val appId1: ScanId = ScanId @@ 21.toShort
+    val appId2: ScanId = ScanId @@ 22.toShort
+    forAll(trackedBoxGen) { tb0 =>
+      withVersionedStore(10) { store =>
+        val tb1 = tb0.copy(scans = Set(appId1), inclusionHeightOpt = Some(5), spendingHeightOpt = None)
+        val reg = new WalletRegistry(store)(ws)
+        WalletRegistry.putBox(emptyBag, tb1).transact(store).get
+        reg.getBox(tb1.box.id).get.scans shouldBe Set(appId1)
+        reg.boxesByInclusionHeight(appId1, 1, 4).length shouldBe 0
+        reg.boxesByInclusionHeight(appId1, 6, 10).length shouldBe 0
+        reg.boxesByInclusionHeight(appId1, 4, 6).length shouldBe 1
+        reg.boxesByInclusionHeight(appId1, 5, 6).length shouldBe 1
+        reg.boxesByInclusionHeight(appId1, 5, 5).length shouldBe 1
+        reg.boxesByInclusionHeight(appId1, 4, 5).length shouldBe 1
+        // put another box under the same scan id should result in 2 matches
+        val tb2 = trackedBoxGen.sample.get.copy(scans = Set(appId1), inclusionHeightOpt = Some(6), spendingHeightOpt = None)
+        WalletRegistry.putBox(emptyBag, tb2).transact(store).get
+        reg.boxesByInclusionHeight(appId1, 4, 7).length shouldBe 2
+        reg.boxesByInclusionHeight(appId1, 4, 5).length shouldBe 1
+        // search should differentiate between scan ids
+        val tb3 = trackedBoxGen.sample.get.copy(scans = Set(appId2), inclusionHeightOpt = Some(6), spendingHeightOpt = None)
+        WalletRegistry.putBox(emptyBag, tb3).transact(store).get
+        reg.boxesByInclusionHeight(appId1, 4, 7).length shouldBe 2
+        reg.boxesByInclusionHeight(appId2, 4, 7).length shouldBe 1
+        // putting 2 different boxes under same height should result in 2 matches
+        val tb4 = trackedBoxGen.sample.get.copy(scans = Set(appId2), inclusionHeightOpt = Some(6), spendingHeightOpt = None)
+        WalletRegistry.putBox(emptyBag, tb4).transact(store).get
+        reg.boxesByInclusionHeight(appId2, 4, 7).length shouldBe 2
+        // putting 2 identical boxes should be idempotent operation
+        WalletRegistry.putBox(emptyBag, tb4).transact(store).get
+        reg.boxesByInclusionHeight(appId2, 4, 7).length shouldBe 2
+        // spent boxes should be included
+        val tb5 = trackedBoxGen.sample.get.copy(scans = Set(appId2), inclusionHeightOpt = Some(5), spendingHeightOpt = Some(6))
+        WalletRegistry.putBox(emptyBag, tb5).transact(store).get
+        reg.boxesByInclusionHeight(appId2, 4, 7).length shouldBe 3
+        // one spent box and 2 unspent boxes should be present
+        reg.spentBoxesByInclusionHeight(appId2, 4, 7).length shouldBe 1
+        reg.unspentBoxesByInclusionHeight(appId2, 4, 7).length shouldBe 2
       }
     }
   }

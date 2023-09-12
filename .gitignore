@@ -3,6 +3,7 @@ devnet
 
 # IDE/Editor files
 .idea
+.bsp
 .ensime
 .ensime_cache/
 scorex.yaml
@@ -61,6 +62,7 @@ local.conf
 .metals/
 .vscode/
 project/metals.sbt
+null/
 
 # scala worksheets
 *.worksheet.sc

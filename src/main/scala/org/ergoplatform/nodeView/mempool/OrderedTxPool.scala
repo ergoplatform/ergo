@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings}
 import scorex.util.{ModifierId, ScorexLogging}
@@ -17,14 +17,25 @@ import scala.collection.immutable.TreeMap
   * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its output box
   * @param inputs               - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its input box id
   */
-case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
-                         transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
-                         invalidatedTxIds: ApproximateCacheLike[String],
-                         outputs: TreeMap[BoxId, WeightedTxId],
-                         inputs: TreeMap[BoxId, WeightedTxId])
-                        (implicit settings: ErgoSettings) extends ScorexLogging {
+class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTransaction],
+                    val transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
+                    val invalidatedTxIds: ApproximateCacheLike[String],
+                    val outputs: TreeMap[BoxId, WeightedTxId],
+                    val inputs: TreeMap[BoxId, WeightedTxId])
+                   (implicit settings: ErgoSettings) extends ScorexLogging {
 
   import OrderedTxPool.weighted
+
+  /**
+    * When a transaction has a parent in the mempool, we update its weight, weight of parent's parents etc.
+    * This parameter sets max update depth
+    */
+  private val MaxParentScanDepth = 500
+
+  /**
+    * See `MaxParentScanDepth`, but this parameter sets max update time
+    */
+  private val MaxParentScanTime = 500
 
   private implicit val ms: MonetarySettings = settings.chainSettings.monetary
 
@@ -32,8 +43,13 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
 
   def size: Int = orderedTransactions.size
 
-  def get(id: ModifierId): Option[ErgoTransaction] = {
-    transactionsRegistry.get(id).flatMap(orderedTransactions.get(_))
+  def get(id: ModifierId): Option[UnconfirmedTransaction] = {
+    transactionsRegistry.get(id).flatMap { wtx =>
+      orderedTransactions.get(wtx) match {
+        case s@Some(_) => s
+        case None => log.warn(s"Found $id in registry but not ordered transactions"); None
+      }
+    }
   }
 
 
@@ -45,17 +61,31 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     * put() is preceded by canAccept method which enforces that newly added transaction will not be immediately
     * thrown from the pool.
     *
-    * @param tx - transaction to add
+    * @param unconfirmedTx - transaction to add
     * @return - modified pool
     */
-  def put(tx: ErgoTransaction): OrderedTxPool = {
-    val wtx = weighted(tx)
-    val newPool = OrderedTxPool(
-      orderedTransactions.updated(wtx, tx),
-      transactionsRegistry.updated(wtx.id, wtx), invalidatedTxIds,
-      outputs ++ tx.outputs.map(_.id -> wtx),
-      inputs ++ tx.inputs.map(_.boxId -> wtx)
-    ).updateFamily(tx, wtx.weight)
+  def put(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int): OrderedTxPool = {
+    val tx = unconfirmedTx.transaction
+
+    val newPool = transactionsRegistry.get(tx.id) match {
+      case Some(wtx) =>
+        new OrderedTxPool(
+          orderedTransactions.updated(wtx, unconfirmedTx),
+          transactionsRegistry,
+          invalidatedTxIds,
+          outputs,
+          inputs
+        )
+      case None =>
+        val wtx = weighted(tx, feeFactor)
+        new OrderedTxPool(
+          orderedTransactions.updated(wtx, unconfirmedTx),
+          transactionsRegistry.updated(wtx.id, wtx),
+          invalidatedTxIds,
+          outputs ++ tx.outputs.map(_.id -> wtx),
+          inputs ++ tx.inputs.map(_.boxId -> wtx)
+        ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), 0)
+    }
     if (newPool.orderedTransactions.size > mempoolCapacity) {
       val victim = newPool.orderedTransactions.last._2
       newPool.remove(victim)
@@ -64,7 +94,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     }
   }
 
-  def remove(txs: Seq[ErgoTransaction]): OrderedTxPool = {
+  def remove(txs: Seq[UnconfirmedTransaction]): OrderedTxPool = {
     txs.foldLeft(this) { case (pool, tx) => pool.remove(tx) }
   }
 
@@ -76,63 +106,73 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
   def remove(tx: ErgoTransaction): OrderedTxPool = {
     transactionsRegistry.get(tx.id) match {
       case Some(wtx) =>
-        OrderedTxPool(
+        new OrderedTxPool(
           orderedTransactions - wtx,
           transactionsRegistry - tx.id,
           invalidatedTxIds,
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(tx, -wtx.weight)
+        ).updateFamily(tx, -wtx.weight, System.currentTimeMillis(), depth = 0)
       case None => this
     }
   }
 
-  def invalidate(tx: ErgoTransaction): OrderedTxPool =
+  def remove(utx: UnconfirmedTransaction): OrderedTxPool = remove(utx.transaction)
+
+  /**
+    * Remove transaction from the pool and add it to invalidated transaction ids cache
+    */
+  def invalidate(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
+    val tx = unconfirmedTx.transaction
     transactionsRegistry.get(tx.id) match {
       case Some(wtx) =>
-        OrderedTxPool(
+        new OrderedTxPool(
           orderedTransactions - wtx,
           transactionsRegistry - tx.id,
           invalidatedTxIds.put(tx.id),
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(tx, -wtx.weight)
+        ).updateFamily(tx, -wtx.weight, System.currentTimeMillis(), depth = 0)
       case None =>
-        OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
+        if (orderedTransactions.valuesIterator.exists(utx => utx.id == tx.id)) {
+          new OrderedTxPool(
+            orderedTransactions.filter(_._2.id != tx.id),
+            transactionsRegistry - tx.id,
+            invalidatedTxIds.put(tx.id),
+            outputs -- tx.outputs.map(_.id),
+            inputs -- tx.inputs.map(_.boxId)
+          )
+        } else {
+          new OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
+        }
     }
-
-  def filter(condition: ErgoTransaction => Boolean): OrderedTxPool = {
-    orderedTransactions.foldLeft(this)((pool, entry) => {
-      val tx = entry._2
-      if (condition(tx)) pool else pool.remove(tx)
-    })
   }
 
   /**
-    * Do not place transaction in the pool if its weight is smaller than smallest weight of transaction in the pool
-    * and pool limit is reached. We need to take in account relationship between transactions: if candidate transaction
-    * is pending output of one of transactions in mempool, we should adjust their weights by adding weight of this
-    * transaction (see updateFamily). Otherwise we will do waste job of validating transaction which will be then
-    * thrown from the pool.
+    * Do not place transaction in the pool if the transaction known to be invalid, pool already has it, or the pool
+    * is overfull.
     *
-    * @param tx
-    * @return
+    * TODO: the latter should not happen likely as we clean pool immediately as it becomes overfull.
+    *
     */
-  def canAccept(tx: ErgoTransaction): Boolean = {
-    val weight = weighted(tx).weight
-    !isInvalidated(tx.id) && !contains(tx.id) &&
-      (size < mempoolCapacity ||
-        weight > updateFamily(tx, weight).orderedTransactions.firstKey.weight)
+  def canAccept(unconfirmedTx: UnconfirmedTransaction): Boolean = {
+    !contains(unconfirmedTx.id) && size <= mempoolCapacity
   }
 
-  def contains(id: ModifierId): Boolean = transactionsRegistry.contains(id)
+  /**
+    *
+    * @param id - transaction id
+    * @return - true, if transaction is in the pool or invalidated earlier, false otherwise
+    */
+  def contains(id: ModifierId): Boolean = {
+    transactionsRegistry.contains(id)
+  }
 
   def isInvalidated(id: ModifierId): Boolean = invalidatedTxIds.mightContain(id)
 
-
   /**
     *
-    * Form families of transactions: take in account relations between transaction when perform ordering.
+    * Form families of transactions: take in account relations between transactions when performing ordering.
     * If transaction X is spending output of transaction Y, then X weight should be greater than of Y.
     * Y should be proceeded prior to X or swapped out of mempool after X.
     * To achieve this goal we recursively add weight of new transaction to all transactions which
@@ -142,25 +182,33 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     * @param weight
     * @return
     */
-  private def updateFamily(tx: ErgoTransaction, weight: Long): OrderedTxPool = {
-    tx.inputs.foldLeft(this)((pool, input) =>
-      pool.outputs.get(input.boxId).fold(pool)(wtx => {
-        pool.orderedTransactions.get(wtx) match {
-          case Some(parent) =>
-            val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerKb, wtx.created)
-            val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> parent),
-              pool.transactionsRegistry.updated(parent.id, newWtx),
-              invalidatedTxIds,
-              parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
-              parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
-            )
-            newPool.updateFamily(parent, weight)
-          case None =>
-            //shouldn't be the case, but better not to hide this possibility
-            log.error("Could not find transaction in pool.orderedTransactions, please report to devs")
-            pool
-        }
-      }))
+  private def updateFamily(tx: ErgoTransaction,
+                           weight: Long,
+                           startTime: Long,
+                           depth: Int): OrderedTxPool = {
+    val now = System.currentTimeMillis()
+    val timeDiff = now - startTime
+    if (depth > MaxParentScanDepth || timeDiff > MaxParentScanTime) {
+      log.warn(s"updateFamily takes too long, depth: $depth, time diff: $timeDiff, transaction: ${tx.id}")
+      this
+    } else {
+
+      val uniqueTxIds: Set[WeightedTxId] = tx.inputs.flatMap(input => this.outputs.get(input.boxId)).toSet
+      val parentTxs = uniqueTxIds.flatMap(wtx => this.orderedTransactions.get(wtx).map(ut => wtx -> ut))
+
+      parentTxs.foldLeft(this) { case (pool, (wtx, ut)) =>
+        val parent = ut.transaction
+        val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerFactor, wtx.created)
+        val newPool = new OrderedTxPool(
+          pool.orderedTransactions - wtx + (newWtx -> ut),
+          pool.transactionsRegistry.updated(parent.id, newWtx),
+          invalidatedTxIds,
+          parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
+          parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
+        )
+        newPool.updateFamily(parent, weight, startTime, depth + 1)
+      }
+    }
   }
 }
 
@@ -171,10 +219,10 @@ object OrderedTxPool {
     *
     * @param id       - Transaction id
     * @param weight   - Weight of transaction
-    * @param feePerKb - Transaction's fee per KB
+    * @param feePerFactor - Transaction's fee per factor (byte or execution cost)
     * @param created  - Transaction creation time
     */
-  case class WeightedTxId(id: ModifierId, weight: Long, feePerKb: Long, created: Long) {
+  case class WeightedTxId(id: ModifierId, weight: Long, feePerFactor: Long, created: Long) {
     // `id` depends on `weight` so we can use only the former for comparison.
     override def equals(obj: Any): Boolean = obj match {
       case that: WeightedTxId => that.id == id
@@ -189,25 +237,37 @@ object OrderedTxPool {
 
   def empty(settings: ErgoSettings): OrderedTxPool = {
     val cacheSettings = settings.cacheSettings.mempool
-    val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
-    val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
     val frontCacheSize = cacheSettings.invalidModifiersCacheSize
     val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
-    OrderedTxPool(
-      TreeMap.empty[WeightedTxId, ErgoTransaction],
+    new OrderedTxPool(
+      TreeMap.empty[WeightedTxId, UnconfirmedTransaction],
       TreeMap.empty[ModifierId, WeightedTxId],
-      ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration),
+      ExpiringApproximateCache.empty(frontCacheSize, frontCacheExpiration),
       TreeMap.empty[BoxId, WeightedTxId],
       TreeMap.empty[BoxId, WeightedTxId])(settings)
   }
 
-  def weighted(tx: ErgoTransaction)(implicit ms: MonetarySettings): WeightedTxId = {
+  def weighted(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int)(implicit ms: MonetarySettings): WeightedTxId = {
+    weighted(unconfirmedTx.transaction, feeFactor)
+  }
+
+  /**
+    * Wrap transaction into an entity which is storing its mempool sorting weight also
+    *
+    * @param tx - transaction
+    * @param feeFactor - fee-related factor of the transaction `tx`, so size or cost
+    * @param ms - monetary settings to extract fee proposition from
+    * @return - transaction and its weight wrapped in `WeightedTxId`
+    */
+  def weighted(tx: ErgoTransaction, feeFactor: Int)(implicit ms: MonetarySettings): WeightedTxId = {
     val fee = tx.outputs
       .filter(b => java.util.Arrays.equals(b.propositionBytes, ms.feePropositionBytes))
       .map(_.value)
       .sum
+
     // We multiply by 1024 for better precision
-    val feePerKb = fee * 1024 / tx.size
-    WeightedTxId(tx.id, feePerKb, feePerKb, System.currentTimeMillis())
+    val feePerFactor = fee * 1024 / feeFactor
+    // Weight is equal to feePerFactor here, however, it can be modified later when children transactions will arrive
+    WeightedTxId(tx.id, feePerFactor, feePerFactor, System.currentTimeMillis())
   }
 }

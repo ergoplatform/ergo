@@ -1,9 +1,10 @@
 package org.ergoplatform.nodeView
 
-import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import org.ergoplatform.ErgoLikeContext
+import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.wallet.protocol.context.InputContext
 
 /**
   * Context to be used during transaction verification

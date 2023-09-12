@@ -1,16 +1,16 @@
 package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
+import akka.http.scaladsl.server.{Route, ValidationRejection}
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
-import io.circe.{Json, Decoder}
-import org.ergoplatform.http.api.{WalletApiRoute, ApiCodecs}
+import io.circe.{Decoder, Json}
+import org.ergoplatform.http.api.{ApiCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
-import org.ergoplatform.nodeView.wallet.{ErgoAddressJsonEncoder, AugWalletTransaction}
-import org.ergoplatform.settings.{Constants, Args, ErgoSettings}
+import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
+import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoAddress, Pay2SAddress}
@@ -20,6 +20,7 @@ import org.scalatest.matchers.should.Matchers
 
 import scala.util.{Random, Try}
 import scala.concurrent.duration._
+import akka.http.scaladsl.server.MissingQueryParamRejection
 
 class WalletApiRouteSpec extends AnyFlatSpec
   with Matchers
@@ -35,6 +36,8 @@ class WalletApiRouteSpec extends AnyFlatSpec
   val ergoSettings: ErgoSettings = ErgoSettings.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = WalletApiRoute(digestReadersRef, nodeViewRef, settings).route
+  val failingNodeViewRef = system.actorOf(NodeViewStub.failingProps())
+  val failingRoute: Route = WalletApiRoute(digestReadersRef, failingNodeViewRef, settings).route
 
   val utxoRoute: Route = WalletApiRoute(utxoReadersRef, nodeViewRef, settings).route
 
@@ -43,15 +46,15 @@ class WalletApiRouteSpec extends AnyFlatSpec
   implicit val requestsHolderEncoder: RequestsHolderEncoder = new RequestsHolderEncoder(ergoSettings)
   implicit val addressJsonDecoder: Decoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).decoder
 
-  val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf), 100L, Seq.empty, Map.empty)
-  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), None, 100L, "TEST", "Test", 8)
+  val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf)(addressEncoder), 100L, Seq.empty, Map.empty)
+  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf)(addressEncoder), None, 100L, "TEST", "Test", 8)
   val requestsHolder = RequestsHolder(
     (0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)),
     Some(10000L),
     Seq.empty,
     Seq.empty,
     minerRewardDelay = 720
-  )
+  )(addressEncoder)
 
 
   it should "generate arbitrary transaction" in {
@@ -88,6 +91,12 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "fail when sent transaction is invalid" in {
+    Post(prefix + "/transaction/send", requestsHolder.asJson) ~> failingRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "sign a transaction" in {
     val digest = Random.nextBoolean()
     val (tsr, r) = if (digest) {
@@ -108,6 +117,12 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "fail when payment is invalid" in {
+    Post(prefix + "/payment/send", Seq(paymentRequest).asJson) ~> failingRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "return addresses" in {
     Get(prefix + "/addresses") ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -122,10 +137,15 @@ class WalletApiRouteSpec extends AnyFlatSpec
   }
 
   it should "restore wallet" in {
-    Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
+    Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson, 
+      "usePre1627KeyDerivation" -> false.asJson)) ~>
       route ~> check(status shouldBe StatusCodes.OK)
   }
 
+  it should "not restore wallet without key derivation method specified" in {
+    Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
+      route ~> check(rejection shouldBe a[MissingQueryParamRejection])
+  }
 
   it should "unlock wallet" in {
     Post(prefix + "/unlock", Json.obj("pass" -> "1234".asJson)) ~> route ~> check {
@@ -147,12 +167,21 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "rescan wallet" in {
-    Get(prefix + "/rescan") ~> route ~> check {
+  it should "rescan wallet post" in {
+    Post(prefix + "/rescan") ~> route ~> check {
       status shouldBe StatusCodes.OK
     }
   }
 
+  it should "rescan wallet post with fromHeight" in {
+    Post(prefix + "/rescan", Json.obj("fromHeight" -> 0.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+
+    Post(prefix + "/rescan", Json.obj("fromHeight" -> (-1).asJson)) ~> route ~> check {
+      rejection shouldEqual ValidationRejection("fromHeight field must be >= 0", None)
+    }
+  }
 
   it should "derive new key according to a provided path" in {
     Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "m/1/2".asJson)) ~> route ~> check {
@@ -169,7 +198,15 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "return all wallet boxes" in {
+  it should "return wallet boxes" in {
+    Get(prefix + "/boxes") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe 3
+    }
+  }
+
+  it should "return wallet boxes with lower constraint" in {
     val minConfirmations = 15
     val minInclusionHeight = 20
     val postfix = s"/boxes?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
@@ -180,10 +217,29 @@ class WalletApiRouteSpec extends AnyFlatSpec
       response.head.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
       response.head.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
     }
-    Get(prefix + "/boxes") ~> route ~> check {
+  }
+
+  it should "return wallet boxes with upper constraint" in {
+    val maxConfirmations = 15
+    val maxInclusionHeight = 20
+    val postfix = s"/boxes?maxConfirmations=$maxConfirmations&maxInclusionHeight=$maxInclusionHeight"
+    Get(prefix + postfix) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
-      response.size shouldBe 3
+      response.size shouldBe 1
+      response.head.hcursor.downField("confirmationsNum").as[Int].forall(_ <= maxConfirmations) shouldBe true
+      response.head.hcursor.downField("inclusionHeight").as[Int].forall(_ <= maxInclusionHeight) shouldBe true
+    }
+  }
+
+  it should "return wallet boxes with both lower and upper constraint" in {
+    val confirmations = 15
+    val inclusionHeight = 20
+    val postfix = s"/boxes?$confirmations&minInclusionHeight=$inclusionHeight&maxConfirmations=$confirmations&maxInclusionHeight=$inclusionHeight"
+    Get(prefix + postfix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.isEmpty shouldBe true
     }
   }
 
@@ -218,6 +274,31 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
       response.size shouldBe walletTxs.size
       responseAs[Seq[AugWalletTransaction]] shouldEqual walletTxs
+    }
+  }
+
+  it should "return wallet transactions by scanId" in {
+    Get(prefix + "/transactionsByScanId/1") ~> route ~> check {
+      import AugWalletTransaction._
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[AugWalletTransaction]]
+      val walletTxs = response.filter { awtx =>
+        awtx.wtx.scanIds.contains(1.shortValue())
+      }
+      walletTxs.size shouldBe response.size
+    }
+  }
+
+  it should "return wallet transactions by scanId including unconfirmed txs" in {
+    Get(prefix + "/transactionsByScanId/1?includeUnconfirmed=true") ~> route ~> check {
+      import AugWalletTransaction._
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[AugWalletTransaction]]
+      val walletTxs = response.filter { awtx =>
+        awtx.wtx.scanIds.contains(1.shortValue())
+      }
+      walletTxs.size shouldBe response.size
+      walletTxs.forall(_.numConfirmations == 0) shouldBe true
     }
   }
 

@@ -1,13 +1,13 @@
 package org.ergoplatform.nodeView.wallet
 
 import com.google.common.hash.BloomFilter
-import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.scanning.Scan
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
+import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.util.ScorexLogging
 
 import scala.util.Try
@@ -40,8 +40,10 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
 
   val miningScriptsBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.miningScriptsBytes).getOrElse(Seq.empty)
 
-  val filter: BloomFilter[Array[Byte]] =
-    stateCacheOpt.map(_.filter).getOrElse(WalletCache.emptyFilter())
+  val scriptsFilter: BloomFilter[Array[Byte]] =
+    stateCacheOpt
+      .map(_.scriptsFilter)
+      .getOrElse(WalletCache.emptyFilter(settings.walletSettings.walletProfile.scriptsFilterSize))
 
   def removeScan(scanId: ScanId): WalletVars = {
     this.copy(externalScans = this.externalScans.filter(_.scanId != scanId))

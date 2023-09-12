@@ -4,15 +4,15 @@ import com.google.common.primitives.Ints
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 
 import scala.util.Try
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
-import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
 import Extension.SystemParametersPrefix
+import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeParameters
 
 /**
   * System parameters which could be readjusted via collective miners decision.
@@ -62,7 +62,7 @@ class Parameters(val height: Height,
   /**
     * Max total computation cost of a block.
     */
-  lazy val maxBlockCost: Long = parametersTable(MaxBlockCostIncrease)
+  lazy val maxBlockCost: Int = parametersTable(MaxBlockCostIncrease)
 
   lazy val softForkStartingHeight: Option[Height] = parametersTable.get(SoftForkStartingHeight)
   lazy val softForkVotesCollected: Option[Int] = parametersTable.get(SoftForkVotesCollected)
@@ -148,7 +148,7 @@ class Parameters(val height: Height,
 
       if (votingSettings.changeApproved(count)) {
         val currentValue = parametersTable(paramIdAbs)
-        val maxValue = maxValues.getOrElse(paramIdAbs, Int.MaxValue / 2) //todo: more precise upper-bound
+        val maxValue = maxValues.getOrElse(paramIdAbs, Int.MaxValue / 2)
         val minValue = minValues.getOrElse(paramIdAbs, 0)
         val step = stepsTable.getOrElse(paramIdAbs, Math.max(1, currentValue / 100))
 
@@ -208,6 +208,10 @@ class Parameters(val height: Height,
       Seq(SoftForkDisablingRulesKey -> ErgoValidationSettingsUpdateSerializer.toBytes(proposedUpdate))
     }
     ExtensionCandidate(paramFields ++ rulesToDisableFields)
+  }
+
+  def withBlockCost(cost: Int): Parameters = {
+    Parameters(height, parametersTable.updated(MaxBlockCostIncrease, cost), proposedUpdate)
   }
 
   override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")}; $proposedUpdate)"
@@ -327,7 +331,11 @@ object Parameters {
 
   val ParamVotesCount = 2
 
-  def apply(h: Height, paramsTable: Map[Byte, Int], update: ErgoValidationSettingsUpdate): Parameters = new Parameters(h, paramsTable, update)
+  def apply(h: Height,
+            paramsTable: Map[Byte, Int],
+            update: ErgoValidationSettingsUpdate): Parameters = {
+    new Parameters(h, paramsTable, update)
+  }
 
   def parseExtension(h: Height, extension: Extension): Try[Parameters] = Try {
     val paramsTable = extension.fields.flatMap { case (k, v) =>
@@ -374,12 +382,13 @@ object Parameters {
 
 }
 
-object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs {
+object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
 
   override def serialize(params: Parameters, w: Writer): Unit = {
     require(params.parametersTable.nonEmpty, s"$params is empty")
     w.putUInt(params.height)
-    w.putUInt(params.parametersTable.size)
+    val paramsSize = params.parametersTable.size
+    w.putUInt(paramsSize)
     params.parametersTable.foreach { case (k, v) =>
       w.put(k)
       w.putInt(v)

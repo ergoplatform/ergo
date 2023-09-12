@@ -4,10 +4,9 @@ import com.google.common.primitives.Bytes
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.{ExtensionTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.settings.Algos
-import scorex.core.ModifierTypeId
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Digest32
@@ -23,13 +22,13 @@ import scorex.util.ModifierId
 case class Extension(headerId: ModifierId,
                      override val fields: Seq[(Array[Byte], Array[Byte])],
                      override val sizeOpt: Option[Int] = None)
-  extends ExtensionCandidate(fields) with BlockSection {
+  extends ExtensionCandidate(fields) with NonHeaderBlockSection {
 
-  override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
+  override val modifierTypeId: NetworkObjectTypeId.Value = Extension.modifierTypeId
 
   override type M = Extension
 
-  override def serializer: ScorexSerializer[Extension] = ExtensionSerializer
+  override def serializer: ErgoSerializer[Extension] = ExtensionSerializer
 
   override def toString: String = {
     s"Extension(id: $id, headerId: ${Algos.encode(headerId)}, " +
@@ -55,7 +54,7 @@ object Extension extends ApiCodecs {
     Algos.merkleTree(LeafData @@ fields.map(kvToLeaf))
   }
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
+  val modifierTypeId: NetworkObjectTypeId.Value = ExtensionTypeId.value
 
   implicit val jsonEncoder: Encoder[Extension] = { e: Extension =>
     Map(

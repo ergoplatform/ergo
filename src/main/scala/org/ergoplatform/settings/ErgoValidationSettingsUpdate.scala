@@ -1,12 +1,13 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.validation.RuleStatusSerializer
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 
-case class ErgoValidationSettingsUpdate(rulesToDisable: Seq[Short], statusUpdates: Seq[(Short, org.ergoplatform.validation.RuleStatus)]) {
+case class ErgoValidationSettingsUpdate(rulesToDisable: Seq[Short],
+                                        statusUpdates: Seq[(Short, org.ergoplatform.validation.RuleStatus)]) {
 
   def ++(that: ErgoValidationSettingsUpdate): ErgoValidationSettingsUpdate = {
     val newRules = (rulesToDisable ++ that.rulesToDisable).distinct.sorted
@@ -20,7 +21,7 @@ object ErgoValidationSettingsUpdate {
   val empty: ErgoValidationSettingsUpdate = ErgoValidationSettingsUpdate(Seq(), Seq())
 }
 
-object ErgoValidationSettingsUpdateSerializer extends ScorexSerializer[ErgoValidationSettingsUpdate] {
+object ErgoValidationSettingsUpdateSerializer extends ErgoSerializer[ErgoValidationSettingsUpdate] {
 
   private val FirstRule = org.ergoplatform.validation.ValidationRules.FirstRuleId
 

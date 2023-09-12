@@ -2,10 +2,12 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{EmptyBlockSectionProcessor, FullBlockPruningProcessor, ToDownloadProcessor}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
 import org.scalacheck.Gen
 import scorex.core.settings.ScorexSettings
+import scorex.util.ModifierId
 import scorex.util.encode.Base16
 
 import scala.concurrent.duration._
@@ -39,29 +41,33 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
                       blocksToKeep: Int,
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10,
-                      initialDiffOpt: Option[BigInt] = None): ErgoHistory = {
+                      initialDiffOpt: Option[BigInt] = None,
+                      genesisIdOpt: Option[ModifierId] = None): ErgoHistory = {
 
     val minimalSuffix = 2
-    val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
+    val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
+    val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, useExternalMiner = false,
+      UtxoSettings(false, 0, 2), NipopowSettings(false, 1, minimalSuffix), mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
+      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
+      rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false
+)
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
     val chainSettings = initialDiffOpt match {
       case Some(diff) =>
         val diffHex = Base16.encode(diff.toByteArray)
-        settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs, initialDifficultyHex = diffHex)
+        settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs, initialDifficultyHex = diffHex, genesisId = genesisIdOpt)
       case _ =>
-        settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)
+        settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs, genesisId = genesisIdOpt)
     }
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
       nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 
-    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+    ErgoHistory.readOrGenerate(fullHistorySettings)(null)
   }
 
 }

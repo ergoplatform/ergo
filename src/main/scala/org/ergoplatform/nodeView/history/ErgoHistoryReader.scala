@@ -3,16 +3,14 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.consensus.History._
-import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
+import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
+import scorex.core.NodeViewComponent
+import scorex.core.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
@@ -25,17 +23,25 @@ import scala.util.{Failure, Try}
   * Read-only copy of ErgoHistory
   */
 trait ErgoHistoryReader
-  extends HistoryReader[ErgoPersistentModifier, ErgoSyncInfo]
+  extends NodeViewComponent
+    with ContainsModifiers[BlockSection]
     with HeadersProcessor
-    with PoPoWProofsProcessor
-    with UTXOSnapshotChunkProcessor
     with BlockSectionProcessor
     with ScorexLogging
     with ScorexEncoding {
 
+  type ModifierIds = Seq[(NetworkObjectTypeId.Value, ModifierId)]
+
   protected[history] val historyStorage: HistoryStorage
 
   protected val settings: ErgoSettings
+
+  override protected def nipopowSettings: NipopowSettings = settings.nodeSettings.nipopowSettings
+
+  private val Valid = 1.toByte
+  private val Invalid = 0.toByte
+
+  override val historyReader = this
 
   /**
     * True if there's no history, even genesis block
@@ -69,9 +75,20 @@ trait ErgoHistoryReader
 
   /**
     * @param id - modifier id
+    * @return type and raw bytes of semantically valid ErgoPersistentModifier with the given id it is in history
+    */
+   def modifierTypeAndBytesById(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] =
+    if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
+      historyStorage.modifierTypeAndBytesById(id)
+    } else {
+      None
+    }
+
+  /**
+    * @param id - modifier id
     * @return semantically valid ErgoPersistentModifier with the given id it is in history
     */
-  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
+  override def modifierById(id: ModifierId): Option[BlockSection] =
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
       historyStorage.modifierById(id)
     } else {
@@ -82,19 +99,30 @@ trait ErgoHistoryReader
     *
     * @param id - modifier id
     * @tparam T - expected Type
-    * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
+    * @return semantically valid ErgoPersistentModifier of type T with the given id if it is in history
     */
-  def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
+  def typedModifierById[T <: BlockSection : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
     case Some(m: T) => Some(m)
     case _ => None
   }
+
+  /** Get index of expected type by its identifier
+    * @param id - index id
+    * @tparam T - expected Type
+    * @return index of type T with the given id if it is in history
+    */
+  def typedExtraIndexById[T <: ExtraIndex : ClassTag](id: ModifierId): Option[T] =
+    historyStorage.getExtraIndex(id) match {
+      case Some(m: T) => Some(m)
+      case _ => None
+    }
 
   override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
 
   /**
     * Check, that it's possible to apply modifier to history
     */
-  def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
+  def applicable(modifier: BlockSection): Boolean = applicableTry(modifier).isSuccess
 
   /**
     * For given headers (sorted in reverse chronological order), find first one (most recent one) which is known
@@ -113,7 +141,7 @@ trait ErgoHistoryReader
     * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead,
     *         Fork if other peer is on another chain, Unknown if we can't deduct neighbour's status
     */
-  override def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
+  def compare(info: ErgoSyncInfo): PeerChainStatus = {
     info match {
       case syncV1: ErgoSyncInfoV1 =>
         compareV1(syncV1)
@@ -131,7 +159,7 @@ trait ErgoHistoryReader
     *         Older if the neighbour is ahead,
     *         Fork if the neighbour is on a fork
     */
-  def compareV2(info: ErgoSyncInfoV2): HistoryComparisonResult = {
+  def compareV2(info: ErgoSyncInfoV2): PeerChainStatus = {
     bestHeaderOpt.map { myLastHeader =>
       if (info.lastHeaders.isEmpty) {
         Younger
@@ -141,13 +169,13 @@ trait ErgoHistoryReader
         val otherHeaders = info.lastHeaders
         val otherLastHeader = otherHeaders.head // always available
         val otherHeight = otherLastHeader.height
-        // todo: check PoW of otherLastHeader
 
         if (otherHeight == myHeight) {
           if (otherLastHeader.id == myLastHeader.id) {
             // Last headers are the same => chains are equal
             Equal
           } else {
+            // todo: check PoW of otherLastHeader
             if (commonPoint(otherHeaders.tail).isDefined) {
               Fork
             } else {
@@ -178,7 +206,7 @@ trait ErgoHistoryReader
     *         Older if the neighbour is ahead,
     *         Fork if the neighbour is on a fork
     */
-  def compareV1(info: ErgoSyncInfoV1): HistoryComparisonResult = {
+  def compareV1(info: ErgoSyncInfoV1): PeerChainStatus = {
     bestHeaderIdOpt match {
       case Some(id) if info.lastHeaderIds.lastOption.contains(id) =>
         //Our best header is the same as other node best header
@@ -264,6 +292,25 @@ trait ErgoHistoryReader
   }
 
   /**
+    * Finding other peer's continuation header from a header that is common to our node's history
+    * @param syncInfo  other's node sync info
+    * @return maybe continuation header
+    */
+  def continuationHeaderV2(syncInfo: ErgoSyncInfoV2): Option[Header] = {
+    if (syncInfo.lastHeaders.isEmpty) {
+      Option.empty
+    } else {
+      val lastHeader = syncInfo.lastHeaders.head
+      // let's find continuation header whose parent is our bestHeader
+      if (bestHeaderIdOpt.contains(lastHeader.parentId)) {
+        Some(lastHeader)
+      } else {
+        Option.empty
+      }
+    }
+  }
+
+  /**
     * Calculating continuation from common header which will be sent to another node
     * if comparison status is YOUNGER or FORK.
     *
@@ -271,7 +318,7 @@ trait ErgoHistoryReader
     * @param size max return size
     * @return Ids of headers, that node with info should download and apply to synchronize
     */
-  override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
+  def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => continuationIdsV1(syncV1, size)
       case syncV2: ErgoSyncInfoV2 => continuationIdsV2(syncV2, size)
@@ -313,16 +360,27 @@ trait ErgoHistoryReader
     *
     * @return
     */
-  def syncInfoV1: ErgoSyncInfo = {
-    if (isEmpty) {
-      ErgoSyncInfoV1(Seq.empty)
-    } else {
-      val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
-      if (startingPoints.headOption.exists(_.isGenesis)) {
-        ErgoSyncInfoV1((PreGenesisHeader +: startingPoints).map(_.id))
-      } else {
-        ErgoSyncInfoV1(startingPoints.map(_.id))
+  def syncInfoV1: ErgoSyncInfoV1 = {
+    /**
+      * Return last count headers from best headers chain if exist or chain up to genesis otherwise
+      */
+    def lastHeaderIds(count: Int): IndexedSeq[ModifierId] = {
+      val currentHeight = headersHeight
+      val from = Math.max(currentHeight - count + 1, 1)
+      val res = (from to currentHeight).flatMap{h =>
+        bestHeaderIdAtHeight(h)
       }
+      if(from == 1) {
+        PreGenesisHeader.id +: res
+      } else {
+        res
+      }
+    }
+
+    if (isEmpty) {
+      ErgoSyncInfoV1(Nil)
+    } else {
+      ErgoSyncInfoV1(lastHeaderIds(ErgoSyncInfo.MaxBlockIds))
     }
   }
 
@@ -334,7 +392,7 @@ trait ErgoHistoryReader
     */
   def syncInfoV2(full: Boolean): ErgoSyncInfoV2 = {
     if (isEmpty) {
-      ErgoSyncInfoV2(Seq.empty)
+      ErgoSyncInfoV2(Nil)
     } else {
       val h = headersHeight
 
@@ -353,8 +411,11 @@ trait ErgoHistoryReader
   /**
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
-  def lastHeaders(count: Int, offset: Int = 0): HeaderChain = bestHeaderOpt
-    .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset)).getOrElse(HeaderChain.empty)
+  def lastHeaders(count: Int, offset: Int = 0): HeaderChain = {
+    bestHeaderOpt
+      .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset))
+      .getOrElse(HeaderChain.empty)
+  }
 
   /**
     * @return ids of headers (max. limit) starting from offset
@@ -363,18 +424,20 @@ trait ErgoHistoryReader
     (offset until (limit + offset)).flatMap(height => bestHeaderIdAtHeight(height))
   }
 
-  override def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
+  /**
+    * Whether a modifier could be applied to the history
+    *
+    * @param modifier  - modifier to apply
+    * @return `Success` if modifier can be applied, `Failure(ModifierError)` if can not
+    */
+  def applicableTry(modifier: BlockSection): Try[Unit] = {
     modifier match {
       case header: Header =>
         validate(header)
-      case m: BlockSection =>
+      case m: NonHeaderBlockSection =>
         validate(m)
-      case m: NipopowProofModifier =>
-        validate(m)
-      case chunk: UTXOSnapshotChunk =>
-        validate(chunk)
       case m: Any =>
-        Failure(new MalformedModifierError(s"Modifier $m has incorrect type"))
+        Failure(new MalformedModifierError(s"Modifier $m has incorrect type", modifier.id, modifier.modifierTypeId))
     }
   }
 
@@ -454,7 +517,7 @@ trait ErgoHistoryReader
       }
     }
 
-    loop(2, HeaderChain(Seq(header2)))
+    loop(numberBack = 2, otherChain = HeaderChain(Seq(header2)))
   }
 
   protected[history] def commonBlockThenSuffixes(otherChain: HeaderChain,
@@ -468,10 +531,16 @@ trait ErgoHistoryReader
     (ourChain, commonBlockThenSuffixes)
   }
 
+  /**
+    * Return semantic validity status of modifier with id == modifierId
+    *
+    * @param modifierId - modifier id to check
+    * @return
+    */
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {
-      case Some(b) if b.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
-      case Some(b) if b.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
+      case Some(b) if b.headOption.contains(Valid) => ModifierSemanticValidity.Valid
+      case Some(b) if b.headOption.contains(Invalid) => ModifierSemanticValidity.Invalid
       case None if contains(modifierId) => ModifierSemanticValidity.Unknown
       case None => ModifierSemanticValidity.Absent
       case m =>
@@ -488,7 +557,7 @@ trait ErgoHistoryReader
   def bestHeadersAfter(header: Header, howMany: Int): Seq[Header] = {
     @tailrec
     def accumulateHeaders(height: Int, accumulator: Seq[Header], left: Int): Seq[Header] = {
-      if(left == 0){
+      if (left == 0) {
         accumulator
       } else {
         bestHeaderAtHeight(height) match {
@@ -503,43 +572,24 @@ trait ErgoHistoryReader
   }
 
   /**
-    * Constructs popow header against given header identifier
-    *
-    * @param headerId - identifier of the header
-    * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
+    * Get estimated height of headers-chain, if it is synced
+    * @return height of last header known, if headers-chain is synced, or None if not synced
     */
-  def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
-    typedModifierById[Header](headerId).flatMap(h =>
-      typedModifierById[Extension](h.extensionId).flatMap { ext =>
-        NipopowAlgos.unpackInterlinks(ext.fields).toOption.map { interlinks =>
-          PoPowHeader(h, interlinks)
-        }
+  def estimatedTip(): Option[Height] = {
+    Try { //error may happen if history not initialized
+      if (isHeadersChainSynced) {
+        Some(headersHeight)
+      } else {
+        None
       }
-    )
+    }.getOrElse(None)
   }
 
   /**
-    * Constructs popow header (header + interlinks) for еру best header at given height
-    *
-    * @param height - height
-    * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
+    * @return serialized NiPoPoW proof store in database
     */
-  def popowHeader(height: Int): Option[PoPowHeader] = {
-    bestHeaderIdAtHeight(height).flatMap(popowHeader)
-  }
-
-  /**
-    * Constructs PoPoW proof for given m and k according to KMZ17 (FC20 version).
-    * See PoPowAlgos.prove for construction details.
-    * @param m - min superchain length
-    * @param k - suffix length
-    * @param headerIdOpt - optional header to start suffix from (so to construct proof for the header).
-    *                    Please note that k-1 headers will be provided after the header.
-    * @return PoPow proof if success, Failure instance otherwise
-    */
-  def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
-    val proofParams = PoPowParams(m, k)
-    nipopowAlgos.prove(histReader = this, headerIdOpt = headerIdOpt)(proofParams)
+  def readPopowProofBytesFromDb(): Option[Array[Byte]] = {
+    historyStorage.getIndex(NipopowSnapshotHeightKey)
   }
 
 }

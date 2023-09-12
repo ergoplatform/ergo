@@ -1,21 +1,22 @@
 package scorex.core.settings
 
 import java.io.File
-import java.net.InetSocketAddress
-
+import java.net.{InetSocketAddress, URL}
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import scorex.core.network.message.Message
-import scorex.core.utils.NetworkTimeProviderSettings
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
 
+case class LoggingSettings(level: String)
+
 case class RESTApiSettings(bindAddress: InetSocketAddress,
                            apiKeyHash: Option[String],
                            corsAllowedOrigin: Option[String],
-                           timeout: FiniteDuration)
+                           timeout: FiniteDuration,
+                           publicUrl: Option[URL])
 
 case class NetworkSettings(nodeName: String,
                            addedMaxDelay: Option[FiniteDuration],
@@ -33,9 +34,6 @@ case class NetworkSettings(nodeName: String,
                            maxDeliveryChecks: Int,
                            appVersion: String,
                            agentName: String,
-                           maxPacketSize: Int,
-                           maxHandshakeSize: Int,
-                           maxInvObjects: Int,
                            desiredInvObjects: Int,
                            syncInterval: FiniteDuration,
                            syncStatusRefresh: FiniteDuration,
@@ -51,13 +49,14 @@ case class NetworkSettings(nodeName: String,
                            temporalBanDuration: FiniteDuration,
                            penaltySafeInterval: FiniteDuration,
                            penaltyScoreThreshold: Int,
-                           peerEvictionInterval: FiniteDuration)
+                           peerEvictionInterval: FiniteDuration,
+                           peerDiscovery: Boolean)
 
 case class ScorexSettings(dataDir: File,
                           logDir: File,
+                          logging: LoggingSettings,
                           network: NetworkSettings,
-                          restApi: RESTApiSettings,
-                          ntp: NetworkTimeProviderSettings)
+                          restApi: RESTApiSettings)
 
 
 object ScorexSettings extends ScorexLogging with SettingsReaders {

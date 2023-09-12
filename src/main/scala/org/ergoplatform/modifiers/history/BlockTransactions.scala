@@ -3,14 +3,14 @@ package org.ergoplatform.modifiers.history
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.{BlockTransactionsTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
 import org.ergoplatform.modifiers.history.header.Header.Version
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
 import scorex.crypto.hash.Digest32
@@ -33,11 +33,11 @@ case class BlockTransactions(headerId: ModifierId,
                              blockVersion: Version,
                              txs: Seq[ErgoTransaction],
                              override val sizeOpt: Option[Int] = None)
-  extends BlockSection with TransactionsCarryingPersistentNodeViewModifier {
+  extends NonHeaderBlockSection with TransactionsCarryingPersistentNodeViewModifier {
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 
-  override val modifierTypeId: ModifierTypeId = BlockTransactions.modifierTypeId
+  override val modifierTypeId: NetworkObjectTypeId.Value = BlockTransactions.modifierTypeId
 
   /**
     * Ids of block transactions
@@ -76,7 +76,7 @@ case class BlockTransactions(headerId: ModifierId,
 
   override type M = BlockTransactions
 
-  override lazy val serializer: ScorexSerializer[BlockTransactions] = BlockTransactionsSerializer
+  override lazy val serializer: ErgoSerializer[BlockTransactions] = BlockTransactionsSerializer
 
   override def toString: String = {
     val idStr = Algos.encode(id)
@@ -94,7 +94,7 @@ case class BlockTransactions(headerId: ModifierId,
 
 object BlockTransactions extends ApiCodecs {
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
+  val modifierTypeId: NetworkObjectTypeId.Value = BlockTransactionsTypeId.value
 
   // Used in the miner when a BlockTransaction instance is not generated yet (because a header is not known)
   def transactionsRoot(txs: Seq[ErgoTransaction], blockVersion: Version): Digest32 = {
@@ -130,7 +130,7 @@ object BlockTransactions extends ApiCodecs {
   }
 }
 
-object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
+object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
   // See a comment in the parse() function
   val MaxTransactionsInBlock = 10000000
 

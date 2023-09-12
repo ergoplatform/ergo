@@ -2,24 +2,25 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoApp.CriticalSystemException
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.mining.difficulty.DifficultyAdjustment
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
+import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import scorex.core.consensus.History.ProgressInfo
+import scorex.core.consensus.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
+import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayWrapper
 import scorex.util._
+import scorex.util.encode.Base16
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -28,7 +29,26 @@ import scala.util.{Failure, Success, Try}
 /**
   * Contains all functions required by History to process Headers.
   */
-trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
+trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with ScorexLogging with ScorexEncoding {
+
+  /**
+    * Key for database record storing ID of best block header
+    */
+  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
+
+  /**
+    * Key for database record storing ID of best full block
+    */
+  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
+
+  /**
+    * Key for database record storing height of first full block stored
+    */
+  protected val MinFullBlockHeightKey = {
+    // hash of "minfullheight" UTF-8 string
+    ByteArrayWrapper(Base16.decode("4987eb6a8fecbed88a6f733f456cdf4e334b944f4436be4cab50cacb442e15e6").get)
+  }
+
 
   protected val historyStorage: HistoryStorage
 
@@ -36,12 +56,10 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   val powScheme: AutolykosPowScheme
 
-  val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
-
   // Maximum time in future block header may have
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
-  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings)
+  lazy val difficultyCalculator = new DifficultyAdjustment(chainSettings)
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
@@ -55,6 +73,16 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
+  override def writeMinimalFullBlockHeight(height: Height): Unit = {
+    historyStorage.insert(
+      indexesToInsert = Array(MinFullBlockHeightKey -> Ints.toByteArray(height)),
+      objectsToInsert = BlockSection.emptyArray)
+  }
+
+  override def readMinimalFullBlockHeight(): Height = {
+    historyStorage.getIndex(MinFullBlockHeightKey).map(Ints.fromByteArray).getOrElse(ErgoHistory.GenesisHeight)
+  }
+
   def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(bytesToId)
 
   /**
@@ -65,12 +93,12 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   /**
     * @return height of best header
     */
-  def headersHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  def headersHeight: Height = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
     * @return height of best header with all block sections
     */
-  def fullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  def fullBlockHeight: Height = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
     * @param id - id of ErgoPersistentModifier
@@ -83,12 +111,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
-  /**
-    * @param h - header to process
-    * @return ProgressInfo - info required for State to be consistent with History
-    */
-  protected def process(h: Header): Try[ProgressInfo[ErgoPersistentModifier]] = synchronized {
-    val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = toInsert(h)
+  override protected def process(h: Header, nipopowMode: Boolean = false): Try[ProgressInfo[BlockSection]] = synchronized {
+    val dataToInsert: (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = toInsert(h, nipopowMode)
 
     historyStorage.insert(dataToInsert._1, dataToInsert._2).flatMap { _ =>
       bestHeaderIdOpt match {
@@ -104,23 +128,75 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   }
 
   /**
-    * Data to add to and remove from the storage to process this modifier
+    * Data to add to and remove from the storage to process a header
+    * @param h - header to be written into the storage
+    * @param nipopowMode - flag showing whether header `h` is applied sequentially (so parent is already there), or
+    *                     coming after a possible gap (during nipopow application). If true, a gap is possible.
     */
-  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = {
+  private def toInsert(h: Header, nipopowMode: Boolean): (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = {
+    //todo: construct resulting Array without ++
+
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
+
+    // in nipopow comment, we consider that header we got is in best chain (which is guaranteed by the proof),
+    // so we do not check chain's score (and we do not have it)
+    val bestHeader = if (nipopowMode) {
+      true
+    } else {
+      score > bestHeadersChainScore
+    }
+
     val bestRow: Seq[(ByteArrayWrapper, Array[Byte])] =
-      if (score > bestHeadersChainScore) Seq(BestHeaderKey -> idToBytes(h.id)) else Seq.empty
+      if (bestHeader) Seq(BestHeaderKey -> idToBytes(h.id)) else Seq.empty
     val scoreRow = headerScoreKey(h.id) -> score.toByteArray
     val heightRow = headerHeightKey(h.id) -> Ints.toByteArray(h.height)
-    val headerIdsRow = if (score > bestHeadersChainScore) {
+
+    val headerIdsRow = if (bestHeader) {
       if (h.isGenesis) log.info(s"Processing genesis header ${h.encodedId}")
+      if(nipopowMode) log.info(s"Processing nipopow header ${h.encodedId}")
       bestBlockHeaderIdsRow(h, score)
     } else {
       orphanedBlockHeaderIdsRow(h, score)
     }
 
-    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Seq(h))
+    // checks if it is time to take nipopow proof
+    // UTXO set snapshot is taken on last block of a UtXO set snapshot epoch
+    // e.g. on a height h , where h % MakeSnapshotEvery == MakeSnapshotEvery - 1
+    // and NiPoPoW proof is taken Constants.LastHeadersInContext before to have Constants.LastHeadersInContext
+    // (actually, Constants.LastHeadersInContext + 1 even) consecutive headers before first full block to be validated
+    val timeToTakeNipopowProof: Boolean = if (settings.nodeSettings.nipopowSettings.nipopowBootstrap) {
+      // currently, the node is not taking NiPoPoW proof if was bootstrapped via a NiPoPoW itself,
+      // as no extension sections (with interlinks) available for headers downloaded via nipopows
+      false
+    } else  {
+      // the node is currently storing one nipopow proof and possibly spreading it over p2p network only
+      // for the case of bootstrapping nodes which will download UTXO set snapshot after
+      // (stateless clients with suffix length resulting to applying full blocks after that height are ok also)
+      // so nipopow proof is taken at Constants.LastHeadersInContext blocks before UTXO set snapshot height,
+      // to have enough headers to apply full blocks after snapshot (Constants.LastHeadersInContext headers will make
+      // execution context whole)
+      val makeSnapshotEvery = chainSettings.makeSnapshotEvery
+      this.isHeadersChainSynced &&
+        h.height % makeSnapshotEvery == makeSnapshotEvery - 1 - Constants.LastHeadersInContext
+    }
+
+    val nipopowsRow: Seq[(ByteArrayWrapper, Array[Byte])] = if (timeToTakeNipopowProof) {
+      val ts0 = System.currentTimeMillis()
+      popowProofBytes() match {
+        case Success(pbs) =>
+          val ts = System.currentTimeMillis()
+          log.info(s"Dumping nipopow proof (size: ${pbs.length}) @ ${h.height}, generated in ${ts - ts0} ms.")
+          Array(NipopowSnapshotHeightKey -> pbs)
+        case Failure(e) =>
+          log.error("Nipopow proof generation failed ", e)
+          Array.empty[(ByteArrayWrapper, Array[Byte])]
+      }
+    } else {
+      Array.empty[(ByteArrayWrapper, Array[Byte])]
+    }
+
+    (Array(scoreRow, heightRow) ++ bestRow ++ headerIdsRow ++ nipopowsRow, Array(h))
   }
 
   /**
@@ -155,11 +231,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     *
     * @return Success() if header is valid, Failure(error) otherwise
     */
-  protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
-
-  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
-
-  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
+  protected def validate(header: Header): Try[Unit] = HeaderValidator.validate(header).toTry
 
   /**
     * @param id - header id
@@ -263,29 +335,58 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return - difficulty for the next block
     */
   def requiredDifficultyAfter(parent: Header): Difficulty = {
-    if (parent.height == settings.chainSettings.voting.version2ActivationHeight || parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
-      // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
-      settings.chainSettings.initialDifficultyVersion2
-    } else {
-      //todo: it is slow to read thousands headers from database for each header
-      //todo; consider caching here
-      //todo: https://github.com/ergoplatform/ergo/issues/872
-      val parentHeight = parent.height
-      val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
-        .ensuring(_.last == parentHeight)
-      if (heights.lengthCompare(1) == 0) {
-        difficultyCalculator.calculate(Seq(parent))
+    val parentHeight = parent.height
+
+    val eip37ActivationHeight = 844673
+
+    if (settings.networkType.isMainNet && parentHeight + 1 >= eip37ActivationHeight) {
+      val epochLength = 128 // epoch length after EIP-37 activation
+      if (parentHeight % epochLength == 0) {
+        val heights = difficultyCalculator.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
+        val headers = if (historyReader.isInBestChain(parent)) {
+          heights.flatMap(height => historyReader.bestHeaderAtHeight(height))
+        } else {
+          val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+          chain.headers.filter(p => heights.contains(p.height))
+        }
+        difficultyCalculator.eip37Calculate(headers, chainSettings.eip37EpochLength.get) // .get is ok for the mainnet
       } else {
-        val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
-        val headers = chain.headers.filter(p => heights.contains(p.height))
-        difficultyCalculator.calculate(headers)
+        parent.requiredDifficulty
+      }
+    } else {
+      if (parentHeight == settings.chainSettings.voting.version2ActivationHeight ||
+          parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
+        // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
+        settings.chainSettings.initialDifficultyVersion2
+      } else {
+        val epochLength = settings.chainSettings.epochLength
+
+        if (parentHeight % epochLength == 0) {
+          val heights = difficultyCalculator.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
+            .ensuring(_.last == parentHeight)
+          if (heights.lengthCompare(1) == 0) {
+            difficultyCalculator.calculate(Array(parent), epochLength)
+          } else {
+            val headers = if (historyReader.isInBestChain(parent)) {
+              heights.flatMap(height => historyReader.bestHeaderAtHeight(height))
+            } else {
+              val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+              chain.headers.filter(p => heights.contains(p.height))
+            }
+            difficultyCalculator.calculate(headers, epochLength)
+          }
+        } else {
+          parent.requiredDifficulty
+        }
       }
     }
   }
 
-  class HeaderValidator extends ScorexEncoding {
+  private object HeaderValidator extends ScorexEncoding {
 
     private def validationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
+
+    private def time(): ErgoHistory.Time = System.currentTimeMillis()
 
     def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {
@@ -295,21 +396,21 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         parentOpt map { parent =>
           validateChildBlockHeader(header, parent)
         } getOrElse {
-          validationState.validate(hdrParent, condition = false, Algos.encode(header.parentId))
+          validationState.validate(hdrParent, condition = false, InvalidModifier(Algos.encode(header.parentId), header.id, header.modifierTypeId))
         }
       }
     }
 
     private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
       validationState
-        .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
-        .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id))
-        .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
-        .validateNoFailure(hdrPoW, powScheme.validate(header))
-        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty)
-        .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validate(hdrTooOld, fullBlockHeight < nodeSettings.keepVersions, heightOf(header.parentId).toString)
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
+        .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId, header.modifierTypeId)
+        .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id), header.id, header.modifierTypeId)
+        .validate(hdrGenesisHeight, header.height == GenesisHeight, InvalidModifier(header.toString, header.id, header.modifierTypeId))
+        .validateNoFailure(hdrPoW, powScheme.validate(header), header.id, header.modifierTypeId)
+        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty, header.id, header.modifierTypeId)
+        .validateNot(alreadyApplied, historyStorage.contains(header.id), InvalidModifier(header.toString, header.id, header.modifierTypeId))
+        .validate(hdrTooOld, fullBlockHeight < nodeSettings.keepVersions, InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
+        .validate(hdrFutureTimestamp, header.timestamp - time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${time()}", header.id, header.modifierTypeId))
         .result
     }
 
@@ -318,27 +419,31 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       */
     private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
       validationState
-        .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
-        .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
-        .validateNoFailure(hdrPoW, powScheme.validate(header))
-        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent))
-        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
-        .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
-        .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validate(hdrCheckpointV2, checkpointV2Condition(header), "Wrong V2 checkpoint")
+        .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, InvalidModifier(s"${header.timestamp} > ${parent.timestamp}", header.id, header.modifierTypeId))
+        .validate(hdrHeight, header.height == parent.height + 1, InvalidModifier(s"${header.height} vs ${parent.height}", header.id, header.modifierTypeId))
+        .validateNoFailure(hdrPoW, powScheme.validate(header), header.id, header.modifierTypeId)
+        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent), header.id, header.modifierTypeId)
+        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
+        .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId), InvalidModifier(s"Parent semantics broken", header.id, header.modifierTypeId))
+        .validate(hdrFutureTimestamp, header.timestamp - time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${time()}", header.id, header.modifierTypeId))
+        .validateNot(alreadyApplied, historyStorage.contains(header.id), InvalidModifier(s"${header.id} already applied", header.id, header.modifierTypeId))
+        .validate(hdrCheckpoint, checkpointCondition(header), InvalidModifier(s"${header.id} wrong checkpoint", header.id, header.modifierTypeId))
         .result
     }
 
     /**
-      * Helper method to check v2 checkpoint (first v2 block)
+      * Helper method to validate checkpoint given in config, if it is provided.
+      *
+      * Checks that block at checkpoint height has id provided.
       */
-    private def checkpointV2Condition(header: Header): Boolean = {
-      if (header.height == 417792 && settings.networkType.isMainNet) {
-        header.id == "0ba60a7db44877aade553beb05200f7d67b586945418d733e455840d283e0508"
-      } else {
-        true
-      }
+    private def checkpointCondition(header: Header): Boolean = {
+      settings.nodeSettings.checkpoint.map { checkpoint =>
+        if (checkpoint.height == header.height) {
+          header.id == checkpoint.blockId
+        } else {
+          true
+        }
+      }.getOrElse(true)
     }
 
   }

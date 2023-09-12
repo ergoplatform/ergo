@@ -1,36 +1,46 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
-import scorex.core.transaction.MempoolReader
+import scorex.core.NodeViewComponent
+import scorex.core.consensus.ContainsModifiers
 import scorex.util.ModifierId
 
-trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
+trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTransaction] {
 
-  override def contains(id: ModifierId): Boolean
+  /**
+    * @param id -  transaction id
+    * @return `true` if mempool holds this transaction or it was invalidated earlier, `false` otherwise
+    */
+  def contains(id: ModifierId): Boolean
 
-  override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction]
+  def getAll(ids: Seq[ModifierId]): Seq[UnconfirmedTransaction]
 
-  override def size: Int
+  def size: Int
 
   /**
     * @return inputs spent by the mempool transactions
     */
   def spentInputs: Iterator[BoxId]
 
-  def getAll: Seq[ErgoTransaction]
+  def getAll: Seq[UnconfirmedTransaction]
 
   /**
     * Returns all transactions resided in pool sorted by weight in descending order
     */
-  def getAllPrioritized: Seq[ErgoTransaction]
+  def getAllPrioritized: Seq[UnconfirmedTransaction]
 
 
   /**
     * Returns given number of transactions resided in pool sorted by weight in descending order
     */
-  def take(limit: Int): Iterable[ErgoTransaction]
+  def take(limit: Int): Iterable[UnconfirmedTransaction]
+
+  /**
+    * Returns up to given number of transactions randomly
+    */
+  def random(limit: Int): Iterable[UnconfirmedTransaction]
 
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 

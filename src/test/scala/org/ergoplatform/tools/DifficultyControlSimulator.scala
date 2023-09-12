@@ -1,6 +1,6 @@
 package org.ergoplatform.tools
 
-import org.ergoplatform.mining.difficulty.{LinearDifficultyControl, RequiredDifficulty}
+import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, DifficultySerializer}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.ErgoSettings
@@ -19,9 +19,10 @@ import scala.util.Random
 object DifficultyControlSimulator extends App with ErgoGenerators {
 
   val baseHeader = defaultHeaderGen.sample.get
-//  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
-  val chainSettings = settings.chainSettings.copy(blockInterval = 2.minute, useLastEpochs = 8, epochLength = 256)
-  val difficultyControl = new LinearDifficultyControl(chainSettings)
+  //  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
+  val epochLength = 256
+  val chainSettings = settings.chainSettings.copy(blockInterval = 2.minute, useLastEpochs = 8, epochLength = epochLength)
+  val difficultyControl = new DifficultyAdjustment(chainSettings)
   // Constant rate: Stable simulated average interval = 119713, error  = 0.23916666% | Init simulated average interval = 117794, error  = 1.8383334%
   // Increasing rate: Stable simulated average interval = 119841, error  = 0.1325% | Init simulated average interval = 119077, error  = 0.76916665%
   // Random rate: Stable simulated average interval = 120539, error  = 0.44916666% | Init simulated average interval = 115519, error  = 3.7341666%
@@ -36,7 +37,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
     * @param difficultyControl
     * @param initialHeader
     */
-  def blockchainSimulator(difficultyControl: LinearDifficultyControl,
+  def blockchainSimulator(difficultyControl: DifficultyAdjustment,
                           initialHeader: Header,
                           timeForOneHash: Int => Int): Unit = {
     // number of blocks in simulated chain
@@ -69,7 +70,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
         val timeDiff = simulateTimeDiff()
         val newHeader = lastHeader.copy(timestamp = lastHeader.timestamp + timeDiff,
           height = curHeight + 1,
-          nBits = RequiredDifficulty.encodeCompactBits(requiredDifficulty))
+          nBits = DifficultySerializer.encodeCompactBits(requiredDifficulty))
         curChain(newHeader.height) = newHeader
 
         genchain(curHeight + 1)
@@ -86,27 +87,27 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
   def printTestnetData(): Unit = {
     val baseHeader = defaultHeaderGen.sample.get
     val chainSettings = ErgoSettings.read().chainSettings.copy(epochLength = 1)
-    val difficultyControl = new LinearDifficultyControl(chainSettings)
+    val difficultyControl = new DifficultyAdjustment(chainSettings)
 
     val headers = Source.fromResource("difficulty.csv").getLines().toSeq.tail.map { line =>
       val l = line.split(",")
       baseHeader.copy(
         height = l(0).toInt,
         timestamp = l(1).toLong,
-        nBits = RequiredDifficulty.encodeCompactBits(BigInt(l(2)))
+        nBits = DifficultySerializer.encodeCompactBits(BigInt(l(2)))
       )
     }
     printEpochs(headers, difficultyControl)
   }
 
-  def printEpochs(headers: Seq[Header], difficultyControl: LinearDifficultyControl): Unit = {
+  def printEpochs(headers: Seq[Header], difficultyControl: DifficultyAdjustment): Unit = {
     case class Epoch(startHeight: Int, requiredDifficulty: BigInt, blockInterval: FiniteDuration, timestamp: Long) {
       val realDifficulty: BigInt = requiredDifficulty * difficultyControl.desiredInterval.toMillis / blockInterval.toMillis
 
       override def toString: String = s"$startHeight,$requiredDifficulty,$realDifficulty,${blockInterval.toMillis}"
     }
 
-    val epochs: Seq[Epoch] = headers.filter(h => h.height % difficultyControl.epochLength == 0).sliding(2).map { p =>
+    val epochs: Seq[Epoch] = headers.filter(h => h.height % epochLength == 0).sliding(2).map { p =>
       val start = p.head
       val end = p.last
       val meanInterval = ((end.timestamp - start.timestamp) / (end.height - start.height)).millis
@@ -123,12 +124,12 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
     val errorStable = Math.abs(simulatedStable - desired).toFloat * 100 / desired
 
     println(s"Control:")
-    println(s"Desired interval = $desired, epoch length = ${difficultyControl.epochLength}, use last epochs = " +
+    println(s"Desired interval = $desired, epoch length = $epochLength, use last epochs = " +
       difficultyControl.useLastEpochs)
     println(s"Init simulated average interval = $simulatedInit, error  = $errorInit%")
     println(s"Stable simulated average interval = $simulatedStable, error  = $errorStable%")
 
-/*
+    /*
     println(s"height,requiredDifficulty,realDifficulty,timeDiff")
     epochs.foreach(d => println(d))
 */
@@ -137,24 +138,24 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   private def requiredDifficultyAfter(parent: Header, blockchain: mutable.Map[Int, Header]): Difficulty = {
     val parentHeight = parent.height
-    val heights = difficultyControl.previousHeadersRequiredForRecalculation(parentHeight + 1)
+    val heights = difficultyControl.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
       .ensuring(_.last == parentHeight)
     if (heights.lengthCompare(1) == 0) {
-      difficultyControl.calculate(Seq(parent))
+      difficultyControl.calculate(Seq(parent), epochLength)
     } else {
       val headersToCalculate = heights.map(h => blockchain(h))
-      difficultyControl.calculate(headersToCalculate)
+      difficultyControl.calculate(headersToCalculate, epochLength)
     }
   }
 
 
   def constantHashRate(height: Int): Int = {
-    assert(height > 0)
     1000
   }
+
   def linearGrowingHashRate(height: Int): Int = Math.max(2000 - height / 20, 100)
+
   def randomHashRate(height: Int): Int = {
-    assert(height > 0)
     Random.nextInt(1000)
   }
 

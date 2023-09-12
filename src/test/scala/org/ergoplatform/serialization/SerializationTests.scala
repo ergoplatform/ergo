@@ -14,12 +14,12 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
 import org.scalatest.Assertion
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 
 class SerializationTests extends ErgoPropertyTest with WalletGenerators with scorex.testkit.SerializationTests {
 
   def checkSerializationRoundtripAndSize[A <: ErgoNodeViewModifier](generator: Gen[A],
-                                                                    serializer: ScorexSerializer[A]): Assertion = {
+                                                                    serializer: ErgoSerializer[A]): Assertion = {
     forAll(generator) { b: A =>
       val recovered = serializer.parseBytes(serializer.toBytes(b))
       val bytes = serializer.toBytes(b)
@@ -35,7 +35,7 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
   }
 
   property("PoPowProof serialization") {
-    checkSerializationRoundtrip(poPowProofGen, new NipopowProofSerializer(popowAlgos))
+    checkSerializationRoundtrip(poPowProofGen, new NipopowProofSerializer(nipopowAlgos))
   }
 
   property("Header serialization") {
@@ -62,6 +62,14 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
 
   property("ErgoTransactionGen serialization") {
     checkSerializationRoundtripAndSize(invalidErgoTransactionGen, ErgoTransactionSerializer)
+  }
+
+  property("ErgoTransaction .bytes") {
+    forAll(invalidErgoTransactionGen) { tx =>
+      val bytes = tx.bytes
+      val txRestored = ErgoTransactionSerializer.parseBytes(bytes)
+      txRestored.bytes.sameElements(bytes) shouldBe true
+    }
   }
 
   property("ErgoSyncInfo v1 serialization") {

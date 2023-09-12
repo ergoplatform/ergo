@@ -1,38 +1,167 @@
 package org.ergoplatform.wallet.transactions
 
-import scala.collection.IndexedSeq
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.DataInput
-import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.ErgoAddress
-import org.ergoplatform.ErgoScriptPredef
-import org.ergoplatform.UnsignedErgoLikeTransaction
-import org.ergoplatform.UnsignedInput
-import sigmastate.eval.Extensions._
-
-import scala.util.Try
-import scorex.util.{ModifierId, bytesToId, idToBytes}
-import special.collection.Coll
-import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId
-import scorex.crypto.hash.Digest32
-import org.ergoplatform.wallet.{AssetUtils, TokensMap}
-import org.ergoplatform.wallet.boxes.BoxSelector
-import org.ergoplatform.wallet.boxes.DefaultBoxSelector
+import org.ergoplatform._
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
+import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
+import scorex.crypto.authds.ADKey
+import scorex.util.encode.Base16
+import scorex.util.{ModifierId, bytesToId}
+import sigmastate.eval.Extensions._
+import sigmastate.eval._
+import sigmastate.utils.Extensions._
+import special.collection.Coll
+import special.collection.Extensions._
 
+import scala.collection.JavaConverters._
+import scala.util.Try
 
 object TransactionBuilder {
 
-  def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap =
+  /**
+    * @param recipientAddress - payment recipient address
+    * @param transferAmt - amount of ERGs to transfer
+    */
+  case class Payment(
+    recipientAddress: ErgoAddress,
+    transferAmt: Long
+  )
+
+  /**
+    * Assembles unsigned payment transaction with multiple outputs
+    *
+    * @param inputIds - identifiers of inputs to be used in transaction
+    * @param feeAmt - fee amount
+    * @param currentHeight - current blockchain height
+    * @param payments - list of addresses and corresponding amounts to make outputs from
+    * @param changeAddress - change recipient address
+    * @param changeAmt - amount to return back to `changeAddress`
+    * @return unsigned transaction
+    */
+  def multiPaymentTransaction(inputIds: Array[String],
+                              feeAmt: Long,
+                              payments: java.util.List[Payment],
+                              changeAddress: ErgoAddress,
+                              changeAmt: Long,
+                              currentHeight: Int): UnsignedErgoLikeTransaction = {
+    val feeBox = new ErgoBoxCandidate(
+      feeAmt,
+      ErgoTreePredef.feeProposition(),
+      currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val paymentBoxes =
+      payments.asScala.map { case Payment(recipientAddress, transferAmt) =>
+        new ErgoBoxCandidate(
+          transferAmt,
+          recipientAddress.script,
+          currentHeight,
+          Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+          Map.empty
+        )
+      }.toVector
+
+    val outputs =
+      if (changeAmt == 0) {
+        paymentBoxes :+ feeBox
+      } else {
+        val changeBox = new ErgoBoxCandidate(
+          changeAmt,
+          changeAddress.script,
+          currentHeight,
+          Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+          Map.empty
+        )
+        paymentBoxes ++ Vector(feeBox, changeBox)
+      }
+    val unsignedInputs = inputIds
+      .flatMap { id =>
+        Base16.decode(id)
+          .map(x => new UnsignedInput(ADKey @@ x))
+          .toOption
+      }.toIndexedSeq
+
+    new UnsignedErgoLikeTransaction(
+      unsignedInputs,
+      dataInputs = IndexedSeq.empty,
+      outputs
+    )
+  }
+
+  /**
+    * Assembles unsigned payment transaction.
+    *
+    * @param recipientAddress - payment recipient address
+    * @param changeAddress - change recipient address
+    * @param transferAmt - amount of ERGs to transfer
+    * @param feeAmt - fee amount
+    * @param changeAmt - amount to return back to `changeAddress`
+    * @param inputIds - identifiers of inputs to be used in transaction
+    * @param currentHeight - current blockchain height
+    * @return unsigned transaction
+    */
+  def paymentTransaction(recipientAddress: ErgoAddress,
+                         changeAddress: ErgoAddress,
+                         transferAmt: Long,
+                         feeAmt: Long,
+                         changeAmt: Long,
+                         inputIds: Array[String],
+                         currentHeight: Int): UnsignedErgoLikeTransaction = {
+    val payTo = new ErgoBoxCandidate(
+      transferAmt,
+      recipientAddress.script,
+      currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val fee = new ErgoBoxCandidate(
+      feeAmt,
+      ErgoTreePredef.feeProposition(),
+      currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val change = new ErgoBoxCandidate(
+      changeAmt,
+      changeAddress.script,
+      currentHeight,
+      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Map.empty
+    )
+    val unsignedInputs = inputIds
+      .flatMap { id =>
+        Base16.decode(id)
+          .map(x => new UnsignedInput(ADKey @@ x))
+          .toOption
+      }
+      .toIndexedSeq
+
+    val dataInputs = IndexedSeq.empty
+    val outputs = if (changeAmt == 0) {
+      IndexedSeq(payTo, fee)
+    } else {
+      IndexedSeq(payTo, change, fee)
+    }
+
+    new UnsignedErgoLikeTransaction(
+      unsignedInputs,
+      dataInputs,
+      outputs
+    )
+  }
+
+  def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap = {
     AssetUtils.mergeAssets(
       initialMap = Map.empty[ModifierId, Long],
-      maps = outputCandidates.map(b => collTokensToMap(b.additionalTokens)):_*)
+      maps = outputCandidates.map(b => collTokensToMap(b.additionalTokens)): _*)
+  }
 
   def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
-    tokens.toArray.map(t => bytesToId(t._1) -> t._2).toMap
+    tokens.toArray.map(t => t._1.toModifierId -> t._2).toMap
 
   def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
-    tokens.toSeq.map {t => (Digest32 @@ idToBytes(t._1)) -> t._2}.toArray.toColl
+    tokens.toArray.map {t => t._1.toTokenId -> t._2}.toColl
 
   private def validateStatelessChecks(inputs: IndexedSeq[ErgoBox], dataInputs: IndexedSeq[DataInput],
     outputCandidates: Seq[ErgoBoxCandidate]): Unit = {
@@ -73,7 +202,7 @@ object TransactionBuilder {
     minChangeValue: Long,
     minerRewardDelay: Int,
     burnTokens: TokensMap = Map.empty,
-    boxSelector: BoxSelector = DefaultBoxSelector
+    boxSelector: BoxSelector = new DefaultBoxSelector(None)
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
     validateStatelessChecks(inputs, dataInputs, outputCandidates)
@@ -99,7 +228,7 @@ object TransactionBuilder {
 
     // add burnTokens to target assets so that they are excluded from the change outputs
     // thus total outputs assets will be reduced which is interpreted as _token burning_
-    val tokensOutWithBurned = AssetUtils.mergeAssets(tokensOutNoMinted, burnTokens)
+    val tokensOutWithBurned = AssetUtils.mergeAssets(tokensOutNoMinted.toMap, burnTokens)
 
     val selection = boxSelector.select(inputs.toIterator, outputTotal, tokensOutWithBurned) match {
       case Left(err) => throw new IllegalArgumentException(
@@ -107,7 +236,7 @@ object TransactionBuilder {
       case Right(v) => v
     }
     // although we're only interested in change boxes, make sure selection contains exact inputs
-    assert(selection.boxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.boxes}")
+    assert(selection.inputBoxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.inputBoxes}")
     val changeBoxes = selection.changeBoxes
     val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty)
 
@@ -123,7 +252,7 @@ object TransactionBuilder {
       val actualFee = if (changeGoesToFee) fee + changeAmt else fee
       new ErgoBoxCandidate(
         actualFee,
-        ErgoScriptPredef.feeProposition(minerRewardDelay),
+        ErgoTreePredef.feeProposition(minerRewardDelay),
         currentHeight
       )
     }
@@ -144,6 +273,30 @@ object TransactionBuilder {
       dataInputs,
       finalOutputCandidates.toIndexedSeq
     )
+  }
+
+  implicit class EitherOpsFor211[+A, +B](val source: Either[A, B]) extends AnyVal {
+
+    /** The given function is applied if this is a `Right`.
+      *
+      *  {{{
+      *  Right(12).map(x => "flower") // Result: Right("flower")
+      *  Left(12).map(x => "flower")  // Result: Left(12)
+      *  }}}
+      */
+    def mapRight[B1](f: B => B1): Either[A, B1] = source match {
+      case Right(b) => Right(f(b))
+      case _        => source.asInstanceOf[Either[A, B1]]
+    }
+
+    /** Binds the given function across `Right`.
+      *
+      *  @param f The function to bind across `Right`.
+      */
+    def flatMapRight[A1 >: A, B1](f: B => Either[A1, B1]): Either[A1, B1] = source match {
+      case Right(b) => f(b)
+      case _        => source.asInstanceOf[Either[A1, B1]]
+    }
   }
 
 }

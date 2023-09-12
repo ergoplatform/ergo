@@ -26,7 +26,7 @@ object LDBStoreBench
   private val db1 = factory.open(createTempDir, options)
 
   private def storeLDB() = new LDBKVStore(db1)
-  private def storeLVDB() = new LDBVersionedStore(createTempDir, keepVersions = 400)
+  private def storeLVDB() = new LDBVersionedStore(createTempDir, initialKeepVersions = 400)
 
   private val modsNumGen = Gen.enumeration("modifiers number")(1000)
 
@@ -37,9 +37,9 @@ object LDBStoreBench
   }
 
   val txsWithDbGen: Gen[(Seq[BlockTransactions], LDBKVStore)] = txsGen.map { bts =>
-    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
+    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes).toArray
     val db = storeLDB()
-    toInsert.grouped(5).foreach(db.insert(_).get)
+    toInsert.grouped(5).foreach(kv => db.insert(kv.map(_._1), kv.map(_._2)).get)
     bts -> storeLDB
   }
 
@@ -53,9 +53,9 @@ object LDBStoreBench
   private def randomVersion: Digest32 = Algos.hash(Longs.toByteArray(Random.nextLong()))
 
   private def benchWriteLDB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
+    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes).toArray
     val db = storeLDB()
-    toInsert.grouped(5).foreach(db.insert(_).get)
+    toInsert.grouped(5).foreach(kv => db.insert(kv.map(_._1), kv.map(_._2)).get)
   }
 
   private def benchReadLDB(bts: Seq[BlockTransactions], db: LDBKVStore): Unit = {

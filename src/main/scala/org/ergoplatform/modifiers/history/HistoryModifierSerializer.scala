@@ -1,14 +1,14 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
-object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier] {
+object HistoryModifierSerializer extends ErgoSerializer[BlockSection] {
 
-  override def serialize(obj: ErgoPersistentModifier, w: Writer): Unit = {
+  override def serialize(obj: BlockSection, w: Writer): Unit = {
     obj match {
       case m: Header =>
         w.put(Header.modifierTypeId)
@@ -27,7 +27,7 @@ object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier
     }
   }
 
-  override def parse(r: Reader): ErgoPersistentModifier = {
+  override def parse(r: Reader): BlockSection = {
     r.getByte() match {
       case Header.`modifierTypeId` =>
         HeaderSerializer.parse(r)

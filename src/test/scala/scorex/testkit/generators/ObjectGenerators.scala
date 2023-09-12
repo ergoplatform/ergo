@@ -1,42 +1,33 @@
 package scorex.testkit.generators
 
-import java.net.{InetAddress, InetSocketAddress}
-
+import java.net.{InetAddress, InetSocketAddress, URL}
 import akka.actor.ActorRef
 import akka.util.ByteString
+import org.ergoplatform.modifiers.NetworkObjectTypeId
+import org.ergoplatform.network.ModePeerFeature
+import org.ergoplatform.nodeView.state.StateType
+import org.scalacheck.Gen.{const, some}
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.core.app.Version
 import scorex.core.network.message.{InvData, ModifiersData}
 import scorex.core.network._
-import scorex.core.serialization.ScorexSerializer
-import scorex.core.{ModifierTypeId, NodeViewModifier}
-import scorex.util.serialization._
+import scorex.core.network.peer.{PeerInfo, RestApiUrlPeerFeature}
+import scorex.core.NodeViewModifier
 import scorex.util.{ModifierId, bytesToId}
 
 trait ObjectGenerators {
 
-  object FullNodePeerFeature extends PeerFeature {
-    override type M = PeerFeature
-    override val featureId: PeerFeature.Id = 1: Byte
-
-    override def serializer: ScorexSerializer[PeerFeature] = new ScorexSerializer[PeerFeature] {
-
-      override def serialize(obj: PeerFeature, w: Writer): Unit = {
-        w.put(1)
-        w.put(2)
-        w.put(3)
-      }
-
-      override def parse(r: Reader): PeerFeature = {
-        require(r.getByte() == 1 && r.getByte() == 2 && r.getByte() == 3)
-        FullNodePeerFeature
-      }
-    }
-  }
-
   val MaxVersion = 999
   val MaxIp = 255
   val MaxPort = 65535
+
+  val modePeerFeatureGen = for {
+    utxo <- Gen.oneOf(true, false)
+    stateType <- if(utxo) StateType.Utxo else StateType.Digest
+    verifyingTransactions <- Gen.oneOf(true, false)
+    popowSuffix <- Gen.option(smallInt)
+    blocksToKeep <- smallInt
+  } yield ModePeerFeature(stateType, verifyingTransactions, popowSuffix, blocksToKeep)
 
   lazy val smallInt: Gen[Int] = Gen.choose(0, 20)
 
@@ -59,10 +50,10 @@ trait ObjectGenerators {
   lazy val modifierIdGen: Gen[ModifierId] = Gen.listOfN(NodeViewModifier.ModifierIdSize, Arbitrary.arbitrary[Byte])
     .map(id => bytesToId(id.toArray))
 
-  lazy val modifierTypeIdGen: Gen[ModifierTypeId] = Arbitrary.arbitrary[Byte].map(t => ModifierTypeId @@ t)
+  lazy val modifierTypeIdGen: Gen[NetworkObjectTypeId.Value] = Arbitrary.arbitrary[Byte].map(t => NetworkObjectTypeId.fromByte(t))
 
   lazy val invDataGen: Gen[InvData] = for {
-    modifierTypeId: ModifierTypeId <- modifierTypeIdGen
+    modifierTypeId: NetworkObjectTypeId.Value <- modifierTypeIdGen
     modifierIds: Seq[ModifierId] <- Gen.nonEmptyListOf(modifierIdGen) if modifierIds.nonEmpty
   } yield InvData(modifierTypeId, modifierIds)
 
@@ -72,7 +63,7 @@ trait ObjectGenerators {
   } yield id -> mod
 
   lazy val modifiersGen: Gen[ModifiersData] = for {
-    modifierTypeId: ModifierTypeId <- modifierTypeIdGen
+    modifierTypeId: NetworkObjectTypeId.Value <- modifierTypeIdGen
     modifiers: Map[ModifierId, Array[Byte]] <- Gen.nonEmptyMap(modifierWithIdGen).suchThat(_.nonEmpty)
   } yield ModifiersData(modifierTypeId, modifiers)
 
@@ -90,14 +81,35 @@ trait ObjectGenerators {
     port <- Gen.choose(0, MaxPort)
   } yield new InetSocketAddress(InetAddress.getByName(s"$ip1.$ip2.$ip3.$ip4"), port)
 
+  lazy val urlGen: Gen[URL] = for {
+    protocol <- Gen.frequency(5 -> const("http://"), 5 -> const("https://"))
+    ip1 <- Gen.choose(0, MaxIp)
+    ip2 <- Gen.choose(0, MaxIp)
+    ip3 <- Gen.choose(0, MaxIp)
+    ip4 <- Gen.choose(0, MaxIp)
+    host <- Gen.frequency(5 -> const(s"$ip1.$ip2.$ip3.$ip4"), 5 -> const("example.com"))
+    port <- Gen.choose(0, MaxPort)
+    suffix <- Gen.frequency(5 -> const("/"), 5 -> const(""))
+  } yield new URL(s"$protocol$host:$port$suffix")
+
   lazy val connectionIdGen: Gen[ConnectionId] = for {
     ip1 <- inetSocketAddressGen
     ip2 <- inetSocketAddressGen
     direction <- Gen.oneOf[ConnectionDirection](Seq[ConnectionDirection](Incoming, Outgoing))
   } yield ConnectionId(ip1, ip2, direction)
 
+  def peerInfoGen: Gen[PeerInfo] = for {
+    peerSpec <- peerSpecGen
+  } yield PeerInfo(peerSpec, 0L, Some(Incoming))
+
   def connectedPeerGen(peerRef: ActorRef): Gen[ConnectedPeer] = for {
     connectionId <- connectionIdGen
-  } yield ConnectedPeer(connectionId, peerRef, 0, None)
+    peerInfo <- peerInfoGen
+  } yield ConnectedPeer(connectionId, peerRef, 0, Some(peerInfo))
 
+  def peerSpecGen: Gen[PeerSpec] = for {
+    declaredAddress <- Gen.frequency(5 -> const(None), 5 -> some(inetSocketAddressGen))
+    features: Seq[PeerFeature] <- Gen.someOf(modePeerFeatureGen, urlGen.flatMap(url => RestApiUrlPeerFeature(url)))
+    version <- appVersionGen
+  } yield PeerSpec("ergoref", version, "ergo-node", declaredAddress, features)
 }

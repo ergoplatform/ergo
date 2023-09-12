@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.scalameter.KeyValue
 import org.scalameter.api._
@@ -43,7 +43,7 @@ object ErgoMemPoolBenchmark
 
   private def bench(txsInIncomeOrder: Seq[ErgoTransaction]): Unit = {
     var pool = ErgoMemPool.empty(settings)
-    txsInIncomeOrder.foreach(tx => pool = pool.put(tx).get)
+    txsInIncomeOrder.foreach(tx => pool = pool.put(UnconfirmedTransaction(tx, None)))
   }
 
   performance of "ErgoMemPool awaiting" in {

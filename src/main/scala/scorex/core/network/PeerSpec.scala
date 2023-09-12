@@ -1,11 +1,13 @@
 package scorex.core.network
 
-import java.net.{InetAddress, InetSocketAddress}
+import org.ergoplatform.settings.PeerFeatureDescriptors
 
+import java.net.{InetAddress, InetSocketAddress, URL}
 import scorex.core.app.{ApplicationVersionSerializer, Version}
-import scorex.core.network.peer.LocalAddressPeerFeature
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.network.peer.{LocalAddressPeerFeature, RestApiUrlPeerFeature}
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.Extensions._
+import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -30,19 +32,29 @@ case class PeerSpec(agentName: String,
     features.collectFirst { case LocalAddressPeerFeature(addr) => addr }
   }
 
+  lazy val publicUrlOpt: Option[URL] =
+    features.collectFirst { case RestApiUrlPeerFeature(url) => url }
+
   def address: Option[InetSocketAddress] = declaredAddress orElse localAddressOpt
 
 }
 
-class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends ScorexSerializer[PeerSpec] {
-  override def serialize(obj: PeerSpec, w: Writer): Unit = {
+object PeerSpecSerializer extends ErgoSerializer[PeerSpec] with ScorexLogging {
 
+  override def serialize(obj: PeerSpec, w: Writer): Unit = {
     w.putShortString(obj.agentName)
     ApplicationVersionSerializer.serialize(obj.protocolVersion, w)
     w.putShortString(obj.nodeName)
 
-
-    w.putOption(obj.declaredAddress) { (writer, isa) =>
+    val address = obj.declaredAddress match {
+      case Some(isa) =>
+        if(isa.getAddress == null)
+          None
+        else
+          Some(isa)
+      case None => None
+    }
+    w.putOption(address) { (writer, isa) =>
       val addr = isa.getAddress.getAddress
       writer.put((addr.size + 4).toByteExact)
       writer.putBytes(addr)
@@ -80,11 +92,14 @@ class PeerSpecSerializer(featureSerializers: PeerFeature.Serializers) extends Sc
       val featBytesCount = r.getUShort().toShortExact
       val featChunk = r.getChunk(featBytesCount)
       //we ignore a feature found in the PeersData if we do not know how to parse it or failed to do that
-      featureSerializers.get(featId).flatMap { featureSerializer =>
+      val serializer = PeerFeatureDescriptors.FeatureSerializers.get(featId)
+      if (serializer.isEmpty) {
+        log.debug(s"No feature serializer found for feature #$featId")
+      }
+      serializer.flatMap { featureSerializer =>
         featureSerializer.parseTry(r.newReader(featChunk)).toOption
       }
     }
-
     PeerSpec(appName, protocolVersion, nodeName, declaredAddressOpt, feats)
   }
 

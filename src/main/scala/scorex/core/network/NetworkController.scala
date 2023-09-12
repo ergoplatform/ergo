@@ -1,20 +1,22 @@
 package scorex.core.network
 
 import java.net._
-import akka.actor._
+import akka.actor.{ActorRef, _}
 import akka.io.Tcp._
 import akka.io.{IO, Tcp}
 import akka.pattern.ask
 import akka.util.Timeout
 import scorex.core.app.{ScorexContext, Version}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{DisconnectedPeer, HandshakedPeer}
+import org.ergoplatform.network.ModePeerFeature
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.network.message.Message.MessageCode
-import scorex.core.network.message.{Message, MessageSpec}
+import scorex.core.network.message.Message
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
-import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, SessionIdPeerFeature}
-import scorex.core.settings.NetworkSettings
-import scorex.core.utils.TimeProvider.Time
-import scorex.core.utils.{NetworkUtils, TimeProvider}
+import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
+import org.ergoplatform.nodeView.history.ErgoHistory.Time
+import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
@@ -25,10 +27,11 @@ import scala.util.{Random, Try}
   * Control all network interaction
   * must be singleton
   */
-class NetworkController(settings: NetworkSettings,
+class NetworkController(ergoSettings: ErgoSettings,
                         peerManagerRef: ActorRef,
                         scorexContext: ScorexContext,
-                        tcpManager: ActorRef
+                        tcpManager: ActorRef,
+                        messageHandlersPartial: ActorRef => Map[MessageCode, ActorRef]
                        )(implicit ec: ExecutionContext) extends Actor with ScorexLogging {
 
   import NetworkController.ReceivableMessages._
@@ -48,21 +51,26 @@ class NetworkController(settings: NetworkSettings,
       Restart
   }
 
-  private implicit val timeout: Timeout = Timeout(settings.controllerTimeout.getOrElse(5.seconds))
+  private val scorexSettings = ergoSettings.scorexSettings
+  private val networkSettings = scorexSettings.network
 
-  private var messageHandlers = Map.empty[MessageCode, ActorRef]
+  // capabilities of our node
+  private val modePeerFeature = ModePeerFeature(ergoSettings.nodeSettings)
+  private val messageHandlers = messageHandlersPartial(self)
 
-  private lazy val bindAddress = settings.bindAddress
+  private implicit val timeout: Timeout = Timeout(networkSettings.controllerTimeout.getOrElse(5.seconds))
+  private lazy val bindAddress = networkSettings.bindAddress
 
   private var connections = Map.empty[InetSocketAddress, ConnectedPeer]
   private var unconfirmedConnections = Set.empty[InetSocketAddress]
 
-  private val mySessionIdFeature = SessionIdPeerFeature(settings.magicBytes)
+  private val mySessionIdFeature = SessionIdPeerFeature(networkSettings.magicBytes)
   /**
     * Storing timestamp of a last message got via p2p network.
     * Used to check whether connectivity is lost.
     */
-  private var lastIncomingMessageTime: TimeProvider.Time = 0L
+  private var lastIncomingMessageTime: ErgoHistory.Time = 0L
+  private val activityDelta: Long = 60 * 1000 // 1 min
 
   //check own declared address for validity
   validateDeclaredAddress()
@@ -72,28 +80,40 @@ class NetworkController(settings: NetworkSettings,
   //bind to listen incoming connections
   tcpManager ! Bind(self, bindAddress, options = Nil, pullMode = false)
 
-  override def receive: Receive =
+  override def receive: Receive = {
     bindingLogic orElse
       businessLogic orElse
       peerCommands orElse
       connectionEvents orElse
       interfaceCalls orElse
       nonsense
+  }
+
+  override def postRestart(reason: Throwable): Unit = {
+    log.error(s"Network controller restarted due to ${reason.getMessage}", reason)
+    super.postRestart(reason)
+  }
+
+  override def postStop(): Unit = {
+    log.warn("Network controller stopped")
+    super.postStop()
+  }
+
 
   private def bindingLogic: Receive = {
     case Bound(_) =>
-      log.info("Successfully bound to the port " + settings.bindAddress.getPort)
+      log.info("Successfully bound to the port " + networkSettings.bindAddress.getPort)
       scheduleConnectionToPeer()
       scheduleDroppingDeadConnections()
       scheduleEvictRandomConnections()
 
     case CommandFailed(_: Bind) =>
-      log.error("Network port " + settings.bindAddress.getPort + " already in use!")
+      log.error("Network port " + networkSettings.bindAddress.getPort + " already in use!")
       java.lang.System.exit(1) // Terminate node if port is in use
       context stop self
   }
 
-  private def networkTime(): Time = scorexContext.timeProvider.time()
+  private def time(): Time = System.currentTimeMillis()
 
   private def businessLogic: Receive = {
     //a message coming in from another peer
@@ -107,9 +127,17 @@ class NetworkController(settings: NetworkSettings,
       val remoteAddress = remote.connectionId.remoteAddress
       connections.get(remoteAddress) match {
         case Some(cp) =>
-          val now = networkTime()
+          val now = time()
           lastIncomingMessageTime = now
           cp.lastMessage = now
+          // Update peer's last activity time every X minutes inside PeerInfo
+          cp.peerInfo.foreach { x =>
+            if ((now - x.lastStoredActivityTime) > activityDelta) {
+              val peerInfo = x.copy(lastStoredActivityTime = now)
+              peerManagerRef ! AddOrUpdatePeer(peerInfo)
+            }
+          }
+
         case None => log.warn("Connection not found for a message got from: " + remoteAddress)
       }
 
@@ -117,10 +145,6 @@ class NetworkController(settings: NetworkSettings,
       filterConnections(sendingStrategy, message.spec.protocolVersion).foreach { connectedPeer =>
         connectedPeer.handlerRef ! message
       }
-
-    case RegisterMessageSpecs(specs, handler) =>
-      log.info(s"Registering handlers for ${specs.map(s => s.messageCode -> s.messageName)}")
-      messageHandlers ++= specs.map(_.messageCode -> handler)
   }
 
   private def peerCommands: Receive = {
@@ -131,11 +155,17 @@ class NetworkController(settings: NetworkSettings,
       log.info(s"Disconnected from ${peer.connectionId}")
       peer.handlerRef ! CloseConnection
 
+    // Register a new penalty for given peer address
     case PenalizePeer(peerAddress, penaltyType) =>
-      penalize(peerAddress, penaltyType)
+      peerManagerRef ! PeerManager.ReceivableMessages.Penalize(peerAddress, penaltyType)
 
     case Blacklisted(peerAddress) =>
-      closeConnection(peerAddress)
+      connections.get(peerAddress).foreach { peer =>
+        connections = connections.filterNot { case (address, _) => // clear all connections related to banned peer ip
+          Option(peer.connectionId.remoteAddress.getAddress).exists(Option(address.getAddress).contains(_))
+        }
+        peer.handlerRef ! CloseConnection
+      }
   }
 
   private def connectionEvents: Receive = {
@@ -160,31 +190,35 @@ class NetworkController(settings: NetworkSettings,
       handlerRef ! Close
 
     case Handshaked(connectedPeer) =>
-      val now = networkTime()
+      val now = time()
       lastIncomingMessageTime = now
       handleHandshake(connectedPeer, sender())
 
     case f@CommandFailed(c: Connect) =>
       unconfirmedConnections -= c.remoteAddress
       f.cause match {
-        case Some(t) => log.info("Failed to connect to : " + c.remoteAddress, t)
-        case None => log.info("Failed to connect to : " + c.remoteAddress)
+        case Some(t) => log.info(s"Failed to connect to ${c.remoteAddress} - ${t.getMessage}")
+        case None => log.info(s"Failed to connect to ${c.remoteAddress}")
       }
 
       // If a message received from p2p within connection timeout,
       // connectivity is not lost thus we're removing the peer
       // we add multiplier 6 to remove more dead peers (and still not dropping a lot when connectivity lost)
-      val noNetworkMessagesFor = networkTime() - lastIncomingMessageTime
-      if (noNetworkMessagesFor < settings.connectionTimeout.toMillis * 6) {
+      val noNetworkMessagesFor = time() - lastIncomingMessageTime
+      if (noNetworkMessagesFor < networkSettings.connectionTimeout.toMillis * 6) {
         peerManagerRef ! RemovePeer(c.remoteAddress)
       }
 
     case Terminated(ref) =>
-      connectionForHandler(ref).foreach { connectedPeer =>
-        val remoteAddress = connectedPeer.connectionId.remoteAddress
-        connections -= remoteAddress
-        unconfirmedConnections -= remoteAddress
-        context.system.eventStream.publish(DisconnectedPeer(remoteAddress))
+      connectionForHandler(ref) match {
+        case Some(connectedPeer) =>
+          log.info(s"Terminating connection to $connectedPeer")
+          val remoteAddress = connectedPeer.connectionId.remoteAddress
+          connections -= remoteAddress
+          unconfirmedConnections -= remoteAddress
+          context.system.eventStream.publish(DisconnectedPeer(connectedPeer))
+        case None =>
+          log.warn(s"No connection found for $ref during termination")
       }
 
     case _: ConnectionClosed =>
@@ -194,7 +228,7 @@ class NetworkController(settings: NetworkSettings,
   //calls from API / application
   private def interfaceCalls: Receive = {
     case GetPeersStatus =>
-      sender() ! PeersStatus(lastIncomingMessageTime, networkTime())
+      sender() ! PeersStatus(lastIncomingMessageTime, time())
 
     case GetConnectedPeers =>
       sender() ! connections.values.filter(_.peerInfo.nonEmpty)
@@ -221,7 +255,7 @@ class NetworkController(settings: NetworkSettings,
     */
   private def scheduleConnectionToPeer(): Unit = {
     context.system.scheduler.scheduleWithFixedDelay(5.seconds, 5.seconds) {
-      () => if (connections.size < settings.maxConnections) {
+      () => if (connections.size < networkSettings.maxConnections) {
         log.debug(s"Looking for a new random connection")
         val randomPeerF = peerManagerRef ? RandomPeerExcluding(connections.values.flatMap(_.peerInfo).toSeq)
         randomPeerF.mapTo[Option[PeerInfo]].foreach { peerInfoOpt =>
@@ -241,10 +275,12 @@ class NetworkController(settings: NetworkSettings,
     * It is needed to prevent eclipsing (https://www.usenix.org/system/files/conference/usenixsecurity15/sec15-paper-heilman.pdf)
     */
   private def scheduleEvictRandomConnections(): Unit = {
-   context.system.scheduler.scheduleWithFixedDelay(settings.peerEvictionInterval, settings.peerEvictionInterval) {
+   val evictionThreshold = 5
+   context.system.scheduler.scheduleWithFixedDelay(networkSettings.peerEvictionInterval, networkSettings.peerEvictionInterval) {
      () =>
        val connectedPeers = connections.values.filter(_.peerInfo.nonEmpty).toSeq
-       if (!connectedPeers.isEmpty) {
+       if (connectedPeers.length >= evictionThreshold) {
+         // if we hava at least `evictionThreshold` connection, we drop a random one
          val victim = Random.nextInt(connectedPeers.size)
          val cp = connectedPeers(victim)
          log.info(s"Evict connection to ${cp.peerInfo}")
@@ -260,10 +296,10 @@ class NetworkController(settings: NetworkSettings,
     context.system.scheduler.scheduleWithFixedDelay(60.seconds, 60.seconds) {
       () => {
         // Drop connections with peers if they seem to be inactive
-        val now = networkTime()
+        val now = time()
         connections.values.foreach { cp =>
           val lastSeen = cp.lastMessage
-          val timeout = settings.inactiveConnectionDeadline.toMillis
+          val timeout = networkSettings.inactiveConnectionDeadline.toMillis
           val delta = now - lastSeen
           if (delta > timeout) {
             log.info(s"Dropping connection with ${cp.peerInfo}, last seen ${delta / 1000.0} seconds ago")
@@ -288,7 +324,7 @@ class NetworkController(settings: NetworkSettings,
           tcpManager ! Connect(
             remoteAddress = remote,
             options = Nil,
-            timeout = Some(settings.connectionTimeout),
+            timeout = Some(networkSettings.connectionTimeout),
             pullMode = true
           )
         } else {
@@ -315,28 +351,39 @@ class NetworkController(settings: NetworkSettings,
           s"New outgoing connection to ${connectionId.remoteAddress} established (bound to local ${connectionId.localAddress})"
       }
     }
-    val isLocal = connectionId.remoteAddress.getAddress.isSiteLocalAddress ||
-      connectionId.remoteAddress.getAddress.isLoopbackAddress
-    val mandatoryFeatures = scorexContext.features :+ mySessionIdFeature
-    val peerFeatures = if (isLocal) {
-      val la = new InetSocketAddress(connectionId.localAddress.getAddress, settings.bindAddress.getPort)
+
+    val mandatoryFeatures = Array(modePeerFeature, mySessionIdFeature)
+
+    val remoteAddress = connectionId.remoteAddress.getAddress
+    val isLocal = (remoteAddress != null) && (remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress)
+    val maybeWithLocal = if (isLocal) {
+      val la = new InetSocketAddress(connectionId.localAddress.getAddress, networkSettings.bindAddress.getPort)
       val localAddrFeature = LocalAddressPeerFeature(la)
       mandatoryFeatures :+ localAddrFeature
     } else {
       mandatoryFeatures
     }
-    val selfAddressOpt = getNodeAddressForPeer(connectionId.localAddress)
 
-    if (selfAddressOpt.isEmpty)
+    val peerFeatures = scorexSettings.restApi.publicUrl match {
+      case Some(publicUrl) =>
+        val restApiUrlPeerFeature = RestApiUrlPeerFeature(publicUrl)
+        maybeWithLocal :+ restApiUrlPeerFeature
+      case None =>
+        maybeWithLocal
+    }
+
+    val selfAddressOpt = getNodeAddressForPeer(connectionId.localAddress)
+    if (selfAddressOpt.isEmpty) {
       log.warn("Unable to define external address. Specify it manually in `scorex.network.declaredAddress`.")
+    }
 
     val connectionDescription = ConnectionDescription(connection, connectionId, selfAddressOpt, peerFeatures)
 
-    val handlerProps: Props = PeerConnectionHandlerRef.props(settings, self, scorexContext, connectionDescription)
+    val handlerProps: Props = PeerConnectionHandlerRef.props(scorexSettings, self, scorexContext, connectionDescription)
 
     val handler = context.actorOf(handlerProps) // launch connection handler
     context.watch(handler)
-    val connectedPeer = ConnectedPeer(connectionId, handler, networkTime(), None)
+    val connectedPeer = ConnectedPeer(connectionId, handler, time(), None)
     connections += connectionId.remoteAddress -> connectedPeer
     unconfirmedConnections -= connectionId.remoteAddress
   }
@@ -387,7 +434,7 @@ class NetworkController(settings: NetworkSettings,
     * @param handler ActorRef on PeerConnectionHandler actor
     * @return Some(ConnectedPeer) when the connection exists for this handler, and None otherwise
     */
-  private def connectionForHandler(handler: ActorRef) = {
+  private def connectionForHandler(handler: ActorRef): Option[ConnectedPeer] = {
     connections.values.find { connectedPeer =>
       connectedPeer.handlerRef == handler
     }
@@ -448,10 +495,10 @@ class NetworkController(settings: NetworkSettings,
 
       case None =>
         if (!localAddr.isSiteLocalAddress && !localAddr.isLoopbackAddress
-          && localSocketAddress.getPort == settings.bindAddress.getPort) {
+          && localSocketAddress.getPort == networkSettings.bindAddress.getPort) {
           Some(localSocketAddress)
         } else {
-          val listenAddrs = NetworkUtils.getListenAddresses(settings.bindAddress)
+          val listenAddrs = NetworkUtils.getListenAddresses(networkSettings.bindAddress)
             .filterNot(addr => addr.getAddress.isSiteLocalAddress || addr.getAddress.isLoopbackAddress)
 
           listenAddrs.find(addr => localAddr == addr.getAddress).orElse(listenAddrs.headOption)
@@ -460,8 +507,8 @@ class NetworkController(settings: NetworkSettings,
   }
 
   private def validateDeclaredAddress(): Unit = {
-    if (!settings.localOnly) {
-      settings.declaredAddress.foreach { mySocketAddress =>
+    if (!networkSettings.localOnly) {
+      networkSettings.declaredAddress.foreach { mySocketAddress =>
         Try {
           val uri = new URI("http://" + mySocketAddress)
           val myHost = uri.getHost
@@ -485,20 +532,6 @@ class NetworkController(settings: NetworkSettings,
     }
   }
 
-  private def closeConnection(peerAddress: InetSocketAddress): Unit =
-    connections.get(peerAddress).foreach { peer =>
-      connections = connections.filterNot { case (address, _) => // clear all connections related to banned peer ip
-        Option(peer.connectionId.remoteAddress.getAddress).exists(Option(address.getAddress).contains(_))
-      }
-      peer.handlerRef ! CloseConnection
-    }
-
-  /**
-    * Register a new penalty for given peer address.
-    */
-  private def penalize(peerAddress: InetSocketAddress, penaltyType: PenaltyType): Unit =
-    peerManagerRef ! PeerManager.ReceivableMessages.Penalize(peerAddress, penaltyType)
-
 }
 
 object NetworkController {
@@ -508,8 +541,6 @@ object NetworkController {
   object ReceivableMessages {
 
     case class Handshaked(peer: PeerInfo)
-
-    case class RegisterMessageSpecs(specs: Seq[MessageSpec[_]], handler: ActorRef)
 
     case class SendToNetwork(message: Message[_], sendingStrategy: SendingStrategy)
 
@@ -534,14 +565,23 @@ object NetworkController {
 
 object NetworkControllerRef {
 
-  def apply(name: String,
-            settings: NetworkSettings,
+  def props(settings: ErgoSettings,
             peerManagerRef: ActorRef,
-            scorexContext: ScorexContext)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
-
-    val props = Props(new NetworkController(settings, peerManagerRef, scorexContext, IO(Tcp)))
-    system.actorOf(props, name)
+            scorexContext: ScorexContext,
+            tcpManager: ActorRef,
+            messageHandlers: ActorRef => Map[MessageCode, ActorRef]
+           )(implicit ec: ExecutionContext): Props = {
+    Props(new NetworkController(settings, peerManagerRef, scorexContext, tcpManager, messageHandlers)
+    )
   }
 
+  def apply(name: String,
+            settings: ErgoSettings,
+            peerManagerRef: ActorRef,
+            scorexContext: ScorexContext,
+            messageHandlers: ActorRef => Map[MessageCode, ActorRef])
+           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
+
+    system.actorOf(props(settings, peerManagerRef, scorexContext, IO(Tcp), messageHandlers), name)
+  }
 }

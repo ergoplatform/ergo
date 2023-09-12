@@ -157,7 +157,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
-      lastMessage = 0,
       Some(peerInfo)
     )
     synchronizerMockRef ! ChangedHistory(history)
@@ -197,7 +196,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     val peer: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
-      lastMessage = 0,
       Some(peerInfo)
     )
   }

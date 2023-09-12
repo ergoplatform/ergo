@@ -15,7 +15,7 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
-import scorex.core.transaction.state.TooHighCostError
+import scorex.core.transaction.TooHighCostError
 import scorex.crypto.authds.ADKey
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId}

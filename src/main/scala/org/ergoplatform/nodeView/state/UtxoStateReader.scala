@@ -9,7 +9,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.transaction.state.TooHighCostError
+import scorex.core.transaction.TooHighCostError
 import scorex.core.validation.MalformedModifierError
 import scorex.crypto.authds.avltree.batch.{Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
@@ -60,11 +60,11 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
         context,
         accumulatedCost = 0L)(verifier) match {
         case Success(txCost) if txCost > costLimit =>
-          Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
+          Failure(TooHighCostError(tx, Some(txCost)))
         case Success(txCost) =>
           Success(txCost)
         case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
-          Failure(TooHighCostError(s"Transaction $tx has too high cost"))
+          Failure(TooHighCostError(tx, None))
         case f: Failure[_] => f
       }
     }

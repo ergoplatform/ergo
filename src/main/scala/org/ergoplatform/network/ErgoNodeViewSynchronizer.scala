@@ -34,12 +34,12 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
-import scorex.core.transaction.state.TooHighCostError
 import scorex.core.app.Version
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
 import scorex.core.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
+import scorex.core.transaction.TooHighCostError
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 
 import scala.annotation.tailrec
@@ -1412,7 +1412,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       utx.source.foreach { peer =>
         // no need to call deliveryTracker.setInvalid, as mempool will consider invalidated tx in contains()
         error match {
-          case TooHighCostError(_) =>
+          case TooHighCostError(_, _) =>
             log.info(s"Penalize spamming peer $peer for too costly transaction $id")
             penalizeSpammingPeer(peer)
           case _ =>

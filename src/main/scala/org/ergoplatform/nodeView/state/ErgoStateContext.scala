@@ -108,6 +108,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   override def serializer: ErgoSerializer[M] = ErgoStateContextSerializer(ergoSettings)
 
+  /**
+    * @return state context corresponding to a block after last known one with fields provided
+    */
   def upcoming(minerPk: EcPointType,
                timestamp: Long,
                nBits: Long,
@@ -123,11 +126,15 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                           calculatedValidationSettings, votingData)
   }
 
-  def simplifiedUpcoming(): UpcomingStateContext = {
+  /**
+    * @return state context corresponding to a block after last known one
+    *         with fields filled with (kind of) default values
+    */
+  def c(): UpcomingStateContext = {
     val minerPk = org.ergoplatform.mining.group.generator
     val version = lastHeaderOpt.map(_.version).getOrElse(Header.InitialVersion)
     val nBits = lastHeaderOpt.map(_.nBits).getOrElse(ergoSettings.chainSettings.initialNBits)
-    val timestamp = System.currentTimeMillis()
+    val timestamp = lastHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
     val votes = Array.emptyByteArray
     val proposedUpdate = ErgoValidationSettingsUpdate.empty
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)

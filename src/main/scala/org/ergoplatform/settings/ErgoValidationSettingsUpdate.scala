@@ -18,7 +18,7 @@ case class ErgoValidationSettingsUpdate(rulesToDisable: Seq[Short],
 }
 
 object ErgoValidationSettingsUpdate {
-  val empty: ErgoValidationSettingsUpdate = ErgoValidationSettingsUpdate(Seq.empty, Seq.empty)
+  val empty: ErgoValidationSettingsUpdate = ErgoValidationSettingsUpdate(Seq(), Seq())
 }
 
 object ErgoValidationSettingsUpdateSerializer extends ErgoSerializer[ErgoValidationSettingsUpdate] {

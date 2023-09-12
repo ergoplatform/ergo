@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.14"
+  version: "5.0.15"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -5594,6 +5594,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScanIdBoxId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/p2sRule:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create and register a scan to track P2S address provided
+      operationId: scriptP2SRule
+      tags:
+        - scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                type: string
+                example: '4MQyML64GnzMxZgm'
+      responses:
+        '200':
+          description: Id of custom scan generated and registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanId'
+        '400':
+          description: Bad source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:

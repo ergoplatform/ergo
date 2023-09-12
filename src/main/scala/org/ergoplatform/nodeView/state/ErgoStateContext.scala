@@ -130,7 +130,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     * @return state context corresponding to a block after last known one
     *         with fields filled with (kind of) default values
     */
-  def c(): UpcomingStateContext = {
+  def simplifiedUpcoming(): UpcomingStateContext = {
     val minerPk = org.ergoplatform.mining.group.generator
     val version = lastHeaderOpt.map(_.version).getOrElse(Header.InitialVersion)
     val nBits = lastHeaderOpt.map(_.nBits).getOrElse(ergoSettings.chainSettings.initialNBits)

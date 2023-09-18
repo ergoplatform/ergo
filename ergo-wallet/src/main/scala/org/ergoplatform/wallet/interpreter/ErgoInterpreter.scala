@@ -4,11 +4,11 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeParameters
 import org.ergoplatform.wallet.protocol.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeContext, ErgoLikeInterpreter}
-import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
 import sigmastate.interpreter.Interpreter.{ScriptEnv, VerificationResult}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
+import special.collection.Coll
 
 import scala.util.Try
 
@@ -100,7 +100,7 @@ object ErgoInterpreter {
     new ErgoInterpreter(params)
 
   /** Create [[AvlTreeData]] with the given digest and all operations enabled. */
-  def avlTreeFromDigest(digest: ADDigest): AvlTreeData = {
+  def avlTreeFromDigest(digest: Coll[Byte]): AvlTreeData = {
     val flags = AvlTreeFlags(insertAllowed = true, updateAllowed = true, removeAllowed = true)
     AvlTreeData(digest, flags, Constants.HashLength)
   }

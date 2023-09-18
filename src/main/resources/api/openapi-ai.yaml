@@ -1,0 +1,1482 @@
+openapi: "3.0.2"
+
+info:
+  version: "5.0.14"
+  title: Ergo Node API
+  description: Specification of Ergo Node API for ChatGPT plugin.
+    The following endpoints supported 
+      - /blocks/chainSlice - Get headers in a specified range of heights
+      - /info - Get the basic information about the status of Ergo Node. 
+      - /transactions/unconfirmed/byTransactionId - Get unconfirmed transaction from the mempool
+      - /transactions/poolHistogram - Get histogram (waittime, (n_trans, sum(fee)) for transactions in mempool.
+      - /blockchain/indexedHeight - Get current indexed block height. (The indexer has processed all blocks up to this height.)
+      - /blockchain/transaction/byId - Retrieve a transaction by its id
+      - /blockchain/transaction/byAddress - Retrieve a list of transactions by their associated address
+      - /blockchain/box/byId - Retrieve a box by its id
+      - /blockchain/box/byAddress - Retrieve boxes by their associated 
+      - /blockchain/box/unspent/byAddress - Retrieve unspent boxes by their associated address
+      - /blockchain/token/byId - Retrieve minting information about a token
+      - /blockchain/balanceForAddress - Retrieve balance information of an Ergo address.
+
+servers:
+  - url: http://localhost:9052
+    description: Ergo full node API (testnet).
+  - url: http://localhost:9053
+    description: Ergo full node API (mainnet).
+
+components:
+  schemas:
+    # Objects
+    ErgoTransactionInput:
+      type: object
+      required:
+        - boxId
+        - spendingProof
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+        spendingProof:
+          $ref: '#/components/schemas/SpendingProof'
+
+    ErgoTransactionDataInput:
+      type: object
+      required:
+        - boxId
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+
+    SpendingProof:
+      description: Spending proof for transaction input
+      type: object
+      required:
+        - proofBytes
+        - extension
+      properties:
+        proofBytes:
+          $ref: '#/components/schemas/SpendingProofBytes'
+        extension:
+          type: object
+          description: Variables to be put into context
+          additionalProperties:
+            $ref: '#/components/schemas/SValue'
+          example:
+            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
+
+    ErgoTransactionOutput:
+      type: object
+      required:
+        - value
+        - ergoTree
+        - additionalRegisters
+        - creationHeight
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+        value:
+          description: Amount of Ergo token
+          type: integer
+          format: int64
+          minimum: 0
+          example: 147
+        ergoTree:
+          $ref: '#/components/schemas/ErgoTree'
+        creationHeight:
+          description: Height the output was created at
+          type: integer
+          format: int32
+          example: 9149
+        assets:
+          description: Assets list in the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/Asset'
+        additionalRegisters:
+          $ref: '#/components/schemas/Registers'
+        transactionId:
+          $ref: '#/components/schemas/TransactionId'
+        index:
+          description: Index in the transaction outputs
+          type: integer
+          format: int32
+
+    BalanceInfo:
+      type: object
+      description: Represents a balance information (e.g. for an address)
+      required:
+        - nanoErgs
+        - tokens
+      properties:
+        nanoErgs:
+          type: integer
+          format: int64
+          description: Balance of nanoERGs
+        tokens:
+          type: array
+          description: List of assets (aks tokens) with balances
+          items:
+            type: object
+            properties:
+              tokenId:
+                $ref: '#/components/schemas/ModifierId'
+                description: Identifier of the asset (aka token)
+              amount:
+                type: integer
+                format: int64
+                description: Amount of the asset (aka token)
+              decimals:
+                type: integer
+                description: Number of decimals of the token
+              name:
+                type: string
+                description: Name of the token, if any
+
+    IndexedErgoBox:
+      type: object
+      description: Box indexed with extra information
+      required:
+        - box
+        - confirmationsNum
+        - address
+        - creationTransaction
+        - spendingTransaction
+        - spendingHeight
+        - inclusionHeight
+        - spent
+        - globalIndex
+      properties:
+        box:
+          $ref: '#/components/schemas/ErgoTransactionOutput'
+        confirmationsNum:
+          description: Number of confirmations, if the box is included into the blockchain
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+          nullable: true
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+        creationTransaction:
+          description: Transaction which created the box
+          $ref: '#/components/schemas/ModifierId'
+        spendingTransaction:
+          description: Transaction which created the box
+          nullable: true
+          $ref: '#/components/schemas/ModifierId'
+        spendingHeight:
+          description: The height the box was spent at
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+          nullable: true
+        inclusionHeight:
+          description: The height the transaction containing the box was included in a block at
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+        spent:
+          description: A flag signalling whether the box was spent
+          type: boolean
+          example: false
+        globalIndex:
+          description: Global index of the output in the blockchain
+          type: integer
+          format: int64
+          minimum: 0
+          example: 83927
+
+    IndexedToken:
+      type: object
+      description: Token indexed with extra information
+      required:
+        - id
+        - boxId
+        - emissionAmount
+        - name
+        - description
+        - decimals
+      properties:
+        id:
+          description: Id of the token
+          $ref: '#/components/schemas/ModifierId'
+        boxId:
+          description: Id of the box that created the token
+          $ref: '#/components/schemas/ModifierId'
+        emissionAmount:
+          description: The total supply of the token
+          type: integer
+          format: int64
+          minimum: 1
+          example: 3500000
+        name:
+          description: The name of the token
+          type: string
+        description:
+          description: The description of the token
+          type: string
+        decimals:
+          description: The number of decimals the token supports
+          type: integer
+          format: int32
+          minimum: 0
+          example: 8
+
+    ErgoTransaction:
+      type: object
+      description: ErgoTransaction is an atomic operation which changes UTXO state.
+      required:
+        - inputs
+        - dataInputs
+        - outputs
+      properties:
+        id:
+          description: Id of the transaction
+          $ref: '#/components/schemas/TransactionId'
+        inputs:
+          description: Inputs, that will be spent by this transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          description: Read-only inputs, that are not going to be spent by transaction.
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          description: Outputs of the transaction, i.e. box candidates to be created by this transaction.
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        size:
+          description: Size of ErgoTransaction in bytes
+          type: integer
+          format: int32
+
+    IndexedErgoTransaction:
+      type: object
+      description: Transaction indexed with extra information
+      required:
+        - id
+        - inputs
+        - dataInputs
+        - outputs
+        - inclusionHeight
+        - numConfirmations
+        - blockId
+        - timestamp
+        - index
+        - globalIndex
+        - size
+      properties:
+        id:
+          $ref: '#/components/schemas/TransactionId'
+        inputs:
+          description: Transaction inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          description: Transaction data inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          description: Transaction outputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        inclusionHeight:
+          description: Height of a block the transaction was included in
+          type: integer
+          format: int32
+          example: 20998
+        numConfirmations:
+          description: Number of transaction confirmations
+          type: integer
+          format: int32
+          example: 20998
+        blockId:
+          description: Id of the block the transaction was included in
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        index:
+          description: index of the transaction in the block it was included in
+          type: integer
+          format: int32
+          example: 3
+        globalIndex:
+          description: Global index of the transaction in the blockchain
+          type: integer
+          format: int64
+          example: 3565445
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+
+    ErgoAddress:
+      description: Encoded Ergo Address
+      type: string
+      example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
+
+    FullBlock:
+      description: Block with header and transactions
+      type: object
+      required:
+        - header
+        - blockTransactions
+        - adProofs
+        - extension
+        - size
+      properties:
+        header:
+          $ref: '#/components/schemas/BlockHeader'
+        blockTransactions:
+          $ref: '#/components/schemas/BlockTransactions'
+        adProofs:
+          $ref: '#/components/schemas/BlockADProofs'
+        extension:
+          $ref: '#/components/schemas/Extension'
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+
+    PowSolutions:
+      description: An object containing all components of pow solution
+      type: object
+      required:
+        - pk
+        - w
+        - n
+        - d
+      properties:
+        pk:
+          type: string
+          description: Base16-encoded public key
+          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+        w:
+          type: string
+          example: '0366ea253123dfdb8d6d9ca2cb9ea98629e8f34015b1e4ba942b1d88badfcc6a12'
+        n:
+          type: string
+          example: '0000000000000000'
+        d:
+          type: number
+          example: 987654321
+
+    BlockHeader:
+      description: Header of a block.
+        It authenticates link to a previous block, other block sections
+        (transactions, UTXO set transformation proofs, extension), UTXO set, votes for blockchain parameters
+        to be changed and proof-of-work related data.
+      type: object
+      required:
+        - id
+        - timestamp
+        - version
+        - adProofsRoot
+        - stateRoot
+        - transactionsRoot
+        - nBits
+        - extensionHash
+        - powSolutions
+        - height
+        - difficulty
+        - parentId
+        - votes
+      properties:
+        id:
+          description: Block id
+          $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          description: Block generation time reported by a miner
+          $ref: '#/components/schemas/Timestamp'
+        version:
+          description: Protocol version used to generate the block
+          $ref: '#/components/schemas/Version'
+        adProofsRoot:
+          description: Digest of UTXO set transformation proofs
+          $ref: '#/components/schemas/Digest32'
+        stateRoot:
+          description: AVL+ tree digest of UTXO set (after the block is applied)
+          $ref: '#/components/schemas/ADDigest'
+        transactionsRoot:
+          description: Merkle tree digest of transactions in the block (BlockTransactions section)
+          $ref: '#/components/schemas/Digest32'
+        nBits:
+          description: Proof-of-work target (difficulty encoded)
+          type: integer
+          format: int64
+          minimum: 0
+          example: 19857408
+        extensionHash:
+          description: Merkle tree digest of the extension section of the block
+          $ref: '#/components/schemas/Digest32'
+        powSolutions:
+          description: Solution for the proof-of-work puzzle
+          $ref: '#/components/schemas/PowSolutions'
+        height:
+          description: Height of the block (genesis block height == 1)
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        difficulty:
+          type: string
+          example: '9575989248'
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        votes:
+          description: Votes for changing system parameters
+          $ref: '#/components/schemas/Votes'
+        size:
+          description: Size of the header in bytes
+          type: integer
+          format: int32
+        extensionId:
+          description: Hash of the extension section of the block == hash(modifier type id, header id, extensionHash)
+          $ref: '#/components/schemas/ModifierId'
+        transactionsId:
+          description: Hash of the transactions section of the block == hash(modifier type id, header id, transactionsRoot)
+          $ref: '#/components/schemas/ModifierId'
+        adProofsId:
+          description: Hash of the UTXO set transformation proofs section of the block == hash(modifier type id, header id, adProofsRoot)
+          $ref: '#/components/schemas/ModifierId'
+
+    BlockTransactions:
+      description: Section of a block which contains transactions.
+      type: object
+      required:
+        - headerId
+        - transactions
+        - size
+      properties:
+        headerId:
+          description: Identifier of a header of a corresponding block
+          $ref: '#/components/schemas/ModifierId'
+        transactions:
+          description: Transactions of the block
+          $ref: '#/components/schemas/Transactions'
+        size:
+          description: Size in bytes of all block transactions
+          type: integer
+          format: int32
+
+    BlockADProofs:
+      type: object
+      required:
+        - headerId
+        - proofBytes
+        - digest
+        - size
+      properties:
+        headerId:
+          description: Identifier of a header of the block which contains the proofs
+          $ref: '#/components/schemas/ModifierId'
+        proofBytes:
+          description: Serialized bytes of the authenticated dictionary proof
+          $ref: '#/components/schemas/SerializedAdProof'
+        digest:
+          description: Hash of the proofBytes
+          $ref: '#/components/schemas/Digest32'
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+
+    Extension:
+      description: Section of a block which contains extension data.
+      type: object
+      required:
+        - headerId
+        - digest
+        - fields
+      properties:
+        headerId:
+          description: Identifier of a header of a corresponding block
+          $ref: '#/components/schemas/ModifierId'
+        digest:
+          description: Root hash (aka digest) merkelized list of key-value records
+          $ref: '#/components/schemas/Digest32'
+        fields:
+          description: List of key-value records
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/KeyValueItem'
+
+    KeyValueItem:
+      description: Key-value record represented as a pair of hex strings in an array.
+      type: array
+      items:
+        $ref: '#/components/schemas/HexString'
+
+    Peer:
+      type: object
+      required:
+        - address
+      properties:
+        address:
+          type: string
+          example: '127.0.0.1:5673'
+        restApiUrl:
+          type: string
+          example: 'https://example.com'
+          nullable: true
+        name:
+          type: string
+          example: mynode
+          nullable: true
+        lastSeen:
+          $ref: '#/components/schemas/Timestamp'
+        connectionType:
+          type: string
+          nullable: true
+          enum:
+            - Incoming
+            - Outgoing
+
+    BlacklistedPeers:
+      type: object
+      required:
+        - addresses
+      properties:
+        addresses:
+          type: array
+          items:
+            type: string
+            description: Blacklisted node address
+
+    NodeInfo:
+      description: Data container for /info API request output. 
+        Contains information about node's state and configuration.
+        Contains data about best block, best header, state, etc.
+        Best block is the block with the maximum height.
+      type: object
+      required:
+        - name
+        - appVersion
+        - fullHeight
+        - headersHeight
+        - maxPeerHeight
+        - bestFullHeaderId
+        - previousFullHeaderId
+        - bestHeaderId
+        - headersScore
+        - fullBlocksScore
+        - stateRoot
+        - stateType
+        - stateVersion
+        - isMining
+        - peersCount
+        - unconfirmedCount
+        - difficulty
+        - currentTime
+        - launchTime
+        - genesisBlockId
+        - parameters
+      properties:
+        name:
+          description: Node's (peer) self-chosen name from config
+          type: string
+          example: my-node-1
+        appVersion:
+          description: Node's application version
+          type: string
+          example: 0.0.1
+        fullHeight:
+          type: integer
+          format: int32
+          description: Height of the best block known to the node. 
+            Can be 'null' if state is empty (no full block is applied since node launch)
+          minimum: 0
+          example: 667
+          nullable: true
+        headersHeight:
+          type: integer
+          format: int32
+          description: The height of the best header (i.e. the one with the maximum height).
+            Can be 'null' if state is empty (no header applied since node launch)
+          minimum: 0
+          example: 667
+          nullable: true
+        maxPeerHeight:
+          type: integer
+          format: int32
+          description: Maximum block height of connected peers.
+            Can be 'null' if state is empty (no peer connected since node launch)
+          minimum: 0
+          example: 706162
+          nullable: true
+        bestFullHeaderId:
+          type: string
+          description: Best full-block id (header id of such block).
+            Can be 'null' if no full block is applied since node launch.
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        previousFullHeaderId:
+          type: string
+          description: Header id of the parent block of the best full-block (i.e. previous block in the blockchain).
+            Can be 'null' if no full block is applied since node launch
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        bestHeaderId:
+          type: string
+          description: Best header ID (hex representation). 
+            Can be 'null' if no header applied since node launch.
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        stateRoot:
+          type: string
+          nullable: true
+          description: Current UTXO set digest. 
+            Can be 'null' if state is empty (no full block is applied since node launch)
+          example: 'dab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+        stateType:
+          description: Whether the node is storing UTXO set or only its digest.
+            Equals `digest` if only digest is stored, `utxo` if full UTXO set is stored.
+          type: string
+          enum:
+            - digest
+            - utxo
+        stateVersion:
+          description: Id of a block where UTXO set digest is taken from.
+            Can be 'null' if no full block is applied since node launch.
+          type: string
+          example: 'fab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+          nullable: true
+        isMining:
+          description: Whether the node is mining (i.e. generating blocks).
+          type: boolean
+          example: true
+        peersCount:
+          type: integer
+          description: Number of peers this node is connected with.
+          format: int32
+          minimum: 0
+          example: 327
+        unconfirmedCount:
+          description: Number of unconfirmed transactions in the mempool.
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 10000
+          example: 327
+        difficulty:
+          type: integer
+          minimum: 0
+          nullable: true
+          example: 667
+          description: Difficulty on current bestFullHeaderId. 
+            Can be 'null' if no full block is applied since node launch.
+            Difficulty is a BigInt integer.
+        currentTime:
+          type: integer
+          description: Current internal node time
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+        launchTime:
+          type: integer
+          description: When the node was launched (in Java time format, UNIX time * 1000).
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+        headersScore:
+          type: integer
+          description: Cumulative difficulty of best headers-chain.
+            Can be 'null' if no headers is applied since node launch. headersScore is a BigInt integer.
+          nullable: true
+        fullBlocksScore:
+          type: integer
+          description: Cumulative difficulty of best full blocks chain.
+            Can be 'null' if no full block is applied since node launch. fullBlocksScore is a BigInt integer.
+          nullable: true
+        genesisBlockId:
+          type: string
+          description: Header id of genesis block. Can be 'null' if genesis blocks is not produced yet.
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        parameters:
+          type: object
+          description: System parameters which could be readjusted via collective miners decision.
+          $ref: '#/components/schemas/Parameters'
+        eip27Supported:
+          type: boolean
+          example: true
+          description: Whether EIP-27 locked in
+        restApiUrl:
+          type: string
+          example: 'https://example.com'
+          description: Publicly accessible url of node which exposes restApi in firewall
+
+    Parameters:
+      description: System parameters which could be readjusted via collective miners decision.
+      type: object
+      required:
+        - height
+        - blockVersion
+        - storageFeeFactor
+        - minValuePerByte
+        - maxBlockSize
+        - maxBlockCost
+        - tokenAccessCost
+        - inputCost
+        - dataInputCost
+        - outputCost
+      properties:
+        height:
+          type: integer
+          format: int32
+          description: Height when current parameters were considered(not actual height). Can be '0' if state is empty
+          minimum: 0
+          example: 667
+          nullable: false
+        storageFeeFactor:
+          type: integer
+          format: int32
+          description: Storage fee coefficient (per byte per storage period ~4 years)
+          minimum: 0
+          example: 100000
+          nullable: false
+        minValuePerByte:
+          type: integer
+          format: int32
+          description: Minimum value per byte of an output
+          minimum: 0
+          example: 360
+          nullable: false
+        maxBlockSize:
+          type: integer
+          format: int32
+          description: Maximum block size (in bytes)
+          minimum: 0
+          example: 1048576
+          nullable: false
+        maxBlockCost:
+          type: integer
+          format: int32
+          description: Maximum cumulative computational cost of input scripts in block transactions
+          minimum: 0
+          example: 104876
+          nullable: false
+        blockVersion:
+          $ref: '#/components/schemas/Version'
+          nullable: false
+        tokenAccessCost:
+          type: integer
+          format: int32
+          description: Validation cost of a single token
+          minimum: 0
+          example: 100
+          nullable: false
+        inputCost:
+          type: integer
+          format: int32
+          description: Validation cost per one transaction input
+          minimum: 0
+          example: 100
+          nullable: false
+        dataInputCost:
+          type: integer
+          format: int32
+          description: Validation cost per one data input
+          minimum: 0
+          example: 100
+          nullable: false
+        outputCost:
+          type: integer
+          format: int32
+          description: Validation cost per one transaction output
+          minimum: 0
+          example: 100
+          nullable: false
+
+    Version:
+      description: Ergo blockchain protocol version
+      type: integer
+      format: int8
+      example: 2
+
+    TransactionBoxId:
+      description: Base16-encoded transaction box id bytes. Should be 32 bytes long
+      type: string
+      format: base16
+      example: '1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+
+    TransactionId:
+      description: Base16-encoded transaction id bytes
+      type: string
+      format: base16
+      example: '2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+
+    ErgoTree:
+      description: Base16-encoded ergo tree bytes
+      type: string
+      format: base16
+      example: '0008cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041'
+
+    Transactions:
+      description: List of ErgoTransaction objects
+      type: array
+      items:
+        $ref: '#/components/schemas/ErgoTransaction'
+
+    FeeHistogramBin:
+      description: Fee histogram bin
+      type: object
+      properties:
+        nTxns:
+          type: integer
+          format: int32
+        totalFee:
+          type: integer
+          format: int64
+
+    FeeHistogram:
+      description: Fee histogram for transactions in mempool
+      type: array
+      items:
+        $ref: '#/components/schemas/FeeHistogramBin'
+
+    Asset:
+      description: Token detail in the transaction
+      type: object
+      required:
+        - tokenId
+        - amount
+      properties:
+        tokenId:
+          $ref: '#/components/schemas/Digest32'
+        amount:
+          description: Amount of the token
+          type: integer
+          format: int64
+          example: 1000
+
+    Registers:
+      description: Ergo box registers
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/SValue'
+      example:
+        R4: '100204a00b08cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041ea02d192a39a8cc7a70173007301'
+
+    SValue:
+      description: Base-16 encoded serialized Sigma-state value
+      type: string
+      format: base16
+      example: '100204a00b08cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041ea02d192a39a8cc7a70173007301'
+
+    ModifierId:
+      description: Base16-encoded 32 byte modifier id
+      type: string
+      format: base16
+      example: '3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+
+    Digest32:
+      description: Base16-encoded 32 byte digest
+      type: string
+      format: base16
+      example: '4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+
+    HexString:
+      description: Base16-encoded bytes
+      type: string
+      format: base16
+      example: '4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+
+    ADDigest:
+      description: Base16-encoded 33 byte digest - digest with extra byte with tree height
+      type: string
+      format: base16
+      example: '333ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+
+    SerializedAdProof:
+      description: Base16-encoded ad proofs
+      type: string
+      format: base16
+      example: '3ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+
+    SpendingProofBytes:
+      description: Base16-encoded spending proofs
+      type: string
+      format: base16
+      example: '4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd1173ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
+
+    Timestamp:
+      description: Basic timestamp definition
+      type: integer
+      format: int64
+      example: 1524143059077
+
+    AddressValidity:
+      description: Validity status of Ergo address
+      type: object
+      required:
+        - address
+        - isValid
+      properties:
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+        isValid:
+          type: boolean
+        error:
+          type: string
+
+    ApiError:
+      description: Error response from API
+      type: object
+      required:
+        - error
+        - reason
+        - detail
+      properties:
+        error:
+          type: integer
+          description: Error code
+          example: 500
+        reason:
+          type: string
+          description: Error message explaining the reason of the error
+          example: 'Internal server error'
+        detail:
+          type: string
+          nullable: true
+          description: Detailed error description
+
+paths:
+  /blocks/chainSlice:
+    get:
+      description: Get headers in a specified range of heights
+      operationId: getChainSlice
+      tags:
+        - blocks
+      parameters:
+        - in: query
+          name: fromHeight
+          required: false
+          description: Min header height (start of the range)
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: toHeight
+          required: false
+          description: Max header height of the range (last header height then omitted)
+          schema:
+            type: integer
+            format: int32
+            default: -1
+      responses:
+        '200':
+          description: Array of headers
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of headers
+                items:
+                  $ref: '#/components/schemas/BlockHeader'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /info:
+    get:
+      description: Get the basic information about the status of Ergo Node.
+      operationId: getNodeInfo
+      tags:
+        - info
+      responses:
+        '200':
+          description: Node info object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/byTransactionId/{txId}:
+    parameters:
+      - in: path
+        name: txId
+        required: true
+        description: ID of a transaction to return
+        schema:
+          type: string
+    get:
+      description: Get unconfirmed transaction from the mempool
+      operationId: getUnconfirmedTransactionById
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransaction'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/poolHistogram:
+    parameters:
+      - in: query
+        name: bins
+        required: false
+        description: The number of bins in histogram
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 10
+      - in: query
+        name: maxtime
+        required: false
+        description: Maximal wait time in milliseconds
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+          default: 60000
+    get:
+      description: Get histogram (waittime, (n_trans, sum(fee)) for transactions in mempool.
+        It contains "bins"+1 bins, where i-th elements corresponds to transaction with wait time [i*maxtime/bins, (i+1)*maxtime/bins),
+        and last bin corresponds to the transactions with wait time >= maxtime.
+      operationId: getFeeHistogram
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Array with fee histogram
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeeHistogram'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /peers/connected:
+    get:
+      description: Get a list of current connected peers
+      operationId: getConnectedPeers
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Array of peer objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Peer'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /peers/blacklisted:
+    get:
+      description: Get a list of blacklisted peers
+      operationId: getBlacklistedPeers
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Array of the addresses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlacklistedPeers'
+
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utils/address/{address}:
+    get:
+      description: Check address validity
+      operationId: CheckAddressValidityWithGet
+      tags:
+        - utils
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to check
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Address validity with validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressValidity'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/indexedHeight:
+    get:
+      description: Get current indexed block height. (The indexer has processed all blocks up to this height.)
+      operationId: getIndexedHeight
+      tags:
+        - blockchain
+      responses:
+        '200':
+          description: height of the indexer and full height
+          content:
+            application/json:
+              schema:
+                properties:
+                  indexedHeight:
+                    type: integer
+                    default: 0
+                    description: number of blocks indexed
+                  fullHeight:
+                    type: integer
+                    description: number of all known blocks
+
+  /blockchain/transaction/byId/{txId}:
+    get:
+      description: Retrieve a transaction by its id
+      operationId: getTxById
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: txId
+          required: true
+          description: id of the wanted transaction
+          schema:
+            type: string
+      responses:
+        '200':
+          description: transaction with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoTransaction'
+        '404':
+          description: Transaction with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/transaction/byAddress/{address}:
+    post:
+      description: Retrieve a list of transactions by their associated address
+      operationId: getTxsByAddress
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to retrieve associated transactions
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: transactions associated with the given address
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of transactions
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoTransaction'
+                  total:
+                    type: integer
+                    description: Total count of retrieved transactions
+        '404':
+          description: No transactions found for wanted address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/byId/{boxId}:
+    get:
+      description: Retrieve a box by its id
+      operationId: getBoxById
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: id of the wanted box
+          schema:
+            type: string
+      responses:
+        '200':
+          description: box with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No box found with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/byAddress/{address}:
+    post:
+      description: Retrieve boxes by their associated address
+      operationId: getBoxesByAddress
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to retrieve boxes for
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: boxes associated with wanted address
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoBox'
+                  total:
+                    type: integer
+                    description: Total number of retreived boxes
+        '404':
+          description: No boxes found for wanted address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/unspent/byAddress/{address}:
+    get:
+      description: Retrieve unspent boxes by their associated address
+      operationId: getBoxesByAddressUnspent
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to retrieve boxes for
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
+      responses:
+        '200':
+          description: unspent boxes associated with wanted address
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of boxes
+                items:
+                  $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No unspent boxes found for wanted address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/token/byId/{tokenId}:
+    get:
+      description: Retrieve minting information about a token
+      operationId: getTokenById
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: tokenId
+          required: true
+          description: id of the wanted token
+          schema:
+            type: string
+      responses:
+        '200':
+          description: token with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedToken'
+        '404':
+          description: No token found with wanted id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/balanceForAddress/{address}:
+    get:
+      description: Retrieve balance information of an Ergo address. 
+        Separately return confirmed and unconfirmed balance information.
+      operationId: getBalanceForAddress
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to retrieve balance information for
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: balance information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  confirmed:
+                    description: confirmed balance of the address
+                    $ref: '#/components/schemas/BalanceInfo'
+                  unconfirmed:
+                    description: unconfirmed balance of the address
+                    $ref: '#/components/schemas/BalanceInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'

@@ -15,7 +15,6 @@ import scorex.core.network.peer.PeerInfo
   */
 case class ConnectedPeer(connectionId: ConnectionId,
                          handlerRef: ActorRef,
-                         var lastMessage: Long,
                          peerInfo: Option[PeerInfo]) {
 
   override def hashCode(): Int = connectionId.remoteAddress.hashCode()
@@ -45,7 +44,7 @@ object ConnectedPeer {
     val optionalFields =
       List(
         peer.peerInfo.map(_.peerSpec.protocolVersion.toString).map("version" -> _.asJson),
-        Option(peer.lastMessage).filter(_ != 0L).map("lastMessage" -> _.asJson)
+        peer.peerInfo.map(_.lastStoredActivityTime).filter(_ != 0L).map("lastMessage" -> _.asJson),
       ).flatten
     val fields = addressField :: optionalFields
     Json.obj(fields:_*)

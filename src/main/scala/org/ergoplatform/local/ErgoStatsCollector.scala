@@ -165,7 +165,7 @@ object ErgoStatsCollector {
     * @param isMining - whether the node is mining
     * @param bestHeaderOpt - best header ID
     * @param headersScore - cumulative difficulty of best headers-chain
-    * @param bestFullBlockOpt - best full-block id (header id of such block)
+    * @param bestFullBlockOpt - Best full-block known to the node. Can be None if state is empty (no full block is applied since node launch)
     * @param fullBlocksScore - cumulative difficulty of best full blocks chain
     * @param maxPeerHeight - maximum block height of connected peers
     * @param launchTime - when the node was launched (in Java time format, basically, UNIX time * 1000)

@@ -68,16 +68,20 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getTxByIdR ~
       getTxByIndexR ~
       getTxsByAddressR ~
+      getTxsByAddressGetRoute ~
       getTxRangeR ~
       getBoxByIdR ~
       getBoxByIndexR ~
       getBoxesByAddressR ~
+      getBoxesByAddressGetRoute ~
       getBoxesByAddressUnspentR ~
+      getBoxesByAddressUnspentGetRoute ~
       getBoxRangeR ~
       getBoxesByErgoTreeR ~
       getBoxesByErgoTreeUnspentR ~
       getTokenInfoByIdR ~
-      getAddressBalanceTotalR
+      getAddressBalanceTotalR ~
+      getAddressBalanceTotalGetRoute
     }
   else
     pathPrefix("blockchain") {
@@ -147,12 +151,22 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getTxsByAddressR: Route = (post & pathPrefix("transaction" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
-    if(limit > MaxItems) {
+  private def validateAndGetTxsByAddress(address: ErgoAddress,
+                                         offset: Int,
+                                         limit: Int): Route = {
+    if (limit > MaxItems) {
       BadRequest(s"No more than $MaxItems transactions can be requested")
-    }else {
+    } else {
       ApiResponse(getTxsByAddress(address, offset, limit))
     }
+  }
+
+  private def getTxsByAddressR: Route = (post & pathPrefix("transaction" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
+    validateAndGetTxsByAddress(address, offset, limit)
+  }
+
+  private def getTxsByAddressGetRoute: Route = (pathPrefix("transaction" / "byAddress") & get & addressPass & paging) { (address, offset, limit) =>
+    validateAndGetTxsByAddress(address, offset, limit)
   }
 
   private def getTxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
@@ -205,12 +219,22 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByAddressR: Route = (post & pathPrefix("box" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
-    if(limit > MaxItems) {
+  private def validateAndGetBoxesByAddress(address: ErgoAddress,
+                                           offset: Int,
+                                           limit: Int) = {
+    if (limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
-    }else {
+    } else {
       ApiResponse(getBoxesByAddress(address, offset, limit))
     }
+  }
+
+  private def getBoxesByAddressR: Route = (post & pathPrefix("box" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
+    validateAndGetBoxesByAddress(address, offset, limit)
+  }
+
+  private def getBoxesByAddressGetRoute: Route = (pathPrefix("box" / "byAddress") & get & addressPass & paging) { (address, offset, limit) =>
+    validateAndGetBoxesByAddress(address, offset, limit)
   }
 
   private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Int, limit: Int, sortDir: Direction): Future[Seq[IndexedErgoBox]] =
@@ -221,15 +245,30 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByAddressUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir) { (address, offset, limit, dir) =>
-    if(limit > MaxItems) {
+  private def validateAndGetBoxesByAddressUnspent(address: ErgoAddress,
+                                                  offset: Int,
+                                                  limit: Int,
+                                                  dir: Direction): Route = {
+    if (limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
-    }else if(dir == SortDirection.INVALID) {
+    } else if (dir == SortDirection.INVALID) {
       BadRequest("Invalid parameter for sort direction, valid values are \"ASC\" and \"DESC\"")
-    }else {
+    } else {
       ApiResponse(getBoxesByAddressUnspent(address, offset, limit, dir))
     }
   }
+
+  private def getBoxesByAddressUnspentR: Route =
+    (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir) {
+      (address, offset, limit, dir) =>
+        validateAndGetBoxesByAddressUnspent(address, offset, limit, dir)
+    }
+
+  private def getBoxesByAddressUnspentGetRoute: Route =
+    (pathPrefix("box" / "unspent" / "byAddress") & get & addressPass & paging & sortDir) {
+      (address, offset, limit, dir) =>
+        validateAndGetBoxesByAddressUnspent(address, offset, limit, dir)
+    }
 
   private def getBoxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
     getHistory.map { history =>
@@ -317,6 +356,14 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getAddressBalanceTotalR: Route = (post & pathPrefix("balance") & ergoAddress) { address =>
     ApiResponse(getAddressBalanceTotal(address))
   }
+
+  /** Parses address in the url (i.e. `balanceForAddress/{address}` into [[ErgoAddress]] using [[ErgoAddressEncoder]]. */
+  private val addressPass: Directive1[ErgoAddress] = pathPrefix(Segment).flatMap(handleErgoAddress)
+
+  private def getAddressBalanceTotalGetRoute: Route =
+    (pathPrefix("balanceForAddress") & get & addressPass) { address =>
+      ApiResponse(getAddressBalanceTotal(address))
+    }
 
 }
 

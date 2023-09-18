@@ -68,6 +68,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
+  lazy val weakId = id.take(8)
+
   /**
     * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction).
     * Id is 248-bit long, to distinguish transaction ids from witness ids in Merkle tree of transactions,

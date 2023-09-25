@@ -65,7 +65,7 @@ trait ExtraIndexerBase extends ScorexLogging {
   protected val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
   protected val boxes: mutable.HashMap[ModifierId,IndexedErgoBox] = mutable.HashMap.empty[ModifierId,IndexedErgoBox]
   protected val trees: mutable.HashMap[ModifierId,IndexedErgoAddress] = mutable.HashMap.empty[ModifierId,IndexedErgoAddress]
-  protected val segments: mutable.HashMap[ModifierId,IndexedErgoAddress] = mutable.HashMap.empty[ModifierId,IndexedErgoAddress]
+  protected val segments: mutable.HashMap[ModifierId,Segment[_]] = mutable.HashMap.empty[ModifierId,Segment[_]]
 
   // input tokens in a tx
   protected val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
@@ -117,7 +117,7 @@ trait ExtraIndexerBase extends ScorexLogging {
       case None => // address not found at all
         spendOrReceive match {
           case Left(iEb) => log.warn(s"Unknown address spent box ${bytesToId(iEb.box.id)}") // spend box should never happen by an unknown address
-          case Right(iEb) => trees.put(id, IndexedErgoAddress(id, ArrayBuffer(globalTxIndex), ArrayBuffer.empty[Long], Some(BalanceInfo())).addBox(iEb)) // receive box
+          case Right(iEb) => trees.put(id, IndexedErgoAddress(id).initBalance.addTx(globalTxIndex).addBox(iEb)) // receive box, new address
         }
     }
   }

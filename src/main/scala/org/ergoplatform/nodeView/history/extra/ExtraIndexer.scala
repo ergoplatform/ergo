@@ -136,9 +136,9 @@ trait ExtraIndexerBase extends ScorexLogging {
 
     // perform segmentation on big addresses and save their internal segment buffer
     trees.values.foreach { tree =>
-      if(tree.segments.nonEmpty) {
-        tree.segments.foreach(seg => segments.put(seg.id, seg))
-        tree.segments.clear()
+      if(tree.buffer.nonEmpty) {
+        tree.buffer.foreach(seg => segments.put(seg.id, seg))
+        tree.buffer.clear()
       }
       if(tree.txs.length > segmentTreshold || tree.boxes.length > segmentTreshold)
         tree.splitToSegments.foreach(seg => segments.put(seg.id, seg))
@@ -292,7 +292,7 @@ trait ExtraIndexerBase extends ScorexLogging {
         iEb.spendingTxIdOpt = None
         val address = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get.addBox(iEb, record = false)
         address.findAndModBox(iEb.globalIndex, history)
-        historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.segments)
+        historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.buffer)
       })
       toRemove += tx.id // tx by id
       toRemove += bytesToId(NumericTxIndex.indexToBytes(globalTxIndex)) // tx id by number

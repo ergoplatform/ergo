@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.ErgoAddressEncoder
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.ErgoSerializer
@@ -9,11 +9,11 @@ import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.ErgoTree
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
   * An index of an address (ErgoTree)
   * @param treeHash    - hash of the corresponding ErgoTree
-  * @param txs         - list of numberic transaction indexes associated with this address
-  * @param boxes       - list of numberic box indexes associated with this address, negative values indicate the box is spent
   */
 case class IndexedErgoAddress(treeHash: ModifierId)
   extends Segment[IndexedErgoAddress](treeHash, id => IndexedErgoAddress(id)) with ExtraIndex {
@@ -67,6 +67,25 @@ case class IndexedErgoAddress(treeHash: ModifierId)
     this
   }
 
+  /**
+   * Rollback the state of segments in memory and in db
+   *
+   * @param txTarget  - remove transaction numbers above this number
+   * @param boxTarget - remove box numbers above this number
+   * @param history   - history handle to update segment in database
+   * @return modifier ids to remove
+   */
+  override private[extra] def rollback(txTarget: Long, boxTarget: Long, history: ErgoHistory)(implicit segmentTreshold: Int): Array[ModifierId] = {
+
+    val toRemove: ArrayBuffer[ModifierId] = rollbackState(txTarget, boxTarget, history.getReader)
+
+    if (txCount == 0 && boxCount == 0)
+      toRemove += treeHash // all segments empty after rollback, delete parent
+    else
+      history.historyStorage.insertExtra(Array.empty, Array(this)) // save the changes made to this address
+
+    toRemove.toArray
+  }
 }
 
 object IndexedErgoAddressSerializer extends ErgoSerializer[IndexedErgoAddress] {

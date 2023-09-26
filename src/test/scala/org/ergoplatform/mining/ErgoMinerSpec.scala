@@ -114,7 +114,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val txCost =
       state.validateWithCost(
         ErgoTransaction(costlyTx.inputs, costlyTx.dataInputs, costlyTx.outputCandidates),
-        Some(r.s.stateContext),
+        r.s.stateContext,
         costLimit = 440000,
         None
       ).get

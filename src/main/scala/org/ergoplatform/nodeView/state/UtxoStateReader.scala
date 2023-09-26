@@ -9,8 +9,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.transaction.state.TransactionValidation
-import scorex.core.transaction.state.TransactionValidation.TooHighCostError
+import scorex.core.transaction.TooHighCostError
 import scorex.core.validation.MalformedModifierError
 import scorex.crypto.authds.avltree.batch.{Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
@@ -23,7 +22,7 @@ import scala.util.{Failure, Success, Try}
   * state representation (so functions to generate UTXO set modifiction proofs, do stateful transaction validation,
   * get UTXOs are there
   */
-trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence with TransactionValidation {
+trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
 
   protected implicit val hf: HF = Algos.hash
 
@@ -46,10 +45,9 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence wi
     * or state context from the previous block if not
     */
   def validateWithCost(tx: ErgoTransaction,
-                       stateContextOpt: Option[ErgoStateContext],
+                       context: ErgoStateContext,
                        costLimit: Int,
                        interpreterOpt: Option[ErgoInterpreter]): Try[Int] = {
-    val context = stateContextOpt.getOrElse(stateContext)
     val parameters = context.currentParameters.withBlockCost(costLimit)
     val verifier = interpreterOpt.getOrElse(ErgoInterpreter(parameters))
 
@@ -61,25 +59,14 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence wi
         context,
         accumulatedCost = 0L)(verifier) match {
         case Success(txCost) if txCost > costLimit =>
-          Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
+          Failure(TooHighCostError(tx, Some(txCost)))
         case Success(txCost) =>
           Success(txCost)
         case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
-          Failure(TooHighCostError(s"Transaction $tx has too high cost"))
+          Failure(TooHighCostError(tx, None))
         case f: Failure[_] => f
       }
     }
-  }
-
-  /**
-    * Validate transaction as if it was included at the end of the last block.
-    * This validation does not guarantee that transaction will be valid in future
-    * as soon as state (both UTXO set and state context) will change.
-    *
-    * Used in mempool.
-    */
-  override def validateWithCost(tx: ErgoTransaction, maxTxCost: Int): Try[Int] = {
-    validateWithCost(tx, None, maxTxCost, None)
   }
 
   /**

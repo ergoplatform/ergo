@@ -14,7 +14,21 @@ import scala.collection.mutable.ArrayBuffer
 import java.lang.Math.abs
 import scala.reflect.ClassTag
 
-abstract class Segment[T <: Segment[_] : ClassTag](parentId: ModifierId, factory: ModifierId => T) extends ExtraIndex with ScorexLogging {
+/**
+ * Class to manage the tracking of transactions/boxes in relation to some other object (ErgoTree/token).
+ * When [[ExtraIndexerBase.segmentTreshold]] number of transaction/box indexes are accumulated, new instances of the parent object are created to contain them.
+ * This mechanism is used to prevent excessive serialization/deserialization delays caused by objects with a lot of transaction/box indexes.
+ * @param parentId - identifier of parent object
+ * @param factory  - parent object factory
+ * @param txs      - list of numberic transaction indexes
+ * @param boxes    - list of numberic box indexes, negative values indicate the box is spent
+ * @tparam T       - type of parent object
+ */
+abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
+                                                   val factory: ModifierId => T,
+                                                   val txs: ArrayBuffer[Long],
+                                                   val boxes: ArrayBuffer[Long])
+  extends ExtraIndex with ScorexLogging {
 
   override lazy val id: ModifierId = parentId
   override def serializedId: Array[Byte] = fastIdToBytes(parentId)
@@ -25,24 +39,22 @@ abstract class Segment[T <: Segment[_] : ClassTag](parentId: ModifierId, factory
   private[extra] val buffer: ArrayBuffer[T] = ArrayBuffer.empty[T]
 
   /**
-   * List of numberic transaction indexes
+   * Number of segments in database containing box numbers
    */
-  val txs: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
-  /**
-   * List of numberic box indexes, negative values indicate the box is spent
-   */
-  val boxes: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
-
   private[extra] var boxSegmentCount: Int = 0
+
+  /**
+   * Number of segments in database containing transaction numbers
+   */
   private[extra] var txSegmentCount: Int = 0
 
   /**
-   * @return total number of boxes associated with this address
+   * @return total number of boxes associated with the parent object
    */
   def boxCount(implicit segmentTreshold: Int): Long = segmentTreshold * boxSegmentCount + boxes.length
 
   /**
-   * @return total number of transactions associated with this address
+   * @return total number of transactions associated with the parent object
    */
   def txCount(implicit segmentTreshold: Int): Long = segmentTreshold * txSegmentCount + txs.length
 
@@ -50,7 +62,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](parentId: ModifierId, factory
    * Retrieve segment with specified id from buffer or database
    *
    * @param history - database handle to search, if segment is not found in buffer
-   * @param searchId- address segment to search for
+   * @param searchId- segment id to search for
    * @return
    */
   private def getSegmentFromBufferOrHistroy(history: ErgoHistoryReader, searchId: ModifierId): Int = {
@@ -97,10 +109,10 @@ abstract class Segment[T <: Segment[_] : ClassTag](parentId: ModifierId, factory
   }
 
   /**
-   * Create an array addresses each containing a "segmentTreshold" number of this address's transaction and box indexes.
-   * These special addresses have their ids calculated by "txSegmentId" and "boxSegmentId" respectively.
+   * Create an array of parent objects each containing [[ExtraIndexerBase.segmentTreshold]] number of transaction/box indexes.
+   * These objects have their ids calculated by "txSegmentId" and "boxSegmentId" respectively.
    *
-   * @return array of addresses
+   * @return array of parent objects
    */
   private[extra] def splitToSegments(implicit segmentTreshold: Int): Array[T] = {
     val data: Array[T] = new Array[T]((txs.length / segmentTreshold) + (boxes.length / segmentTreshold))
@@ -169,7 +181,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](parentId: ModifierId, factory
     arr.map(n => NumericBoxIndex.getBoxByNumber(history, n).get).toArray
 
   /**
-   * Get a set of address segments from database containing numeric transaction or box indexes. Then actually retreive these indexes.
+   * Get a set of segments from database containing numeric transaction or box indexes. Then actually retreive these indexes.
    *
    * @param history       - database handle
    * @param offset        - number of items to skip from the start
@@ -208,7 +220,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](parentId: ModifierId, factory
   }
 
   /**
-   * Get a range of the transactions associated with this address
+   * Get a range of the transactions associated with the parent object
    *
    * @param history - history to use
    * @param offset  - items to skip from the start
@@ -219,7 +231,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](parentId: ModifierId, factory
     getFromSegments(history, offset, limit, txSegmentCount, txs, txSegmentId, _.txs, getTxs)
 
   /**
-   * Get a range of the boxes associated with this address
+   * Get a range of the boxes associated with the parent object
    *
    * @param history - history to use
    * @param offset  - items to skip from the start
@@ -230,7 +242,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](parentId: ModifierId, factory
     getFromSegments(history, offset, limit, boxSegmentCount, boxes, boxSegmentId, _.boxes, getBoxes)
 
   /**
-   * Get a range of the boxes associated with this address that are NOT spent
+   * Get a range of the boxes associated with the parent that are NOT spent
    *
    * @param history - history to use
    * @param offset  - items to skip from the start
@@ -263,6 +275,14 @@ abstract class Segment[T <: Segment[_] : ClassTag](parentId: ModifierId, factory
     }
   }
 
+  /**
+   * Logic for [[Segment.rollback]]
+   *
+   * @param txTarget  - remove transaction numbers above this number
+   * @param boxTarget - remove box numbers above this number
+   * @param history   - history handle to update segment(s) in database
+   * @return modifier ids to remove
+   */
   protected def rollbackState(txTarget: Long, boxTarget: Long, history: ErgoHistoryReader)
                              (implicit segmentTreshold: Int): ArrayBuffer[ModifierId] = {
 
@@ -306,7 +326,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](parentId: ModifierId, factory
    *
    * @param txTarget  - remove transaction numbers above this number
    * @param boxTarget - remove box numbers above this number
-   * @param history  - history handle to update segment in database
+   * @param history  - history handle to update segment(s) in database
    * @return modifier ids to remove
    */
   private[extra] def rollback(txTarget: Long, boxTarget: Long, history: ErgoHistory)(implicit segmentTreshold: Int): Array[ModifierId]

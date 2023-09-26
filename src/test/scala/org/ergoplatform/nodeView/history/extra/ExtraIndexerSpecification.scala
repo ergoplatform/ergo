@@ -68,6 +68,7 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     general.clear()
     boxes.clear()
     trees.clear()
+    segments.clear()
   }
 
   def getAddresses(limit: Int): (mutable.HashMap[ModifierId,(Long,Long)],Int,Int) = {

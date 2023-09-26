@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox, Pay2SAddress}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -11,10 +11,12 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, 
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.{GetSegmentTreshold, StartExtraIndexer}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
+import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.ErgoTree
+import special.collection.Extensions._
 
 import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
@@ -27,34 +29,54 @@ import scala.collection.mutable
   */
 trait ExtraIndexerBase extends ScorexLogging {
 
-  // Indexed block height
+  /**
+   * Indexed block height
+   */
   protected var indexedHeight: Int = 0
 
-  // Indexed transaction count
+  /**
+   * Indexed transaction count
+   */
   protected var globalTxIndex: Long = 0L
 
-  // Indexed box count
+  /**
+   * Indexed box count
+   */
   protected var globalBoxIndex: Long = 0L
 
-  // Last block height when buffer contents were saved to database
+  /**
+   * Last block height when buffer contents were saved to database
+   */
   protected var lastWroteToDB: Int = 0
 
-  // Max buffer size (determined by config)
+  /**
+   * Max buffer size (determined by config)
+   */
   protected val saveLimit: Int
 
-  // Size of box and tx number containing segment addresses
+  /**
+   * Number of transaction/box numberic indexes object segments contain
+   */
   protected implicit val segmentTreshold: Int
 
-  // Address encoder instance
+  /**
+   * Address encoder instance
+   */
   protected implicit val addressEncoder: ErgoAddressEncoder
 
-  // Flag to signal when indexer has reached current block height
+  /**
+   * Flag to signal when indexer has reached current block height
+   */
   protected var caughtUp: Boolean = false
 
-  // Flag to signal a rollback
+  /**
+   * Flag to signal a rollback
+   */
   protected var rollback: Boolean = false
 
-  // Database handle
+  /**
+   * Database handle
+   */
   protected var _history: ErgoHistory = _
 
   protected def chainHeight: Int = _history.fullBlockHeight
@@ -65,10 +87,13 @@ trait ExtraIndexerBase extends ScorexLogging {
   protected val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
   protected val boxes: mutable.HashMap[ModifierId,IndexedErgoBox] = mutable.HashMap.empty[ModifierId,IndexedErgoBox]
   protected val trees: mutable.HashMap[ModifierId,IndexedErgoAddress] = mutable.HashMap.empty[ModifierId,IndexedErgoAddress]
+  protected val tokens: mutable.HashMap[ModifierId,IndexedToken] = mutable.HashMap.empty[ModifierId,IndexedToken]
   protected val segments: mutable.HashMap[ModifierId,Segment[_]] = mutable.HashMap.empty[ModifierId,Segment[_]]
 
-  // input tokens in a tx
-  protected val tokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
+  /**
+   * Input tokens in a transaction
+   */
+  private val inputTokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
 
   /**
     * Spend an IndexedErgoBox from buffer or database. Also record tokens for later use in balance tracking logic.
@@ -80,13 +105,13 @@ trait ExtraIndexerBase extends ScorexLogging {
     */
   private def findAndSpendBox(id: ModifierId, txId: ModifierId, height: Int): Boolean = {
     boxes.get(id).map(box => {
-      tokens ++= box.asSpent(txId, height).box.additionalTokens.toArray
+      inputTokens ++= box.asSpent(txId, height).box.additionalTokens.toArray
       return true
     })
     history.typedExtraIndexById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
       case Some(x) => // box found in DB, update
         boxes.put(id, x.asSpent(txId, height))
-        tokens ++= x.box.additionalTokens.toArray
+        inputTokens ++= x.box.additionalTokens.toArray
         true
       case None => // box not found at all (this shouldn't happen)
         log.warn(s"Unknown box used as input: $id")
@@ -98,7 +123,7 @@ trait ExtraIndexerBase extends ScorexLogging {
     * Add or subtract a box from an address in the buffer or in database.
     *
     * @param id             - hash of the (ergotree) address
-    * @param spendOrReceive - ErgoBox to spend or IndexedErgoBox to receive
+    * @param spendOrReceive - IndexedErgoBox to receive (Right) or spend (Left)
     */
   private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[IndexedErgoBox, IndexedErgoBox]): Unit = {
     trees.get(id).map(tree => {
@@ -111,10 +136,38 @@ trait ExtraIndexerBase extends ScorexLogging {
     history.typedExtraIndexById[IndexedErgoAddress](id) match { // address not found in last saveLimit modifiers
       case Some(x) =>
         spendOrReceive match {
-          case Left(box) => trees.put(id, x.addTx(globalTxIndex).spendBox(box, Some(history))) // spend box
+          case Left(iEb) => trees.put(id, x.addTx(globalTxIndex).spendBox(iEb, Some(history))) // spend box
           case Right(iEb) => trees.put(id, x.addTx(globalTxIndex).addBox(iEb)) // receive box
         }
       case None => // address not found at all
+        spendOrReceive match {
+          case Left(iEb) => log.warn(s"Unknown address spent box ${bytesToId(iEb.box.id)}") // spend box should never happen by an unknown address
+          case Right(iEb) => trees.put(id, IndexedErgoAddress(id).initBalance.addTx(globalTxIndex).addBox(iEb)) // receive box, new address
+        }
+    }
+  }
+
+  /**
+   * Add or subtract a box from a token in the buffer or in database.
+   *
+   * @param id             - token id
+   * @param spendOrReceive - IndexedErgoBox to receive (Right) or spend (Left)
+   */
+  private def findAndUpdateToken(id: ModifierId, spendOrReceive: Either[IndexedErgoBox, IndexedErgoBox]): Unit = {
+    tokens.get(id).map(token => {
+      spendOrReceive match {
+        case Left(iEb) => token.spendBox(iEb, Some(history)) // spend box
+        case Right(iEb) => token.addBox(iEb) // receive box
+      }
+      return
+    })
+    history.typedExtraIndexById[IndexedToken](uniqueId(id)) match { // token not found in last saveLimit modifiers
+      case Some(x) =>
+        spendOrReceive match {
+          case Left(iEb) => tokens.put(id, x.spendBox(iEb, Some(history))) // spend box
+          case Right(iEb) => tokens.put(id, x.addBox(iEb)) // receive box
+        }
+      case None => // token not found at all
         spendOrReceive match {
           case Left(iEb) => log.warn(s"Unknown address spent box ${bytesToId(iEb.box.id)}") // spend box should never happen by an unknown address
           case Right(iEb) => trees.put(id, IndexedErgoAddress(id).initBalance.addTx(globalTxIndex).addBox(iEb)) // receive box, new address
@@ -144,11 +197,21 @@ trait ExtraIndexerBase extends ScorexLogging {
         tree.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 
+    // perform segmentation on big tokens and save their internal segment buffer
+    tokens.values.foreach { token =>
+      if(token.buffer.nonEmpty) {
+        token.buffer.foreach(seg => segments.put(seg.id, seg))
+        token.buffer.clear()
+      }
+      if(token.txs.length > segmentTreshold || token.boxes.length > segmentTreshold)
+        token.splitToSegments.foreach(seg => segments.put(seg.id, seg))
+    }
+
     // insert modifiers and progress info to db
     historyStorage.insertExtra(Array((IndexedHeightKey, ByteBuffer.allocate(4).putInt(indexedHeight).array),
                                      (GlobalTxIndexKey, ByteBuffer.allocate(8).putLong(globalTxIndex).array),
                                      (GlobalBoxIndexKey,ByteBuffer.allocate(8).putLong(globalBoxIndex).array)),
-                              (((general ++= boxes.values) ++= trees.values) ++= segments.values).toArray)
+      ((((general ++= boxes.values) ++= trees.values) ++= tokens.values) ++= segments.values).toArray)
 
     if (writeLog)
       log.info(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
@@ -182,7 +245,7 @@ trait ExtraIndexerBase extends ScorexLogging {
       val tx: ErgoTransaction = bt.txs(n)
       val inputs: Array[Long] = Array.ofDim[Long](tx.inputs.length)
 
-      tokens.clear()
+      inputTokens.clear()
 
       //process transaction inputs
       if (height != 1) { //only after 1st block (skip genesis box)
@@ -191,6 +254,9 @@ trait ExtraIndexerBase extends ScorexLogging {
           if (findAndSpendBox(boxId, tx.id, height)) { // spend box and add tx
             val iEb = boxes(boxId)
             findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))
+            cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
+              findAndUpdateToken(iEb.box.additionalTokens(j)._1.toModifierId, Left(iEb))
+            }
             inputs(i) = iEb.globalIndex
           }
         }
@@ -198,19 +264,20 @@ trait ExtraIndexerBase extends ScorexLogging {
 
       //process transaction outputs
       cfor(0)(_ < tx.outputs.size, _ + 1) { i =>
-        val box: ErgoBox = tx.outputs(i)
-        val boxId = bytesToId(box.id)
-        boxes.put(boxId, new IndexedErgoBox(height, None, None, box, globalBoxIndex)) // box by id
-        general += NumericBoxIndex(globalBoxIndex, bytesToId(box.id)) // box id by global box number
+        val iEb: IndexedErgoBox = new IndexedErgoBox(height, None, None, tx.outputs(i), globalBoxIndex)
+        boxes.put(iEb.id, iEb) // box by id
+        general += NumericBoxIndex(globalBoxIndex, iEb.id) // box id by global box number
 
         // box by address
-        findAndUpdateTree(hashErgoTree(box.ergoTree), Right(boxes(boxId)))
+        findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))
 
         // check if box is creating new tokens, if yes record them
-        cfor(0)(_ < box.additionalTokens.length, _ + 1) { j =>
-          if (!tokens.exists(x => x._1 == box.additionalTokens(j)._1)) {
-            general += IndexedToken.fromBox(box, j)
+        cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
+          if (!inputTokens.exists(x => x._1 == iEb.box.additionalTokens(j)._1)) {
+            val token = IndexedToken.fromBox(iEb, j)
+            tokens.put(token.tokenId, token)
           }
+          findAndUpdateToken(iEb.box.additionalTokens(j)._1.toModifierId, Right(iEb))
         }
 
         globalBoxIndex += 1
@@ -305,7 +372,7 @@ trait ExtraIndexerBase extends ScorexLogging {
     while(globalBoxIndex > boxTarget) {
       val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, globalBoxIndex).get
       cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
-        history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb.box, i).id) match {
+        history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id) match {
           case Some(token) if token.boxId == iEb.id =>
             toRemove += token.id // token created, delete
           case _ => // no token created

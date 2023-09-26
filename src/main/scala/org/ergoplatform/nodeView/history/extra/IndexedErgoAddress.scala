@@ -13,10 +13,14 @@ import scala.collection.mutable.ArrayBuffer
 
 /**
   * An index of an address (ErgoTree)
-  * @param treeHash    - hash of the corresponding ErgoTree
+  * @param treeHash - hash of the corresponding ErgoTree
+  * @param txs      - list of numberic transaction indexes
+  * @param boxes    - list of numberic box indexes, negative values indicate the box is spent
   */
-case class IndexedErgoAddress(treeHash: ModifierId)
-  extends Segment[IndexedErgoAddress](treeHash, id => IndexedErgoAddress(id)) with ExtraIndex {
+case class IndexedErgoAddress(treeHash: ModifierId,
+                              override val txs: ArrayBuffer[Long] = new ArrayBuffer[Long],
+                              override val boxes: ArrayBuffer[Long] = new ArrayBuffer[Long])
+  extends Segment[IndexedErgoAddress](treeHash, id => IndexedErgoAddress(id), txs, boxes) with ExtraIndex {
 
   override lazy val id: ModifierId = treeHash
   override def serializedId: Array[Byte] = fastIdToBytes(treeHash)

@@ -109,6 +109,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   override def serializer: ErgoSerializer[M] = ErgoStateContextSerializer(ergoSettings)
 
+  /**
+    * @return state context corresponding to a block after last known one with fields provided
+    */
   def upcoming(minerPk: EcPointType,
                timestamp: Long,
                nBits: Long,
@@ -122,6 +125,25 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val calculatedValidationSettings = validationSettings.updated(updated)
     UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
                           calculatedValidationSettings, votingData)
+  }
+
+  /**
+    * @return state context corresponding to a block after last known one
+    *         with fields filled with (kind of) default values
+    */
+  def simplifiedUpcoming(): UpcomingStateContext = {
+    val minerPk = org.ergoplatform.mining.group.generator
+    val version = lastHeaderOpt.map(_.version).getOrElse(Header.InitialVersion)
+    val nBits = lastHeaderOpt.map(_.nBits).getOrElse(ergoSettings.chainSettings.initialNBits)
+    val timestamp = lastHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
+    val votes = Array.emptyByteArray
+    val proposedUpdate = ErgoValidationSettingsUpdate.empty
+    val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
+    val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
+    val (calculatedParams, updated) = currentParameters.update(height, forkVote = false, votingData.epochVotes, proposedUpdate, votingSettings)
+    val calculatedValidationSettings = validationSettings.updated(updated)
+    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
+      calculatedValidationSettings, votingData)
   }
 
   protected def checkForkVote(height: Height): Unit = {

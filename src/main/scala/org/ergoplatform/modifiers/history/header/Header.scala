@@ -142,7 +142,7 @@ object Header extends ApiCodecs {
       version = header.version,
       parentId = header.parentId.toBytes.toColl,
       ADProofsRoot = header.ADProofsRoot.asInstanceOf[Array[Byte]].toColl,
-      stateRoot = CAvlTree(ErgoInterpreter.avlTreeFromDigest(header.stateRoot)),
+      stateRoot = CAvlTree(ErgoInterpreter.avlTreeFromDigest(header.stateRoot.toColl)),
       transactionsRoot = header.transactionsRoot.asInstanceOf[Array[Byte]].toColl,
       timestamp = header.timestamp,
       nBits = header.nBits,

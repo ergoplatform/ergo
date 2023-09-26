@@ -252,12 +252,23 @@ class ScanApiRouteSpec extends AnyFlatSpec
     }
   }
 
-
   it should "stop tracking a box" in {
     val scanIdBoxId = ScanIdBoxId(ScanId @@ (51: Short), ADKey @@ Random.randomBytes(32))
 
     Post(prefix + "/stopTracking", scanIdBoxId.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "generate scan for p2s rule" in {
+    Post(prefix + "/p2sRule", "Ms7smJmdbakqfwNo") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val res = responseAs[Json]
+      res.hcursor.downField("scanId").as[Int].toOption.isDefined shouldBe true
+    }
+
+    Post(prefix + "/p2sRule", "s7smJmdbakqfwNo") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

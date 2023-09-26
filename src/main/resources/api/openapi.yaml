@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.13"
+  version: "5.0.15"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -243,71 +243,53 @@ components:
                 description: Name of the token, if any
 
     IndexedErgoBox:
-      type: object
-      description: Box indexed with extra information
-      required:
-        - box
-        - confirmationsNum
-        - address
-        - creationTransaction
-        - spendingTransaction
-        - spendingHeight
-        - inclusionHeight
-        - spent
-        - globalIndex
-      properties:
-        box:
-          $ref: '#/components/schemas/ErgoTransactionOutput'
-        confirmationsNum:
-          description: Number of confirmations, if the box is included into the blockchain
-          type: integer
-          format: int32
-          minimum: 0
-          example: 147
-          nullable: true
-        address:
-          $ref: '#/components/schemas/ErgoAddress'
-        creationTransaction:
-          description: Transaction which created the box
-          $ref: '#/components/schemas/ModifierId'
-        spendingTransaction:
-          description: Transaction which created the box
-          nullable: true
-          $ref: '#/components/schemas/ModifierId'
-        spendingHeight:
-          description: The height the box was spent at
-          type: integer
-          format: int32
-          minimum: 0
-          example: 147
-          nullable: true
-        inclusionHeight:
-          description: The height the transaction containing the box was included in a block at
-          type: integer
-          format: int32
-          minimum: 0
-          example: 147
-        spent:
-          description: A flag signalling whether the box was spent
-          type: boolean
-          example: false
-        globalIndex:
-          description: Global index of the output in the blockchain
-          type: integer
-          format: int64
-          minimum: 0
-          example: 83927
+      allOf:
+        - $ref: '#/components/schemas/ErgoTransactionOutput'
+        - type: object
+          description: Box indexed with extra information
+          required:
+            - address
+            - spentTransactionId
+            - spendingHeight
+            - inclusionHeight
+            - globalIndex
+          properties:
+            address:
+              $ref: '#/components/schemas/ErgoAddress'
+            spentTransactionId:
+              description: Transaction which spent the box
+              nullable: true
+              $ref: '#/components/schemas/ModifierId'
+            spendingHeight:
+              description: The height the box was spent at
+              type: integer
+              format: int32
+              minimum: 0
+              example: 147
+              nullable: true
+            inclusionHeight:
+              description: The height the transaction containing the box was included in a block at
+              type: integer
+              format: int32
+              minimum: 0
+              example: 147
+            globalIndex:
+              description: Global index of the output in the blockchain
+              type: integer
+              format: int64
+              minimum: 0
+              example: 83927
 
     IndexedToken:
       type: object
       description: Token indexed with extra information
       required:
-        -id
-        -boxId
-        -emissionAmount
-        -name
-        -description
-        -decimals
+        - id
+        - boxId
+        - emissionAmount
+        - name
+        - description
+        - decimals
       properties:
         id:
           description: Id of the token
@@ -362,31 +344,32 @@ components:
 
     ErgoTransaction:
       type: object
-      description: Ergo transaction
+      description: ErgoTransaction is an atomic operation which changes UTXO state.
       required:
         - inputs
         - dataInputs
         - outputs
       properties:
         id:
+          description: Id of the transaction
           $ref: '#/components/schemas/TransactionId'
         inputs:
-          description: Inputs of the transaction
+          description: Inputs, that will be spent by this transaction
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionInput'
         dataInputs:
-          description: Data inputs of the transaction
+          description: Read-only inputs, that are not going to be spent by transaction.
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionDataInput'
         outputs:
-          description: Outputs of the transaction
+          description: Outputs of the transaction, i.e. box candidates to be created by this transaction.
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionOutput'
         size:
-          description: Size in bytes
+          description: Size of ErgoTransaction in bytes
           type: integer
           format: int32
 
@@ -1540,6 +1523,10 @@ components:
             $ref: '#/components/schemas/BlockHeader'
 
     BlockHeader:
+      description: Header of a block.
+        It authenticates link to a previous block, other block sections
+        (transactions, UTXO set transformation proofs, extension), UTXO set, votes for blockchain parameters
+        to be changed and proof-of-work related data.
       type: object
       required:
         - id
@@ -1557,27 +1544,37 @@ components:
         - votes
       properties:
         id:
+          description: Block id
           $ref: '#/components/schemas/ModifierId'
         timestamp:
+          description: Block generation time reported by a miner
           $ref: '#/components/schemas/Timestamp'
         version:
+          description: Protocol version used to generate the block
           $ref: '#/components/schemas/Version'
         adProofsRoot:
+          description: Digest of UTXO set transformation proofs
           $ref: '#/components/schemas/Digest32'
         stateRoot:
+          description: AVL+ tree digest of UTXO set (after the block is applied)
           $ref: '#/components/schemas/ADDigest'
         transactionsRoot:
+          description: Merkle tree digest of transactions in the block (BlockTransactions section)
           $ref: '#/components/schemas/Digest32'
         nBits:
+          description: Proof-of-work target (difficulty encoded)
           type: integer
           format: int64
           minimum: 0
           example: 19857408
         extensionHash:
+          description: Merkle tree digest of the extension section of the block
           $ref: '#/components/schemas/Digest32'
         powSolutions:
+          description: Solution for the proof-of-work puzzle
           $ref: '#/components/schemas/PowSolutions'
         height:
+          description: Height of the block (genesis block height == 1)
           type: integer
           format: int32
           minimum: 0
@@ -1588,19 +1585,24 @@ components:
         parentId:
           $ref: '#/components/schemas/ModifierId'
         votes:
+          description: Votes for changing system parameters
           $ref: '#/components/schemas/Votes'
         size:
-          description: Size in bytes
+          description: Size of the header in bytes
           type: integer
           format: int32
         extensionId:
+          description: Hash of the extension section of the block == hash(modifier type id, header id, extensionHash)
           $ref: '#/components/schemas/ModifierId'
         transactionsId:
+          description: Hash of the transactions section of the block == hash(modifier type id, header id, transactionsRoot)
           $ref: '#/components/schemas/ModifierId'
         adProofsId:
+          description: Hash of the UTXO set transformation proofs section of the block == hash(modifier type id, header id, adProofsRoot)
           $ref: '#/components/schemas/ModifierId'
 
     BlockTransactions:
+      description: Section of a block which contains transactions.
       type: object
       required:
         - headerId
@@ -1608,11 +1610,13 @@ components:
         - size
       properties:
         headerId:
+          description: Identifier of a header of a corresponding block
           $ref: '#/components/schemas/ModifierId'
         transactions:
+          description: Transactions of the block
           $ref: '#/components/schemas/Transactions'
         size:
-          description: Size in bytes
+          description: Size in bytes of all block transactions
           type: integer
           format: int32
 
@@ -1625,10 +1629,13 @@ components:
         - size
       properties:
         headerId:
+          description: Identifier of a header of the block which contains the proofs
           $ref: '#/components/schemas/ModifierId'
         proofBytes:
+          description: Serialized bytes of the authenticated dictionary proof
           $ref: '#/components/schemas/SerializedAdProof'
         digest:
+          description: Hash of the proofBytes
           $ref: '#/components/schemas/Digest32'
         size:
           description: Size in bytes
@@ -1636,6 +1643,7 @@ components:
           format: int32
 
     Extension:
+      description: Section of a block which contains extension data.
       type: object
       required:
         - headerId
@@ -1643,8 +1651,10 @@ components:
         - fields
       properties:
         headerId:
+          description: Identifier of a header of a corresponding block
           $ref: '#/components/schemas/ModifierId'
         digest:
+          description: Root hash (aka digest) merkelized list of key-value records
           $ref: '#/components/schemas/Digest32'
         fields:
           description: List of key-value records
@@ -1654,6 +1664,7 @@ components:
             $ref: '#/components/schemas/KeyValueItem'
 
     KeyValueItem:
+      description: Key-value record represented as a pair of hex strings in an array.
       type: array
       items:
         $ref: '#/components/schemas/HexString'
@@ -2047,6 +2058,10 @@ components:
             description: Blacklisted node address
 
     NodeInfo:
+      description: Data container for /info API request output. 
+        Contains information about node's state and configuration.
+        Contains data about best block, best header, state, etc.
+        Best block is the block with the maximum height.
       type: object
       required:
         - name
@@ -2072,76 +2087,89 @@ components:
         - parameters
       properties:
         name:
+          description: Node's (peer) self-chosen name from config
           type: string
           example: my-node-1
         appVersion:
+          description: Node's application version
           type: string
           example: 0.0.1
         fullHeight:
           type: integer
           format: int32
-          description: Can be 'null' if state is empty (no full block is applied since node launch)
+          description: Height of the best block known to the node. 
+            Can be 'null' if state is empty (no full block is applied since node launch)
           minimum: 0
           example: 667
           nullable: true
         headersHeight:
           type: integer
           format: int32
-          description: Can be 'null' if state is empty (no header applied since node launch)
+          description: The height of the best header (i.e. the one with the maximum height).
+            Can be 'null' if state is empty (no header applied since node launch)
           minimum: 0
           example: 667
           nullable: true
         maxPeerHeight:
           type: integer
           format: int32
-          description: Maximum block height of connected peers. Can be 'null' if state is empty (no peer connected since node launch)
+          description: Maximum block height of connected peers.
+            Can be 'null' if state is empty (no peer connected since node launch)
           minimum: 0
           example: 706162
           nullable: true
         bestFullHeaderId:
           type: string
-          description: Can be 'null' if no full block is applied since node launch
+          description: Best full-block id (header id of such block).
+            Can be 'null' if no full block is applied since node launch.
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ModifierId'
         previousFullHeaderId:
           type: string
-          description: Can be 'null' if no full block is applied since node launch
+          description: Header id of the parent block of the best full-block (i.e. previous block in the blockchain).
+            Can be 'null' if no full block is applied since node launch
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ModifierId'
         bestHeaderId:
           type: string
-          description: Can be 'null' if no header applied since node launch
+          description: Best header ID (hex representation). 
+            Can be 'null' if no header applied since node launch.
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ModifierId'
         stateRoot:
           type: string
           nullable: true
-          description: Can be 'null' if state is empty (no full block is applied since node launch)
+          description: Current UTXO set digest. 
+            Can be 'null' if state is empty (no full block is applied since node launch)
           example: 'dab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
         stateType:
+          description: Whether the node is storing UTXO set or only its digest.
+            Equals `digest` if only digest is stored, `utxo` if full UTXO set is stored.
           type: string
           enum:
             - digest
             - utxo
         stateVersion:
-          description: Can be 'null' if no full block is applied since node launch
+          description: Id of a block where UTXO set digest is taken from.
+            Can be 'null' if no full block is applied since node launch.
           type: string
           example: 'fab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117'
           nullable: true
         isMining:
+          description: Whether the node is mining (i.e. generating blocks).
           type: boolean
           example: true
         peersCount:
           type: integer
-          description: Number of connected peers
+          description: Number of peers this node is connected with.
           format: int32
           minimum: 0
           example: 327
         unconfirmedCount:
-          description: Current unconfirmed transactions count
+          description: Number of unconfirmed transactions in the mempool.
           type: integer
           format: int32
           minimum: 0
@@ -2152,8 +2180,8 @@ components:
           minimum: 0
           nullable: true
           example: 667
-          description: >
-            Difficulty on current bestFullHeaderId. Can be 'null' if no full block is applied since node launch.
+          description: Difficulty on current bestFullHeaderId. 
+            Can be 'null' if no full block is applied since node launch.
             Difficulty is a BigInt integer.
         currentTime:
           type: integer
@@ -2162,26 +2190,28 @@ components:
             - $ref: '#/components/schemas/Timestamp'
         launchTime:
           type: integer
-          description: Time when the node was started
+          description: When the node was launched (in Java time format, UNIX time * 1000).
           allOf:
             - $ref: '#/components/schemas/Timestamp'
         headersScore:
           type: integer
-          description: Can be 'null' if no headers is applied since node launch. headersScore is a BigInt integer.
+          description: Cumulative difficulty of best headers-chain.
+            Can be 'null' if no headers is applied since node launch. headersScore is a BigInt integer.
           nullable: true
         fullBlocksScore:
           type: integer
-          description: Can be 'null' if no full block is applied since node launch. fullBlocksScore is a BigInt integer.
+          description: Cumulative difficulty of best full blocks chain.
+            Can be 'null' if no full block is applied since node launch. fullBlocksScore is a BigInt integer.
           nullable: true
         genesisBlockId:
           type: string
-          description: Can be 'null' if genesis blocks is not produced yet
+          description: Header id of genesis block. Can be 'null' if genesis blocks is not produced yet.
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ModifierId'
         parameters:
           type: object
-          description: current parameters
+          description: System parameters which could be readjusted via collective miners decision.
           $ref: '#/components/schemas/Parameters'
         eip27Supported:
           type: boolean
@@ -2193,6 +2223,7 @@ components:
           description: Publicly accessible url of node which exposes restApi in firewall
 
     Parameters:
+      description: System parameters which could be readjusted via collective miners decision.
       type: object
       required:
         - height
@@ -2306,7 +2337,7 @@ components:
           example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
 
     Transactions:
-      description: Ergo transaction objects
+      description: List of ErgoTransaction objects
       type: array
       items:
         $ref: '#/components/schemas/ErgoTransaction'
@@ -2472,6 +2503,7 @@ components:
           type: string
 
     ApiError:
+      description: Error response from API
       type: object
       required:
         - error
@@ -2484,7 +2516,7 @@ components:
           example: 500
         reason:
           type: string
-          description: String error code
+          description: Error message explaining the reason of the error
           example: 'Internal server error'
         detail:
           type: string
@@ -2494,7 +2526,8 @@ components:
 paths:
   /blocks:
     get:
-      summary: Get the Array of header ids
+      summary: Get an array of header ids (hex encoded) for the given range of blockchain block heights.
+        Returns a page of the whole list starting from `offset` and containing `limit` items.
       operationId: getHeaderIds
       tags:
         - blocks
@@ -2512,7 +2545,7 @@ paths:
         - in: query
           name: offset
           required: false
-          description: The number of items in list to skip
+          description: The first block height to include in the list
           schema:
             type: integer
             format: int32
@@ -2559,7 +2592,7 @@ paths:
 
   /blocks/at/{blockHeight}:
     get:
-      summary: Get the header ids at a given height
+      summary: Get header ids at the given height
       operationId: getFullBlockAt
       tags:
         - blocks
@@ -2567,7 +2600,7 @@ paths:
         - in: path
           name: blockHeight
           required: true
-          description: Height of a wanted block
+          description: Height of a block to retrieve header ids
           schema:
             type: integer
             format: int32
@@ -2598,7 +2631,7 @@ paths:
 
   /blocks/chainSlice:
     get:
-      summary: Get headers in a specified range
+      summary: Get headers in a specified range of heights
       operationId: getChainSlice
       tags:
         - blocks
@@ -2606,7 +2639,7 @@ paths:
         - in: query
           name: fromHeight
           required: false
-          description: Min header height
+          description: Min header height (start of the range)
           schema:
             type: integer
             format: int32
@@ -2614,7 +2647,7 @@ paths:
         - in: query
           name: toHeight
           required: false
-          description: Max header height (best header height by default)
+          description: Max header height of the range (last header height then omitted)
           schema:
             type: integer
             format: int32
@@ -2638,7 +2671,7 @@ paths:
 
   /blocks/{headerId}:
     get:
-      summary: Get the full block info by a given signature
+      summary: Get the full block info by a given header id
       operationId: getFullBlockById
       tags:
         - blocks
@@ -2647,12 +2680,12 @@ paths:
         - in: path
           name: headerId
           required: true
-          description: ID of a wanted block
+          description: ID of the header the wanted block
           schema:
             type: string
       responses:
         '200':
-          description: Block object
+          description: Block object representing the full block data
           content:
             application/json:
               schema:
@@ -2672,7 +2705,7 @@ paths:
 
   /blocks/{headerId}/header:
     get:
-      summary: Get the block header info by a given signature
+      summary: Get the block header info by a given header id
       operationId: getBlockHeaderById
       tags:
         - blocks
@@ -2782,7 +2815,7 @@ paths:
         - in: path
           name: count
           required: true
-          description: count of a wanted block headers
+          description: a number of block headers to return
           schema:
             type: number
       responses:
@@ -5550,6 +5583,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /scan/p2sRule:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create and register a scan to track P2S address provided
+      operationId: scriptP2SRule
+      tags:
+        - scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                type: string
+                example: '4MQyML64GnzMxZgm'
+      responses:
+        '200':
+          description: Id of custom scan generated and registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanId'
+        '400':
+          description: Bad source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/generateCommitments:
     post:
       security:
@@ -5717,7 +5785,7 @@ paths:
 
   /blockchain/indexedHeight:
     get:
-      summary: Get current block height the indexer is at
+      summary: Get current indexed block height. (The indexer has processed all blocks up to this height.)
       operationId: getIndexedHeight
       tags:
         - blockchain

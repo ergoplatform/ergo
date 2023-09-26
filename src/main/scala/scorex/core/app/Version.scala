@@ -33,20 +33,12 @@ object Version {
 
   val initial: Version = Version(0, 0, 1)
 
-  val v4017: Version = Version(4, 0, 17)
-
-  val v4018: Version = Version(4, 0, 18)
-
-  val v4022: Version = Version(4, 0, 22)
-
-  val v4043: Version = Version(4, 0, 43)
-
   val Eip37ForkVersion: Version = Version(4, 0, 100)
   val JitSoftForkVersion: Version = Version(5, 0, 0)
 
   val UtxoSnapsnotActivationVersion: Version = Version(5, 0, 12)
 
-  val NipopowActivationVersion: Version = Version(5, 0, 13) // todo: set proper version around release
+  val NipopowActivationVersion: Version = Version(5, 0, 13)
 }
 
 object ApplicationVersionSerializer extends ErgoSerializer[Version] {

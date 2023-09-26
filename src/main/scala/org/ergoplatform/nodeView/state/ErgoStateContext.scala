@@ -18,6 +18,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.basics.CryptoConstants.EcPointType
+import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.eval.SigmaDsl
 import special.collection.Coll
 
@@ -83,10 +84,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
-  override def previousStateDigest: ADDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
-    ADDigest @@ sigmaLastHeaders.toArray.head.stateRoot.digest.toArray
+  override def previousStateDigest: Coll[Byte] = if (sigmaLastHeaders.toArray.nonEmpty) {
+    sigmaLastHeaders.toArray.head.stateRoot.digest
   } else {
-    genesisStateDigest
+    genesisStateDigest.toColl
   }
 
   /* NOHF PROOF:
@@ -108,6 +109,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   override def serializer: ErgoSerializer[M] = ErgoStateContextSerializer(ergoSettings)
 
+  /**
+    * @return state context corresponding to a block after last known one with fields provided
+    */
   def upcoming(minerPk: EcPointType,
                timestamp: Long,
                nBits: Long,
@@ -121,6 +125,25 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val calculatedValidationSettings = validationSettings.updated(updated)
     UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
                           calculatedValidationSettings, votingData)
+  }
+
+  /**
+    * @return state context corresponding to a block after last known one
+    *         with fields filled with (kind of) default values
+    */
+  def simplifiedUpcoming(): UpcomingStateContext = {
+    val minerPk = org.ergoplatform.mining.group.generator
+    val version = lastHeaderOpt.map(_.version).getOrElse(Header.InitialVersion)
+    val nBits = lastHeaderOpt.map(_.nBits).getOrElse(ergoSettings.chainSettings.initialNBits)
+    val timestamp = lastHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
+    val votes = Array.emptyByteArray
+    val proposedUpdate = ErgoValidationSettingsUpdate.empty
+    val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
+    val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
+    val (calculatedParams, updated) = currentParameters.update(height, forkVote = false, votingData.epochVotes, proposedUpdate, votingSettings)
+    val calculatedValidationSettings = validationSettings.updated(updated)
+    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
+      calculatedValidationSettings, votingData)
   }
 
   protected def checkForkVote(height: Height): Unit = {
@@ -274,7 +297,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }.flatten
 
   override def toString: String =
-    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
+    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest.toArray)}, $lastHeaders, $currentParameters)"
 
 
   /**

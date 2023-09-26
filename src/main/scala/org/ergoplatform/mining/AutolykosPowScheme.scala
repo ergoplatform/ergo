@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.crypto.CryptoFacade
 
 import scala.annotation.tailrec

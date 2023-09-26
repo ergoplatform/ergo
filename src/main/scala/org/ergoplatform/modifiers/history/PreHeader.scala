@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.header.Header._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import scorex.util._
-import sigmastate.basics.CryptoConstants.EcPointType
+import sigmastate.crypto.CryptoConstants.EcPointType
 import sigmastate.eval.CGroupElement
 import sigmastate.eval.Extensions._
 
@@ -35,7 +35,7 @@ case class CPreHeader(version: Version,
 
 object PreHeader {
 
-  def toSigma(preHeader: PreHeader): special.sigma.PreHeader =
+  def toSigma(preHeader: PreHeader): sigma.PreHeader =
     sigmastate.eval.CPreHeader(
       version = preHeader.version,
       parentId = preHeader.parentId.toBytes.toColl,

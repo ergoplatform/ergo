@@ -10,7 +10,7 @@ import scorex.util.{ByteArrayOps, ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.CollectionConstant
 import sigmastate.SByte
-import special.collection.Extensions._
+import sigma.Extensions._
 
 /**
   * Index of a token containing creation information.

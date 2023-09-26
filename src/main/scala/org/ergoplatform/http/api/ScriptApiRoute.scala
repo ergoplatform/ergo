@@ -17,7 +17,7 @@ import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.CompiletimeIRContext
 import sigmastate.interpreter.Interpreter
 import sigmastate.lang.{CompilerResult, SigmaCompiler}

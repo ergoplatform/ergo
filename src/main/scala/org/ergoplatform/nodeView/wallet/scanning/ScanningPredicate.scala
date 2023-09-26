@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet.scanning
 import org.ergoplatform.ErgoBox
 import sigmastate.Values.EvaluatedValue
 import sigmastate.{SType, Values}
-import special.collection.Extensions._
+import sigma.Extensions._
 
 /**
   * Basic interface for box scanning predicate functionality

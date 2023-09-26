@@ -24,7 +24,7 @@ import scorex.crypto.hash.Blake2b256
 import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._

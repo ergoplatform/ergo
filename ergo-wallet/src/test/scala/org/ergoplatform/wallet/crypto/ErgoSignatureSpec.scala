@@ -4,7 +4,7 @@ import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.util.Random
-import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 class ErgoSignatureSpec extends AnyPropSpec with Matchers with Generators {
 

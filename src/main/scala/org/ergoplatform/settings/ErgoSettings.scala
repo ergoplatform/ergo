@@ -13,7 +13,7 @@ import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, P2PKAddress}
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import java.net.{InetAddress, URL}
 import scala.util.Try

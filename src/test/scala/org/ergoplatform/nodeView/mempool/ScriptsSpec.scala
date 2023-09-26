@@ -9,8 +9,8 @@ import org.ergoplatform.{ErgoBox, ErgoTreePredef, Height, Self}
 import scorex.crypto.authds.avltree.batch.Remove
 import sigmastate.Values._
 import sigmastate._
-import sigmastate.basics.CryptoConstants.dlogGroup
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.CryptoConstants.dlogGroup
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.{CompiletimeIRContext, IRContext}
 import sigmastate.lang.Terms._
 import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}

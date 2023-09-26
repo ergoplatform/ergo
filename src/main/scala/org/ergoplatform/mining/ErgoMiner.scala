@@ -10,7 +10,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
 import scorex.util.ScorexLogging
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}

@@ -445,7 +445,8 @@ trait ErgoHistoryReader
     (typedModifierById[BlockTransactions](header.transactionsId),
       typedModifierById[Extension](header.extensionId),
       typedModifierById[ADProofs](header.ADProofsId)) match {
-      case (Some(txs), Some(ext), Some(proofs)) => Some(ErgoFullBlock(header, txs, ext, Some(proofs)))
+      case (Some(txs), Some(ext), Some(proofs)) =>
+        Some(ErgoFullBlock(header, txs, ext, Some(proofs)))
       case (Some(txs), Some(ext), None) if !nodeSettings.stateType.requireProofs =>
         Some(ErgoFullBlock(header, txs, ext, None))
       case _ => None

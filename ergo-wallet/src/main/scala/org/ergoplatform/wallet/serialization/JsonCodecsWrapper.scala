@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.serialization
 
-import org.ergoplatform.JsonCodecs
+import org.ergoplatform.sdk.JsonCodecs
 
 /**
   * JSON Codecs provided as singleton package, not trait.

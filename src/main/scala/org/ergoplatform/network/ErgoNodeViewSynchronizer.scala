@@ -75,8 +75,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       Restart
   }
 
-  private val blockSectionsDownloadFilter = BlockSectionsDownloadFilter(settings.nodeSettings.stateType)
-
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
   private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
@@ -530,7 +528,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return available peers to download headers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): Iterable[ConnectedPeer] = {
-    syncTracker.peersByStatus.getOrElse(Older, Array(callingPeer))
+    val nonFiltered: Iterable[ConnectedPeer] = syncTracker.peersByStatus.getOrElse(Older, Array(callingPeer))
+    HeadersDownloadFilter.filter(nonFiltered)
   }
 
   /**
@@ -545,7 +544,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       .orElse {
         Option(peersByStatus.getOrElse(Unknown, mutable.WrappedArray.empty) ++ peersByStatus.getOrElse(Fork, mutable.WrappedArray.empty))
           .filter(_.nonEmpty)
-      }.map(blockSectionsDownloadFilter.filter)
+      }.map(BlockSectionsDownloadFilter.filter)
   }
 
   /**
@@ -1129,14 +1128,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         }
       case _ =>
-        if (peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial) == Version.v4043 &&
-          modifierTypeId == Header.modifierTypeId) {
-          log.debug("Header ids from 4.0.43")
-          Seq.empty
-        } else {
-          log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
-          invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
-        }
+        log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
+        invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
     }
 
     if (newModifierIds.nonEmpty) {

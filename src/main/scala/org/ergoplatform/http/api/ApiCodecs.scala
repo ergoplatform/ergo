@@ -36,6 +36,8 @@ import sigmastate.serialization.OpCodes
 import special.sigma.AnyValue
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
+import org.ergoplatform.sdk.JsonCodecs
+
 import java.math.BigInteger
 import scala.util.{Failure, Success, Try}
 

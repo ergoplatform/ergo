@@ -239,10 +239,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     validateAndGetBoxesByAddress(address, offset, limit)
   }
 
-  private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Int, limit: Int, sortDir: Direction): Future[Seq[IndexedErgoBox]] =
-    getHistory.map { history =>
+  private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean): Future[Seq[IndexedErgoBox]] =
+    getHistoryWithMempool.map { case (history, mempool) =>
       getAddress(addr)(history) match {
-        case Some(addr) => addr.retrieveUtxos(history, offset, limit, sortDir)
+        case Some(addr) => addr.retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed)
         case None       => Seq.empty[IndexedErgoBox]
       }
     }
@@ -250,26 +250,27 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def validateAndGetBoxesByAddressUnspent(address: ErgoAddress,
                                                   offset: Int,
                                                   limit: Int,
-                                                  dir: Direction): Route = {
+                                                  dir: Direction,
+                                                  unconfirmed: Boolean): Route = {
     if (limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     } else if (dir == SortDirection.INVALID) {
       BadRequest("Invalid parameter for sort direction, valid values are \"ASC\" and \"DESC\"")
     } else {
-      ApiResponse(getBoxesByAddressUnspent(address, offset, limit, dir))
+      ApiResponse(getBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed))
     }
   }
 
   private def getBoxesByAddressUnspentR: Route =
-    (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir) {
-      (address, offset, limit, dir) =>
-        validateAndGetBoxesByAddressUnspent(address, offset, limit, dir)
+    (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir & unconfirmed) {
+      (address, offset, limit, dir, unconfirmed) =>
+        validateAndGetBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed)
     }
 
   private def getBoxesByAddressUnspentGetRoute: Route =
-    (pathPrefix("box" / "unspent" / "byAddress") & get & addressPass & paging & sortDir) {
-      (address, offset, limit, dir) =>
-        validateAndGetBoxesByAddressUnspent(address, offset, limit, dir)
+    (pathPrefix("box" / "unspent" / "byAddress") & get & addressPass & paging & sortDir & unconfirmed) {
+      (address, offset, limit, dir, unconfirmed) =>
+        validateAndGetBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed)
     }
 
   private def getBoxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =

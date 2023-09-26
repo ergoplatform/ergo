@@ -34,7 +34,6 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
-import scorex.core.app.Version
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height

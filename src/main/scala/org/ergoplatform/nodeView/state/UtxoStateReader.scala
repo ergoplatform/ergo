@@ -45,10 +45,9 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
     * or state context from the previous block if not
     */
   def validateWithCost(tx: ErgoTransaction,
-                       stateContextOpt: Option[ErgoStateContext],
+                       context: ErgoStateContext,
                        costLimit: Int,
                        interpreterOpt: Option[ErgoInterpreter]): Try[Int] = {
-    val context = stateContextOpt.getOrElse(stateContext)
     val parameters = context.currentParameters.withBlockCost(costLimit)
     val verifier = interpreterOpt.getOrElse(ErgoInterpreter(parameters))
 

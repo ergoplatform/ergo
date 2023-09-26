@@ -220,6 +220,7 @@ trait ExtraIndexerBase extends ScorexLogging {
     general.clear()
     boxes.clear()
     trees.clear()
+    tokens.clear()
     segments.clear()
 
     lastWroteToDB = indexedHeight

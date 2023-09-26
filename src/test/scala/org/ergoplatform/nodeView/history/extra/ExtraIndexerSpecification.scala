@@ -68,6 +68,7 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
     general.clear()
     boxes.clear()
     trees.clear()
+    tokens.clear()
     segments.clear()
   }
 

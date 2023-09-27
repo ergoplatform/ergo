@@ -49,7 +49,7 @@ case class IndexedToken(tokenId: ModifierId,
 
     val toRemove: ArrayBuffer[ModifierId] = rollbackState(txTarget, boxTarget, history.getReader)
 
-    if (txCount == 0 && boxCount == 0)
+    if (boxCount == 0)
       toRemove += id // all segments empty after rollback, delete parent
     else
       history.historyStorage.insertExtra(Array.empty, Array(this)) // save the changes made to this address
@@ -192,6 +192,5 @@ object IndexedToken {
                  name,
                  description,
                  decimals)
-      .addBox(iEb)
   }
 }

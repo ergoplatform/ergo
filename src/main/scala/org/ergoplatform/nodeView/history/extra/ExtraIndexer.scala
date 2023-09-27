@@ -168,17 +168,14 @@ trait ExtraIndexerBase extends ScorexLogging {
           case Right(iEb) => tokens.put(id, x.addBox(iEb)) // receive box
         }
       case None => // token not found at all
-        spendOrReceive match {
-          case Left(iEb) => log.warn(s"Unknown address spent box ${bytesToId(iEb.box.id)}") // spend box should never happen by an unknown address
-          case Right(iEb) => trees.put(id, IndexedErgoAddress(id).initBalance.addTx(globalTxIndex).addBox(iEb)) // receive box, new address
-        }
+        log.warn(s"Unknown token $id") // spend box should never happen by an unknown token
     }
   }
 
   /**
     * @return number of indexes in all buffers
     */
-  private def modCount: Int = general.length + boxes.size + trees.size
+  private def modCount: Int = general.length + boxes.size + trees.size + tokens.size
 
   /**
     * Write buffered indexes to database and clear buffers.
@@ -203,7 +200,7 @@ trait ExtraIndexerBase extends ScorexLogging {
         token.buffer.foreach(seg => segments.put(seg.id, seg))
         token.buffer.clear()
       }
-      if(token.txs.length > segmentTreshold || token.boxes.length > segmentTreshold)
+      if(token.boxes.length > segmentTreshold)
         token.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 
@@ -355,13 +352,22 @@ trait ExtraIndexerBase extends ScorexLogging {
     globalTxIndex -= 1
     while(globalTxIndex > txTarget) {
       val tx: IndexedErgoTransaction = NumericTxIndex.getTxByNumber(history, globalTxIndex).get
-      tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach(iEb => { // undo all spendings
+      tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach { iEb => // undo all spendings
+
         iEb.spendingHeightOpt = None
         iEb.spendingTxIdOpt = None
+
         val address = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get.addBox(iEb, record = false)
         address.findAndModBox(iEb.globalIndex, history)
         historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.buffer)
-      })
+
+        cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
+          history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
+            token.findAndModBox(iEb.globalIndex, history)
+            historyStorage.insertExtra(Array.empty, Array[ExtraIndex](token) ++ token.buffer)
+          }
+        }
+      }
       toRemove += tx.id // tx by id
       toRemove += bytesToId(NumericTxIndex.indexToBytes(globalTxIndex)) // tx id by number
       globalTxIndex -= 1
@@ -373,10 +379,11 @@ trait ExtraIndexerBase extends ScorexLogging {
     while(globalBoxIndex > boxTarget) {
       val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, globalBoxIndex).get
       cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
-        history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id) match {
-          case Some(token) if token.boxId == iEb.id =>
-            toRemove += token.id // token created, delete
-          case _ => // no token created
+        history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
+          if(token.boxId == iEb.id) // token created, delete
+            toRemove += token.id
+          else // no token created, update
+            toRemove ++= token.rollback(txTarget, boxTarget, _history)
         }
       }
       history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).map { address =>

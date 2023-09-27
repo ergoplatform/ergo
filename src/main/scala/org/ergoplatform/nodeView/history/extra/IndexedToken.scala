@@ -18,7 +18,7 @@ import scala.collection.mutable.ArrayBuffer
 /**
   * Index of a token containing creation information.
   * @param tokenId     - id of this token
-  * @param boxId       - id of the box that created th is token
+  * @param boxId       - id of the box that created this token
   * @param amount      - emission amount
   * @param name        - name of this token (UTF-8)
   * @param description - description of this token (UTF-8)
@@ -32,7 +32,7 @@ case class IndexedToken(tokenId: ModifierId,
                         description: String = "",
                         decimals: Int = 0,
                         override val boxes: ArrayBuffer[Long] = new ArrayBuffer[Long])
-  extends Segment[IndexedToken](uniqueId(tokenId), id => IndexedToken(id), new ArrayBuffer[Long], boxes) with ExtraIndex {
+  extends Segment[IndexedToken](tokenId, id => IndexedToken(id), new ArrayBuffer[Long], boxes, uniqueId) with ExtraIndex {
 
   override lazy val id: ModifierId = uniqueId(tokenId)
   override def serializedId: Array[Byte] = fastIdToBytes(id)
@@ -106,6 +106,7 @@ object IndexedTokenSerializer extends ErgoSerializer[IndexedToken] {
 
   override def serialize(iT: IndexedToken, w: Writer): Unit = {
     w.putBytes(fastIdToBytes(iT.tokenId))
+    w.putUByte(iT.boxId.length / 2)
     w.putBytes(fastIdToBytes(iT.boxId))
     w.putULong(iT.amount)
     val name: Array[Byte] = iT.name.getBytes("UTF-8")
@@ -120,7 +121,8 @@ object IndexedTokenSerializer extends ErgoSerializer[IndexedToken] {
 
   override def parse(r: Reader): IndexedToken = {
     val tokenId: ModifierId = bytesToId(r.getBytes(32))
-    val boxId: ModifierId = bytesToId(r.getBytes(32))
+    val boxIdLen: Int = r.getUByte()
+    val boxId: ModifierId = bytesToId(r.getBytes(boxIdLen))
     val amount: Long = r.getULong()
     val nameLen: Int = r.getUShort()
     val name: String = new String(r.getBytes(nameLen), "UTF-8")

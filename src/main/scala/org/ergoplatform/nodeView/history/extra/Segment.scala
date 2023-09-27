@@ -22,12 +22,14 @@ import scala.reflect.ClassTag
  * @param factory  - parent object factory
  * @param txs      - list of numberic transaction indexes
  * @param boxes    - list of numberic box indexes, negative values indicate the box is spent
+ * @param idMod    - function to apply to ids during segmentation and db lookup
  * @tparam T       - type of parent object
  */
 abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
                                                    val factory: ModifierId => T,
                                                    val txs: ArrayBuffer[Long],
-                                                   val boxes: ArrayBuffer[Long])
+                                                   val boxes: ArrayBuffer[Long],
+                                                   val idMod: ModifierId => ModifierId = id => id)
   extends ExtraIndex with ScorexLogging {
 
   override lazy val id: ModifierId = parentId
@@ -69,7 +71,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
     cfor(buffer.length - 1)(_ >= 0, _ - 1) { i =>
       if(buffer(i).id.equals(searchId)) return i
     }
-    buffer += history.typedExtraIndexById[T](searchId).get
+    buffer += history.typedExtraIndexById[T](idMod(searchId)).get
     buffer.length - 1
   }
 
@@ -115,27 +117,24 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @return array of parent objects
    */
   private[extra] def splitToSegments(implicit segmentTreshold: Int): Array[T] = {
-    val data: Array[T] = new Array[T]((txs.length / segmentTreshold) + (boxes.length / segmentTreshold))
-    var i: Int = 0
+    val data: ArrayBuffer[T] = new ArrayBuffer[T]
 
     // Split txs until under segmentTreshold
-    while(txs.length >= segmentTreshold) {
-      data(i) = factory(txSegmentId(parentId, txSegmentCount))
-      data(i).txs ++= txs.take(segmentTreshold)
-      i += 1
+    while(txs.length > segmentTreshold) {
+      data += factory(txSegmentId(parentId, txSegmentCount))
+      data.last.txs ++= txs.take(segmentTreshold)
       txSegmentCount += 1
       txs.remove(0, segmentTreshold)
     }
 
     // Split boxes until under segmentTreshold
-    while(boxes.length >= segmentTreshold) {
-      data(i) = factory(boxSegmentId(parentId, boxSegmentCount))
-      data(i).boxes ++= boxes.take(segmentTreshold)
-      i += 1
+    while(boxes.length > segmentTreshold) {
+      data += factory(boxSegmentId(parentId, boxSegmentCount))
+      data.last.boxes ++= boxes.take(segmentTreshold)
       boxSegmentCount += 1
       boxes.remove(0, segmentTreshold)
     }
-    data
+    data.toArray
   }
 
   /**
@@ -210,7 +209,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       val data: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
       getSegmentsForRange(offset, limit).map(n => math.max(segmentCount - n, 0)).distinct.foreach { num =>
         arraySelector(
-          history.typedExtraIndexById[T](idOf(id, num)).get
+          history.typedExtraIndexById[T](idMod(idOf(id, num))).get
         ) ++=: data
       }
       data ++= (if(offset < array.length) array else Nil)
@@ -258,14 +257,14 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
         var segment: Int = boxSegmentCount
         while(data.length < (limit + offset) && segment > 0) {
           segment -= 1
-          history.typedExtraIndexById[T](boxSegmentId(id, segment)).get.boxes
+          history.typedExtraIndexById[T](idMod(boxSegmentId(id, segment))).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
         }
         data.reverse.slice(offset, offset + limit).toArray
       case ASC =>
         var segment: Int = 0
         while(data.length < (limit + offset) && segment < boxSegmentCount) {
-          data ++= history.typedExtraIndexById[T](boxSegmentId(id, segment)).get.boxes
+          data ++= history.typedExtraIndexById[T](idMod(boxSegmentId(id, segment))).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
           segment += 1
         }
@@ -286,8 +285,9 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
   protected def rollbackState(txTarget: Long, boxTarget: Long, history: ErgoHistoryReader)
                              (implicit segmentTreshold: Int): ArrayBuffer[ModifierId] = {
 
-    if ((txCount == 0 && boxCount == 0) || // already rolled back
-      (txs.last <= txTarget && abs(boxes.last) <= boxTarget)) // no rollback needed
+    if((txCount == 0 && boxCount == 0) || // already rolled back
+      (txs.lastOption.getOrElse[Long](0) <= txTarget &&
+        abs(boxes.lastOption.getOrElse[Long](0)) <= boxTarget)) // no rollback needed
       return ArrayBuffer.empty[ModifierId]
 
     val toRemove: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]
@@ -299,7 +299,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       txs ++= tmp
       if (txs.isEmpty && txSegmentCount > 0) { // entire current tx set removed, retrieving more from database if possible
         val segmentId = txSegmentId(parentId, txSegmentCount - 1)
-        history.typedExtraIndexById[T](segmentId).get.txs ++=: txs
+        history.typedExtraIndexById[T](idMod(segmentId)).get.txs ++=: txs
         toRemove += segmentId
         txSegmentCount -= 1
       }
@@ -312,7 +312,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       boxes ++= tmp
       if (boxes.isEmpty && boxSegmentCount > 0) { // entire current box set removed, retrieving more from database if possible
         val segmentId = boxSegmentId(parentId, boxSegmentCount - 1)
-        history.typedExtraIndexById[T](segmentId).get.boxes ++=: boxes
+        history.typedExtraIndexById[T](idMod(segmentId)).get.boxes ++=: boxes
         toRemove += segmentId
         boxSegmentCount -= 1
       }

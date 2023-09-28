@@ -8,6 +8,16 @@ import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 
+/**
+  * Implementation steps:
+  * * implement basic weak block algorithms (isweak etc)
+  * * implement weak block network message
+  * * implement weak block info support in sync tracker
+  * * implement downloading weak blocks chain
+  * * implement avoiding downloading full-blocks
+  * * weak blocks support in /mining API
+  * * weak confirmations API
+  */
 object WeakBlockAlgos {
 
   val weaksPerBlock = 128 // weak blocks per block

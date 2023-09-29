@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.GetSegmentTreshold
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, getIndex}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
+import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
@@ -72,6 +73,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getTxRangeR ~
       getBoxByIdR ~
       getBoxByIndexR ~
+      getBoxesByTokenIdR ~
+      getBoxesByTokenIdUnspentR ~
       getBoxesByAddressR ~
       getBoxesByAddressGetRoute ~
       getBoxesByAddressUnspentR ~
@@ -316,7 +319,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     }else if (dir == SortDirection.INVALID) {
-      BadRequest("Invalid parameter for sort direction, valid values are \"ASC\" and \"DESC\"")
+      BadRequest("Invalid parameter for sort direction, valid values are 'ASC' and 'DESC'")
     }else {
       ApiResponse(getBoxesByErgoTreeUnspent(tree, offset, limit, dir))
     }
@@ -324,12 +327,42 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getTokenInfoById(id: ModifierId): Future[Option[IndexedToken]] = {
     getHistory.map { history =>
-      history.typedExtraIndexById[IndexedToken](IndexedTokenSerializer.uniqueId(id))
+      history.typedExtraIndexById[IndexedToken](uniqueId(id))
     }
   }
 
   private def getTokenInfoByIdR: Route = (get & pathPrefix("token" / "byId") & modifierId) { id =>
     ApiResponse(getTokenInfoById(id))
+  }
+
+  private def getBoxesByTokenId(id: ModifierId, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
+    getHistory.map { history =>
+      history.typedExtraIndexById[IndexedToken](uniqueId(id)) match {
+        case Some(token) => (token.retrieveBoxes(history, offset, limit), token.boxCount)
+        case None        => (Seq.empty[IndexedErgoBox], 0L)
+      }
+    }
+
+  private def getBoxesByTokenIdR: Route = (get & pathPrefix("box" / "byTokenId") & modifierId & paging) { (id, offset, limit) =>
+    ApiResponse(getBoxesByTokenId(id, offset, limit))
+  }
+
+  private def getBoxesByTokenIdUnspent(id: ModifierId, offset: Int, limit: Int, sortDir: Direction): Future[Seq[IndexedErgoBox]] =
+    getHistory.map { history =>
+      history.typedExtraIndexById[IndexedToken](uniqueId(id)) match {
+        case Some(token) => token.retrieveUtxos(history, offset, limit, sortDir)
+        case None        => Seq.empty[IndexedErgoBox]
+      }
+    }
+
+  private def getBoxesByTokenIdUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byTokenId") & modifierId & paging & sortDir) { (id, offset, limit, dir) =>
+    if (limit > MaxItems) {
+      BadRequest(s"No more than $MaxItems boxes can be requested")
+    } else if (dir == SortDirection.INVALID) {
+      BadRequest("Invalid parameter for sort direction, valid values are 'ASC' and 'DESC'")
+    } else {
+      ApiResponse(getBoxesByTokenIdUnspent(id, offset, limit, dir))
+    }
   }
 
   private def getUnconfirmedForAddress(address: ErgoAddress)(mempool: ErgoMemPoolReader): BalanceInfo = {

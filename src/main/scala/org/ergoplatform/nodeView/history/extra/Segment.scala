@@ -12,6 +12,7 @@ import spire.implicits.cfor
 
 import scala.collection.mutable.ArrayBuffer
 import java.lang.Math.abs
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 /**
@@ -38,7 +39,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
   /**
    * Internal segment buffer
    */
-  private[extra] val buffer: ArrayBuffer[T] = ArrayBuffer.empty[T]
+  private[extra] val buffer: mutable.HashMap[ModifierId,T] = new mutable.HashMap[ModifierId,T]
 
   /**
    * Number of segments in database containing box numbers
@@ -61,21 +62,6 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
   def txCount(implicit segmentTreshold: Int): Long = segmentTreshold * txSegmentCount + txs.length
 
   /**
-   * Retrieve segment with specified id from buffer or database
-   *
-   * @param history - database handle to search, if segment is not found in buffer
-   * @param searchId- segment id to search for
-   * @return
-   */
-  private def getSegmentFromBufferOrHistroy(history: ErgoHistoryReader, searchId: ModifierId): Int = {
-    cfor(buffer.length - 1)(_ >= 0, _ - 1) { i =>
-      if(buffer(i).id.equals(searchId)) return i
-    }
-    buffer += history.typedExtraIndexById[T](idMod(searchId)).get
-    buffer.length - 1
-  }
-
-  /**
    * Locate which segment the given box number is in and change its sign, meaning it spends unspent boxes and vice versa.
    *
    * @param boxNum  - box number to locate
@@ -85,28 +71,34 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
     val boxNumAbs = abs(boxNum)
     val inCurrent: Int = binarySearch(boxes, boxNumAbs)
     if(inCurrent >= 0) { // box found in current box array
-      boxes(inCurrent) = -boxes(inCurrent)
+      boxes.update(inCurrent, -boxes(inCurrent))
     } else { // box is in another segment, use binary search to locate
-      var n = 0
+      var segmentId: ModifierId = ModifierId @@ ""
       var low = 0
       var high = boxSegmentCount - 1
-      while (low <= high) {
+      while(low <= high) {
         val mid = (low + high) >>> 1
-        n = getSegmentFromBufferOrHistroy(history, boxSegmentId(parentId, mid))
-        if (abs(buffer(n).boxes.head) < boxNumAbs &&
-          abs(buffer(n).boxes.last) < boxNumAbs)
-          low = mid + 1
-        else if (abs(buffer(n).boxes.head) > boxNumAbs &&
-          abs(buffer(n).boxes.last) > boxNumAbs)
-          high = mid - 1
-        else
-          low = high + 1 // break
+        segmentId = boxSegmentId(parentId, mid)
+        buffer.get(segmentId).orElse(history.typedExtraIndexById[T](idMod(segmentId))).foreach { segment =>
+          if(abs(segment.boxes.head) < boxNumAbs &&
+            abs(segment.boxes.last) < boxNumAbs)
+            low = mid + 1
+          else if(abs(segment.boxes.head) > boxNumAbs &&
+            abs(segment.boxes.last) > boxNumAbs)
+            high = mid - 1
+          else {
+            low = high + 1 // break
+            buffer.put(segmentId, segment)
+          }
+        }
       }
-      val i: Int = binarySearch(buffer(n).boxes, boxNumAbs)
-      if (i >= 0)
-        buffer(n).boxes(i) = -buffer(n).boxes(i)
-      else
-        log.warn(s"Box $boxNum not found in any segment of parent when trying to spend")
+      buffer.get(segmentId) match {
+        case Some(segment) =>
+          val i: Int = binarySearch(segment.boxes, boxNumAbs)
+          segment.boxes(i) = -segment.boxes(i)
+        case None =>
+          log.warn(s"Box $boxNum not found in any segment of parent when trying to spend")
+      }
     }
   }
 
@@ -411,9 +403,9 @@ object SegmentSerializer {
 
   def parse(r: Reader, s: Segment[_]): Unit = {
     val txnsLen: Long = r.getUInt()
-    cfor(0)(_ < txnsLen, _ + 1) { _ => s.txs += r.getLong() }
+    cfor(0)(_ < txnsLen, _ + 1) { _ => s.txs.+=(r.getLong()) }
     val boxesLen: Long = r.getUInt()
-    cfor(0)(_ < boxesLen, _ + 1) { _ => s.boxes += r.getLong() }
+    cfor(0)(_ < boxesLen, _ + 1) { _ => s.boxes.+=(r.getLong()) }
     s.boxSegmentCount = r.getInt()
     s.txSegmentCount = r.getInt()
   }

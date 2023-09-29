@@ -126,13 +126,13 @@ trait ExtraIndexerBase extends ScorexLogging {
     * @param spendOrReceive - IndexedErgoBox to receive (Right) or spend (Left)
     */
   private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[IndexedErgoBox, IndexedErgoBox]): Unit = {
-    trees.get(id).map(tree => {
+    trees.get(id).map { tree =>
       spendOrReceive match {
         case Left(iEb) => tree.addTx(globalTxIndex).spendBox(iEb, Some(history)) // spend box
         case Right(iEb) => tree.addTx(globalTxIndex).addBox(iEb) // receive box
       }
       return
-    })
+    }
     history.typedExtraIndexById[IndexedErgoAddress](id) match { // address not found in last saveLimit modifiers
       case Some(x) =>
         spendOrReceive match {
@@ -154,13 +154,13 @@ trait ExtraIndexerBase extends ScorexLogging {
    * @param spendOrReceive - IndexedErgoBox to receive (Right) or spend (Left)
    */
   private def findAndUpdateToken(id: ModifierId, spendOrReceive: Either[IndexedErgoBox, IndexedErgoBox]): Unit = {
-    tokens.get(id).map(token => {
+    tokens.get(id).map { token =>
       spendOrReceive match {
         case Left(iEb) => token.spendBox(iEb, Some(history)) // spend box
         case Right(iEb) => token.addBox(iEb) // receive box
       }
       return
-    })
+    }
     history.typedExtraIndexById[IndexedToken](uniqueId(id)) match { // token not found in last saveLimit modifiers
       case Some(x) =>
         spendOrReceive match {
@@ -187,7 +187,7 @@ trait ExtraIndexerBase extends ScorexLogging {
     // perform segmentation on big addresses and save their internal segment buffer
     trees.values.foreach { tree =>
       if(tree.buffer.nonEmpty) {
-        tree.buffer.foreach(seg => segments.put(seg.id, seg))
+        tree.buffer.values.foreach(seg => segments.put(seg.id, seg))
         tree.buffer.clear()
       }
       if(tree.txs.length > segmentTreshold || tree.boxes.length > segmentTreshold)
@@ -197,7 +197,7 @@ trait ExtraIndexerBase extends ScorexLogging {
     // perform segmentation on big tokens and save their internal segment buffer
     tokens.values.foreach { token =>
       if(token.buffer.nonEmpty) {
-        token.buffer.foreach(seg => segments.put(seg.id, seg))
+        token.buffer.values.foreach(seg => segments.put(seg.id, seg))
         token.buffer.clear()
       }
       if(token.boxes.length > segmentTreshold)
@@ -273,7 +273,13 @@ trait ExtraIndexerBase extends ScorexLogging {
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
           if (!inputTokens.exists(x => x._1 == iEb.box.additionalTokens(j)._1)) {
             val token = IndexedToken.fromBox(iEb, j)
-            tokens.put(token.tokenId, token)
+            tokens.get(token.tokenId) match {
+              case Some(t) => // same new token created in multiple boxes -> add amounts
+                val newToken = IndexedToken(t.tokenId, t.boxId, t.amount + token.amount, t.name, t.description, t.decimals, t.boxes)
+                newToken.buffer ++= t.buffer
+                tokens.put(token.tokenId, newToken)
+              case None => tokens.put(token.tokenId, token) // new token
+            }
           }
           findAndUpdateToken(iEb.box.additionalTokens(j)._1.toModifierId, Right(iEb))
         }
@@ -359,12 +365,12 @@ trait ExtraIndexerBase extends ScorexLogging {
 
         val address = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get.addBox(iEb, record = false)
         address.findAndModBox(iEb.globalIndex, history)
-        historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.buffer)
+        historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.buffer.values)
 
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
           history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
             token.findAndModBox(iEb.globalIndex, history)
-            historyStorage.insertExtra(Array.empty, Array[ExtraIndex](token) ++ token.buffer)
+            historyStorage.insertExtra(Array.empty, Array[ExtraIndex](token) ++ token.buffer.values)
           }
         }
       }
@@ -508,7 +514,7 @@ object ExtraIndexer {
   /**
    * Current newest database schema version. Used to force extra database resync.
    */
-  val NewestVersion: Int = 3
+  val NewestVersion: Int = 4
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")

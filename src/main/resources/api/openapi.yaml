@@ -5126,7 +5126,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErgoTransactionOutput'
+                type: array
+                items:
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
         '404':
           description: Any boxes from the list with this id doesn't exist
           content:

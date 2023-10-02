@@ -5,7 +5,8 @@ import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Direction}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getFromSegments, getTxs}
-import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, txSegmentId}
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, hashErgoTree, txSegmentId}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -141,14 +142,21 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   /**
     * Get a range of the boxes associated with this address that are NOT spent
     * @param history - history to use
+    * @param mempool - mempool to use, if unconfirmed is true
     * @param offset  - items to skip from the start
     * @param limit   - items to retrieve
     * @param sortDir - whether to start retreival from newest box ([[DESC]]) or oldest box ([[ASC]])
+    * @param unconfirmed - whether to include unconfirmed boxes
     * @return array of unspent boxes
     */
-  def retrieveUtxos(history: ErgoHistoryReader, offset: Int, limit: Int, sortDir: Direction): Array[IndexedErgoBox] = {
+  def retrieveUtxos(history: ErgoHistoryReader,
+                    mempool: ErgoMemPoolReader,
+                    offset: Int,
+                    limit: Int,
+                    sortDir: Direction,
+                    unconfirmed: Boolean): Seq[IndexedErgoBox] = {
     val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
-    sortDir match {
+    val confirmedBoxes: Seq[IndexedErgoBox] = sortDir match {
       case DESC =>
         data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
         var segment: Int = boxSegmentCount
@@ -157,7 +165,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
           history.typedExtraIndexById[IndexedErgoAddress](boxSegmentId(treeHash, segment)).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
         }
-        data.reverse.slice(offset, offset + limit).toArray
+        data.reverse.slice(offset, offset + limit)
       case ASC =>
         var segment: Int = 0
         while (data.length < (limit + offset) && segment < boxSegmentCount) {
@@ -167,8 +175,18 @@ case class IndexedErgoAddress(treeHash: ModifierId,
         }
         if(data.length < (limit + offset))
           data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
-        data.slice(offset, offset + limit).toArray
+        data.slice(offset, offset + limit)
     }
+    if(unconfirmed) {
+      val mempoolBoxes = mempool.getAll.flatMap(_.transaction.outputs)
+        .filter(box => hashErgoTree(box.ergoTree) == treeHash)
+      val unconfirmedBoxes = mempoolBoxes.map(new IndexedErgoBox(0, None, None, _, 0))
+      sortDir match {
+        case DESC => unconfirmedBoxes ++ confirmedBoxes
+        case ASC => confirmedBoxes ++ unconfirmedBoxes
+      }
+    } else
+      confirmedBoxes
   }
 
   /**

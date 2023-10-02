@@ -5107,7 +5107,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /utxo/withPool/byIdsList:
-    get:
+    post:
       summary: Get box contents for a list of boxes by a unique identifier, from UTXO set and also the mempool.
       operationId: getBoxWithPoolByIdsList
       tags:

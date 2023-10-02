@@ -287,6 +287,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         history().createPersistentProver(store, history(), height, blockId) match {
           case Success(pp) =>
             log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
+            // initiate scan
             history().onUtxoSnapshotApplied(height)
             val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
             updateNodeView(updatedState = Some(newState.asInstanceOf[State]))

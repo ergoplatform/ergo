@@ -14,7 +14,8 @@ import org.scalatest.matchers.should.Matchers
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 
-class UtxoApiRouteSpec extends AnyFlatSpec
+class UtxoApiRouteSpec
+  extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs
@@ -23,10 +24,11 @@ class UtxoApiRouteSpec extends AnyFlatSpec
 
   val prefix = "/utxo"
 
-  val route: Route = UtxoApiRoute(utxoReadersRef, utxoSettings.scorexSettings.restApi).route
+  val route: Route =
+    UtxoApiRoute(utxoReadersRef, utxoSettings.scorexSettings.restApi).route
 
   it should "get utxo box with /byId" in {
-    val box = utxoState.takeBoxes(1).head
+    val box   = utxoState.takeBoxes(1).head
     val boxId = Base16.encode(box.id)
     Get(prefix + s"/byId/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -36,7 +38,7 @@ class UtxoApiRouteSpec extends AnyFlatSpec
   }
 
   it should "get mempool box with withPool/byId" in {
-    val box = memPool.getAll.map(utx => utx.transaction).flatMap(_.outputs).head
+    val box   = memPool.getAll.map(utx => utx.transaction).flatMap(_.outputs).head
     val boxId = Base16.encode(box.id)
     Get(prefix + s"/byId/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.NotFound
@@ -48,6 +50,19 @@ class UtxoApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "get all mempool boxes with withPool/byIdsList" in {
+    val boxes = memPool.getAll.map(utx => utx.transaction).flatMap(_.outputs)
+    val boxesEncoded = boxes.map(box => Base16.encode(box.id))
+
+    Get(prefix + "/withPool/byIdsList", boxesEncoded.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Seq[Json]]
+        .map(_.hcursor.downField("value").as[Long]) shouldEqual boxes.map(x => Right(x.value))
+      responseAs[Seq[Json]]
+        .map(_.hcursor.downField("boxId").as[String]) shouldEqual boxesEncoded.map(x => Right(x))
+    }
+  }
+
   it should "not found utxo box with /byId" in {
     val boxId = Base16.encode(Blake2b256(utxoState.takeBoxes(1).head.id))
     Get(prefix + s"/byId/$boxId") ~> route ~> check {
@@ -56,12 +71,14 @@ class UtxoApiRouteSpec extends AnyFlatSpec
   }
 
   it should "get utxo box with /byIdBinary" in {
-    val box = utxoState.takeBoxes(1).head
+    val box   = utxoState.takeBoxes(1).head
     val boxId = Base16.encode(box.id)
     Get(prefix + s"/byIdBinary/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("boxId").as[String] shouldEqual Right(boxId)
-      val bytes = Base16.decode(responseAs[Json].hcursor.downField("bytes").as[String].toOption.get).get
+      val bytes = Base16
+        .decode(responseAs[Json].hcursor.downField("bytes").as[String].toOption.get)
+        .get
       val boxRestored = ErgoBoxSerializer.parseBytes(bytes)
       box shouldEqual boxRestored
     }
@@ -75,7 +92,7 @@ class UtxoApiRouteSpec extends AnyFlatSpec
   }
 
   it should "get pool box with /withPool/byIdBinary" in {
-    val box = memPool.getAll.map(utx => utx.transaction).flatMap(_.outputs).head
+    val box   = memPool.getAll.map(utx => utx.transaction).flatMap(_.outputs).head
     val boxId = Base16.encode(box.id)
     Get(prefix + s"/byIdBinary/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.NotFound
@@ -83,7 +100,9 @@ class UtxoApiRouteSpec extends AnyFlatSpec
     Get(prefix + s"/withPool/byIdBinary/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("boxId").as[String] shouldEqual Right(boxId)
-      val bytes = Base16.decode(responseAs[Json].hcursor.downField("bytes").as[String].toOption.get).get
+      val bytes = Base16
+        .decode(responseAs[Json].hcursor.downField("bytes").as[String].toOption.get)
+        .get
       val boxRestored = ErgoBoxSerializer.parseBytes(bytes)
       box shouldEqual boxRestored
     }

@@ -5106,6 +5106,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /utxo/withPool/byIdsList:
+    get:
+      summary: Get box contents for a list of boxes by a unique identifier, from UTXO set and also the mempool.
+      operationId: getBoxWithPoolByIdsList
+      tags:
+        - utxo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: Box object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransactionOutput'
+        '404':
+          description: Any boxes from the list with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /utxo/withPool/byIdBinary/{boxId}:
     get:
       summary: Get serialized box in Base16 encoding by an identifier, considering also the mempool.

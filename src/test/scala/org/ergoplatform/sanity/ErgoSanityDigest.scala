@@ -84,13 +84,12 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val tx = validErgoTransactionGenTemplate(minAssets = 0, maxAssets = 0).sample.get._2
 
 
-    val peerInfo = PeerInfo(defaultPeerSpec, Long.MaxValue)
+    val peerInfo = PeerInfo(defaultPeerSpec, Long.MaxValue, None, 0L)
 
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
-      lastMessage = 0,
       Some(peerInfo)
     )
     ref ! ChangedHistory(h)

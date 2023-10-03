@@ -116,25 +116,24 @@ class NetworkController(ergoSettings: ErgoSettings,
   private def time(): Time = System.currentTimeMillis()
 
   private def businessLogic: Receive = {
-    //a message coming in from another peer
+    // a message coming in from another peer
     case msg@Message(spec, _, Some(remote)) =>
       messageHandlers.get(spec.messageCode) match {
         case Some(handler) => handler ! msg // forward the message to the appropriate handler for processing
         case None => log.error(s"No handlers found for message $remote: " + spec.messageCode)
       }
 
-      // Update last seen message timestamps, global and peer's, with the message timestamp
+      // Update last seen message timestamps with the message timestamp
       val remoteAddress = remote.connectionId.remoteAddress
       connections.get(remoteAddress) match {
         case Some(cp) =>
           val now = time()
           lastIncomingMessageTime = now
-          cp.lastMessage = now
-          // Update peer's last activity time every X minutes inside PeerInfo
-          cp.peerInfo.foreach { x =>
-            if ((now - x.lastStoredActivityTime) > activityDelta) {
-              val peerInfo = x.copy(lastStoredActivityTime = now)
-              peerManagerRef ! AddOrUpdatePeer(peerInfo)
+          // Update peer's last activity time every ${activityDelta} minutes inside PeerInfo
+          cp.peerInfo.foreach { peerInfo =>
+            if ((now - peerInfo.lastStoredActivityTime) > activityDelta) {
+              val peerInfoUpdated = peerInfo.copy(lastStoredActivityTime = now)
+              peerManagerRef ! AddOrUpdatePeer(peerInfoUpdated)
             }
           }
 
@@ -297,18 +296,33 @@ class NetworkController(ergoSettings: ErgoSettings,
       () => {
         // Drop connections with peers if they seem to be inactive
         val now = time()
-        connections.values.foreach { cp =>
-          val lastSeen = cp.lastMessage
-          val timeout = networkSettings.inactiveConnectionDeadline.toMillis
-          val delta = now - lastSeen
-          if (delta > timeout) {
-            log.info(s"Dropping connection with ${cp.peerInfo}, last seen ${delta / 1000.0} seconds ago")
-            cp.handlerRef ! CloseConnection
+        connections.values.foreach { cp => 
+          cp.peerInfo.foreach { peerInfo =>
+            val lastSeen = peerInfo.lastStoredActivityTime
+            val timeout = networkSettings.inactiveConnectionDeadline.toMillis
+            val delta = now - lastSeen
+            if (delta > timeout) {
+              log.info(s"Dropping connection with ${peerInfo}, last seen ${delta / 1000.0} seconds ago")
+              cp.handlerRef ! CloseConnection
+            }
           }
         }
       }
     }
   }
+
+  /**
+   * Check if a given IPv4 or IPv6 address is local.
+   * @param remote - address to check
+   * @return true if the address is local, false otherwise
+   */
+  private def checkLocalOnly(remote: InetSocketAddress): Boolean =
+    if(!networkSettings.localOnly) { // not only accept local
+      val address = remote.getAddress
+      address.isSiteLocalAddress || address.isLinkLocalAddress
+    } else {
+      false
+    }
 
   /**
     * Connect to peer
@@ -320,13 +334,17 @@ class NetworkController(ergoSettings: ErgoSettings,
     getPeerAddress(peer) match {
       case Some(remote) =>
         if (connectionForPeerAddress(remote).isEmpty && !unconfirmedConnections.contains(remote)) {
-          unconfirmedConnections += remote
-          tcpManager ! Connect(
-            remoteAddress = remote,
-            options = Nil,
-            timeout = Some(networkSettings.connectionTimeout),
-            pullMode = true
-          )
+          if (checkLocalOnly(remote)) {
+            log.warn(s"Prevented attempt to connect to local peer $remote. (scorex.network.localOnly is false)")
+          } else {
+            unconfirmedConnections += remote
+            tcpManager ! Connect(
+              remoteAddress = remote,
+              options = Nil,
+              timeout = Some(networkSettings.connectionTimeout),
+              pullMode = true
+            )
+          }
         } else {
           log.warn(s"Connection to peer $remote is already established")
         }
@@ -383,7 +401,7 @@ class NetworkController(ergoSettings: ErgoSettings,
 
     val handler = context.actorOf(handlerProps) // launch connection handler
     context.watch(handler)
-    val connectedPeer = ConnectedPeer(connectionId, handler, time(), None)
+    val connectedPeer = ConnectedPeer(connectionId, handler, None)
     connections += connectionId.remoteAddress -> connectedPeer
     unconfirmedConnections -= connectionId.remoteAddress
   }

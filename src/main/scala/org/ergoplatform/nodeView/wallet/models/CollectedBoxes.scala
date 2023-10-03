@@ -3,7 +3,8 @@ package org.ergoplatform.nodeView.wallet.models
 import io.circe.generic.encoding.DerivedAsObjectEncoder.deriveEncoder
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
-import org.ergoplatform.{ErgoBox, JsonCodecs}
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.sdk.JsonCodecs
 
 /**
   * Response for requested boxes that contains ErgoBoxes and ChangeBoxes

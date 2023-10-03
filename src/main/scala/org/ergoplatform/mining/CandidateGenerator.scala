@@ -819,7 +819,7 @@ object CandidateGenerator extends ScorexLogging {
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
               tx,
-              Some(upcomingContext),
+              upcomingContext,
               maxBlockCost,
               Some(verifier)
             ) match {

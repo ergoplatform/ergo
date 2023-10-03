@@ -34,12 +34,11 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
-import scorex.core.transaction.state.TransactionValidation.TooHighCostError
-import scorex.core.app.Version
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
 import scorex.core.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
+import scorex.core.transaction.TooHighCostError
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 
 import scala.annotation.tailrec
@@ -74,8 +73,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.warn(s"Restarting actor due to : $e")
       Restart
   }
-
-  private val blockSectionsDownloadFilter = BlockSectionsDownloadFilter(settings.nodeSettings.stateType)
 
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
@@ -530,7 +527,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return available peers to download headers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): Iterable[ConnectedPeer] = {
-    syncTracker.peersByStatus.getOrElse(Older, Array(callingPeer))
+    val nonFiltered: Iterable[ConnectedPeer] = syncTracker.peersByStatus.getOrElse(Older, Array(callingPeer))
+    HeadersDownloadFilter.filter(nonFiltered)
   }
 
   /**
@@ -545,7 +543,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       .orElse {
         Option(peersByStatus.getOrElse(Unknown, mutable.WrappedArray.empty) ++ peersByStatus.getOrElse(Fork, mutable.WrappedArray.empty))
           .filter(_.nonEmpty)
-      }.map(blockSectionsDownloadFilter.filter)
+      }.map(BlockSectionsDownloadFilter.filter)
   }
 
   /**
@@ -1129,14 +1127,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         }
       case _ =>
-        if (peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial) == Version.v4043 &&
-          modifierTypeId == Header.modifierTypeId) {
-          log.debug("Header ids from 4.0.43")
-          Seq.empty
-        } else {
-          log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
-          invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
-        }
+        log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
+        invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
     }
 
     if (newModifierIds.nonEmpty) {
@@ -1412,7 +1404,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       utx.source.foreach { peer =>
         // no need to call deliveryTracker.setInvalid, as mempool will consider invalidated tx in contains()
         error match {
-          case TooHighCostError(_) =>
+          case TooHighCostError(_, _) =>
             log.info(s"Penalize spamming peer $peer for too costly transaction $id")
             penalizeSpammingPeer(peer)
           case _ =>

@@ -1,0 +1,18 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Ergo Node Plugin (no auth)",
+  "name_for_model": "ergonode",
+  "description_for_human": "Plugin for interacting with Ergo node.",
+  "description_for_model": "Specification of Ergo Node API for ChatGPT plugin.\n    The following endpoints supported \n      - /blocks/chainSlice - Get headers in a specified range of heights\n      - /info - Get the basic information about the status of Ergo Node. \n      - /transactions/unconfirmed/byTransactionId - Get unconfirmed transaction from the mempool\n      - /transactions/poolHistogram - Get histogram (waittime, (n_trans, sum(fee)) for transactions in mempool.\n      - /peers/connected - Get a list of current connected peers\n      - /peers/blacklisted - Get a list of blacklisted peers\n      - /utils/address - Check address validity\n      - /blockchain/indexedHeight - Get current indexed block height. (The indexer has processed all blocks up to this height.)\n      - /blockchain/transaction/byId - Retrieve a transaction by its id\n      - /blockchain/transaction/byAddress - Retrieve a list of transactions by their associated address\n      - /blockchain/box/byId - Retrieve a box by its id\n      - /blockchain/box/byAddress - Retrieve boxes by their associated \n      - /blockchain/box/unspent/byAddress - Retrieve unspent boxes by their associated address\n      - /blockchain/token/byId - Retrieve minting information about a token\n      - /blockchain/balanceForAddress - Retrieve balance information of an Ergo address.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "http://localhost:9053/openapi.yaml",
+    "is_user_authenticated": false
+  },
+  "logo_url": "https://cryptologos.cc/logos/ergo-erg-logo.png",
+  "contact_email": "team@ergoplatform.org",
+  "legal_info_url": "https://ergoplatform.org/en/legal/"
+}

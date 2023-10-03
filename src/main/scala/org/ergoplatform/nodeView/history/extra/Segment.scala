@@ -201,7 +201,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       val data: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
       getSegmentsForRange(offset, limit).map(n => math.max(segmentCount - n, 0)).distinct.foreach { num =>
         arraySelector(
-          history.typedExtraIndexById[T](idMod(idOf(id, num))).get
+          history.typedExtraIndexById[T](idMod(idOf(parentId, num))).get
         ) ++=: data
       }
       data ++= (if(offset < array.length) array else Nil)
@@ -249,14 +249,14 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
         var segment: Int = boxSegmentCount
         while(data.length < (limit + offset) && segment > 0) {
           segment -= 1
-          history.typedExtraIndexById[T](idMod(boxSegmentId(id, segment))).get.boxes
+          history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
         }
         data.reverse.slice(offset, offset + limit).toArray
       case ASC =>
         var segment: Int = 0
         while(data.length < (limit + offset) && segment < boxSegmentCount) {
-          data ++= history.typedExtraIndexById[T](idMod(boxSegmentId(id, segment))).get.boxes
+          data ++= history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
           segment += 1
         }

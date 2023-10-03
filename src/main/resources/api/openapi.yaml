@@ -5222,7 +5222,7 @@ paths:
               $ref: '#/components/schemas/SourceHolder'
       responses:
         '200':
-          description: Ergo address derived from source
+          description: P2SH address derived from source
           content:
             application/json:
               schema:

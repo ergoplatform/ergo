@@ -6,7 +6,8 @@ import org.ergoplatform.settings.LaunchParameters._
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import scorex.crypto.authds.ADKey
 import scorex.utils.Random
-import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigma.Colls
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions.ArrayByteOps
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, ProverResult}

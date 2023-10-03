@@ -8,7 +8,7 @@ import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import spire.implicits.cfor
-import special.collection.Extensions._
+import sigma.Extensions._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 

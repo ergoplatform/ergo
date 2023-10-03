@@ -8,7 +8,7 @@ import org.ergoplatform.{Height, MinerPubkey, Outputs, Self}
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant, SigmaPropValue, Value}
 import sigmastate.utxo._
 import sigmastate._
-import special.collection.Coll
+import sigma.Coll
 
 /**
   * Container for re-emission related contracts. Contains re-emission contract and pay-to-reemission contract.

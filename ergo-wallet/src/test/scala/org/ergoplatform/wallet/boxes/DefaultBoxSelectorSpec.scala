@@ -16,7 +16,7 @@ import sigmastate.Values.SigmaPropValue
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers._
 import sigmastate.utils.Extensions._
-import special.collection.Extensions._
+import sigma.Extensions._
 
 import scala.util.Random
 

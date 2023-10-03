@@ -20,8 +20,9 @@ import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.util.ScorexLogging
+import sigma.Colls
 import sigmastate.Values.ByteArrayConstant
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.utils.Extensions._

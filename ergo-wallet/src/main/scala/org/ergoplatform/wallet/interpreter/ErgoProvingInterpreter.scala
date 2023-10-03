@@ -1,19 +1,18 @@
 package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform._
+import org.ergoplatform.sdk.BlockchainParameters
 import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
-import org.ergoplatform.sdk.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
+import org.ergoplatform.sdk.wallet.protocol.context.BlockchainStateContext
 import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey, SecretKey}
 import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
-import scorex.crypto.authds.ADDigest
 import scorex.util.encode.Base16
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
-import sigmastate.basics.SigmaProtocolPrivateInput
+import sigmastate.crypto.SigmaProtocolPrivateInput
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
-import special.collection.Coll
-import special.sigma.{Header, PreHeader}
+import sigma.{Coll, Header, PreHeader}
 
 import java.util
 import scala.util.{Failure, Success, Try}
@@ -39,14 +38,14 @@ import scala.util.{Failure, Success, Try}
   *                           (to not to recompute them)
   */
 class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
-                             params: ErgoLikeParameters,
+                             params: BlockchainParameters,
                              val cachedHdPubKeysOpt: Option[IndexedSeq[ExtendedPublicKey]] = None)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
   /**
     * Interpreter's secrets, in form of sigma protocols private inputs
     */
-  val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = secretKeys.map(_.privateInput)
+  val secrets: IndexedSeq[SigmaProtocolPrivateInput[_]] = secretKeys.map(_.privateInput)
 
   /**
     * Only secrets corresponding to hierarchical deterministic scheme (BIP-32 impl)
@@ -93,14 +92,14 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     * @param newParams - updated parameters
     * @return modified prover
     */
-  def withNewParameters(newParams: ErgoLikeParameters): ErgoProvingInterpreter = {
+  def withNewParameters(newParams: BlockchainParameters): ErgoProvingInterpreter = {
     new ErgoProvingInterpreter(this.secretKeys, newParams, this.cachedHdPubKeysOpt)
   }
 
   def signInputs(unsignedTx: UnsignedErgoLikeTransaction,
                  boxesToSpend: IndexedSeq[ErgoBox],
                  dataBoxes: IndexedSeq[ErgoBox],
-                 stateContext: ErgoLikeStateContext,
+                 stateContext: BlockchainStateContext,
                  txHints: TransactionHintsBag): Try[(IndexedSeq[Input], Long)] = {
     if (unsignedTx.inputs.length != boxesToSpend.length) {
       Failure(new Exception("Not enough boxes to spend"))
@@ -164,7 +163,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   def sign(unsignedTx: UnsignedErgoLikeTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
            dataBoxes: IndexedSeq[ErgoBox],
-           stateContext: ErgoLikeStateContext,
+           stateContext: BlockchainStateContext,
            txHints: TransactionHintsBag = TransactionHintsBag.empty): Try[ErgoLikeTransaction] = {
 
     val signedInputs: Try[(IndexedSeq[Input], Long)] =
@@ -190,7 +189,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   def generateCommitmentsFor(unsignedTx: UnsignedErgoLikeTransaction,
                              boxesToSpend: IndexedSeq[ErgoBox],
                              dataBoxes: IndexedSeq[ErgoBox],
-                             stateContext: ErgoLikeStateContext): Try[TransactionHintsBag] = Try {
+                             stateContext: BlockchainStateContext): Try[TransactionHintsBag] = Try {
     val inputCmts = unsignedTx.inputs.zipWithIndex.map { case (unsignedInput, inpIndex) =>
 
       val inputBox = boxesToSpend(inpIndex)
@@ -230,7 +229,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   def bagForTransaction(tx: ErgoLikeTransaction,
                         boxesToSpend: IndexedSeq[ErgoBox],
                         dataBoxes: IndexedSeq[ErgoBox],
-                        stateContext: ErgoLikeStateContext,
+                        stateContext: BlockchainStateContext,
                         realSecretsToExtract: Seq[SigmaBoolean],
                         simulatedSecretsToExtract: Seq[SigmaBoolean]): TransactionHintsBag = {
     val augmentedInputs = tx.inputs.zipWithIndex.zip(boxesToSpend)
@@ -262,11 +261,11 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
 object ErgoProvingInterpreter {
 
   def apply(secrets: IndexedSeq[SecretKey],
-            params: ErgoLikeParameters): ErgoProvingInterpreter =
+            params: BlockchainParameters): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(secrets, params)
 
   def apply(rootSecret: ExtendedSecretKey,
-            params: ErgoLikeParameters): ErgoProvingInterpreter =
+            params: BlockchainParameters): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)
 
 }

@@ -100,12 +100,12 @@ trait ObjectGenerators {
 
   def peerInfoGen: Gen[PeerInfo] = for {
     peerSpec <- peerSpecGen
-  } yield PeerInfo(peerSpec, 0L, Some(Incoming))
+  } yield PeerInfo(peerSpec, 0L, Some(Incoming), 0L)
 
   def connectedPeerGen(peerRef: ActorRef): Gen[ConnectedPeer] = for {
     connectionId <- connectionIdGen
     peerInfo <- peerInfoGen
-  } yield ConnectedPeer(connectionId, peerRef, 0, Some(peerInfo))
+  } yield ConnectedPeer(connectionId, peerRef, Some(peerInfo))
 
   def peerSpecGen: Gen[PeerSpec] = for {
     declaredAddress <- Gen.frequency(5 -> const(None), 5 -> some(inetSocketAddressGen))

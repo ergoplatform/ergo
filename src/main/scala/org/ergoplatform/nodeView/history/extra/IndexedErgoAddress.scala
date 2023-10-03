@@ -3,6 +3,9 @@ package org.ergoplatform.nodeView.history.extra
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getFromSegments, getTxs}
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, hashErgoTree, txSegmentId}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, bytesToId}

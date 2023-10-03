@@ -56,7 +56,7 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
         con.peerInfo.map { peerInfo =>
           PeerInfoResponse(
             address = peerInfo.peerSpec.declaredAddress.map(_.toString).getOrElse(""),
-            lastMessage = con.lastMessage,
+            lastMessage = peerInfo.lastStoredActivityTime,
             lastHandshake = peerInfo.lastHandshake,
             name = peerInfo.peerSpec.nodeName,
             connectionType = peerInfo.connectionType.map(_.toString),

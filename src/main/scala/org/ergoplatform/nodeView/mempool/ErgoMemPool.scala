@@ -6,7 +6,6 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransacti
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
-import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
@@ -228,7 +227,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               // Allow proceeded transaction to spend outputs of pooled transactions.
               val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
-                utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), costLimit, None) match {
+                val validationContext = utxo.stateContext.simplifiedUpcoming()
+                utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
                   case Success(cost) =>
                     acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
                   case Failure(ex) =>
@@ -237,15 +237,6 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               } else {
                 val exc = new Exception("not all utxos in place yet")
                 this -> new ProcessingOutcome.Declined(exc, validationStartTime)
-              }
-            case validator: TransactionValidation =>
-              // transaction validation currently works only for UtxoState, so this branch currently
-              // will not be triggered probably
-              validator.validateWithCost(tx, costLimit) match {
-                case Success(cost) =>
-                  acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
-                case Failure(ex) =>
-                  this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
               }
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other

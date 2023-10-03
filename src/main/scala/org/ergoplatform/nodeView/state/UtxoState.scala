@@ -13,7 +13,6 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
-import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
@@ -38,7 +37,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                 override val store: LDBVersionedStore,
                 override protected val ergoSettings: ErgoSettings)
   extends ErgoState[UtxoState]
-    with TransactionValidation
     with UtxoStateReader
     with ScorexEncoding {
 

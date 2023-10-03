@@ -6130,6 +6130,13 @@ paths:
           schema:
             type: string
             default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: unspent boxes associated with wanted token

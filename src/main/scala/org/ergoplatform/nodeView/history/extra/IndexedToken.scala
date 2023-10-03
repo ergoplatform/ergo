@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
@@ -90,6 +90,16 @@ case class IndexedToken(tokenId: ModifierId,
       findAndModBox(iEb.globalIndex, historyOpt.get)
     this
   }
+
+  /**
+   * Filter mempool boxes if API call requires it
+   *
+   * @param boxes - all boxes in mempool
+   * @return associated boxes
+   */
+  override private[extra] def filterMempool(boxes: Seq[ErgoBox]): Seq[ErgoBox] =
+    boxes.filter(_.additionalTokens.exists(_._1.toModifierId == tokenId))
+
 }
 
 object IndexedTokenSerializer extends ErgoSerializer[IndexedToken] {

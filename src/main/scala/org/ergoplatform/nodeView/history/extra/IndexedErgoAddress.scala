@@ -1,11 +1,9 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
-import org.ergoplatform.nodeView.history.extra.IndexedErgoAddress.{getBoxes, getFromSegments, getTxs}
-import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.{boxSegmentId, hashErgoTree, txSegmentId}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, bytesToId}
@@ -93,6 +91,16 @@ case class IndexedErgoAddress(treeHash: ModifierId,
 
     toRemove.toArray
   }
+
+  /**
+   * Filter mempool boxes if API call requires it
+   *
+   * @param boxes - all boxes in mempool
+   * @return associated boxes
+   */
+  override private[extra] def filterMempool(boxes: Seq[ErgoBox]): Seq[ErgoBox] =
+    boxes.filter(box => hashErgoTree(box.ergoTree) == treeHash)
+
 }
 
 object IndexedErgoAddressSerializer extends ErgoSerializer[IndexedErgoAddress] {

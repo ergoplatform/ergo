@@ -355,7 +355,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       }
     }
 
-  private def getBoxesByTokenIdUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byTokenId") & modifierId & paging & sortDir) { (id, offset, limit, dir) =>
+  private def getBoxesByTokenIdUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byTokenId") & modifierId & paging & sortDir) { (id, offset, limit, dir) =>
     if (limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     } else if (dir == SortDirection.INVALID) {

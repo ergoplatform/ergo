@@ -2703,10 +2703,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blocks/headerIdsList:
+  /blocks/headerIds:
     get:
       summary: Get the list of full block info by given header ids
-      operationId: getFullBlockByIdsList
+      operationId: getFullBlockByIds
       tags:
         - blocks
       requestBody:
@@ -2719,7 +2719,7 @@ paths:
                   type: string
       responses:
         '200':
-          description: List of block objects representing the full block data
+          description: Full blocks corresponding to ids provided
           content:
             application/json:
               schema:

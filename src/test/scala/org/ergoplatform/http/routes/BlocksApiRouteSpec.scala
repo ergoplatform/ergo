@@ -100,7 +100,7 @@ class BlocksApiRouteSpec
     val headerIdsBytes               = history.lastHeaders(10).headers
     val headerIdsString: Seq[String] = headerIdsBytes.map(h => Algos.encode(h.id))
 
-    Post(prefix + "/headerIdsList", headerIdsString.asJson) ~> route ~> check {
+    Post(prefix + "/headerIds", headerIdsString.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
 
       val expected = headerIdsBytes

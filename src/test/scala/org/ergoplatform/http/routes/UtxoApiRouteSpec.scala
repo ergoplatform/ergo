@@ -50,11 +50,11 @@ class UtxoApiRouteSpec
     }
   }
 
-  it should "get all mempool boxes with withPool/byIdsList" in {
+  it should "get all mempool boxes with withPool/byIds" in {
     val boxes = memPool.getAll.map(utx => utx.transaction).flatMap(_.outputs)
     val boxesEncoded = boxes.map(box => Base16.encode(box.id))
 
-    Post(prefix + "/withPool/byIdsList", boxesEncoded.asJson) ~> route ~> check {
+    Post(prefix + "/withPool/byIds", boxesEncoded.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Seq[Json]]
         .map(_.hcursor.downField("value").as[Long]) shouldEqual boxes.map(x => Right(x.value))

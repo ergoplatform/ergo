@@ -5106,10 +5106,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /utxo/withPool/byIdsList:
+  /utxo/withPool/byIds:
     post:
-      summary: Get box contents for a list of boxes by a unique identifier, from UTXO set and also the mempool.
-      operationId: getBoxWithPoolByIdsList
+      summary: Get boxes JSONs for ids in array provided, from UTXO or the mempool.
+      operationId: getBoxWithPoolByIds
       tags:
         - utxo
       requestBody:

@@ -7,7 +7,7 @@ import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.http.api.ApiCodecs
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
-import special.collection.Extensions._
+import sigma.Extensions._
 
 
 object ScanningPredicateJsonCodecs extends ApiCodecs {

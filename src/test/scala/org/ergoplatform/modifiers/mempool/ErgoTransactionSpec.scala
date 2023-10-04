@@ -14,19 +14,21 @@ import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
-import scalan.util.BenchmarkUtil
+import sigma.util.BenchmarkUtil
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
+import sigma.Colls
 import sigmastate.AND
 import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant, TrueLeaf}
-import sigmastate.basics.CryptoConstants
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.CryptoConstants
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.eval.Extensions._
+
 import scala.util.{Random, Try}
 
 class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {

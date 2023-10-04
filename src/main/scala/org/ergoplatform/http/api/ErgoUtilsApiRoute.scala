@@ -13,7 +13,7 @@ import scorex.core.settings.RESTApiSettings
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import java.security.SecureRandom
 import scala.util.Failure

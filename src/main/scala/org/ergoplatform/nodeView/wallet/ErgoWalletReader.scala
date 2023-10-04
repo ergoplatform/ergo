@@ -20,7 +20,7 @@ import org.ergoplatform.{ErgoBox, P2PKAddress}
 import scorex.core.NodeViewComponent
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
-import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.Future

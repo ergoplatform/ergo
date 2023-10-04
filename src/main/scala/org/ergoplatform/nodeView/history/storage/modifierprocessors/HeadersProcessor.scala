@@ -63,7 +63,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
-  // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
+  // todo for performance reasons we may just use key like s"score$id" but this will require to resync the blockchain
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("score".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 

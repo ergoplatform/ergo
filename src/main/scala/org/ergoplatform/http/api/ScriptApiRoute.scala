@@ -17,7 +17,7 @@ import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.CompiletimeIRContext
 import sigmastate.interpreter.Interpreter
 import sigmastate.lang.{CompilerResult, SigmaCompiler}
@@ -39,8 +39,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   override val route: Route = pathPrefix("script") {
     toStrictEntity(10.seconds) {
-      // p2shAddressR ~
-      p2sAddressR ~
+      p2shAddressR ~
+        p2sAddressR ~
         addressToTreeR ~
         addressToBytesR ~
         executeWithContextR
@@ -86,7 +86,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
-  //todo: temporarily switched off due to https://github.com/ergoplatform/ergo/issues/936
   def p2shAddressR: Route = (path("p2shAddress") & post & source) { source =>
     withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
       compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(

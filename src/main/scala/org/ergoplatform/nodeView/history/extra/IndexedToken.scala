@@ -11,7 +11,7 @@ import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.CollectionConstant
 import sigmastate.SByte
-import special.collection.Extensions._
+import sigma.Extensions._
 
 import scala.collection.mutable.ArrayBuffer
 

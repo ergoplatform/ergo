@@ -19,10 +19,10 @@ import org.ergoplatform.settings.{ErgoSettings, NetworkType, NipopowSettings, No
 import org.ergoplatform.utils.{ErgoPropertyTest, ErgoTestHelpers, HistoryTestHelpers}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import special.collection.Coll
+import sigma.{Coll, Colls}
 import spire.implicits.cfor
 
 import java.io.File

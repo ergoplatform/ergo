@@ -1,16 +1,16 @@
 package org.ergoplatform.wallet.interpreter
 
-import org.ergoplatform.sdk.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
+import org.ergoplatform.sdk.BlockchainParameters
+import org.ergoplatform.sdk.wallet.protocol.context.BlockchainStateContext
 import scorex.util.encode.Base16
-import sigmastate.basics.CryptoConstants
+import sigmastate.crypto.CryptoConstants
 import sigmastate.eval.Extensions.ArrayOps
-import sigmastate.eval.{CGroupElement, CPreHeader, Colls}
-import special.collection.Coll
-import special.sigma.{Header, PreHeader}
+import sigmastate.eval.{CGroupElement, CPreHeader}
+import sigma.{Coll, Colls, Header, PreHeader}
 
 trait InterpreterSpecCommon {
 
-  protected val parameters = new ErgoLikeParameters {
+  protected val parameters = new BlockchainParameters {
 
     override def storageFeeFactor: Int = 1250000
 
@@ -35,7 +35,7 @@ trait InterpreterSpecCommon {
     override def blockVersion: Byte = 1
   }
 
-  protected val stateContext = new ErgoLikeStateContext {
+  protected val stateContext = new BlockchainStateContext {
 
     override def sigmaLastHeaders: Coll[Header] = Colls.emptyColl
 

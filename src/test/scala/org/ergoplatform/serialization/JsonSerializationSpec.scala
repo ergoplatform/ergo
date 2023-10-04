@@ -3,7 +3,7 @@ package org.ergoplatform.serialization
 import io.circe.syntax._
 import io.circe.{ACursor, Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
+import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
@@ -187,7 +187,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     stringify(decodedAssets) should contain theSameElementsAs stringify(assets)
   }
 
-  private def checkRegisters(c: ACursor, registers: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]]) = {
+  private def checkRegisters(c: ACursor, registers: AdditionalRegisters) = {
     val Right(decodedRegs) = c.as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
     decodedRegs should contain theSameElementsAs registers
   }

@@ -2703,6 +2703,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blocks/headerIds:
+    get:
+      summary: Get the list of full block info by given header ids
+      operationId: getFullBlockByIds
+      tags:
+        - blocks
+      requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+      responses:
+        '200':
+          description: Full blocks corresponding to ids provided
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FullBlock'
+        '404':
+          description: Blocks with this ids doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /blocks/{headerId}/header:
     get:
       summary: Get the block header info by a given header id

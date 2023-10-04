@@ -6036,6 +6036,130 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blockchain/box/byTokenId/{tokenId}:
+    get:
+      summary: Retrieve boxes by an associated token id
+      operationId: getBoxesByTokenId
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: tokenId
+          required: true
+          description: id of the token
+          schema:
+            $ref: '#/components/schemas/ModifierId'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: boxes associated with wanted token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoBox'
+                  total:
+                    type: integer
+                    description: Total number of retreived boxes
+        '404':
+          description: No boxes found for wanted token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/unspent/byTokenId/{tokenId}:
+    get:
+      summary: Retrieve unspent boxes by an associated token id
+      operationId: getBoxesByTokenIdUnspent
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: tokenId
+          required: true
+          description: id of the token
+          schema:
+            $ref: '#/components/schemas/ModifierId'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: unspent boxes associated with wanted token
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of boxes
+                items:
+                  $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No unspent boxes found for wanted token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /blockchain/box/byAddress:
     post:
       summary: Retrieve boxes by their associated address

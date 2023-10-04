@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.14"
+  version: "5.0.15"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -243,60 +243,42 @@ components:
                 description: Name of the token, if any
 
     IndexedErgoBox:
-      type: object
-      description: Box indexed with extra information
-      required:
-        - box
-        - confirmationsNum
-        - address
-        - creationTransaction
-        - spendingTransaction
-        - spendingHeight
-        - inclusionHeight
-        - spent
-        - globalIndex
-      properties:
-        box:
-          $ref: '#/components/schemas/ErgoTransactionOutput'
-        confirmationsNum:
-          description: Number of confirmations, if the box is included into the blockchain
-          type: integer
-          format: int32
-          minimum: 0
-          example: 147
-          nullable: true
-        address:
-          $ref: '#/components/schemas/ErgoAddress'
-        creationTransaction:
-          description: Transaction which created the box
-          $ref: '#/components/schemas/ModifierId'
-        spendingTransaction:
-          description: Transaction which created the box
-          nullable: true
-          $ref: '#/components/schemas/ModifierId'
-        spendingHeight:
-          description: The height the box was spent at
-          type: integer
-          format: int32
-          minimum: 0
-          example: 147
-          nullable: true
-        inclusionHeight:
-          description: The height the transaction containing the box was included in a block at
-          type: integer
-          format: int32
-          minimum: 0
-          example: 147
-        spent:
-          description: A flag signalling whether the box was spent
-          type: boolean
-          example: false
-        globalIndex:
-          description: Global index of the output in the blockchain
-          type: integer
-          format: int64
-          minimum: 0
-          example: 83927
+      allOf:
+        - $ref: '#/components/schemas/ErgoTransactionOutput'
+        - type: object
+          description: Box indexed with extra information
+          required:
+            - address
+            - spentTransactionId
+            - spendingHeight
+            - inclusionHeight
+            - globalIndex
+          properties:
+            address:
+              $ref: '#/components/schemas/ErgoAddress'
+            spentTransactionId:
+              description: Transaction which spent the box
+              nullable: true
+              $ref: '#/components/schemas/ModifierId'
+            spendingHeight:
+              description: The height the box was spent at
+              type: integer
+              format: int32
+              minimum: 0
+              example: 147
+              nullable: true
+            inclusionHeight:
+              description: The height the transaction containing the box was included in a block at
+              type: integer
+              format: int32
+              minimum: 0
+              example: 147
+            globalIndex:
+              description: Global index of the output in the blockchain
+              type: integer
+              format: int64
+              minimum: 0
+              example: 83927
 
     IndexedToken:
       type: object
@@ -5276,7 +5258,7 @@ paths:
               $ref: '#/components/schemas/SourceHolder'
       responses:
         '200':
-          description: Ergo address derived from source
+          description: P2SH address derived from source
           content:
             application/json:
               schema:
@@ -5630,6 +5612,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScanIdBoxId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/p2sRule:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create and register a scan to track P2S address provided
+      operationId: scriptP2SRule
+      tags:
+        - scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                type: string
+                example: '4MQyML64GnzMxZgm'
+      responses:
+        '200':
+          description: Id of custom scan generated and registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanId'
+        '400':
+          description: Bad source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
@@ -6153,6 +6170,13 @@ paths:
           schema:
             type: string
             default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: unspent boxes associated with wanted address
@@ -6308,6 +6332,13 @@ paths:
           schema:
             type: string
             default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: unspent boxes with wanted ergotree

@@ -13,7 +13,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.ADKey
 import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.crypto.CryptoFacade.SecretKeyLength
 import sigmastate.eval.Extensions._
 import sigmastate.eval._

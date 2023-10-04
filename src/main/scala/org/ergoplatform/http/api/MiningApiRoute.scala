@@ -13,7 +13,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import scala.concurrent.Future
 

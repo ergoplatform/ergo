@@ -1,14 +1,14 @@
 package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeParameters
+import org.ergoplatform.sdk.BlockchainParameters
 import org.ergoplatform.wallet.protocol.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeContext, ErgoLikeInterpreter}
 import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
 import sigmastate.interpreter.Interpreter.{ScriptEnv, VerificationResult}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
-import special.collection.Coll
+import sigma.Coll
 
 import scala.util.Try
 
@@ -18,7 +18,7 @@ import scala.util.Try
   *
   * @param params - current values of adjustable blockchain settings
   */
-class ErgoInterpreter(params: ErgoLikeParameters)
+class ErgoInterpreter(params: BlockchainParameters)
   extends ErgoLikeInterpreter with ScorexLogging {
 
   /** Override default logging for all Ergo interpreters. */
@@ -96,7 +96,7 @@ object ErgoInterpreter {
   val interpreterInitCost = 10000
 
   /** Creates an interpreter with the given parameters. */
-  def apply(params: ErgoLikeParameters): ErgoInterpreter =
+  def apply(params: BlockchainParameters): ErgoInterpreter =
     new ErgoInterpreter(params)
 
   /** Create [[AvlTreeData]] with the given digest and all operations enabled. */

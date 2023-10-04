@@ -24,8 +24,8 @@ import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId}
 import sigmastate.Values.SigmaBoolean
-import sigmastate.basics.DLogProtocol.DLogProverInput
-import special.collection.Extensions.CollBytesOps
+import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigma.Extensions.CollBytesOps
 
 import java.io.FileNotFoundException
 import scala.collection.compat.immutable.ArraySeq

@@ -25,7 +25,7 @@ import scorex.core.VersionTag
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.Values.SigmaBoolean
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}

@@ -17,7 +17,7 @@ import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
-import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.{CAND, CTHRESHOLD}

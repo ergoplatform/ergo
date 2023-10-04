@@ -9,7 +9,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
-import sigmastate.basics.CryptoConstants.EcPointType
+import sigmastate.crypto.CryptoConstants.EcPointType
 
 import java.nio.ByteBuffer
 

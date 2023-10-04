@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
-import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeStateContext
+import org.ergoplatform.sdk.wallet.protocol.context.BlockchainStateContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
@@ -17,10 +17,10 @@ import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationSta
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.basics.CryptoConstants.EcPointType
+import sigmastate.crypto.CryptoConstants.EcPointType
 import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.eval.SigmaDsl
-import special.collection.Coll
+import sigma.Coll
 
 import scala.util.{Failure, Success, Try}
 
@@ -38,9 +38,9 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
   extends ErgoStateContext(lastHeaders, lastExtensionOpt, genesisStateDigest, currentParameters,
                             validationSettings, votingData)(ergoSettings) {
 
-  override def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(predictedHeader)
+  override def sigmaPreHeader: sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
-  override def sigmaLastHeaders: Coll[special.sigma.Header] = {
+  override def sigmaLastHeaders: Coll[sigma.Header] = {
     SigmaDsl.Colls.fromArray(lastHeaders.map(h => Header.toSigma(h)).toArray)
   }
 
@@ -66,7 +66,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                        val validationSettings: ErgoValidationSettings,
                        val votingData: VotingData)
                       (implicit val ergoSettings: ErgoSettings)
-  extends ErgoLikeStateContext
+  extends BlockchainStateContext
     with BytesSerializable
     with ScorexEncoding
     with ScorexLogging {
@@ -76,10 +76,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   private val votingSettings = ergoSettings.chainSettings.voting
   private val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
 
-  override def sigmaPreHeader: special.sigma.PreHeader =
+  override def sigmaPreHeader: sigma.PreHeader =
     PreHeader.toSigma(lastHeaders.headOption.getOrElse(PreHeader.fake))
 
-  override def sigmaLastHeaders: Coll[special.sigma.Header] =
+  override def sigmaLastHeaders: Coll[sigma.Header] =
     SigmaDsl.Colls.fromArray(lastHeaders.drop(1).map(h => Header.toSigma(h)).toArray)
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
@@ -109,6 +109,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   override def serializer: ErgoSerializer[M] = ErgoStateContextSerializer(ergoSettings)
 
+  /**
+    * @return state context corresponding to a block after last known one with fields provided
+    */
   def upcoming(minerPk: EcPointType,
                timestamp: Long,
                nBits: Long,
@@ -122,6 +125,25 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val calculatedValidationSettings = validationSettings.updated(updated)
     UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
                           calculatedValidationSettings, votingData)
+  }
+
+  /**
+    * @return state context corresponding to a block after last known one
+    *         with fields filled with (kind of) default values
+    */
+  def simplifiedUpcoming(): UpcomingStateContext = {
+    val minerPk = org.ergoplatform.mining.group.generator
+    val version = lastHeaderOpt.map(_.version).getOrElse(Header.InitialVersion)
+    val nBits = lastHeaderOpt.map(_.nBits).getOrElse(ergoSettings.chainSettings.initialNBits)
+    val timestamp = lastHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
+    val votes = Array.emptyByteArray
+    val proposedUpdate = ErgoValidationSettingsUpdate.empty
+    val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
+    val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
+    val (calculatedParams, updated) = currentParameters.update(height, forkVote = false, votingData.epochVotes, proposedUpdate, votingSettings)
+    val calculatedValidationSettings = validationSettings.updated(updated)
+    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
+      calculatedValidationSettings, votingData)
   }
 
   protected def checkForkVote(height: Height): Unit = {

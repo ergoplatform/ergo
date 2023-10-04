@@ -12,13 +12,13 @@ import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.ADKey
 import scorex.util._
+import sigma.ast.{SByte, SType}
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.crypto.CryptoFacade.SecretKeyLength
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.{SByte, SType}
 
 
 trait Generators {
@@ -107,7 +107,7 @@ trait Generators {
     Gen.choose(minValue, CoinsTotalTest / 1000)
   }
 
-  def ergoBoxGen(propGen: Gen[ErgoTree] = Gen.const(TrueLeaf.toSigmaProp),
+  def ergoBoxGen(propGen: Gen[ErgoTree] = Gen.const(ErgoTree.fromProposition(TrueLeaf.toSigmaProp)),
                  tokensGen: Gen[Seq[(TokenId, Long)]] = additionalTokensGen,
                  valueGenOpt: Option[Gen[Long]] = None,
                  heightGen: Gen[Int] = heightGen): Gen[ErgoBox] = for {
@@ -174,7 +174,7 @@ trait Generators {
 
 
   def unsignedTxGen(secret: SecretKey): Gen[(IndexedSeq[ErgoBox], UnsignedErgoLikeTransaction)] = {
-    val dlog: Gen[ErgoTree] = Gen.const(secret.privateInput.publicImage.asInstanceOf[ProveDlog].toSigmaProp)
+    val dlog: Gen[ErgoTree] = Gen.const(ErgoTree.fromProposition(secret.privateInput.publicImage.asInstanceOf[ProveDlog]))
 
     for {
       ins <- Gen.listOfN(2, ergoBoxGen(dlog))

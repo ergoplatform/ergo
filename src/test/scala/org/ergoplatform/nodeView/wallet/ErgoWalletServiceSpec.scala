@@ -24,10 +24,11 @@ import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
-import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
+import sigma.ast.SType
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, EvaluatedValue}
 import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.helpers.TestingHelpers.testBox
-import sigmastate.{SType, Values}
+import sigmastate.Values
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.Random
@@ -92,7 +93,7 @@ class ErgoWalletServiceSpec
           ErgoLikeTransaction(IndexedSeq(), IndexedSeq()),
           creationOutIndex = 0,
           None,
-          testBox(1L, Values.TrueLeaf.toSigmaProp, 0),
+          testBox(1L, ErgoTree.fromProposition(Values.TrueLeaf.toSigmaProp), 0),
           Set(PaymentsScanId)
         )
       )

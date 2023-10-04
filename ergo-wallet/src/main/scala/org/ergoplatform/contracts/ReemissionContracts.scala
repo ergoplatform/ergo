@@ -9,6 +9,8 @@ import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant
 import sigmastate.utxo._
 import sigmastate._
 import sigma.Coll
+import sigma.ast.{SBox, SCollection, STuple}
+import sigmastate.Values.ErgoTree.ZeroHeader
 
 /**
   * Container for re-emission related contracts. Contains re-emission contract and pay-to-reemission contract.
@@ -39,8 +41,8 @@ trait ReemissionContracts {
   /** Helper method to produce v1 tree from a SigmaPropValue instance (i.e. root node of AST).*/
   private def v1Tree(prop: SigmaPropValue): ErgoTree = {
     val version: Byte = 1
-    val headerFlags = ErgoTree.headerWithVersion(version)
-    ErgoTree.fromProposition(headerFlags, prop)
+    val header = ErgoTree.headerWithVersion(ZeroHeader, version)
+    ErgoTree.fromProposition(header, prop)
   }
 
   /**

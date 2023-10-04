@@ -22,6 +22,7 @@ import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigma.{Coll, Colls}
+import sigmastate.Values.ErgoTree.ZeroHeader
 import spire.implicits.cfor
 
 import java.io.File
@@ -238,7 +239,7 @@ object ChainGenerator extends ErgoTestHelpers {
   val RewardDelay: Int = initSettings.chainSettings.monetary.minerRewardDelay
   val MaxTxsPerBlock: Int = 10
   val minerPk: ProveDlog = defaultProver.hdKeys.head.publicImage
-  val selfAddressScript: Values.ErgoTree = P2PKAddress(minerPk).script
+  val selfAddressScript: Values.ErgoTree = P2PKAddress(minerPk).script.copy(header = ZeroHeader)
   val minerProp: Values.ErgoTree = ErgoTreePredef.rewardOutputScript(RewardDelay, minerPk)
   val votingEpochLength: Height = votingSettings.votingLength
   val protocolVersion: Byte = initSettings.chainSettings.protocolVersion

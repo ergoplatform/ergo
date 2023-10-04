@@ -5,11 +5,11 @@ import org.ergoplatform.contracts.ReemissionContracts
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.ergoplatform.settings.{ErgoSettings, ReemissionSettings}
-import sigmastate.SBoolean
-import sigmastate.Values.Value
+import sigmastate.Values.{ErgoTree, Value}
 import sigmastate.eval.CompiletimeIRContext
 import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
 import sigma.Coll
+import sigma.ast.SBoolean
 
 import scala.util.Try
 
@@ -71,7 +71,7 @@ object ReemissionRules {
     val compiler = SigmaCompiler(CompilerSettings(networkPrefix, TransformingSigmaBuilder, lowerMethodCalls = true))
     val compiled = Try(compiler.compile(Map.empty, source)(new CompiletimeIRContext)).get.asInstanceOf[Value[SBoolean.type]].toSigmaProp
 
-    Pay2SAddress.apply(compiled)
+    Pay2SAddress.apply(ErgoTree.fromProposition(compiled))
   }
 
   def main(args: Array[String]): Unit = {

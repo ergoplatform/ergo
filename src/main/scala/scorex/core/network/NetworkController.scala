@@ -425,9 +425,10 @@ class NetworkController(ergoSettings: ErgoSettings,
         peerManagerRef ! RemovePeer(peerAddress)
         connections -= connectedPeer.connectionId.remoteAddress
       } else {
-        peerManagerRef ! AddOrUpdatePeer(peerInfo)
+        val newPeerInfo = peerInfo.copy(lastStoredActivityTime = time())
+        peerManagerRef ! AddOrUpdatePeer(newPeerInfo)
 
-        val updatedConnectedPeer = connectedPeer.copy(peerInfo = Some(peerInfo))
+        val updatedConnectedPeer = connectedPeer.copy(peerInfo = Some(newPeerInfo))
         connections += remoteAddress -> updatedConnectedPeer
         context.system.eventStream.publish(HandshakedPeer(updatedConnectedPeer))
       }

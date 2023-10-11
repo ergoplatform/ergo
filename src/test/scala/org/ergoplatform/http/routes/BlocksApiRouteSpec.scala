@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, Universa
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.http.api.BlocksApiRoute
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -34,8 +35,7 @@ class BlocksApiRouteSpec
       history
         .headerIdsAt(0, 50)
         .map(Algos.encode)
-        .asJson
-        .toString() shouldEqual responseAs[String]
+        .asJson shouldEqual responseAs[Json]
     }
   }
 
@@ -56,8 +56,7 @@ class BlocksApiRouteSpec
         .lastHeaders(1)
         .headers
         .map(_.asJson)
-        .asJson
-        .toString() shouldEqual responseAs[String]
+        .asJson shouldEqual responseAs[Json]
     }
   }
 
@@ -67,19 +66,18 @@ class BlocksApiRouteSpec
       history
         .headerIdsAtHeight(0)
         .map(Algos.encode)
-        .asJson
-        .toString() shouldEqual responseAs[String]
+        .asJson shouldEqual responseAs[Json]
     }
   }
 
   it should "get chain slice" in {
     Get(prefix + "/chainSlice?fromHeight=0") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      chain.map(_.header).asJson.toString() shouldEqual responseAs[String]
+      chain.map(_.header).asJson shouldEqual responseAs[Json]
     }
     Get(prefix + "/chainSlice?fromHeight=2&toHeight=4") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      chain.slice(2, 4).map(_.header).asJson.toString() shouldEqual responseAs[String]
+      chain.slice(2, 4).map(_.header).asJson shouldEqual responseAs[Json]
     }
   }
 
@@ -91,8 +89,8 @@ class BlocksApiRouteSpec
         .flatMap(history.getFullBlock)
         .map(_.asJson)
         .get
-        .toString
-      responseAs[String] shouldEqual expected
+
+      responseAs[Json] shouldEqual expected
     }
   }
 
@@ -121,8 +119,8 @@ class BlocksApiRouteSpec
         .flatMap(history.getFullBlock)
         .map(_.header.asJson)
         .get
-        .toString
-      responseAs[String] shouldEqual expected
+
+      responseAs[Json] shouldEqual expected
     }
   }
 
@@ -131,8 +129,8 @@ class BlocksApiRouteSpec
       status shouldBe StatusCodes.OK
       val header    = history.typedModifierById[Header](headerIdBytes).value
       val fullBlock = history.getFullBlock(header).value
-      val expected  = fullBlock.blockTransactions.asJson.toString
-      responseAs[String] shouldEqual expected
+      val expected  = fullBlock.blockTransactions.asJson
+      responseAs[Json] shouldEqual expected
     }
   }
 

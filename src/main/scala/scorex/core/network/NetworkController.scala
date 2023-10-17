@@ -301,7 +301,7 @@ class NetworkController(ergoSettings: ErgoSettings,
             val lastSeen = peerInfo.lastStoredActivityTime
             val timeout = networkSettings.inactiveConnectionDeadline.toMillis
             val delta = now - lastSeen
-            if (delta > timeout) {
+            if (delta > timeout && lastSeen > 0) {
               log.info(s"Dropping connection with ${peerInfo}, last seen ${delta / 1000.0} seconds ago")
               cp.handlerRef ! CloseConnection
             }

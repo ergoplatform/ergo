@@ -37,7 +37,7 @@ object PeerInfo {
     */
   def fromAddress(address: InetSocketAddress): PeerInfo = {
     val peerSpec = PeerSpec("unknown", Version.initial, s"unknown-$address", Some(address), Seq())
-    PeerInfo(peerSpec, 0L, None)
+    PeerInfo(peerSpec, 0L, None, 0L)
   }
 
 }
@@ -57,6 +57,6 @@ object PeerInfoSerializer extends ErgoSerializer[PeerInfo] {
      val lastHandshake = r.getLong()
      val connectionType = r.getOption(if (r.getUByte() != 0) Incoming else Outgoing)
      val peerSpec = PeerSpecSerializer.parse(r)
-     PeerInfo(peerSpec, lastHandshake, connectionType)
+     PeerInfo(peerSpec, lastHandshake, connectionType, lastStoredActivityTime = 0L)
    }
 }

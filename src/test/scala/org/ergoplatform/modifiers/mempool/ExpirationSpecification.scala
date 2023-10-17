@@ -6,6 +6,7 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
+import sigma.Colls
 import sigmastate.Values.ShortConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.eval._

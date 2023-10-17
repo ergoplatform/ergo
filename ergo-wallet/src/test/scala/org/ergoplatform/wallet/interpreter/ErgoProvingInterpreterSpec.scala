@@ -9,6 +9,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.{ModifierId, Random}
 import scorex.util.encode.Base16
+import sigma.Colls
 import sigmastate.CTHRESHOLD
 import sigmastate.Values.{GroupElementConstant, SigmaBoolean}
 import sigmastate.interpreter.{ContextExtension, HintsBag}

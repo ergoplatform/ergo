@@ -26,8 +26,8 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigmastate.SigmaAnd
 import sigmastate.Values.{ErgoTree, SigmaPropConstant}
-import sigmastate.basics.DLogProtocol
-import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.crypto.DLogProtocol
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -114,7 +114,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val txCost =
       state.validateWithCost(
         ErgoTransaction(costlyTx.inputs, costlyTx.dataInputs, costlyTx.outputCandidates),
-        Some(r.s.stateContext),
+        r.s.stateContext,
         costLimit = 440000,
         None
       ).get

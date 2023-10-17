@@ -10,8 +10,8 @@ import scorex.util.{ModifierId, bytesToId}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.utils.Extensions._
-import special.collection.Coll
-import special.collection.Extensions._
+import sigma.Coll
+import sigma.Extensions._
 
 import scala.collection.JavaConverters._
 import scala.util.Try

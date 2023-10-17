@@ -27,16 +27,17 @@ import scorex.crypto.hash.Digest
 import scorex.util.encode.Base16
 import sigmastate.Values.SigmaBoolean
 import sigmastate._
-import sigmastate.basics.CryptoConstants.EcPointType
-import sigmastate.basics.DLogProtocol.{DLogProverInput, FirstDLogProverMessage, ProveDlog}
-import sigmastate.basics.VerifierMessage.Challenge
-import sigmastate.basics._
+import sigmastate.crypto.CryptoConstants.EcPointType
+import sigmastate.crypto.DLogProtocol.{DLogProverInput, FirstDLogProverMessage, ProveDlog}
+import sigmastate.crypto.VerifierMessage.Challenge
+import sigmastate.crypto._
 import sigmastate.interpreter._
 import sigmastate.serialization.OpCodes
-import special.sigma.AnyValue
+import sigma.AnyValue
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.sdk.JsonCodecs
+import sigmastate.eval.Extensions.ArrayOps
 
 import java.math.BigInteger
 import scala.util.{Failure, Success, Try}
@@ -200,7 +201,14 @@ trait ApiCodecs extends JsonCodecs {
     } yield ErgoTransaction(ergoLikeTx)
   }
 
-
+  implicit val sigmaLeafEncoder: Encoder[SigmaLeaf] = {
+    leaf =>
+      val op = leaf.opCode.toByte.asJson
+      leaf match {
+        case dlog: ProveDlog => Map("op" -> op, "h" -> dlog.value.asJson).asJson
+        case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
+      }
+  }
 
   implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
     sigma =>
@@ -216,6 +224,16 @@ trait ApiCodecs extends JsonCodecs {
         case th: CTHRESHOLD =>
           Map("op" -> op, "args" -> th.children.map(_.asJson).asJson).asJson
       }
+  }
+
+  implicit val sigmaLeafDecoder: Decoder[SigmaLeaf] = Decoder.instance { c =>
+    c.downField("op").as[Byte].flatMap {
+      case b: Byte if b == OpCodes.ProveDlogCode =>
+        c.downField("h").as[EcPointType].map(h => ProveDlog(h))
+      case _ =>
+        //only dlog is supported for now
+        Left(DecodingFailure("Unsupported value", List()))
+    }
   }
 
   implicit val sigmaBooleanDecoder: Decoder[SigmaBoolean] = Decoder.instance { c =>
@@ -251,7 +269,7 @@ trait ApiCodecs extends JsonCodecs {
   implicit val firstProverMessageEncoder: Encoder[FirstProverMessage] = {
     case cmtDlog: FirstDLogProverMessage =>
       Json.obj("type" -> "dlog".asJson, "a" -> cmtDlog.ecData.asJson)
-    case cmtDht: FirstDiffieHellmanTupleProverMessage =>
+    case cmtDht: FirstDHTupleProverMessage =>
       Json.obj("type" -> "dht".asJson, "a" -> cmtDht.a.asJson, "b" -> cmtDht.b.asJson)
     case _ => ???
   }
@@ -266,7 +284,7 @@ trait ApiCodecs extends JsonCodecs {
         for {
           a <- c.downField("a").as[EcPointType]
           b <- c.downField("b").as[EcPointType]
-        } yield FirstDiffieHellmanTupleProverMessage(a, b)
+        } yield FirstDHTupleProverMessage(a, b)
       case _ =>
         Left(DecodingFailure("Unsupported sigma-protocol type value", List()))
     }
@@ -304,20 +322,20 @@ trait ApiCodecs extends JsonCodecs {
       case h: String if h == "cmtWithSecret" =>
         for {
           secret <- c.downField("secret").as[BigInteger]
-          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          pubkey <- c.downField("pubkey").as[SigmaLeaf]
           position <- c.downField("position").as[NodePosition]
           firstMsg <- firstProverMessageDecoder.tryDecode(c)
         } yield OwnCommitment(pubkey, secret, firstMsg, position)
       case h: String if h == "cmtReal" =>
         for {
-          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          pubkey <- c.downField("pubkey").as[SigmaLeaf]
           position <- c.downField("position").as[NodePosition]
           firstMsg <- firstProverMessageDecoder.tryDecode(c)
         } yield RealCommitment(pubkey, firstMsg, position)
       case h: String if h == "cmtSimulated" =>
         for {
           position <- c.downField("position").as[NodePosition]
-          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          pubkey <- c.downField("pubkey").as[SigmaLeaf]
           firstMsg <- firstProverMessageDecoder.tryDecode(c)
         } yield SimulatedCommitment(pubkey, firstMsg, position)
       case _ =>
@@ -334,7 +352,7 @@ trait ApiCodecs extends JsonCodecs {
 
     Json.obj(
       "hint" -> proofType.asJson,
-      "challenge" -> Base16.encode(sp.challenge).asJson,
+      "challenge" -> Base16.encode(sp.challenge.toArray).asJson,
       "pubkey" -> sp.image.asJson,
       "proof" -> SigSerializer.toProofBytes(sp.uncheckedTree).asJson,
       "position" -> sp.position.asJson
@@ -346,26 +364,26 @@ trait ApiCodecs extends JsonCodecs {
       case h: String if h == "proofReal" =>
         for {
           challenge <- c.downField("challenge").as[String]
-          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          pubkey <- c.downField("pubkey").as[SigmaLeaf]
           proof <- c.downField("proof").as[String]
           position <- c.downField("position").as[NodePosition]
         } yield
           RealSecretProof(
             pubkey,
-            Challenge @@ Base16.decode(challenge).get,
+            Challenge @@ Base16.decode(challenge).get.toColl,
             SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)(null),
             position
           )
       case h: String if h == "proofSimulated" =>
         for {
           challenge <- c.downField("challenge").as[String]
-          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          pubkey <- c.downField("pubkey").as[SigmaLeaf]
           proof <- c.downField("proof").as[String]
           position <- c.downField("position").as[NodePosition]
         } yield
           SimulatedSecretProof(
             pubkey,
-            Challenge @@ Base16.decode(challenge).get,
+            Challenge @@ Base16.decode(challenge).get.toColl,
             SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)(null),
             position
           )

@@ -22,8 +22,8 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.CryptoConstants.EcPointType
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.crypto.CryptoConstants.EcPointType
+import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._

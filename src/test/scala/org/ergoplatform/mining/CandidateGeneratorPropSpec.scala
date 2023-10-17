@@ -7,7 +7,7 @@ import org.ergoplatform.settings.MonetarySettings
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import scala.concurrent.duration._
 
@@ -167,7 +167,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
       val costs: Seq[Int] = fromBigMempool.map { tx =>
-        us.validateWithCost(tx, Some(upcomingContext), Int.MaxValue, Some(verifier)).getOrElse {
+        us.validateWithCost(tx, upcomingContext, Int.MaxValue, Some(verifier)).getOrElse {
           val boxesToSpend =
             tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
           tx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext).get

@@ -72,7 +72,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
       log.info(s"Got a Handshake from $connectionId")
 
       val peerInfo = PeerInfo(receivedHandshake.peerSpec, System.currentTimeMillis(), Some(direction))
-      val peer = ConnectedPeer(connectionDescription.connectionId, self, 0, Some(peerInfo))
+      val peer = ConnectedPeer(connectionDescription.connectionId, self, Some(peerInfo))
       selfPeer = Some(peer)
 
       networkControllerRef ! Handshaked(peerInfo)

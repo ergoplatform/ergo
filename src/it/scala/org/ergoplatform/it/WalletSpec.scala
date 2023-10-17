@@ -20,6 +20,7 @@ import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.scalatest.wordspec.AsyncWordSpec
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
+import sigma.Colls
 import sigmastate.Values.{ErgoTree, TrueLeaf}
 
 import scala.concurrent.ExecutionContext

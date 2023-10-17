@@ -10,12 +10,10 @@ import scorex.core.network.peer.PeerInfo
   *
   * @param connectionId - connection address
   * @param handlerRef   - reference to PeerConnectionHandler that is responsible for communication with this peer
-  * @param lastMessage  - timestamp of last received message
   * @param peerInfo     - information about this peer. May be None if peer is connected, but is not handshaked yet
   */
 case class ConnectedPeer(connectionId: ConnectionId,
                          handlerRef: ActorRef,
-                         var lastMessage: Long,
                          peerInfo: Option[PeerInfo]) {
 
   override def hashCode(): Int = connectionId.remoteAddress.hashCode()
@@ -45,7 +43,7 @@ object ConnectedPeer {
     val optionalFields =
       List(
         peer.peerInfo.map(_.peerSpec.protocolVersion.toString).map("version" -> _.asJson),
-        Option(peer.lastMessage).filter(_ != 0L).map("lastMessage" -> _.asJson)
+        peer.peerInfo.map(_.lastStoredActivityTime).filter(_ != 0L).map("lastMessage" -> _.asJson),
       ).flatten
     val fields = addressField :: optionalFields
     Json.obj(fields:_*)

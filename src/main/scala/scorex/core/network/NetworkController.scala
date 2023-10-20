@@ -133,6 +133,7 @@ class NetworkController(ergoSettings: ErgoSettings,
           cp.peerInfo.foreach { peerInfo =>
             if ((now - peerInfo.lastStoredActivityTime) > activityDelta) {
               val peerInfoUpdated = peerInfo.copy(lastStoredActivityTime = now)
+              connections += remoteAddress -> cp.copy(peerInfo = Some(peerInfoUpdated))
               peerManagerRef ! AddOrUpdatePeer(peerInfoUpdated)
             }
           }

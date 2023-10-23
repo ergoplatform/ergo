@@ -20,7 +20,7 @@ import scorex.crypto.authds.ADKey
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.encode.Base16
-import sigmastate.Values.ByteArrayConstant
+import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.ProverResult
 import sigmastate.helpers.TestingHelpers._
@@ -46,7 +46,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
       val remaining = emission.remainingFoundationRewardAtHeight(height)
       val newFoundersBox = testBox(remaining, foundersBox.ergoTree, height, Seq(), Map(R4 -> foundersBox.additionalRegisters(R4)))
-      val rewardBox = testBox(foundersBox.value - remaining, defaultProver.hdKeys.last.publicImage, height)
+      val rewardBox = testBox(foundersBox.value - remaining, ErgoTree.fromSigmaBoolean(defaultProver.hdKeys.last.publicImage), height)
       val newBoxes = IndexedSeq(newFoundersBox, rewardBox)
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
@@ -90,7 +90,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
       val newBoxes = IndexedSeq(
         testBox(remaining, foundersBox.ergoTree, height, Seq(), foundersBox.additionalRegisters),
-        testBox(foundersBox.value - remaining, rewardPk, height, Seq())
+        testBox(foundersBox.value - remaining, ErgoTree.fromSigmaBoolean(rewardPk), height, Seq())
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)

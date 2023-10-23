@@ -4,7 +4,7 @@ import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.ErgoLikeTransaction
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import sigmastate.Values
-import sigmastate.Values.SigmaPropValue
+import sigmastate.Values.{ErgoTree, SigmaPropValue}
 import sigmastate.helpers.TestingHelpers._
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
@@ -17,7 +17,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
 
   val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
 
-  def box(value:Long) = testBox(value, TrueLeaf, 0)
+  def box(value:Long) = testBox(value, ErgoTree.fromProposition(TrueLeaf), 0)
   def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), Set(PaymentsScanId))
 
   property("compress() done properly") {

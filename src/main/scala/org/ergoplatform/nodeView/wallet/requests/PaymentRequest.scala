@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction._
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoBox}
-import sigmastate.SType
+import sigma.ast.SType
 import sigmastate.Values.EvaluatedValue
 
 /**

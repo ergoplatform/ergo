@@ -10,8 +10,8 @@ import scorex.core.serialization.ErgoSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.Values.CollectionConstant
-import sigmastate.SByte
 import sigma.Extensions._
+import sigma.ast.SByte
 
 import scala.collection.mutable.ArrayBuffer
 

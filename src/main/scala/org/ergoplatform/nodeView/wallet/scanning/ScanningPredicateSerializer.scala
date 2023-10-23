@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox.RegisterId
 import scorex.core.serialization.ErgoSerializer
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.SType
+import sigma.ast.SType
 import sigmastate.Values.EvaluatedValue
 import sigmastate.eval.Extensions.ArrayByteOps
 import sigmastate.serialization.ValueSerializer

@@ -28,16 +28,21 @@ class ScriptsSpec extends ErgoPropertyTest {
 
   property("simple operations without cryptography") {
     // true/false
-    applyBlockSpendingScript(Values.TrueLeaf.toSigmaProp) shouldBe 'success
-    applyBlockSpendingScript(Values.FalseLeaf.toSigmaProp) shouldBe 'failure
+    applyBlockSpendingScript(ErgoTree.fromProposition(Values.TrueLeaf.toSigmaProp)) shouldBe 'success
+    applyBlockSpendingScript(ErgoTree.fromProposition(Values.FalseLeaf.toSigmaProp)) shouldBe 'failure
     // eq
-    applyBlockSpendingScript(EQ(IntConstant(1), IntConstant(1)).toSigmaProp) shouldBe 'success
-    applyBlockSpendingScript(EQ(IntConstant(1), IntConstant(2)).toSigmaProp) shouldBe 'failure
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(EQ(IntConstant(1), IntConstant(1)).toSigmaProp)) shouldBe 'success
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(EQ(IntConstant(1), IntConstant(2)).toSigmaProp)) shouldBe 'failure
     // math
-    applyBlockSpendingScript(EQ(Plus(1, 2), Minus(6, 3)).toSigmaProp) shouldBe 'success
-    applyBlockSpendingScript(EQ(Multiply(1, 2), Divide(7, 3)).toSigmaProp) shouldBe 'success
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(EQ(Plus(1, 2), Minus(6, 3)).toSigmaProp)) shouldBe 'success
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(EQ(Multiply(1, 2), Divide(7, 3)).toSigmaProp)) shouldBe 'success
     // context
-    applyBlockSpendingScript(EQ(IntConstant(1), Height).toSigmaProp) shouldBe 'success
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(EQ(IntConstant(1), Height).toSigmaProp)) shouldBe 'success
     applyBlockSpendingScript(fromString("CONTEXT.preHeader.height == 1")) shouldBe 'success
     applyBlockSpendingScript(fromString("CONTEXT.headers.size == 0")) shouldBe 'success
     applyBlockSpendingScript(fromString(s"CONTEXT.dataInputs.exists{ (box: Box) => box.value == ${fixedBox.value}L}")) shouldBe 'success
@@ -45,23 +50,31 @@ class ScriptsSpec extends ErgoPropertyTest {
   }
 
   property("simple crypto") {
-    applyBlockSpendingScript(defaultMinerPk) shouldBe 'success
-    applyBlockSpendingScript(SigmaAnd(defaultProver.hdKeys.map(s => SigmaPropConstant(s.publicImage)))) shouldBe 'success
-    applyBlockSpendingScript(SigmaAnd(defaultMinerPk, ProveDlog(dlogGroup.generator))) shouldBe 'failure
-    applyBlockSpendingScript(SigmaOr(defaultMinerPk, ProveDlog(dlogGroup.generator))) shouldBe 'success
+    applyBlockSpendingScript(ErgoTree.fromSigmaBoolean(defaultMinerPk)) shouldBe 'success
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(
+        SigmaAnd(defaultProver.hdKeys.map(s => SigmaPropConstant(s.publicImage))))) shouldBe 'success
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(
+        SigmaAnd(defaultMinerPk, ProveDlog(dlogGroup.generator)))) shouldBe 'failure
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(
+        SigmaOr(defaultMinerPk, ProveDlog(dlogGroup.generator)))) shouldBe 'success
   }
 
   property("predef scripts") {
     delta shouldBe -1000
 
-    applyBlockSpendingScript(GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))).toSigmaProp) shouldBe 'success
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(
+        GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))).toSigmaProp)) shouldBe 'success
     applyBlockSpendingScript(ErgoTreePredef.rewardOutputScript(delta, defaultMinerPk)) shouldBe 'success
 //        applyBlockSpendingScript(ErgoScriptPredef.feeProposition(delta)) shouldBe 'success
   }
 
 
   private def fromString(str: String): ErgoTree = {
-    compiler.compile(Map(), str).buildTree.asBoolValue.toSigmaProp
+    ErgoTree.fromProposition(compiler.compile(Map(), str).buildTree.asBoolValue.toSigmaProp)
   }
 
   private def applyBlockSpendingScript(script: ErgoTree): Try[UtxoState] = {

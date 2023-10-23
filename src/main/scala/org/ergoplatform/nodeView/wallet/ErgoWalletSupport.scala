@@ -21,7 +21,7 @@ import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.util.ScorexLogging
 import sigma.Colls
-import sigmastate.Values.ByteArrayConstant
+import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
@@ -255,7 +255,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         // todo: is this extra check needed ?
         val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
         val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => t._1.toTokenId -> t._2).toIndexedSeq
-        new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
+        new ErgoBoxCandidate(changeBox.value, ErgoTree.fromProposition(changeAddressOpt.get), walletHeight, assets.toColl)
     }
     val inputBoxes = selectionResult.inputBoxes.toIndexedSeq
     new UnsignedErgoTransaction(

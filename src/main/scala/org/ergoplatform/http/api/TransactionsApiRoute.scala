@@ -18,7 +18,7 @@ import scorex.core.api.http.{ApiError, ApiResponse}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
-import sigmastate.SType
+import sigma.ast.SType
 import sigmastate.Values.EvaluatedValue
 import sigmastate.eval.Extensions.ArrayByteOps
 

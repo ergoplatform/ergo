@@ -2,7 +2,7 @@ package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
+import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules

@@ -55,7 +55,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     boxes.nonEmpty shouldBe true
 
     val script = s"{sigmaProp(HEIGHT == ${genesis.height} + 1)}"
-    val compiler = new SigmaCompiler(ErgoAddressEncoder.MainnetNetworkPrefix)
+    val compiler = SigmaCompiler(ErgoAddressEncoder.MainnetNetworkPrefix)
     val prop = compiler.compile(emptyEnv, script).buildTree
     val tree = ErgoTree.fromProposition(prop.asSigmaProp)
 
@@ -64,7 +64,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     val validTx = validTransactionFromBoxes(boxes.toIndexedSeq, outputsProposition = tree)
 
-    val temporarilyValidTx = validTransactionFromBoxes(validTx.outputs, outputsProposition = proveDlogGen.sample.get)
+    val temporarilyValidTx = validTransactionFromBoxes(validTx.outputs, outputsProposition = ErgoTree.fromProposition(proveDlogGen.sample.get))
 
     subscribeEvents(classOf[FailedTransaction])
     nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(validTx, None))

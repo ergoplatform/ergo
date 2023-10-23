@@ -18,7 +18,7 @@ import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalatest.Inspectors
-import sigmastate.SType
+import sigma.ast.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
 
 import scala.util.Random

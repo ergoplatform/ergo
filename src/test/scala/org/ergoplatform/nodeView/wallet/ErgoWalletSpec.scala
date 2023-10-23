@@ -17,6 +17,7 @@ import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
+import sigmastate.Values.ErgoTree
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
@@ -699,7 +700,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
 
       // We need this second block to have something to rollback. Just spent some balance to anyone
       val balanceToSpend = randomLong(initialBalance)
-      val onchainSpendingTx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, address.pubkey)
+      val onchainSpendingTx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, ErgoTree.fromSigmaBoolean(address.pubkey))
       val boxesToSpend = boxesAvailable(onchainSpendingTx, address.pubkey)
       val block = makeNextBlock(getUtxoState, Seq(onchainSpendingTx))
       applyBlock(block) shouldBe 'success
@@ -759,7 +760,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         eventually {
           val initialBalance = getConfirmedBalances.walletBalance
           val balanceToSpend = randomLong(balanceAmount(boxesToSpend))
-          val creationTx = makeTx(boxesToSpend, emptyProverResult, balanceToSpend, pubKey, randomNewAsset)
+          val creationTx = makeTx(boxesToSpend, emptyProverResult, balanceToSpend, ErgoTree.fromSigmaBoolean(pubKey), randomNewAsset)
           val initialAssets = assetAmount(boxesAvailable(creationTx, pubKey))
           initialAssets should not be empty
           log.info(s"Initial balance: $initialBalance")
@@ -926,7 +927,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
       val initialBalance = balanceAmount(initialBoxes)
 
       val balancePicked = randomLong(initialBalance)
-      val creationTx = makeTx(initialBoxes, emptyProverResult, balancePicked, address.pubkey, randomNewAsset)
+      val creationTx = makeTx(initialBoxes, emptyProverResult, balancePicked, ErgoTree.fromSigmaBoolean(address.pubkey), randomNewAsset)
       val boxesToSpend = boxesAvailable(creationTx, address.pubkey)
       val balanceToSpend = balanceAmount(boxesToSpend)
 
@@ -1056,7 +1057,9 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         //pay out all the wallet balance:
         val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
         assetToSpend should not be empty
-        val req1 = PaymentRequest(Pay2SAddress(CAND(Seq(secret1.publicImage, secret2.publicImage))), confirmedBalance, assetToSpend, Map.empty)
+        val req1 = PaymentRequest(
+          Pay2SAddress(ErgoTree.fromSigmaBoolean(CAND(Seq(secret1.publicImage, secret2.publicImage)))),
+          confirmedBalance, assetToSpend, Map.empty)
 
         val tx = await(wallet.generateTransaction(Seq(req1))).get
 
@@ -1093,7 +1096,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         //pay out all the wallet balance:
         val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
         assetToSpend should not be empty
-        val addr = Pay2SAddress(CTHRESHOLD(2, Seq(secret1.publicImage, secret2.publicImage, secret3.publicImage)))
+        val addr = Pay2SAddress(ErgoTree.fromSigmaBoolean(CTHRESHOLD(2, Seq(secret1.publicImage, secret2.publicImage, secret3.publicImage))))
         val req1 = PaymentRequest(addr, confirmedBalance, assetToSpend, Map.empty)
 
         val tx = await(wallet.generateTransaction(Seq(req1))).get

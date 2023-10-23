@@ -13,7 +13,7 @@ import org.ergoplatform.http.api.ScriptApiRoute
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
-import sigmastate.SByte
+import sigma.ast.SByte
 import sigmastate.Values.{CollectionConstant, ErgoTree, TrueLeaf}
 import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
 

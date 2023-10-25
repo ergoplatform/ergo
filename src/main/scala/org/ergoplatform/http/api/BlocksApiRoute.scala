@@ -38,6 +38,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getChainSliceR ~
       getBlockIdsAtHeightR ~
       getBlockHeaderByHeaderIdR ~
+      getFullBlockByHeaderIdsR ~
       getBlockTransactionsByHeaderIdR ~
       getProofForTxR ~
       getFullBlockByHeaderIdR ~
@@ -67,6 +68,11 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] =
     getHistory.map { history =>
       history.typedModifierById[Header](headerId).flatMap(history.getFullBlock)
+    }
+
+  private def getFullBlockByHeaderIds(headerIds: Seq[ModifierId]): Future[Seq[ErgoFullBlock]] =
+    getHistory.map { history =>
+      headerIds.flatMap(headerId => history.typedModifierById[Header](headerId).flatMap(history.getFullBlock))
     }
 
   private def getModifierById(modifierId: ModifierId): Future[Option[BlockSection]] =
@@ -175,6 +181,10 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   def getFullBlockByHeaderIdR: Route = (modifierId & get) { id =>
     ApiResponse(getFullBlockByHeaderId(id))
+  }
+
+  def getFullBlockByHeaderIdsR: Route = (post & path("headerIds") & modifierIds) { ids =>
+    ApiResponse(getFullBlockByHeaderIds(ids))
   }
 
 }

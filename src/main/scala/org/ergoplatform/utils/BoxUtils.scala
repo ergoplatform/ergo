@@ -1,13 +1,12 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
+import org.ergoplatform.ErgoBox.{AdditionalRegisters, TokenId}
 import org.ergoplatform.settings.{Algos, Parameters}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import scorex.util.ModifierId
-import sigmastate.SType
-import sigmastate.Values.{ErgoTree, EvaluatedValue}
+import sigma.{Coll, Colls}
+import sigmastate.Values.ErgoTree
 import sigmastate.eval._
-import special.collection.Coll
 
 object BoxUtils {
 
@@ -19,7 +18,7 @@ object BoxUtils {
   @inline
   def minimalErgoAmountSimulated(script: ErgoTree,
                                  tokens: Coll[(TokenId, Long)] = Colls.emptyColl,
-                                 additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
+                                 additionalRegisters: AdditionalRegisters = Map(),
                                  parameters: Parameters): Long = {
     val candidateMock = new ErgoBoxCandidate(value = Long.MaxValue, script, creationHeight = Int.MaxValue, tokens, additionalRegisters)
     val mockId = ModifierId @@ Algos.encode(scorex.util.Random.randomBytes(32))

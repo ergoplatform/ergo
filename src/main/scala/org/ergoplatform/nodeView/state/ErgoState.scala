@@ -24,7 +24,7 @@ import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.AtLeast
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
 import spire.syntax.all.cfor
 

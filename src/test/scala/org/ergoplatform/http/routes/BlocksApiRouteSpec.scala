@@ -3,6 +3,8 @@ package org.ergoplatform.http.routes
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.http.api.BlocksApiRoute
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -13,9 +15,11 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.ModifierId
 
-class BlocksApiRouteSpec extends AnyFlatSpec
+class BlocksApiRouteSpec
+  extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
+  with FailFastCirceSupport
   with Stubs {
 
   val prefix = "/blocks"
@@ -23,19 +27,23 @@ class BlocksApiRouteSpec extends AnyFlatSpec
   val route: Route = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).route
 
   val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
-  val headerIdString: String = Algos.encode(headerIdBytes)
+  val headerIdString: String    = Algos.encode(headerIdBytes)
 
   it should "get last blocks" in {
     Get(prefix) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.headerIdsAt(0, 50).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
+      history
+        .headerIdsAt(0, 50)
+        .map(Algos.encode)
+        .asJson shouldEqual responseAs[Json]
     }
   }
 
   it should "post block correctly" in {
-    val (st, bh) = createUtxoState(settings)
+    val (st, bh)             = createUtxoState(settings)
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
-    val blockJson: UniversalEntity = HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
+    val blockJson: UniversalEntity =
+      HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
     Post(prefix, blockJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
     }
@@ -44,37 +52,62 @@ class BlocksApiRouteSpec extends AnyFlatSpec
   it should "get last headers" in {
     Get(prefix + "/lastHeaders/1") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.lastHeaders(1).headers.map(_.asJson).asJson.toString() shouldEqual responseAs[String]
+      history
+        .lastHeaders(1)
+        .headers
+        .map(_.asJson)
+        .asJson shouldEqual responseAs[Json]
     }
   }
 
   it should "get block at height" in {
     Get(prefix + "/at/0") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.headerIdsAtHeight(0).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
+      history
+        .headerIdsAtHeight(0)
+        .map(Algos.encode)
+        .asJson shouldEqual responseAs[Json]
     }
   }
 
   it should "get chain slice" in {
     Get(prefix + "/chainSlice?fromHeight=0") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      chain.map(_.header).asJson.toString() shouldEqual responseAs[String]
+      chain.map(_.header).asJson shouldEqual responseAs[Json]
     }
     Get(prefix + "/chainSlice?fromHeight=2&toHeight=4") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      chain.slice(2, 4).map(_.header).asJson.toString() shouldEqual responseAs[String]
+      chain.slice(2, 4).map(_.header).asJson shouldEqual responseAs[Json]
     }
   }
 
   it should "get block by header id" in {
     Get(prefix + "/" + headerIdString) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      val expected = history.typedModifierById[Header](headerIdBytes)
+      val expected = history
+        .typedModifierById[Header](headerIdBytes)
         .flatMap(history.getFullBlock)
         .map(_.asJson)
         .get
-        .toString
-      responseAs[String] shouldEqual expected
+
+      responseAs[Json] shouldEqual expected
+    }
+  }
+
+  it should "get blocks by header ids" in {
+    val headerIdsBytes               = history.lastHeaders(10).headers
+    val headerIdsString: Seq[String] = headerIdsBytes.map(h => Algos.encode(h.id))
+
+    Post(prefix + "/headerIds", headerIdsString.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+
+      val expected = headerIdsBytes
+        .map(_.id)
+        .flatMap(headerId =>
+          history.typedModifierById[Header](headerId).flatMap(history.getFullBlock)
+        )
+
+      responseAs[Seq[ErgoFullBlock]] shouldEqual expected
     }
   }
 
@@ -86,18 +119,18 @@ class BlocksApiRouteSpec extends AnyFlatSpec
         .flatMap(history.getFullBlock)
         .map(_.header.asJson)
         .get
-        .toString
-      responseAs[String] shouldEqual expected
+
+      responseAs[Json] shouldEqual expected
     }
   }
 
   it should "get transactions by header id" in {
     Get(prefix + "/" + headerIdString + "/transactions") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      val header = history.typedModifierById[Header](headerIdBytes).value
+      val header    = history.typedModifierById[Header](headerIdBytes).value
       val fullBlock = history.getFullBlock(header).value
-      val expected = fullBlock.blockTransactions.asJson.toString
-      responseAs[String] shouldEqual expected
+      val expected  = fullBlock.blockTransactions.asJson
+      responseAs[Json] shouldEqual expected
     }
   }
 

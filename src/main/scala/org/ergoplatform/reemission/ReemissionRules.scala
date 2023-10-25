@@ -9,7 +9,7 @@ import sigmastate.SBoolean
 import sigmastate.Values.Value
 import sigmastate.eval.CompiletimeIRContext
 import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
-import special.collection.Coll
+import sigma.Coll
 
 import scala.util.Try
 

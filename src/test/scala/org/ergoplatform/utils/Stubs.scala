@@ -42,7 +42,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.ByteArrayWrapper
 import scorex.util.Random
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
 
 import scala.collection.mutable
 import scala.concurrent.duration._

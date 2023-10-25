@@ -35,8 +35,6 @@ case class PeerSpec(agentName: String,
   lazy val publicUrlOpt: Option[URL] =
     features.collectFirst { case RestApiUrlPeerFeature(url) => url }
 
-  def reachablePeer: Boolean = address.isDefined
-
   def address: Option[InetSocketAddress] = declaredAddress orElse localAddressOpt
 
 }

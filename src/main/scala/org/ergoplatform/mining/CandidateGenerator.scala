@@ -26,13 +26,13 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
-import sigmastate.SType.ErgoBoxRType
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.ErgoBoxRType
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.crypto.CryptoFacade
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
-import special.collection.Coll
+import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -819,7 +819,7 @@ object CandidateGenerator extends ScorexLogging {
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
               tx,
-              Some(upcomingContext),
+              upcomingContext,
               maxBlockCost,
               Some(verifier)
             ) match {

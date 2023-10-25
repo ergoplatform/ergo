@@ -133,6 +133,7 @@ class NetworkController(ergoSettings: ErgoSettings,
           cp.peerInfo.foreach { peerInfo =>
             if ((now - peerInfo.lastStoredActivityTime) > activityDelta) {
               val peerInfoUpdated = peerInfo.copy(lastStoredActivityTime = now)
+              connections += remoteAddress -> cp.copy(peerInfo = Some(peerInfoUpdated))
               peerManagerRef ! AddOrUpdatePeer(peerInfoUpdated)
             }
           }
@@ -301,7 +302,7 @@ class NetworkController(ergoSettings: ErgoSettings,
             val lastSeen = peerInfo.lastStoredActivityTime
             val timeout = networkSettings.inactiveConnectionDeadline.toMillis
             val delta = now - lastSeen
-            if (delta > timeout) {
+            if (delta > timeout && lastSeen > 0) {
               log.info(s"Dropping connection with ${peerInfo}, last seen ${delta / 1000.0} seconds ago")
               cp.handlerRef ! CloseConnection
             }
@@ -425,9 +426,10 @@ class NetworkController(ergoSettings: ErgoSettings,
         peerManagerRef ! RemovePeer(peerAddress)
         connections -= connectedPeer.connectionId.remoteAddress
       } else {
-        peerManagerRef ! AddOrUpdatePeer(peerInfo)
+        val newPeerInfo = peerInfo.copy(lastStoredActivityTime = time())
+        peerManagerRef ! AddOrUpdatePeer(newPeerInfo)
 
-        val updatedConnectedPeer = connectedPeer.copy(peerInfo = Some(peerInfo))
+        val updatedConnectedPeer = connectedPeer.copy(peerInfo = Some(newPeerInfo))
         connections += remoteAddress -> updatedConnectedPeer
         context.system.eventStream.publish(HandshakedPeer(updatedConnectedPeer))
       }

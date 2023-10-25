@@ -2704,8 +2704,8 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /blocks/headerIds:
-    get:
-      summary: Get the list of full block info by given header ids
+    post:
+      summary: Get full blocks by given header ids
       operationId: getFullBlockByIds
       tags:
         - blocks
@@ -2727,7 +2727,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/FullBlock'
         '404':
-          description: Blocks with this ids doesn't exist
+          description: No block exist for every id provided
           content:
             application/json:
               schema:
@@ -5126,7 +5126,7 @@ paths:
 
   /utxo/withPool/byIds:
     post:
-      summary: Get boxes JSONs for ids in array provided, from UTXO or the mempool.
+      summary: Get boxes for ids provided, from UTXO or the mempool.
       operationId: getBoxWithPoolByIds
       tags:
         - utxo
@@ -5148,7 +5148,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/ErgoTransactionOutput'
         '404':
-          description: Any boxes from the list with this id doesn't exist
+          description: No any box exists for every id provided
           content:
             application/json:
               schema:

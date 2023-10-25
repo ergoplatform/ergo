@@ -382,9 +382,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     getHistoryWithMempool.map { case (history, mempool) =>
       getAddress(address)(history) match {
         case Some(addr) =>
-          (addr.balanceInfo.get.retreiveAdditionalTokenInfo(history), getUnconfirmedForAddress(address)(mempool).retreiveAdditionalTokenInfo(history))
+          (addr.balanceInfo.get.retrieveAdditionalTokenInfo(history), getUnconfirmedForAddress(address)(mempool).retrieveAdditionalTokenInfo(history))
         case None =>
-          (BalanceInfo(), getUnconfirmedForAddress(address)(mempool).retreiveAdditionalTokenInfo(history))
+          (BalanceInfo(), getUnconfirmedForAddress(address)(mempool).retrieveAdditionalTokenInfo(history))
       }
     }
   }

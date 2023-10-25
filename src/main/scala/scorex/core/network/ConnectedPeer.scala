@@ -10,7 +10,6 @@ import scorex.core.network.peer.PeerInfo
   *
   * @param connectionId - connection address
   * @param handlerRef   - reference to PeerConnectionHandler that is responsible for communication with this peer
-  * @param lastMessage  - timestamp of last received message
   * @param peerInfo     - information about this peer. May be None if peer is connected, but is not handshaked yet
   */
 case class ConnectedPeer(connectionId: ConnectionId,

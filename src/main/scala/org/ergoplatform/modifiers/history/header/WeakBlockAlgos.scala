@@ -22,6 +22,8 @@ object WeakBlockAlgos {
 
   val weaksPerBlock = 128 // weak blocks per block
 
+  val weakTransactionIdLength = 6
+
   def isWeak(header: Header, requiredDifficulty: Difficulty): Boolean = {
     val diff = requiredDifficulty / weaksPerBlock
     header.requiredDifficulty >= diff
@@ -34,13 +36,15 @@ object WeakBlockAlgos {
   // weak block signal:
   // version
   // weak block (~200 bytes) - contains a link to parent block
-  // previous weak block
+  // previous weak block id
   // transactions since last weak blocks (8 byte ids?)
 
+  // todo: move `txsSinceLastWeak` to a dedicated message
   class WeakBlockInfo(version: Byte, weakBlock: Header, prevWeakBlockId: Array[Byte], txsSinceLastWeak: Array[Array[Byte]]) extends BytesSerializable {
     override type M = WeakBlockInfo
 
-    val weakTransactionIdLength = 8
+    val initialMessageVersion = 1
+
     /**
       * Serializer which can convert self to bytes
       */
@@ -55,13 +59,17 @@ object WeakBlockAlgos {
 
       override def parse(r: Reader): WeakBlockInfo = {
         val version = r.getByte()
-        val weakBlock = HeaderSerializer.parse(r)
-        val prevWeakBlockId = r.getBytes(32)
-        val txsCount = r.getUShort().toShortExact
-        val txsSinceLastWeak  = (1 to txsCount).map{_ => // todo: more efficient array construction
-          r.getBytes(weakTransactionIdLength)
-        }.toArray
-        new WeakBlockInfo(version, weakBlock, prevWeakBlockId, txsSinceLastWeak)
+        if (version == initialMessageVersion) {
+          val weakBlock = HeaderSerializer.parse(r)
+          val prevWeakBlockId = r.getBytes(32)
+          val txsCount = r.getUShort().toShortExact
+          val txsSinceLastWeak = (1 to txsCount).map { _ => // todo: more efficient array construction
+            r.getBytes(weakTransactionIdLength)
+          }.toArray
+          new WeakBlockInfo(version, weakBlock, prevWeakBlockId, txsSinceLastWeak)
+        } else {
+          throw new Exception("Unsupported weakblock message version")
+        }
       }
     }
   }

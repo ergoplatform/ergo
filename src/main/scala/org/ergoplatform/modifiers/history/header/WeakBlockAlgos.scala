@@ -1,12 +1,13 @@
 package org.ergoplatform.modifiers.history.header
 
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scorex.core.consensus.SyncInfo
+import scorex.core.{NodeViewModifier, bytesToId, idToBytes}
 import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message.MessageSpecV1
-import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
+import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
+import scorex.util.ModifierId
 
 /**
   * Implementation steps:
@@ -40,21 +41,20 @@ object WeakBlockAlgos {
   // transactions since last weak blocks (8 byte ids?)
 
   // todo: move `txsSinceLastWeak` to a dedicated message
-  class WeakBlockInfo(version: Byte, weakBlock: Header, prevWeakBlockId: Array[Byte], txsSinceLastWeak: Array[Array[Byte]]) extends BytesSerializable {
-    override type M = WeakBlockInfo
+  case class WeakBlockInfo(version: Byte, weakBlock: Header, prevWeakBlockId: Array[Byte])
+
+  object WeakBlockInfo {
 
     val initialMessageVersion = 1
 
     /**
       * Serializer which can convert self to bytes
       */
-    override def serializer: ErgoSerializer[WeakBlockInfo] = new ErgoSerializer[WeakBlockInfo] {
+    def serializer: ErgoSerializer[WeakBlockInfo] = new ErgoSerializer[WeakBlockInfo] {
       override def serialize(wbi: WeakBlockInfo, w: Writer): Unit = {
-        w.put(version)
-        HeaderSerializer.serialize(weakBlock, w)
-        w.putBytes(prevWeakBlockId)
-        w.putUShort(txsSinceLastWeak.length) // consider case when more txs than can be in short
-        txsSinceLastWeak.foreach(txId => w.putBytes(txId))
+        w.put(wbi.version)
+        HeaderSerializer.serialize(wbi.weakBlock, w)
+        w.putBytes(wbi.prevWeakBlockId)
       }
 
       override def parse(r: Reader): WeakBlockInfo = {
@@ -62,11 +62,7 @@ object WeakBlockAlgos {
         if (version == initialMessageVersion) {
           val weakBlock = HeaderSerializer.parse(r)
           val prevWeakBlockId = r.getBytes(32)
-          val txsCount = r.getUShort().toShortExact
-          val txsSinceLastWeak = (1 to txsCount).map { _ => // todo: more efficient array construction
-            r.getBytes(weakTransactionIdLength)
-          }.toArray
-          new WeakBlockInfo(version, weakBlock, prevWeakBlockId, txsSinceLastWeak)
+          new WeakBlockInfo(version, weakBlock, prevWeakBlockId)
         } else {
           throw new Exception("Unsupported weakblock message version")
         }
@@ -74,15 +70,71 @@ object WeakBlockAlgos {
     }
   }
 
-  class WeakBlockMessageSpec[SI <: SyncInfo](serializer: ErgoSerializer[SI]) extends MessageSpecV1[SI] {
+  object WeakBlockMessageSpec extends MessageSpecV1[WeakBlockInfo] {
+
+    val MaxMessageSize = 10000
 
     override val messageCode: MessageCode = 90: Byte
-    override val messageName: String = "Sync"
+    override val messageName: String = "WeakBlock"
 
-    override def serialize(data: SI, w: Writer): Unit = serializer.serialize(data, w)
+    override def serialize(data: WeakBlockInfo, w: Writer): Unit = {
+      WeakBlockInfo.serializer.serialize(data, w)
+    }
 
-    override def parse(r: Reader): SI = serializer.parse(r)
+    override def parse(r: Reader): WeakBlockInfo = {
+      WeakBlockInfo.serializer.parse(r)
+    }
   }
 
+  /**
+    * On receiving weak block or block, the node is sending last weak block id it has to get short transaction
+    * ids since then
+    */
+  object GetDataSpec extends MessageSpecV1[ModifierId] {
+    import scorex.util.{idToBytes, bytesToId}
+
+    override val messageCode: MessageCode = 91: Byte
+    override val messageName: String = "GetData"
+
+    override def serialize(data: ModifierId, w: Writer): Unit = {
+      w.putBytes(idToBytes(data))
+    }
+
+    override def parse(r: Reader): ModifierId = {
+      bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
+    }
+  }
+
+  case class TransactionsSince(transactionsWithBlockIds: Array[(ModifierId, Array[Array[Byte]])])
+
+  class DataSpec extends MessageSpecV1[TransactionsSince] {
+
+    override val messageCode: MessageCode = 92: Byte
+    override val messageName: String = "GetData"
+
+    override def serialize(data: TransactionsSince, w: Writer): Unit = {
+      w.putUInt(data.transactionsWithBlockIds.length)
+      data.transactionsWithBlockIds.foreach { case (id, txIds) =>
+        w.putBytes(idToBytes(id))
+        w.putUInt(txIds.length)
+        txIds.foreach { txId =>
+          w.putBytes(txId)
+        }
+      }
+    }
+
+    override def parse(r: Reader): TransactionsSince = {
+      val blocksCount = r.getUInt().toIntExact
+      val records = (1 to blocksCount).map{_ =>
+        val blockId = r.getBytes(32)
+        val txsCount = r.getUInt().toIntExact
+        val txIds = (1 to txsCount).map{_ =>
+          r.getBytes(6)
+        }.toArray
+        bytesToId(blockId) -> txIds
+      }.toArray
+      TransactionsSince(records)
+    }
+  }
 
 }

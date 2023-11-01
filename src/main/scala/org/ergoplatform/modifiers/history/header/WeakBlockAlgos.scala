@@ -70,6 +70,10 @@ object WeakBlockAlgos {
     }
   }
 
+  /**
+    * Message that is informing about weak block produced.
+    * Contains header and link to previous weak block ().
+    */
   object WeakBlockMessageSpec extends MessageSpecV1[WeakBlockInfo] {
 
     val MaxMessageSize = 10000
@@ -87,10 +91,11 @@ object WeakBlockAlgos {
   }
 
   /**
-    * On receiving weak block or block, the node is sending last weak block id it has to get short transaction
+    * On receiving weak block or block, the node is sending last weak block or block id it has to get short transaction
     * ids since then
     */
   object GetDataSpec extends MessageSpecV1[ModifierId] {
+
     import scorex.util.{idToBytes, bytesToId}
 
     override val messageCode: MessageCode = 91: Byte
@@ -125,10 +130,10 @@ object WeakBlockAlgos {
 
     override def parse(r: Reader): TransactionsSince = {
       val blocksCount = r.getUInt().toIntExact
-      val records = (1 to blocksCount).map{_ =>
+      val records = (1 to blocksCount).map { _ =>
         val blockId = r.getBytes(32)
         val txsCount = r.getUInt().toIntExact
-        val txIds = (1 to txsCount).map{_ =>
+        val txIds = (1 to txsCount).map { _ =>
           r.getBytes(6)
         }.toArray
         bytesToId(blockId) -> txIds
@@ -138,3 +143,4 @@ object WeakBlockAlgos {
   }
 
 }
+

@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import com.google.common.hash.BloomFilter
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
@@ -183,79 +184,82 @@ object WalletScanLogic extends ScorexLogging {
   def extractWalletOutputs(tx: ErgoTransaction,
                            inclusionHeight: Option[Int],
                            walletVars: WalletVars,
-                           dustLimit: Option[Long]): Seq[TrackedBox] = {
+                           dustLimit: Option[Long]): Seq[TrackedBox] =
+    tx.outputs.flatMap(filterWalletOutput(_, inclusionHeight, walletVars, dustLimit))
+
+  def filterWalletOutput(box: ErgoBox,
+                          inclusionHeight: Option[Int],
+                          walletVars: WalletVars,
+                          dustLimit: Option[Long]): Option[TrackedBox] = {
 
     val trackedBytes: Seq[Array[Byte]] = walletVars.trackedBytes
     val miningScriptsBytes: Seq[Array[Byte]] = walletVars.miningScriptsBytes
     val externalScans: Seq[Scan] = walletVars.externalScans
 
-    tx.outputs.flatMap { bx  =>
+    // First, we check apps triggered by the tx output
+    val appsTriggered =
+      externalScans
+        .filter(_.trackingRule.filter(box))
+        .map(app => app.scanId -> app.walletInteraction)
 
-      // First, we check apps triggered by the tx output
-      val appsTriggered =
-        externalScans
-          .filter(_.trackingRule.filter(bx))
-          .map(app => app.scanId -> app.walletInteraction)
+    val boxScript = box.propositionBytes
 
-      val boxScript = bx.propositionBytes
+    // then check whether Bloom filter built on top of payment & mining scripts of the p2pk-wallet
+    val statuses: Set[ScanId] = if (walletVars.scriptsFilter.mightContain(boxScript)) {
 
-      // then check whether Bloom filter built on top of payment & mining scripts of the p2pk-wallet
-      val statuses: Set[ScanId] = if (walletVars.scriptsFilter.mightContain(boxScript)) {
+      // first, we are checking mining script
+      val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
-        // first, we are checking mining script
-        val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
-
-        val prePaymentStatuses = if (miningIncomeTriggered) {
-          val miningStatus: (ScanId, ScanWalletInteraction.Value) = if (walletVars.settings.miningRewardDelay > 0) {
-            MiningScanId -> ScanWalletInteraction.Off // scripts are different, so off is kinda overkill
-          } else {
-            //tweak for tests
-            PaymentsScanId -> ScanWalletInteraction.Off
-          }
-          appsTriggered :+ miningStatus
+      val prePaymentStatuses = if (miningIncomeTriggered) {
+        val miningStatus: (ScanId, ScanWalletInteraction.Value) = if (walletVars.settings.miningRewardDelay > 0) {
+          MiningScanId -> ScanWalletInteraction.Off // scripts are different, so off is kinda overkill
         } else {
-          appsTriggered
+          //tweak for tests
+          PaymentsScanId -> ScanWalletInteraction.Off
         }
-
-        if (prePaymentStatuses.nonEmpty &&
-          !prePaymentStatuses.exists(t => ScanWalletInteraction.interactingWithWallet(t._2))) {
-          // if other scans intercept the box, and the scans are not sharing the box,
-          // then the box is not being tracked by the p2pk-wallet
-          prePaymentStatuses.map(_._1).toSet
-        } else {
-          //check whether payment is triggered (Bloom filter has false positives)
-          val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
-
-          val otherIds = prePaymentStatuses.map(_._1).toSet
-          if (paymentsTriggered) {
-            Set(PaymentsScanId) ++ otherIds
-          } else {
-            otherIds
-          }
-        }
+        appsTriggered :+ miningStatus
       } else {
-        val appScans = appsTriggered.map(_._1).toSet
-
-        // Add p2pk-wallet if there's a scan enforcing that
-        if (appsTriggered.exists(_._2 == ScanWalletInteraction.Forced)) {
-          appScans ++ Set(PaymentsScanId)
-        } else {
-          appScans
-        }
+        appsTriggered
       }
 
-      if (statuses.nonEmpty) {
-        if (dustLimit.exists(bx.value <= _)){
-          // filter out boxes with value that is considered dust
-          None
-        } else {
-          val tb = TrackedBox(tx.id, bx.index, inclusionHeight, None, None, bx, statuses)
-          log.debug("New tracked box: " + tb.boxId, " scans: " + tb.scans)
-          Some(tb)
-        }
+      if (prePaymentStatuses.nonEmpty &&
+        !prePaymentStatuses.exists(t => ScanWalletInteraction.interactingWithWallet(t._2))) {
+        // if other scans intercept the box, and the scans are not sharing the box,
+        // then the box is not being tracked by the p2pk-wallet
+        prePaymentStatuses.map(_._1).toSet
       } else {
+        //check whether payment is triggered (Bloom filter has false positives)
+        val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
+
+        val otherIds = prePaymentStatuses.map(_._1).toSet
+        if (paymentsTriggered) {
+          Set(PaymentsScanId) ++ otherIds
+        } else {
+          otherIds
+        }
+      }
+    } else {
+      val appScans = appsTriggered.map(_._1).toSet
+
+      // Add p2pk-wallet if there's a scan enforcing that
+      if (appsTriggered.exists(_._2 == ScanWalletInteraction.Forced)) {
+        appScans ++ Set(PaymentsScanId)
+      } else {
+        appScans
+      }
+    }
+
+    if (statuses.nonEmpty) {
+      if (dustLimit.exists(box.value <= _)) {
+        // filter out boxes with value that is considered dust
         None
+      } else {
+        val tb = TrackedBox(box.transactionId, box.index, inclusionHeight, None, None, box, statuses)
+        log.debug("New tracked box: " + tb.boxId, " scans: " + tb.scans)
+        Some(tb)
       }
+    } else {
+      None
     }
   }
 

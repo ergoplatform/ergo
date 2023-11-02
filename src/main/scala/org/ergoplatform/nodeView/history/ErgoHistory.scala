@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.S
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import UTXOSetScanner.InitializeUTXOSetScanner
+import UTXOSnapshotScanner.InitializeUTXOSetScanner
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.consensus.ProgressInfo

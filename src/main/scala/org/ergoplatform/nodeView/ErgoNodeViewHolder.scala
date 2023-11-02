@@ -28,7 +28,7 @@ import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
-import org.ergoplatform.nodeView.history.UTXOSetScanner.{InitializeScan, Start, StartScan}
+import org.ergoplatform.nodeView.history.UTXOSnapshotScanner.StartUtxoSetSnapshotScan
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -288,7 +288,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         history().createPersistentProver(store, history(), height, blockId) match {
           case Success(pp) =>
             log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
-            context.system.eventStream.publish(StartScan())
+            context.system.eventStream.publish(StartUtxoSetSnapshotScan())
             history().onUtxoSnapshotApplied(height)
             val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
             updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
@@ -511,7 +511,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     v
                   }
 
-                  if (almostSynced) {
+                  // dont update wallet if we are bootstrapping using UTXO set snapshot
+                  // when UTXOSetScanner finishes scanning the snapshot it will start wallet scan
+                  val usingSnapshot = settings.nodeSettings.utxoSettings.utxoBootstrap
+                  if (almostSynced && !usingSnapshot) {
                     blocksApplied.foreach(newVault.scanPersistent)
                   }
 

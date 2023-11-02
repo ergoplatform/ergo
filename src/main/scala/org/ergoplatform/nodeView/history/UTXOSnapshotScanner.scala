@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.BlockSection
-import org.ergoplatform.nodeView.history.UTXOSetScanner._
+import org.ergoplatform.nodeView.history.UTXOSnapshotScanner._
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.core.serialization.SubtreeSerializer
@@ -18,7 +18,7 @@ import java.nio.ByteBuffer
 import scala.util.{Failure, Success}
 
 
-class UTXOSetScanner() extends Actor with ScorexLogging {
+class UTXOSnapshotScanner() extends Actor with ScorexLogging {
 
   private var history: ErgoHistory = _
   private def historyStorage: HistoryStorage = history.historyStorage
@@ -38,46 +38,51 @@ class UTXOSetScanner() extends Actor with ScorexLogging {
   }
 
   private def scanBox(box: ErgoBox, current: Int, total: Int): Unit = {
-    log.info(s"Scanning box ${bytesToId(box.id)} in chunk $current / $total")
-    // TODO perform scan
+    //filterWalletOutput(box, Some(box.creationHeight), null, None)
+    log.info(s"Scanned box ${bytesToId(box.id)} at height ${box.creationHeight} in chunk $current / $total")
   }
 
   private def run(): Unit = {
     var (current, total) = readProgress()
+    if(total == 0) return
+    log.info(s"Starting UTXO set snapshot scan for $total chunks")
     downloadedChunksIterator(historyStorage, current, total).foreach { subtree =>
       subtree.leafValues.foreach { leaf =>
         ErgoBoxSerializer.parseBytesTry(leaf) match {
           case Success(box) => scanBox(box, current, total)
-          case Failure(e) => log.error(s"Failed to parse box from prover leaf: $e")
+          case Failure(e) => log.error(s"Failed to parse box from snapshot chunk $current / $total: $e")
         }
       }
       current += 1
       saveProgress(current, total)
     }
-    if(current == total)
+    if(current == total) {
       history.removeUtxoSnapshotChunks()
+      saveProgress(0, 0)
+      log.info(s"Successfully scanned $total UTXO set snapshot chunks")
+    }
   }
 
   override def receive: Receive = {
     case InitializeUTXOSetScanner(history: ErgoHistory) =>
       this.history = history
-      if(readProgress()._2 != 0)
-        run()
-    case StartScan() =>
+      run()
+    case StartUtxoSetSnapshotScan() =>
       run()
   }
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[InitializeUTXOSetScanner])
+    context.system.eventStream.subscribe(self, classOf[StartUtxoSetSnapshotScan])
   }
 
 }
 
-object UTXOSetScanner {
+object UTXOSnapshotScanner {
 
   case class InitializeUTXOSetScanner(history: ErgoHistory)
 
-  case class StartScan()
+  case class StartUtxoSetSnapshotScan()
 
   private val downloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
 
@@ -102,5 +107,5 @@ object UTXOSetScanner {
     ByteArrayWrapper(Blake2b256.hash("scanned chunk"))
 
   def apply()(implicit system: ActorSystem): ActorRef =
-    system.actorOf(Props.create(classOf[UTXOSetScanner]))
+    system.actorOf(Props.create(classOf[UTXOSnapshotScanner]))
 }

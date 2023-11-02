@@ -28,6 +28,7 @@ import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.nodeView.history.UTXOSetScanner.{InitializeScan, Start, StartScan}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -287,7 +288,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         history().createPersistentProver(store, history(), height, blockId) match {
           case Success(pp) =>
             log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
-            // initiate scan
+            context.system.eventStream.publish(StartScan())
             history().onUtxoSnapshotApplied(height)
             val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
             updateNodeView(updatedState = Some(newState.asInstanceOf[State]))

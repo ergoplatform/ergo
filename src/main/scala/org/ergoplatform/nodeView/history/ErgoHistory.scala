@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.S
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
+import UTXOSetScanner.InitializeUTXOSetScanner
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.consensus.ProgressInfo
@@ -337,6 +338,7 @@ object ErgoHistory extends ScorexLogging {
     log.info("History database read")
     if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled
       context.system.eventStream.publish(StartExtraIndexer(history))
+    context.system.eventStream.publish(InitializeUTXOSetScanner(history))
     history
   }
 

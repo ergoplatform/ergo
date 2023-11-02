@@ -12,7 +12,7 @@ import scala.util.Try
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import Extension.SystemParametersPrefix
-import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeParameters
+import org.ergoplatform.sdk.BlockchainParameters
 
 /**
   * System parameters which could be readjusted via collective miners decision.
@@ -20,7 +20,7 @@ import org.ergoplatform.sdk.wallet.protocol.context.ErgoLikeParameters
 class Parameters(val height: Height,
                  val parametersTable: Map[Byte, Int],
                  val proposedUpdate: ErgoValidationSettingsUpdate)
-  extends ErgoLikeParameters {
+  extends BlockchainParameters {
 
   import Parameters._
 

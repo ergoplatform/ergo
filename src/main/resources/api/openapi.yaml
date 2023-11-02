@@ -2703,6 +2703,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blocks/headerIds:
+    post:
+      summary: Get full blocks by given header ids
+      operationId: getFullBlockByIds
+      tags:
+        - blocks
+      requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+      responses:
+        '200':
+          description: Full blocks corresponding to ids provided
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FullBlock'
+        '404':
+          description: No block exist for every id provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /blocks/{headerId}/header:
     get:
       summary: Get the block header info by a given header id
@@ -5088,6 +5124,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /utxo/withPool/byIds:
+    post:
+      summary: Get boxes for ids provided, from UTXO or the mempool.
+      operationId: getBoxWithPoolByIds
+      tags:
+        - utxo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: Box object
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
+        '404':
+          description: No any box exists for every id provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /utxo/withPool/byIdBinary/{boxId}:
     get:
       summary: Get serialized box in Base16 encoding by an identifier, considering also the mempool.
@@ -5222,7 +5294,7 @@ paths:
               $ref: '#/components/schemas/SourceHolder'
       responses:
         '200':
-          description: Ergo address derived from source
+          description: P2SH address derived from source
           content:
             application/json:
               schema:
@@ -6036,6 +6108,130 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blockchain/box/byTokenId/{tokenId}:
+    get:
+      summary: Retrieve boxes by an associated token id
+      operationId: getBoxesByTokenId
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: tokenId
+          required: true
+          description: id of the token
+          schema:
+            $ref: '#/components/schemas/ModifierId'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: boxes associated with wanted token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoBox'
+                  total:
+                    type: integer
+                    description: Total number of retreived boxes
+        '404':
+          description: No boxes found for wanted token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/unspent/byTokenId/{tokenId}:
+    get:
+      summary: Retrieve unspent boxes by an associated token id
+      operationId: getBoxesByTokenIdUnspent
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: tokenId
+          required: true
+          description: id of the token
+          schema:
+            $ref: '#/components/schemas/ModifierId'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: unspent boxes associated with wanted token
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of boxes
+                items:
+                  $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No unspent boxes found for wanted token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /blockchain/box/byAddress:
     post:
       summary: Retrieve boxes by their associated address
@@ -6134,6 +6330,13 @@ paths:
           schema:
             type: string
             default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: unspent boxes associated with wanted address
@@ -6289,6 +6492,13 @@ paths:
           schema:
             type: string
             default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: unspent boxes with wanted ergotree

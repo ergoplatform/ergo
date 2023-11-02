@@ -16,7 +16,7 @@ import scorex.core.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
-import sigmastate.basics.CryptoConstants.EcPointType
+import sigmastate.crypto.CryptoConstants.EcPointType
 import sigmastate.eval.Extensions._
 import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
 
@@ -136,7 +136,7 @@ object Header extends ApiCodecs {
   val Interpreter50Version: Byte = 3
 
 
-  def toSigma(header: Header): special.sigma.Header =
+  def toSigma(header: Header): sigma.Header =
     CHeader(
       id = header.id.toBytes.toColl,
       version = header.version,

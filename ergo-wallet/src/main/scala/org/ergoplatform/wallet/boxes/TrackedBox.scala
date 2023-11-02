@@ -8,7 +8,7 @@ import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoBoxAssets, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
-import special.collection.Extensions._
+import sigma.Extensions._
 
 /**
   * A box tracked by a wallet that contains Ergo box itself as well as

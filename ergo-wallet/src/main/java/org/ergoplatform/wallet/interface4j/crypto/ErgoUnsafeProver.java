@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.interface4j.crypto;
 import org.ergoplatform.ErgoLikeTransaction;
 import org.ergoplatform.UnsignedErgoLikeTransaction;
 import scala.collection.JavaConverters;
-import sigmastate.basics.DLogProtocol;
+import sigmastate.crypto.DLogProtocol;
 import java.util.Map;
 
 /**

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.models
 
-import io.circe.generic.encoding.DerivedObjectEncoder.deriveEncoder
+import io.circe.generic.encoding.DerivedAsObjectEncoder.deriveEncoder
 import io.circe.syntax._
 import io.circe.{Encoder, Json, KeyEncoder}
 import scorex.util.ModifierId

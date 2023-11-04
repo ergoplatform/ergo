@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.history.header
 
+import org.ergoplatform.modifiers.history.header.WeakBlockAlgos.WeakBlockInfo
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.{NodeViewModifier, bytesToId, idToBytes}
 import scorex.core.network.message.Message.MessageCode
@@ -8,6 +9,8 @@ import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 import scorex.util.ModifierId
+
+import scala.collection.mutable
 
 /**
   * Implementation steps:
@@ -139,6 +142,61 @@ object WeakBlockAlgos {
         bytesToId(blockId) -> txIds
       }.toArray
       TransactionsSince(records)
+    }
+  }
+
+}
+
+object structures {
+  var lastBlock: Header = null
+
+  val weakBlocks: mutable.Set[ModifierId] = mutable.Set.empty
+
+  val weakBlockLinks: mutable.Map[ModifierId, ModifierId] = mutable.Map.empty
+
+  var weakBlockTxs: Map[ModifierId, Array[Array[Byte]]] = Map.empty
+
+  def processWeakBlock(wbi: WeakBlockInfo) = {
+    val wbHeader = wbi.weakBlock
+    val prevWbId = bytesToId(wbi.prevWeakBlockId)
+    val wbHeight = wbHeader.height
+
+    if(wbHeader.id == prevWbId){
+      ??? // todo: throw error
+    }
+
+    if (wbHeight < lastBlock.height + 1) {
+      // just ignore as we have better block already
+    } else if (wbHeight == lastBlock.height + 1) {
+      if (wbHeader.parentId == lastBlock.id) {
+        val weakBlockId = wbHeader.id
+        if(weakBlocks.contains(weakBlockId)){
+          // todo: what to do?
+        } else {
+          weakBlocks += weakBlockId
+          if (weakBlocks.contains(prevWbId)){
+            weakBlockLinks.put(weakBlockId, prevWbId)
+          } else {
+            //todo: download prev weak block id
+          }
+          // todo: download weak block related txs
+        }
+      } else {
+        // todo: we got orphaned block's weak block, process this
+      }
+    } else {
+      // just ignoring weak block coming from future for now
+    }
+  }
+
+  def processBlock(header: Header) = {
+    if (header.height > lastBlock.height) {
+      lastBlock = header
+      weakBlocks.clear()
+      weakBlockLinks.clear()
+      weakBlockTxs = Map.empty
+    } else {
+      ??? // todo: process
     }
   }
 

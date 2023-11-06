@@ -166,7 +166,48 @@ object WalletScanLogic extends ScorexLogging {
     }
 
     // function effects: updating registry and offchainRegistry datasets
-    registry.updateOnBlock(scanRes, blockId, height)
+    updateRegistryAndOffchain(registry, offChainRegistry, outputsFilter, scanRes, blockId, height)
+  }
+
+  def scanSnapshotBoxes(registry: WalletRegistry,
+                        offChainRegistry: OffChainRegistry,
+                        walletVars: WalletVars,
+                        boxes: Array[ErgoBox],
+                        subtreeId: ModifierId,
+                        cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
+                        dustLimit: Option[Long],
+                        walletProfile: WalletProfile): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
+
+    // Take unspent wallet outputs Bloom Filter from cache
+    // or recreate it from unspent outputs stored in the database
+    val outputsFilter = cachedOutputsFilter.getOrElse {
+      val bf = WalletCache.emptyFilter(walletProfile.outputsFilterSize)
+      registry.allUnspentBoxes().foreach(tb => bf.put(tb.box.id))
+      bf
+    }
+
+    // extract wallet- (and external scans) related outputs
+    val myOutputs = boxes.flatMap { box =>
+      filterWalletOutput(box, Some(box.creationHeight), walletVars, dustLimit)
+    }
+
+    // add extracted outputs to the filter
+    myOutputs.foreach { out =>
+      outputsFilter.put(out.box.id)
+    }
+
+    val scanRes = ScanResults(myOutputs, Seq.empty, Seq.empty)
+
+    updateRegistryAndOffchain(registry, offChainRegistry, outputsFilter, scanRes, subtreeId, 0)
+  }
+
+  def updateRegistryAndOffchain(registry: WalletRegistry,
+                                offChainRegistry: OffChainRegistry,
+                                outputsFilter: BloomFilter[Array[Byte]],
+                                scanRes: ScanResults,
+                                versionId: ModifierId,
+                                height: Int): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] =
+    registry.updateOnBlock(scanRes, versionId, height)
       .map { _ =>
         //data needed to update the offchain-registry
         val walletUnspent = registry.walletUnspentBoxes()
@@ -175,8 +216,6 @@ object WalletScanLogic extends ScorexLogging {
 
         (registry, updatedOffchainRegistry, outputsFilter)
       }
-  }
-
 
   /**
     * Extracts all outputs which contain tracked bytes from the given transaction.
@@ -188,9 +227,9 @@ object WalletScanLogic extends ScorexLogging {
     tx.outputs.flatMap(filterWalletOutput(_, inclusionHeight, walletVars, dustLimit))
 
   def filterWalletOutput(box: ErgoBox,
-                          inclusionHeight: Option[Int],
-                          walletVars: WalletVars,
-                          dustLimit: Option[Long]): Option[TrackedBox] = {
+                         inclusionHeight: Option[Int],
+                         walletVars: WalletVars,
+                         dustLimit: Option[Long]): Option[TrackedBox] = {
 
     val trackedBytes: Seq[Array[Byte]] = walletVars.trackedBytes
     val miningScriptsBytes: Seq[Array[Byte]] = walletVars.miningScriptsBytes

@@ -222,6 +222,16 @@ trait ErgoWalletService {
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState]
 
   /**
+   *
+   * @param state
+   * @param boxes
+   * @param subtreeId
+   * @param dustLimit
+   * @return
+   */
+  def scanSnapshotChunk(state: ErgoWalletState, boxes: Array[ErgoBox], subtreeId: ModifierId, dustLimit: Option[Long]): Try[ErgoWalletState]
+
+  /**
     * Sign a transaction
     */
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
@@ -595,6 +605,22 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
         state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
       }
+
+  override def scanSnapshotChunk(state: ErgoWalletState,
+                                 boxes: Array[ErgoBox],
+                                 subtreeId: ModifierId,
+                                 dustLimit: Option[Long]): Try[ErgoWalletState] =
+    WalletScanLogic.scanSnapshotBoxes(
+      state.registry,
+      state.offChainRegistry,
+      state.walletVars,
+      boxes,
+      subtreeId,
+      state.outputsFilter,
+      dustLimit,
+      ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
+      state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
+    }
 
   override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

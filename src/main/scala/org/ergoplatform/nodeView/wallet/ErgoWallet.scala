@@ -1,9 +1,11 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{ActorRef, ActorSystem}
+import akka.pattern.ask
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.UtxoSnapshotScanner.StartUtxoSetSnapshotScan
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
@@ -11,6 +13,9 @@ import org.ergoplatform.wallet.boxes.{ReemissionData, ReplaceCompactCollectBoxSe
 import scorex.core.VersionTag
 import scorex.util.ScorexLogging
 
+import java.util.concurrent.TimeUnit
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
 
 class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, parameters: Parameters)
@@ -36,6 +41,17 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
   override val walletActor: ActorRef =
     ErgoWalletActor(settings, parameters, new ErgoWalletServiceImpl(settings), boxSelector, historyReader)
 
+  private val duration: Duration = Duration.create(10, TimeUnit.SECONDS)
+
+  private var isUtxoSnapshotScannerRunning: Boolean = false
+  private var isUtxoSnapshotScannerStarted: Boolean = false
+
+  def scanUtxoSnapshot(msg: ScanBoxesFromUtxoSnapshot): ErgoWallet = {
+    isUtxoSnapshotScannerRunning = msg.current < msg.total
+    Await.result(walletActor ? msg, duration)
+    this
+  }
+
   def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)
     this
@@ -47,12 +63,30 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
   }
 
   def scanPersistent(modifier: BlockSection): ErgoWallet = {
-    modifier match {
-      case fb: ErgoFullBlock =>
-        walletActor ! ScanOnChain(fb)
-      case _ =>
-        log.debug("Not full block in ErgoWallet.scanPersistent, which could be the case only if " +
-          "state = digest when bootstrapping")
+
+    def isUtxoBootStrapping: Boolean = // height is kept at 0 while the scan is running
+      settings.nodeSettings.utxoSettings.utxoBootstrap && Await.result(getWalletStatus, duration).height == 0
+    val shouldStart: Boolean = !isUtxoSnapshotScannerRunning && !isUtxoSnapshotScannerStarted
+
+
+    if(isUtxoSnapshotScannerRunning || // scan already running, dont process blocks
+      (shouldStart && isUtxoBootStrapping)) { // scan not running, start scanner
+
+      if(!isUtxoSnapshotScannerStarted) {
+        actorSystem.eventStream.publish(StartUtxoSetSnapshotScan())
+        isUtxoSnapshotScannerStarted = true
+        isUtxoSnapshotScannerRunning = true
+      }
+
+    }else {
+      isUtxoSnapshotScannerStarted = true // this prevents getWalletStatus getting called every time
+      modifier match {
+        case fb: ErgoFullBlock =>
+          walletActor ! ScanOnChain(fb)
+        case _ =>
+          log.debug("Not full block in ErgoWallet.scanPersistent, which could be the case only if " +
+            "state = digest when bootstrapping")
+      }
     }
     this
   }

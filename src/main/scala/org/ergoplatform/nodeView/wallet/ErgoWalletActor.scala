@@ -27,6 +27,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.Values.SigmaBoolean
 import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -241,9 +242,25 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       context.become(loadedWallet(newState))
 
+    case ScanBoxesFromUtxoSnapshot(chunks: ArrayBuffer[(ModifierId,Array[ErgoBox])], current: Int, total: Int) =>
+      val newState = chunks.zipWithIndex.foldLeft(state) { case (accState, ((id, boxes), i)) =>
+        val chunk = current - chunks.size + i + 1
+        // last scanned chunk sets wallet height to the first available block
+        ergoWalletService.scanSnapshotChunk(accState, boxes, id, settings.walletSettings.dustLimit) match {
+          case Failure(ex) =>
+            val errorMsg = s"Failed to scan ${boxes.length} boxes in chunk $chunk / $total: ${ex.getMessage}"
+            accState.copy(error = Some(errorMsg))
+          case Success(updatedState) =>
+            log.info(s"Successfully scanned ${boxes.length} boxes in chunk $chunk / $total")
+            updatedState
+        }
+      }
+      context.become(loadedWallet(newState))
+      sender() ! "ok"
+
     // rescan=true means we serve a user request for rescan from arbitrary height
     case ScanInThePast(blockHeight, rescan) =>
-      val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
+      val nextBlockHeight = state.expectedNextBlockHeight(historyReader.readMinimalFullBlockHeight(), settings.nodeSettings.isFullBlocksPruned)
       if (nextBlockHeight == blockHeight || rescan) {
         val newState =
           historyReader.bestFullBlockAt(blockHeight) match {
@@ -273,7 +290,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     //scan block transactions
     case ScanOnChain(newBlock) =>
       if (state.secretIsSet(settings.walletSettings.testMnemonic)) { // scan blocks only if wallet is initialized
-        val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)
+        val nextBlockHeight = state.expectedNextBlockHeight(historyReader.readMinimalFullBlockHeight(), settings.nodeSettings.isFullBlocksPruned)
         if (nextBlockHeight == newBlock.height) {
           log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
           val newState =
@@ -542,6 +559,8 @@ object ErgoWalletActor extends ScorexLogging {
 
 
   // Publicly available signals for the wallet actor
+
+  final case class ScanBoxesFromUtxoSnapshot(chunks: ArrayBuffer[(ModifierId,Array[ErgoBox])], current: Int, total: Int)
 
   /**
     * Command to scan offchain transaction

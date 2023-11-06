@@ -8,11 +8,11 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
+import org.ergoplatform.nodeView.history.UtxoSnapshotScanner.InitializeUtxoSetScannerWithHistory
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import UTXOSnapshotScanner.InitializeUTXOSetScanner
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.consensus.ProgressInfo
@@ -336,9 +336,17 @@ object ErgoHistory extends ScorexLogging {
     }
 
     log.info("History database read")
-    if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled
+
+    // start extra indexer, if enabled
+    if(ergoSettings.nodeSettings.extraIndex) {
       context.system.eventStream.publish(StartExtraIndexer(history))
-    context.system.eventStream.publish(InitializeUTXOSetScanner(history))
+    }
+
+    // set history for snapshot scanner, if bootstrapping by snapshot
+    if(ergoSettings.nodeSettings.utxoSettings.utxoBootstrap) {
+      context.system.eventStream.publish(InitializeUtxoSetScannerWithHistory(history))
+    }
+
     history
   }
 

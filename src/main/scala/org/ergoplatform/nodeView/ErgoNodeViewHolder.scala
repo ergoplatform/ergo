@@ -28,10 +28,13 @@ import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
-import org.ergoplatform.nodeView.history.UtxoSnapshotScanner.StartUtxoSetSnapshotScan
+import org.ergoplatform.nodeView.history.UtxoSetScanner.StartUtxoSetScan
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.concurrent.Await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.{Duration, SECONDS}
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -63,6 +66,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private val headersCache = new ErgoModifiersCache(8192)
 
   private val modifiersCache = new ErgoModifiersCache(384)
+
+  /**
+   * Cache wallet height for utxo set snapshot bootstrap
+   */
+  private var cachedWalletHeight: Int = 0
 
   /**
     * The main data structure a node software is taking care about, a node view consists
@@ -452,8 +460,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  //todo: update state in async way?
+  def shouldScanBlocks: Boolean =
+    if(settings.nodeSettings.utxoSettings.utxoBootstrap) {
+      if(cachedWalletHeight == 0) {
+        cachedWalletHeight = Await.result(vault().getWalletStatus.map(_.height), Duration(3, SECONDS))
+      }
+      cachedWalletHeight > 0
+    }else {
+      true
+    }
 
+  //todo: update state in async way?
   /**
     * Remote and local persistent modifiers need to be appended to history, applied to state
     * which also needs to be git propagated to mempool and wallet
@@ -510,7 +527,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     v
                   }
 
-                  if (almostSynced) {
+                  if (almostSynced && shouldScanBlocks) {
                     blocksApplied.foreach(newVault.scanPersistent)
                   }
 
@@ -522,7 +539,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                       val recheckCommand = RecheckMempool(utxoStateReader, newMemPool)
                       context.system.eventStream.publish(recheckCommand)
                       if(settings.nodeSettings.utxoSettings.utxoBootstrap) {
-                        context.system.eventStream.publish(StartUtxoSetSnapshotScan())
+                        context.system.eventStream.publish(StartUtxoSetScan())
                       }
                     case _ =>
                   }

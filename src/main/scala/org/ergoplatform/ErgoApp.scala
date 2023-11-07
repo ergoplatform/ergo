@@ -10,7 +10,7 @@ import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
-import org.ergoplatform.nodeView.history.{ErgoSyncInfoMessageSpec, UtxoSnapshotScanner}
+import org.ergoplatform.nodeView.history.{ErgoSyncInfoMessageSpec, UtxoSetScanner}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
@@ -116,7 +116,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
   private val indexer: ActorRef = ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings)
 
-  UtxoSnapshotScanner(nodeViewHolderRef)
+  UtxoSetScanner(nodeViewHolderRef)
 
   private val syncTracker = ErgoSyncTracker(scorexSettings.network)
 

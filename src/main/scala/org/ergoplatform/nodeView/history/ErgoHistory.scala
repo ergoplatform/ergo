@@ -8,7 +8,7 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
-import org.ergoplatform.nodeView.history.UtxoSnapshotScanner.InitializeUtxoSetScannerWithHistory
+import org.ergoplatform.nodeView.history.UtxoSetScanner.StartUtxoSetScanWithHistory
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -342,9 +342,9 @@ object ErgoHistory extends ScorexLogging {
       context.system.eventStream.publish(StartExtraIndexer(history))
     }
 
-    // set history for snapshot scanner, if bootstrapping by snapshot
+    // set history for utxo set scanner, if bootstrapping by snapshot
     if(ergoSettings.nodeSettings.utxoSettings.utxoBootstrap) {
-      context.system.eventStream.publish(InitializeUtxoSetScannerWithHistory(history))
+      context.system.eventStream.publish(StartUtxoSetScanWithHistory(history))
     }
 
     history

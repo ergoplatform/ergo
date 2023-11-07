@@ -21,6 +21,7 @@ import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform._
+import org.ergoplatform.nodeView.history.UtxoSetScanner.StartUtxoSetScan
 import scorex.core.VersionTag
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging}
@@ -305,7 +306,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           context.become(loadedWallet(newState))
         } else if (nextBlockHeight < newBlock.height) {
           log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
-          self ! ScanInThePast(nextBlockHeight, false)
+          self ! ScanInThePast(nextBlockHeight, state.rescanInProgress)
         } else {
           log.warn(s"Wallet: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
         }
@@ -369,8 +370,12 @@ class ErgoWalletActor(settings: ErgoSettings,
         ergoWalletService.recreateRegistry(state, settings) match {
           case Success(newState) =>
             context.become(loadedWallet(newState.copy(rescanInProgress = true)))
-            val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
-            self ! ScanInThePast(heightToScanFrom, rescan = true)
+            if(settings.nodeSettings.utxoSettings.utxoBootstrap) {
+              context.system.eventStream.publish(StartUtxoSetScan())
+            }else {
+              val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
+              self ! ScanInThePast(heightToScanFrom, rescan = true)
+            }
             sender() ! Success(())
           case f@Failure(t) =>
             log.error("Error during rescan attempt: ", t)

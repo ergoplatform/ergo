@@ -1,7 +1,7 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import scorex.core.serialization.{ManifestSerializer, SubtreeSerializer}
+import scorex.core.serialization.ManifestSerializer
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
@@ -155,32 +155,28 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     }
   }
 
-  def iterateAVLTree(handleSubtree: BatchAVLProverSubtree[DigestType] => Unit): Unit =
+  def iterateAVLTree(fromIndex: Int)(handleSubtree: BatchAVLProverSubtree[DigestType] => Unit): Unit =
     store.processSnapshot { dbReader =>
 
-      def subtreeLoop(label: Array[Byte], builder: mutable.ArrayBuilder[Byte]): Unit = {
-        val nodeBytes = dbReader.get(label)
-        builder ++= nodeBytes
-        VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes) match {
-          case in: ProxyInternalNode[DigestType] =>
-            subtreeLoop(Digest32 @@@ in.leftLabel, builder)
-            subtreeLoop(Digest32 @@@ in.rightLabel, builder)
-          case _ =>
-        }
-      }
+      var current: Int = 0
 
-      def processSubtree(label: Array[Byte]): BatchAVLProverSubtree[DigestType] = {
-        val builder = mutable.ArrayBuilder.make[Byte]()
-        builder.sizeHint(200000)
-        subtreeLoop(label, builder)
-        SubtreeSerializer.parseBytes(builder.result())
+      def subtree(sid: Array[Byte]): BatchAVLProverSubtree[DigestType] = {
+        def loop(label: Array[Byte]): ProverNodes[DigestType] =
+          VersionedLDBAVLStorage.noStoreSerializer.parseBytes(dbReader.get(label)) match {
+            case leaf: ProverLeaf[DigestType] => leaf
+            case i: ProxyInternalNode[DigestType] =>
+              i.getNew(loop(i.leftLabel), loop(i.rightLabel))
+          }
+        new BatchAVLProverSubtree[DigestType](loop(sid))
       }
 
       def proxyLoop(label: Array[Byte], level: Int): Unit =
         VersionedLDBAVLStorage.noStoreSerializer.parseBytes(dbReader.get(label)) match {
           case in: ProxyInternalNode[DigestType] if level == ManifestSerializer.MainnetManifestDepth =>
-            handleSubtree(processSubtree(in.leftLabel))
-            handleSubtree(processSubtree(in.rightLabel))
+            if(current >= fromIndex) handleSubtree(subtree(in.leftLabel))
+            current += 1
+            if(current >= fromIndex) handleSubtree(subtree(in.rightLabel))
+            current += 1
           case in: ProxyInternalNode[DigestType] =>
             proxyLoop(in.leftLabel, level + 1)
             proxyLoop(in.rightLabel, level + 1)

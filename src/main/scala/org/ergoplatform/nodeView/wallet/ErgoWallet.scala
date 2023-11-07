@@ -42,10 +42,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
 
   private val duration: Duration = Duration.create(10, TimeUnit.SECONDS)
 
-  private var isUtxoSnapshotScannerRunning: Boolean = false
-
   def scanUtxoSnapshot(msg: ScanBoxesFromUtxoSnapshot): ErgoWallet = {
-    isUtxoSnapshotScannerRunning = msg.current < msg.total
     Await.result(walletActor ? msg, duration)
     this
   }
@@ -61,19 +58,12 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
   }
 
   def scanPersistent(modifier: BlockSection): ErgoWallet = {
-
-    def willUtxoSnapshotScannerRun: Boolean = // height is kept at 0 while the scan is running
-      settings.nodeSettings.utxoSettings.utxoBootstrap && Await.result(getWalletStatus, duration).height == 0
-
-    if(!(isUtxoSnapshotScannerRunning || // scan already running, dont process blocks
-         willUtxoSnapshotScannerRun)) { // scan not running, scanner will start
-      modifier match {
-        case fb: ErgoFullBlock =>
-          walletActor ! ScanOnChain(fb)
-        case _ =>
-          log.debug("Not full block in ErgoWallet.scanPersistent, which could be the case only if " +
-            "state = digest when bootstrapping")
-      }
+    modifier match {
+      case fb: ErgoFullBlock =>
+        walletActor ! ScanOnChain(fb)
+      case _ =>
+        log.debug("Not full block in ErgoWallet.scanPersistent, which could be the case only if " +
+          "state = digest when bootstrapping")
     }
     this
   }

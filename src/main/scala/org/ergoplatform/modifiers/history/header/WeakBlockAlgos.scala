@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history.header
 
-import org.ergoplatform.modifiers.history.header.WeakBlockAlgos.WeakBlockInfo
+import org.ergoplatform.modifiers.history.header.WeakBlockAlgos.SubBlockInfo
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.{NodeViewModifier, bytesToId, idToBytes}
 import scorex.core.network.message.Message.MessageCode
@@ -44,28 +44,28 @@ object WeakBlockAlgos {
   // transactions since last weak blocks (8 byte ids?)
 
   // todo: move `txsSinceLastWeak` to a dedicated message
-  case class WeakBlockInfo(version: Byte, weakBlock: Header, prevWeakBlockId: Array[Byte])
+  case class SubBlockInfo(version: Byte, subBlock: Header, prevWeakBlockId: Array[Byte])
 
-  object WeakBlockInfo {
+  object SubBlockInfo {
 
     val initialMessageVersion = 1
 
     /**
       * Serializer which can convert self to bytes
       */
-    def serializer: ErgoSerializer[WeakBlockInfo] = new ErgoSerializer[WeakBlockInfo] {
-      override def serialize(wbi: WeakBlockInfo, w: Writer): Unit = {
-        w.put(wbi.version)
-        HeaderSerializer.serialize(wbi.weakBlock, w)
-        w.putBytes(wbi.prevWeakBlockId)
+    def serializer: ErgoSerializer[SubBlockInfo] = new ErgoSerializer[SubBlockInfo] {
+      override def serialize(sbi: SubBlockInfo, w: Writer): Unit = {
+        w.put(sbi.version)
+        HeaderSerializer.serialize(sbi.subBlock, w)
+        w.putBytes(sbi.prevWeakBlockId)
       }
 
-      override def parse(r: Reader): WeakBlockInfo = {
+      override def parse(r: Reader): SubBlockInfo = {
         val version = r.getByte()
         if (version == initialMessageVersion) {
           val weakBlock = HeaderSerializer.parse(r)
           val prevWeakBlockId = r.getBytes(32)
-          new WeakBlockInfo(version, weakBlock, prevWeakBlockId)
+          new SubBlockInfo(version, weakBlock, prevWeakBlockId)
         } else {
           throw new Exception("Unsupported weakblock message version")
         }
@@ -77,19 +77,19 @@ object WeakBlockAlgos {
     * Message that is informing about weak block produced.
     * Contains header and link to previous weak block ().
     */
-  object WeakBlockMessageSpec extends MessageSpecV1[WeakBlockInfo] {
+  object SubBlockMessageSpec extends MessageSpecV1[SubBlockInfo] {
 
     val MaxMessageSize = 10000
 
     override val messageCode: MessageCode = 90: Byte
     override val messageName: String = "WeakBlock"
 
-    override def serialize(data: WeakBlockInfo, w: Writer): Unit = {
-      WeakBlockInfo.serializer.serialize(data, w)
+    override def serialize(data: SubBlockInfo, w: Writer): Unit = {
+      SubBlockInfo.serializer.serialize(data, w)
     }
 
-    override def parse(r: Reader): WeakBlockInfo = {
-      WeakBlockInfo.serializer.parse(r)
+    override def parse(r: Reader): SubBlockInfo = {
+      SubBlockInfo.serializer.parse(r)
     }
   }
 
@@ -150,32 +150,33 @@ object WeakBlockAlgos {
 object structures {
   var lastBlock: Header = null
 
-  val weakBlocks: mutable.Set[ModifierId] = mutable.Set.empty
+  val subBlocks: mutable.Set[ModifierId] = mutable.Set.empty
 
-  val weakBlockLinks: mutable.Map[ModifierId, ModifierId] = mutable.Map.empty
+  val subBlockLinks: mutable.Map[ModifierId, ModifierId] = mutable.Map.empty
 
-  var weakBlockTxs: Map[ModifierId, Array[Array[Byte]]] = Map.empty
+  var subBlockTxs: Map[ModifierId, Array[Array[Byte]]] = Map.empty
 
-  def processWeakBlock(wbi: WeakBlockInfo) = {
-    val wbHeader = wbi.weakBlock
-    val prevWbId = bytesToId(wbi.prevWeakBlockId)
-    val wbHeight = wbHeader.height
+  // A primer algo on processing
+  def processWeakBlock(sbi: SubBlockInfo) = {
+    val sbHeader = sbi.subBlock
+    val prevWbId = bytesToId(sbi.prevWeakBlockId)
+    val sbHeight = sbHeader.height
 
-    if(wbHeader.id == prevWbId){
+    if(sbHeader.id == prevWbId){
       ??? // todo: throw error
     }
 
-    if (wbHeight < lastBlock.height + 1) {
+    if (sbHeight < lastBlock.height + 1) {
       // just ignore as we have better block already
-    } else if (wbHeight == lastBlock.height + 1) {
-      if (wbHeader.parentId == lastBlock.id) {
-        val weakBlockId = wbHeader.id
-        if(weakBlocks.contains(weakBlockId)){
+    } else if (sbHeight == lastBlock.height + 1) {
+      if (sbHeader.parentId == lastBlock.id) {
+        val weakBlockId = sbHeader.id
+        if(subBlocks.contains(weakBlockId)){
           // todo: what to do?
         } else {
-          weakBlocks += weakBlockId
-          if (weakBlocks.contains(prevWbId)){
-            weakBlockLinks.put(weakBlockId, prevWbId)
+          subBlocks += weakBlockId
+          if (subBlocks.contains(prevWbId)){
+            subBlockLinks.put(weakBlockId, prevWbId)
           } else {
             //todo: download prev weak block id
           }
@@ -192,9 +193,9 @@ object structures {
   def processBlock(header: Header) = {
     if (header.height > lastBlock.height) {
       lastBlock = header
-      weakBlocks.clear()
-      weakBlockLinks.clear()
-      weakBlockTxs = Map.empty
+      subBlocks.clear()
+      subBlockLinks.clear()
+      subBlockTxs = Map.empty
     } else {
       ??? // todo: process
     }

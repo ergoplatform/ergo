@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
-import org.ergoplatform.{ErgoApp, ErgoBox}
+import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -28,12 +28,10 @@ import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
-import org.ergoplatform.nodeView.history.UtxoSnapshotScanner.InitializeUtxoSetScannerWithSnapshot
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.ScanBoxesFromUtxoSnapshot
+import org.ergoplatform.nodeView.history.UtxoSnapshotScanner.StartUtxoSetSnapshotScan
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -290,7 +288,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         history().createPersistentProver(store, history(), height, blockId) match {
           case Success(pp) =>
             log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
-            context.system.eventStream.publish(InitializeUtxoSetScannerWithSnapshot())
             history().onUtxoSnapshotApplied(height)
             val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
             updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
@@ -524,6 +521,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     case utxoStateReader: UtxoStateReader if headersHeight == fullBlockHeight =>
                       val recheckCommand = RecheckMempool(utxoStateReader, newMemPool)
                       context.system.eventStream.publish(recheckCommand)
+                      if(settings.nodeSettings.utxoSettings.utxoBootstrap) {
+                        context.system.eventStream.publish(StartUtxoSetSnapshotScan())
+                      }
                     case _ =>
                   }
 
@@ -696,11 +696,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       sender() ! healthCheckReply
   }
 
-  private def proxyUtxoSetScan: Receive = {
-    case ScanBoxesFromUtxoSnapshot(chunks: ArrayBuffer[(ModifierId,Array[ErgoBox])], current: Int, total: Int) =>
-      sender() ! vault().scanUtxoSnapshot(ScanBoxesFromUtxoSnapshot(chunks, current, total))
-  }
-
   override def receive: Receive =
     processRemoteModifiers orElse
       processLocallyGeneratedModifiers orElse
@@ -708,8 +703,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       getCurrentInfo orElse
       getNodeViewChanges orElse
       processStateSnapshot orElse
-      handleHealthCheck orElse
-      proxyUtxoSetScan orElse {
+      handleHealthCheck orElse {
         case a: Any => log.error("Strange input: " + a)
       }
 

@@ -1,6 +1,7 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
+import scorex.core.serialization.{ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
@@ -153,6 +154,42 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       rootNodeLabel
     }
   }
+
+  def iterateAVLTree(handleSubtree: BatchAVLProverSubtree[DigestType] => Unit): Unit =
+    store.processSnapshot { dbReader =>
+
+      def subtreeLoop(label: Array[Byte], builder: mutable.ArrayBuilder[Byte]): Unit = {
+        val nodeBytes = dbReader.get(label)
+        builder ++= nodeBytes
+        VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes) match {
+          case in: ProxyInternalNode[DigestType] =>
+            subtreeLoop(Digest32 @@@ in.leftLabel, builder)
+            subtreeLoop(Digest32 @@@ in.rightLabel, builder)
+          case _ =>
+        }
+      }
+
+      def processSubtree(label: Array[Byte]): BatchAVLProverSubtree[DigestType] = {
+        val builder = mutable.ArrayBuilder.make[Byte]()
+        builder.sizeHint(200000)
+        subtreeLoop(label, builder)
+        SubtreeSerializer.parseBytes(builder.result())
+      }
+
+      def proxyLoop(label: Array[Byte], level: Int): Unit =
+        VersionedLDBAVLStorage.noStoreSerializer.parseBytes(dbReader.get(label)) match {
+          case in: ProxyInternalNode[DigestType] if level == ManifestSerializer.MainnetManifestDepth =>
+            handleSubtree(processSubtree(in.leftLabel))
+            handleSubtree(processSubtree(in.rightLabel))
+          case in: ProxyInternalNode[DigestType] =>
+            proxyLoop(in.leftLabel, level + 1)
+            proxyLoop(in.rightLabel, level + 1)
+          case _ =>
+        }
+
+      proxyLoop(dbReader.get(topNodeHashKey), 1)
+
+    }
 }
 
 

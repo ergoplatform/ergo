@@ -371,7 +371,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           case Success(newState) =>
             context.become(loadedWallet(newState.copy(rescanInProgress = true)))
             if(settings.nodeSettings.utxoSettings.utxoBootstrap) {
-              context.system.eventStream.publish(StartUtxoSetScan())
+              context.system.eventStream.publish(StartUtxoSetScan(true))
             }else {
               val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
               self ! ScanInThePast(heightToScanFrom, rescan = true)

@@ -42,7 +42,7 @@ class UtxoSetScanner(nodeView: ActorRef) extends Actor with ScorexLogging {
       (current, total)
     }.getOrElse((0, 0))
 
-  private def writeProgress(current: Int, total: Int = MainnetTotal): Unit = {
+  private def writeProgress(current: Int, total: Int): Unit = {
     val buffer: ByteBuffer = ByteBuffer.allocate(8)
     buffer.putInt(current)
     buffer.putInt(total)
@@ -51,7 +51,7 @@ class UtxoSetScanner(nodeView: ActorRef) extends Actor with ScorexLogging {
 
   private def sendBufferToWallet(wallet: ErgoWallet, current: Int): Unit = {
     wallet.scanUtxoSnapshot(ScanBoxesFromUtxoSnapshot(chunkBuffer, current, MainnetTotal))
-    writeProgress(current)
+    writeProgress(current, MainnetTotal)
     chunkBuffer.clear()
   }
 
@@ -93,9 +93,7 @@ class UtxoSetScanner(nodeView: ActorRef) extends Actor with ScorexLogging {
 
     if(current == total) {
       log.info(s"Successfully scanned $total Utxo set subtrees")
-      // start wallet scan with first available block
-      val firstBlock = history.bestFullBlockAt(history.readMinimalFullBlockHeight()).get
-      wallet.scanPersistent(firstBlock)
+      wallet.scanPersistent(history.bestFullBlockOpt.get)
     }else {
       log.error(s"Inconsistent Utxo set scan state: $current scanned subtrees out of $total")
     }
@@ -106,8 +104,8 @@ class UtxoSetScanner(nodeView: ActorRef) extends Actor with ScorexLogging {
     case StartUtxoSetScanWithHistory(history: ErgoHistory) =>
       this.history = history
       run()
-    case StartUtxoSetScan() =>
-      writeProgress(0)
+    case StartUtxoSetScan(rescan: Boolean) =>
+      if(readProgress()._1 == 0 || rescan) writeProgress(0, MainnetTotal)
       run()
   }
 
@@ -122,7 +120,7 @@ object UtxoSetScanner {
 
   case class StartUtxoSetScanWithHistory(history: ErgoHistory)
 
-  case class StartUtxoSetScan()
+  case class StartUtxoSetScan(rescan: Boolean)
 
   private val MainnetTotal: Int = math.pow(2, ManifestSerializer.MainnetManifestDepth).toInt
 

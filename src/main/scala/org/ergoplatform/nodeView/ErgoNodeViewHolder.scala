@@ -538,8 +538,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     case utxoStateReader: UtxoStateReader if headersHeight == fullBlockHeight =>
                       val recheckCommand = RecheckMempool(utxoStateReader, newMemPool)
                       context.system.eventStream.publish(recheckCommand)
-                      if(settings.nodeSettings.utxoSettings.utxoBootstrap) {
-                        context.system.eventStream.publish(StartUtxoSetScan())
+                      if(!shouldScanBlocks) {
+                        context.system.eventStream.publish(StartUtxoSetScan(false))
                       }
                     case _ =>
                   }

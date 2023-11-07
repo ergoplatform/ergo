@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history.header
 
-import org.ergoplatform.modifiers.history.header.WeakBlockAlgos.SubBlockInfo
+import org.ergoplatform.modifiers.history.header.SubBlockAlgos.SubBlockInfo
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.{NodeViewModifier, bytesToId, idToBytes}
 import scorex.core.network.message.Message.MessageCode
@@ -14,22 +14,22 @@ import scala.collection.mutable
 
 /**
   * Implementation steps:
-  * * implement basic weak block algorithms (isweak etc)
-  * * implement weak block network message
-  * * implement weak block info support in sync tracker
-  * * implement downloading weak blocks chain
+  * * implement basic sub block algorithms (isSub etc)
+  * * implement sub block network message
+  * * implement sub block info support in sync tracker
+  * * implement downloading sub blocks chain
   * * implement avoiding downloading full-blocks
-  * * weak blocks support in /mining API
-  * * weak confirmations API
+  * * sub blocks support in /mining API
+  * * sub confirmations API
   */
-object WeakBlockAlgos {
+object SubBlockAlgos {
 
-  val weaksPerBlock = 128 // weak blocks per block
+  val subsPerBlock = 128 // sub blocks per block
 
   val weakTransactionIdLength = 6
 
-  def isWeak(header: Header, requiredDifficulty: Difficulty): Boolean = {
-    val diff = requiredDifficulty / weaksPerBlock
+  def isSub(header: Header, requiredDifficulty: Difficulty): Boolean = {
+    val diff = requiredDifficulty / subsPerBlock
     header.requiredDifficulty >= diff
   }
 
@@ -37,14 +37,14 @@ object WeakBlockAlgos {
 
   // messages:
   //
-  // weak block signal:
+  // sub block signal:
   // version
-  // weak block (~200 bytes) - contains a link to parent block
-  // previous weak block id
-  // transactions since last weak blocks (8 byte ids?)
+  // sub block (~200 bytes) - contains a link to parent block
+  // previous sub block id
+  // transactions since last sub blocks (8 byte ids?)
 
-  // todo: move `txsSinceLastWeak` to a dedicated message
-  case class SubBlockInfo(version: Byte, subBlock: Header, prevWeakBlockId: Array[Byte])
+  // todo: move `txsSinceLastSub` to a dedicated message
+  case class SubBlockInfo(version: Byte, subBlock: Header, prevSubBlockId: Array[Byte])
 
   object SubBlockInfo {
 
@@ -57,32 +57,32 @@ object WeakBlockAlgos {
       override def serialize(sbi: SubBlockInfo, w: Writer): Unit = {
         w.put(sbi.version)
         HeaderSerializer.serialize(sbi.subBlock, w)
-        w.putBytes(sbi.prevWeakBlockId)
+        w.putBytes(sbi.prevSubBlockId)
       }
 
       override def parse(r: Reader): SubBlockInfo = {
         val version = r.getByte()
         if (version == initialMessageVersion) {
-          val weakBlock = HeaderSerializer.parse(r)
-          val prevWeakBlockId = r.getBytes(32)
-          new SubBlockInfo(version, weakBlock, prevWeakBlockId)
+          val subBlock = HeaderSerializer.parse(r)
+          val prevSubBlockId = r.getBytes(32)
+          new SubBlockInfo(version, subBlock, prevSubBlockId)
         } else {
-          throw new Exception("Unsupported weakblock message version")
+          throw new Exception("Unsupported sub-block message version")
         }
       }
     }
   }
 
   /**
-    * Message that is informing about weak block produced.
-    * Contains header and link to previous weak block ().
+    * Message that is informing about sub block produced.
+    * Contains header and link to previous sub block ().
     */
   object SubBlockMessageSpec extends MessageSpecV1[SubBlockInfo] {
 
     val MaxMessageSize = 10000
 
     override val messageCode: MessageCode = 90: Byte
-    override val messageName: String = "WeakBlock"
+    override val messageName: String = "SubBlock"
 
     override def serialize(data: SubBlockInfo, w: Writer): Unit = {
       SubBlockInfo.serializer.serialize(data, w)
@@ -94,7 +94,7 @@ object WeakBlockAlgos {
   }
 
   /**
-    * On receiving weak block or block, the node is sending last weak block or block id it has to get short transaction
+    * On receiving sub block or block, the node is sending last sub block or block id it has to get short transaction
     * ids since then
     */
   object GetDataSpec extends MessageSpecV1[ModifierId] {
@@ -156,37 +156,40 @@ object structures {
 
   var subBlockTxs: Map[ModifierId, Array[Array[Byte]]] = Map.empty
 
-  // A primer algo on processing
-  def processWeakBlock(sbi: SubBlockInfo) = {
+  case class DownloadPlan()
+
+  // A primer algo on processing sub-blocks
+
+  def processSubBlock(sbi: SubBlockInfo) = {
     val sbHeader = sbi.subBlock
-    val prevWbId = bytesToId(sbi.prevWeakBlockId)
+    val prevSbId = bytesToId(sbi.prevSubBlockId)
     val sbHeight = sbHeader.height
 
-    if(sbHeader.id == prevWbId){
-      ??? // todo: throw error
+    if(sbHeader.id == prevSbId){
+      ??? // todo: malicious prev throw error
     }
 
     if (sbHeight < lastBlock.height + 1) {
       // just ignore as we have better block already
     } else if (sbHeight == lastBlock.height + 1) {
       if (sbHeader.parentId == lastBlock.id) {
-        val weakBlockId = sbHeader.id
-        if(subBlocks.contains(weakBlockId)){
+        val subBlockId = sbHeader.id
+        if(subBlocks.contains(subBlockId)){
           // todo: what to do?
         } else {
-          subBlocks += weakBlockId
-          if (subBlocks.contains(prevWbId)){
-            subBlockLinks.put(weakBlockId, prevWbId)
+          subBlocks += subBlockId
+          if (subBlocks.contains(prevSbId)){
+            subBlockLinks.put(subBlockId, prevSbId)
           } else {
-            //todo: download prev weak block id
+            //todo: download prev sub block id
           }
-          // todo: download weak block related txs
+          // todo: download sub block related txs
         }
       } else {
-        // todo: we got orphaned block's weak block, process this
+        // todo: we got orphaned block's sub block, process this
       }
     } else {
-      // just ignoring weak block coming from future for now
+      // just ignoring sub block coming from future for now
     }
   }
 

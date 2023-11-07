@@ -6,7 +6,7 @@ import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.history.header.{Header, WeakBlockAlgos}
+import org.ergoplatform.modifiers.history.header.{Header, SubBlockAlgos}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
 import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}
 import org.ergoplatform.nodeView.ErgoContext
@@ -68,7 +68,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
-  lazy val weakId = id.take(WeakBlockAlgos.weakTransactionIdLength)
+  lazy val weakId = id.take(SubBlockAlgos.weakTransactionIdLength)
 
   /**
     * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction).

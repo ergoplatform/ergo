@@ -156,14 +156,19 @@ object structures {
 
   var subBlockTxs: Map[ModifierId, Array[Array[Byte]]] = Map.empty
 
-  case class DownloadPlan()
 
   // A primer algo on processing sub-blocks
 
-  def processSubBlock(sbi: SubBlockInfo) = {
+  /**
+    * @param sbi
+    * @return - sub-block ids to download, sub-block transactions to download
+    */
+  def processSubBlock(sbi: SubBlockInfo): (Seq[ModifierId], Seq[ModifierId]) = {
     val sbHeader = sbi.subBlock
     val prevSbId = bytesToId(sbi.prevSubBlockId)
     val sbHeight = sbHeader.height
+
+    def emptyResult: (Seq[ModifierId], Seq[ModifierId]) = Seq.empty -> Seq.empty
 
     if(sbHeader.id == prevSbId){
       ??? // todo: malicious prev throw error
@@ -171,25 +176,31 @@ object structures {
 
     if (sbHeight < lastBlock.height + 1) {
       // just ignore as we have better block already
+      emptyResult
     } else if (sbHeight == lastBlock.height + 1) {
       if (sbHeader.parentId == lastBlock.id) {
         val subBlockId = sbHeader.id
         if(subBlocks.contains(subBlockId)){
           // todo: what to do?
+          emptyResult
         } else {
           subBlocks += subBlockId
           if (subBlocks.contains(prevSbId)){
             subBlockLinks.put(subBlockId, prevSbId)
+            (Seq.empty, Seq(sbHeader.id))
           } else {
             //todo: download prev sub block id
+            (Seq(prevSbId), Seq(sbHeader.id))
           }
           // todo: download sub block related txs
         }
       } else {
         // todo: we got orphaned block's sub block, process this
+        emptyResult
       }
     } else {
       // just ignoring sub block coming from future for now
+      emptyResult
     }
   }
 

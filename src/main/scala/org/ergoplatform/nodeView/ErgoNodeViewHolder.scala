@@ -68,11 +68,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private val modifiersCache = new ErgoModifiersCache(384)
 
   /**
-   * Cache wallet height for utxo set snapshot bootstrap
-   */
-  private var cachedWalletHeight: Int = 0
-
-  /**
     * The main data structure a node software is taking care about, a node view consists
     * of four elements to be updated atomically: history (log of persistent modifiers),
     * state (result of log's modifiers application to pre-historical(genesis) state,
@@ -462,10 +457,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   def shouldScanBlocks: Boolean =
     if(settings.nodeSettings.utxoSettings.utxoBootstrap) {
-      if(cachedWalletHeight == 0) {
-        cachedWalletHeight = Await.result(vault().getWalletStatus.map(_.height), Duration(3, SECONDS))
+      try {
+        Await.result(vault().getWalletStatus.map(_.height), Duration(3, SECONDS)) > 0
+      }catch {
+        case _: Throwable => false
       }
-      cachedWalletHeight > 0
     }else {
       true
     }

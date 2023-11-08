@@ -222,12 +222,12 @@ trait ErgoWalletService {
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState]
 
   /**
-   *
-   * @param state
-   * @param boxes
-   * @param subtreeId
-   * @param dustLimit
-   * @return
+   * Scan boxes extracted from Utxo set subtree
+   * @param state - current wallet state
+   * @param boxes - box array to scan
+   * @param subtreeId - id of Utxo set subtree (used instead of blockId as version id)
+   * @param dustLimit - boxes with value smaller than dustLimit are disregarded in wallet scan logic
+   * @return new wallet state
    */
   def scanSnapshotChunk(state: ErgoWalletState, boxes: Array[ErgoBox], subtreeId: ModifierId, dustLimit: Option[Long]): Try[ErgoWalletState]
 

@@ -455,7 +455,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  def shouldScanBlocks: Boolean =
+  /**
+   * Whether to send blocks to wallet to scan. (Utxo scan keeps wallet height at 0)
+   * @return true if utxoBootstrap is not enabled; if it is enabled, then walletHeight > 0
+   */
+  private def shouldScanBlocks: Boolean =
     if(settings.nodeSettings.utxoSettings.utxoBootstrap) {
       try {
         Await.result(vault().getWalletStatus.map(_.height), Duration(3, SECONDS)) > 0

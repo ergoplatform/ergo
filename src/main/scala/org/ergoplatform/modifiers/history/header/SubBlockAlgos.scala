@@ -148,7 +148,7 @@ object SubBlockAlgos {
 }
 
 object structures {
-  var lastBlock: Header = null
+  var lastBlock: Header = null // we ignore forks for now
 
   val subBlocks: mutable.Set[ModifierId] = mutable.Set.empty
 
@@ -157,9 +157,10 @@ object structures {
   var subBlockTxs: Map[ModifierId, Array[Array[Byte]]] = Map.empty
 
 
-  // A primer algo on processing sub-blocks
-
   /**
+    * A primer algo on processing sub-blocks in p2p layer. It is updating internal sub-block related
+    * caches and decides what to download next
+    *
     * @param sbi
     * @return - sub-block ids to download, sub-block transactions to download
     */
@@ -170,7 +171,7 @@ object structures {
 
     def emptyResult: (Seq[ModifierId], Seq[ModifierId]) = Seq.empty -> Seq.empty
 
-    if(sbHeader.id == prevSbId){
+    if (sbHeader.id == prevSbId) {
       ??? // todo: malicious prev throw error
     }
 
@@ -180,12 +181,13 @@ object structures {
     } else if (sbHeight == lastBlock.height + 1) {
       if (sbHeader.parentId == lastBlock.id) {
         val subBlockId = sbHeader.id
-        if(subBlocks.contains(subBlockId)){
-          // todo: what to do?
+        if (subBlocks.contains(subBlockId)) {
+          // we got sub-block we already have
+          // todo: check if previous sub-block and transactions are downloaded
           emptyResult
         } else {
           subBlocks += subBlockId
-          if (subBlocks.contains(prevSbId)){
+          if (subBlocks.contains(prevSbId)) {
             subBlockLinks.put(subBlockId, prevSbId)
             (Seq.empty, Seq(sbHeader.id))
           } else {
@@ -195,7 +197,7 @@ object structures {
           // todo: download sub block related txs
         }
       } else {
-        // todo: we got orphaned block's sub block, process this
+        // todo: we got orphaned block's sub block, do nothing for now, but we need to check the block is downloaded
         emptyResult
       }
     } else {

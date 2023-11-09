@@ -6,11 +6,13 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
+import scorex.util.encode.Base16
 import sigma.Colls
-import sigmastate.Values.ShortConstant
+import sigmastate.Values.{ErgoTree, ShortConstant}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
+import sigmastate.serialization.ErgoTreeSerializer
 
 class ExpirationSpecification extends ErgoPropertyTest {
 
@@ -18,9 +20,9 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
 
-  def falsify(box: ErgoBox): ErgoBox = {
+  def injectScript(box: ErgoBox, script: ErgoTree): ErgoBox = {
     testBox(box.value,
-      Constants.FalseLeaf,
+      script,
       box.creationHeight,
       box.additionalTokens.toArray.toSeq,
       box.additionalRegisters,
@@ -65,6 +67,16 @@ class ExpirationSpecification extends ErgoPropertyTest {
   property("successful spending w. same value") {
     forAll(unspendableErgoBoxGen()) { from =>
       constructTest(from, 0, _ => IndexedSeq(from), expectedValidity = true)
+    }
+  }
+
+  property("successful spending w. invalid ergotree") {
+    forAll(unspendableErgoBoxGen()) { from =>
+      // invalid (unparseable) ergo tree
+      val etString = "0e1631393039303063646462363930366462363530336665"
+      val et = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(etString).get)
+      val modified = injectScript(from, et)
+      constructTest(modified, 0, _ => IndexedSeq(modified), expectedValidity = true)
     }
   }
 

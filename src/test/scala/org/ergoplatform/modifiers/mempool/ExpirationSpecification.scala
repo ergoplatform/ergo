@@ -20,7 +20,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
 
-  def injectScript(box: ErgoBox, script: ErgoTree) = {
+  def injectScript(box: ErgoBox, script: ErgoTree): ErgoBox = {
     testBox(box.value,
       script,
       box.creationHeight,

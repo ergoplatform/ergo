@@ -150,10 +150,13 @@ object SubBlockAlgos {
 object structures {
   var lastBlock: Header = null // we ignore forks for now
 
-  val subBlocks: mutable.Set[ModifierId] = mutable.Set.empty
+  // all the sub-blocks known since the last block
+  val subBlocks: mutable.Map[ModifierId, Header] = mutable.Map.empty
 
+  // links from sub-blocks to their parent sub-blocks
   val subBlockLinks: mutable.Map[ModifierId, ModifierId] = mutable.Map.empty
 
+  // only new transactions appeared in a sub-block
   var subBlockTxs: Map[ModifierId, Array[Array[Byte]]] = Map.empty
 
 
@@ -186,10 +189,15 @@ object structures {
           // todo: check if previous sub-block and transactions are downloaded
           emptyResult
         } else {
-          subBlocks += subBlockId
+          subBlocks += subBlockId -> sbHeader
           if (subBlocks.contains(prevSbId)) {
+            val prevSb = subBlocks(prevSbId)
             subBlockLinks.put(subBlockId, prevSbId)
-            (Seq.empty, Seq(sbHeader.id))
+            if(prevSb.transactionsRoot != sbHeader.transactionsRoot) {
+              (Seq.empty, Seq(sbHeader.id))
+            } else {
+              emptyResult // no new transactions
+            }
           } else {
             //todo: download prev sub block id
             (Seq(prevSbId), Seq(sbHeader.id))

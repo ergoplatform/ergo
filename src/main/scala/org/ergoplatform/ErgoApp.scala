@@ -13,7 +13,7 @@ import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
@@ -36,7 +36,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   log.info(s"Running with args: $args")
 
-  private val ergoSettings: ErgoSettings = ErgoSettings.read(args)
+  private val ergoSettings: ErgoSettings = ErgoSettingsReader.read(args)
 
   require(
     ergoSettings.scorexSettings.restApi.apiKeyHash.isDefined,
@@ -291,8 +291,7 @@ object ErgoApp extends ScorexLogging {
   /** Intentional user invoked remote shutdown */
   case object RemoteShutdown extends CoordinatedShutdown.Reason
 
-  /** Exception that triggers proper system shutdown */
-  case class CriticalSystemException(message: String) extends Exception(message)
+
 
   /** hard application exit in case actor system is not started yet*/
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)

@@ -220,8 +220,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
     val utx = gcr.unsignedTx
     val externalSecretsOpt = gcr.externalSecretsOpt
-    val extInputsOpt = gcr.inputs.map(ErgoWalletService.stringsToBoxes)
-    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletService.stringsToBoxes)
+    val extInputsOpt = gcr.inputs.map(ErgoWalletServiceUtils.stringsToBoxes)
+    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletServiceUtils.stringsToBoxes)
 
     withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
       case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
@@ -477,8 +477,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
     withWallet { w =>
-      val extInputsOpt = her.inputs.map(ErgoWalletService.stringsToBoxes)
-      val extDataInputsOpt = her.dataInputs.map(ErgoWalletService.stringsToBoxes)
+      val extInputsOpt = her.inputs.map(ErgoWalletServiceUtils.stringsToBoxes)
+      val extDataInputsOpt = her.dataInputs.map(ErgoWalletServiceUtils.stringsToBoxes)
 
       w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
     }

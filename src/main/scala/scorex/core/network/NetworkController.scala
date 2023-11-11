@@ -7,7 +7,7 @@ import akka.io.{IO, Tcp}
 import akka.pattern.ask
 import akka.util.Timeout
 import scorex.core.app.{ScorexContext, Version}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{DisconnectedPeer, HandshakedPeer}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DisconnectedPeer, HandshakedPeer}
 import org.ergoplatform.network.ModePeerFeature
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ErgoSettings

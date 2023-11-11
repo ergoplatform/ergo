@@ -41,6 +41,18 @@ object Constants {
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
 
+  /**
+    * Serializers for block sections and transactions
+    *
+    * // todo: move to NodeViewSynchronizer, used only there
+    */
+  val modifierSerializers: Map[NetworkObjectTypeId.Value, ErgoSerializer[_ <: NodeViewModifier]] =
+    Map(Header.modifierTypeId -> HeaderSerializer,
+      Extension.modifierTypeId -> ExtensionSerializer,
+      BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
+      ADProofs.modifierTypeId -> ADProofsSerializer,
+      ErgoTransaction.modifierTypeId -> ErgoTransactionSerializer)
+
   val SoftForkEpochs = 32 //about 45.5 days
 
   def TrueLeaf: ErgoTree = Values.TrueLeaf.toSigmaProp

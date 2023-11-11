@@ -9,6 +9,8 @@ import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, PreHeader}
 import org.ergoplatform.modifiers.{BlockSection, HeaderTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.serialization.ErgoSerializer
@@ -89,7 +91,7 @@ case class Header(override val version: Header.Version,
 
   override lazy val serializer: ErgoSerializer[Header] = HeaderSerializer
 
-  lazy val isGenesis: Boolean = height == GenesisHeight
+  lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 
   /**
     * Checks that modifier m corresponds to this header

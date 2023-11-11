@@ -107,7 +107,7 @@ object ValidationRules {
     hdrGenesisFromConfig -> RuleStatus(im => fatal(s"Genesis header id should be equal to id from the config. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrGenesisHeight -> RuleStatus(im => fatal(s"Genesis height should be ${GenesisHeight}. ${im.error}", im.modifierId, im.modifierTypeId),
+    hdrGenesisHeight -> RuleStatus(im => fatal(s"Genesis height should be ${ErgoHistory.GenesisHeight}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Header]),
       mayBeDisabled = false),
     hdrParent -> RuleStatus(im => recoverable(s"Parent header with id ${im.error} is not defined", im.modifierId, im.modifierTypeId),

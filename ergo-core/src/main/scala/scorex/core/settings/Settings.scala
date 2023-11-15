@@ -5,7 +5,7 @@ import java.net.{InetSocketAddress, URL}
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import scorex.core.network.message.Message
+import scorex.core.network.message.MessageConstants._
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
@@ -97,6 +97,6 @@ object ScorexSettings extends ScorexLogging with SettingsReaders {
 
   def fromConfig(config: Config): ScorexSettings = {
     config.as[ScorexSettings](configPath)
-      .ensuring(_.network.magicBytes.length == Message.MagicLength)
+      .ensuring(_.network.magicBytes.length == MagicLength)
   }
 }

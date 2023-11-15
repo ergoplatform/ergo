@@ -1,7 +1,6 @@
 package scorex.core.network.peer
 
-import org.ergoplatform.nodeView.history.ErgoHistory
-
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.net.{InetAddress, InetSocketAddress}
 import org.ergoplatform.settings.ErgoSettings
@@ -30,7 +29,7 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
   /**
     * banned peer ip -> ban expiration timestamp
     */
-  private var blacklist = Map.empty[InetAddress, ErgoHistory.Time]
+  private var blacklist = Map.empty[InetAddress, Time]
 
   /**
     * penalized peer ip -> (accumulated penalty score, last penalty timestamp)

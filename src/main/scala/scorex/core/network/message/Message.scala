@@ -4,7 +4,7 @@ package scorex.core.network.message
 import akka.actor.DeadLetterSuppression
 import scorex.core.network.ConnectedPeer
 import scala.util.{Success, Try}
-
+import scorex.core.network.message.MessageConstants._
 
 /**
   * Wrapper for a network message, whether come from external peer or generated locally
@@ -51,14 +51,4 @@ case class Message[Content](spec: MessageSpec[Content],
     }
   }
 
-}
-
-object Message {
-  type MessageCode = Byte
-
-  val MagicLength: Int = 4
-
-  val ChecksumLength: Int = 4
-
-  val HeaderLength: Int = MagicLength + 5
 }

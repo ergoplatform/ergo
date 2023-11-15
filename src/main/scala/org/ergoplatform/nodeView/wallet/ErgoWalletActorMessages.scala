@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
@@ -28,7 +28,7 @@ object ErgoWalletActorMessages {
    * @param blockHeight - height of a block to scan
    * @param rescan - scan a block even if height is out of order, to serve rescan requests from arbitrary height
    */
-  final case class ScanInThePast(blockHeight: ErgoHistory.Height, rescan: Boolean)
+  final case class ScanInThePast(blockHeight: Height, rescan: Boolean)
 
 
   // Publicly available signals for the wallet actor
@@ -320,7 +320,7 @@ object ErgoWalletActorMessages {
   case class WalletStatus(initialized: Boolean,
                           unlocked: Boolean,
                           changeAddress: Option[P2PKAddress],
-                          height: ErgoHistory.Height,
+                          height: Height,
                           error: Option[String])
 
   /**

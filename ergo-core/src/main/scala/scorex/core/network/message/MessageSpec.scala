@@ -1,6 +1,7 @@
 package scorex.core.network.message
 
 import scorex.core.app.Version
+import scorex.core.network.message.MessageConstants._
 import scorex.core.serialization.ErgoSerializer
 
 /**
@@ -17,7 +18,7 @@ trait MessageSpec[Content] extends ErgoSerializer[Content] {
     * Code which identifies what message type is contained in the payload
     */
 
-  val messageCode: Message.MessageCode
+  val messageCode: MessageCode
 
   /**
     * Name of this message type. For debug purposes only.

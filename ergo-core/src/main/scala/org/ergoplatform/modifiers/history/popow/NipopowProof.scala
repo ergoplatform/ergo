@@ -1,9 +1,9 @@
 package org.ergoplatform.modifiers.history.popow
 
 import io.circe.{Decoder, Encoder}
-import org.ergoplatform.mining.difficulty.DifficultyAdjustment //TODO 2
-import org.ergoplatform.modifiers.history.header.Header //TODO 1
-import org.ergoplatform.modifiers.history.header.HeaderSerializer //TODO 3
+import org.ergoplatform.mining.difficulty.DifficultyAdjustment
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.header.HeaderSerializer
 import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps

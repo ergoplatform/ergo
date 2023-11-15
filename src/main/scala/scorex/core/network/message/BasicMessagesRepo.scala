@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.SyncInfo
 import scorex.core.network._
-import scorex.core.network.message.Message.MessageCode
+import scorex.core.network.message.MessageConstants.MessageCode
 import scorex.core.serialization.ErgoSerializer
 import scorex.core.NodeViewModifier
 import scorex.crypto.hash.Digest32
@@ -27,23 +27,7 @@ case class NipopowProofData(m: Int, k: Int, headerId: Option[ModifierId]) {
   def headerIdBytesOpt: Option[Array[Byte]] = headerId.map(Algos.decode).flatMap(_.toOption)
 }
 
-/**
-  * The `SyncInfo` message requests an `Inv` message that provides modifier ids
-  * required be sender to synchronize his blockchain with the recipient.
-  * It allows a peer which has been disconnected or started for the first
-  * time to get the data it needs to request the blocks it hasn't seen.
-  *
-  * Payload of this message should be determined in underlying applications.
-  */
-class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ErgoSerializer[SI]) extends MessageSpecV1[SI] {
 
-  override val messageCode: MessageCode = 65: Byte
-  override val messageName: String = "Sync"
-
-  override def serialize(data: SI, w: Writer): Unit = serializer.serialize(data, w)
-
-  override def parse(r: Reader): SI = serializer.parse(r)
-}
 
 /**
   * The `Inv` message (inventory message) transmits one or more inventories of
@@ -180,7 +164,7 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
   * messages to arrive over time.
   */
 object GetPeersSpec extends MessageSpecV1[Unit] {
-  override val messageCode: Message.MessageCode = 1: Byte
+  override val messageCode: MessageCode = 1: Byte
 
   override val messageName: String = "GetPeers message"
 
@@ -194,7 +178,7 @@ object GetPeersSpec extends MessageSpecV1[Unit] {
 
 object PeersSpec {
 
-  val messageCode: Message.MessageCode = 2: Byte
+  val messageCode: MessageCode = 2: Byte
 
   val messageName: String = "Peers message"
 
@@ -206,7 +190,7 @@ object PeersSpec {
   */
 class PeersSpec(peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
 
-  override val messageCode: Message.MessageCode = PeersSpec.messageCode
+  override val messageCode: MessageCode = PeersSpec.messageCode
 
   override val messageName: String = PeersSpec.messageName
 

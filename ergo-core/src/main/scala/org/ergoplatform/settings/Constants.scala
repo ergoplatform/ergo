@@ -1,7 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Difficulty
 import scorex.crypto.authds.avltree.batch.AvlTreeParameters
 import sigmastate.Values
 import sigmastate.Values.ErgoTree

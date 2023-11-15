@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.history.popow
 
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, DifficultySerializer}
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.header.Header
@@ -10,7 +10,6 @@ import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -30,9 +29,6 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
   import NipopowAlgos._
 
   private def powScheme: AutolykosPowScheme = chainSettings.powScheme
-
-  private val diffAdjustment = new DifficultyAdjustment(chainSettings)
-
   /**
     * Computes interlinks vector for a header next to `prevHeader`.
     */

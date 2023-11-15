@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, NipopowProofSerializer, PoPowHeader, PoPowParams}
-import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.GenesisHeight
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{ChainSettings, NipopowSettings}
 import org.ergoplatform.settings.Constants.HashLength

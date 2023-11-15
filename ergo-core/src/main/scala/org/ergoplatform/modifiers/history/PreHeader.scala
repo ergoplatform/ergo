@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.header.Header._
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.settings.Constants
 import scorex.util._
 import sigmastate.crypto.CryptoConstants.EcPointType
@@ -72,7 +72,7 @@ object PreHeader {
     parentId = Header.GenesisParentId,
     timestamp = 0,
     nBits = Constants.InitialNBits,
-    height = ErgoHistory.EmptyHistoryHeight,
+    height = EmptyHistoryHeight,
     votes = Array.fill(3)(0.toByte),
     minerPk = org.ergoplatform.mining.group.generator
   )

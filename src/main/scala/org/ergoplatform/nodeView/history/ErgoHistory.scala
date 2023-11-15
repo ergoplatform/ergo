@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.history
 import akka.actor.ActorContext
 
 import java.io.File
-import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
@@ -12,6 +11,7 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.S
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.consensus.ProgressInfo
@@ -233,22 +233,6 @@ trait ErgoHistory
 }
 
 object ErgoHistory extends ScorexLogging {
-  /**
-   * Type for time, represents machine-specific timestamp of a transaction
-   * or block section, as miliseconds passed since beginning of UNIX
-   * epoch on the machine
-   */
-  type Time = Long
-
-  type Height = ErgoLikeContext.Height // Int
-  type Score = BigInt
-  type Difficulty = BigInt
-  type NBits = Long
-
-  val CharsetName = "UTF-8"
-
-  val EmptyHistoryHeight: Int = 0
-  val GenesisHeight: Int = EmptyHistoryHeight + 1 // first block has height == 1
 
   def heightOf(headerOpt: Option[Header]): Int = headerOpt.map(_.height).getOrElse(EmptyHistoryHeight)
 

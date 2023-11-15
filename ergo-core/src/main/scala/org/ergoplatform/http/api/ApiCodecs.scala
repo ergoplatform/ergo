@@ -6,12 +6,9 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
-import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.getAddress
-import org.ergoplatform.nodeView.history.extra.{BalanceInfo, IndexedErgoBox, IndexedErgoTransaction, IndexedToken}
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Difficulty
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, GenerateCommitmentsRequest, TransactionSigningRequest}
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
@@ -33,7 +30,6 @@ import sigmastate.crypto.VerifierMessage.Challenge
 import sigmastate.crypto._
 import sigmastate.interpreter._
 import sigmastate.serialization.OpCodes
-import sigma.AnyValue
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.sdk.JsonCodecs
@@ -246,25 +242,7 @@ trait ApiCodecs extends JsonCodecs {
     }
   }
 
-  implicit val hintExtractionRequestEncoder: Encoder[HintExtractionRequest] = {hr =>
-    Map(
-      "tx" -> hr.tx.asJson,
-      "real" -> hr.real.asJson,
-      "simulated" -> hr.simulated.asJson,
-      "inputsRaw" -> hr.inputs.asJson,
-      "dataInputsRaw" -> hr.dataInputs.asJson
-    ).asJson
-  }
 
-  implicit val hintExtractionRequestDecoder: Decoder[HintExtractionRequest] = {cursor =>
-    for {
-      tx <- cursor.downField("tx").as[ErgoTransaction]
-      real <- cursor.downField("real").as[Seq[SigmaBoolean]]
-      simulated <- cursor.downField("simulated").as[Seq[SigmaBoolean]]
-      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
-      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
-    } yield HintExtractionRequest(tx, real, simulated, inputs, dataInputs)
-  }
 
   implicit val firstProverMessageEncoder: Encoder[FirstProverMessage] = {
     case cmtDlog: FirstDLogProverMessage =>
@@ -488,95 +466,7 @@ trait ApiCodecs extends JsonCodecs {
     } yield GenerateCommitmentsRequest(tx, secretsOpt, inputs, dataInputs)
   }
 
-  implicit val executeRequestDecoder = new Decoder[ExecuteRequest] {
-    def apply(cursor: HCursor): Decoder.Result[ExecuteRequest] = {
-      for {
-        script <- cursor.downField("script").as[String]
-        env <- cursor.downField("namedConstants").as[Map[String,AnyValue]]
-        ctx <- cursor.downField("context").as[ErgoLikeContext]
-      } yield ExecuteRequest(script, env.map({ case (k,v) => k -> v.value }), ctx)
-    }
-  }
 
-  implicit val cryptResultEncoder: Encoder[CryptoResult] = {
-    res =>
-      val fields = Map(
-        "value" -> res.value.asJson,
-        "cost" -> res.cost.asJson
-      )
-      fields.asJson
-  }
-
-  implicit val indexedBoxEncoder: Encoder[IndexedErgoBox] = { iEb =>
-    iEb.box.asJson.deepMerge(Json.obj(
-      "globalIndex" -> iEb.globalIndex.asJson,
-      "inclusionHeight" -> iEb.inclusionHeight.asJson,
-      "address" -> ergoAddressEncoder.toString(getAddress(iEb.box.ergoTree)).asJson,
-      "spentTransactionId" -> iEb.spendingTxIdOpt.asJson
-    ))
-  }
-
-  implicit val indexedBoxSeqEncoder: Encoder[(Seq[IndexedErgoBox],Long)] = { iEbSeq =>
-    Json.obj(
-      "items" -> iEbSeq._1.asJson,
-      "total" -> iEbSeq._2.asJson
-    )
-  }
-
-  implicit val indexedTxEncoder: Encoder[IndexedErgoTransaction] = { iEt =>
-    Json.obj(
-      "id" -> iEt.txid.asJson,
-      "blockId" -> iEt.blockId.asJson,
-      "inclusionHeight" -> iEt.inclusionHeight.asJson,
-      "timestamp" -> iEt.timestamp.asJson,
-      "index" -> iEt.index.asJson,
-      "globalIndex" -> iEt.globalIndex.asJson,
-      "numConfirmations" -> iEt.numConfirmations.asJson,
-      "inputs" -> iEt.inputs.asJson,
-      "dataInputs" -> iEt.dataInputs.asJson,
-      "outputs" -> iEt.outputs.asJson,
-      "size" -> iEt.txSize.asJson
-    )
-  }
-
-  implicit val indexedTxSeqEncoder: Encoder[(Seq[IndexedErgoTransaction],Long)] = { iEtSeq =>
-    Json.obj(
-      "items" -> iEtSeq._1.asJson,
-      "total" -> iEtSeq._2.asJson
-    )
-  }
-
-  implicit val IndexedTokenEncoder: Encoder[IndexedToken] = { token =>
-    Json.obj(
-      "id" -> token.tokenId.asJson,
-      "boxId" -> token.boxId.asJson,
-      "emissionAmount" -> token.amount.asJson,
-      "name" -> token.name.asJson,
-      "description" -> token.description.asJson,
-      "decimals" -> token.decimals.asJson
-    )
-  }
-
-  implicit val BalanceInfoEncoder: Encoder[BalanceInfo] = { bal =>
-    Json.obj(
-      "nanoErgs" -> bal.nanoErgs.asJson,
-      "tokens" -> bal.tokens.map(token => {
-        Json.obj(
-          "tokenId" -> token._1.asJson,
-          "amount" -> token._2.asJson,
-          "decimals" -> bal.additionalTokenInfo(token._1)._2.asJson,
-          "name" -> bal.additionalTokenInfo(token._1)._1.asJson
-        )
-      }).asJson
-    )
-  }
-
-  implicit val TotalBalanceInfoEncoder: Encoder[(BalanceInfo,BalanceInfo)] = { tBal =>
-    Json.obj(
-      "confirmed" -> tBal._1.asJson,
-      "unconfirmed" -> tBal._2.asJson
-    )
-  }
 
 }
 

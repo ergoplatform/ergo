@@ -2,7 +2,7 @@ package org.ergoplatform.modifiers.history.header
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
-import org.ergoplatform.nodeView.history.ErgoHistory.{GenesisHeight, Difficulty}
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.{GenesisHeight, Difficulty}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.mining.difficulty.DifficultySerializer

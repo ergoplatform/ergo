@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
-import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
@@ -34,6 +34,8 @@ import scorex.core.network.peer.PenaltyType
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import scorex.core.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import scorex.core.transaction.TooHighCostError
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
@@ -1611,4 +1613,13 @@ object ErgoNodeViewSynchronizer {
 
   case object CheckModifiersToDownload
 
+  /**
+   * Serializers for block sections and transactions
+   */
+  val modifierSerializers: Map[NetworkObjectTypeId.Value, ErgoSerializer[_ <: NodeViewModifier]] =
+    Map(Header.modifierTypeId -> HeaderSerializer,
+      Extension.modifierTypeId -> ExtensionSerializer,
+      BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
+      ADProofs.modifierTypeId -> ADProofsSerializer,
+      ErgoTransaction.modifierTypeId -> ErgoTransactionSerializer)
 }

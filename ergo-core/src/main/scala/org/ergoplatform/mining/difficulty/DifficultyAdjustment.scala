@@ -1,7 +1,7 @@
 package org.ergoplatform.mining.difficulty
 
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, Height}
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.{Difficulty, Height}
 import org.ergoplatform.settings.ChainSettings
 import scorex.util.ScorexLogging
 import scala.concurrent.duration.FiniteDuration

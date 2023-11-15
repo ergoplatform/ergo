@@ -80,7 +80,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
+    val txProcessing = ErgoState.execTransactions(transactions, currentStateContext, ergoSettings.nodeSettings)(checkBoxExistence)
     if (txProcessing.isValid) {
       log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
       val blockOpsTry = ErgoState.stateChanges(transactions).flatMap { stateChanges =>
@@ -192,7 +192,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             }
 
             if (fb.adProofs.isEmpty) {
-              if (fb.height >= estimatedTip.getOrElse(Int.MaxValue) - stateContext.ergoSettings.nodeSettings.adProofsSuffixLength) {
+              if (fb.height >= estimatedTip.getOrElse(Int.MaxValue) - ergoSettings.nodeSettings.adProofsSuffixLength) {
                 val adProofs = ADProofs(fb.header.id, proofBytes)
                 generate(LocallyGeneratedModifier(adProofs))
               }
@@ -309,7 +309,7 @@ object UtxoState {
 
     val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
 
-    val defaultStateContext = ErgoStateContext.empty(settings, parameters)
+    val defaultStateContext = ErgoStateContext.empty(settings.chainSettings, parameters)
     val storage = new VersionedLDBAVLStorage(store)
     val persistentProver = PersistentBatchAVLProver.create(
       p,

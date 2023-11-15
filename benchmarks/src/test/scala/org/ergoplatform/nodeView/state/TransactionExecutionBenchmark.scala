@@ -41,7 +41,7 @@ object TransactionExecutionBenchmark extends HistoryTestHelpers with NVBenchmark
     val boxes = bh.boxes
     def bench: Long =
       Utils.time {
-        assert(ErgoState.execTransactions(txs, emptyStateContext)(id => Try(boxes(ByteArrayWrapper(id)))) == Valid(178665000))
+        assert(ErgoState.execTransactions(txs, emptyStateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))) == Valid(178665000))
       }.toLong
 
     (0 to WarmupRuns).foreach(_ => bench)

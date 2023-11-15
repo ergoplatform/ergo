@@ -656,7 +656,7 @@ object CandidateGenerator extends ScorexLogging {
     stateContext: ErgoStateContext,
     assets: Coll[(TokenId, Long)] = Colls.emptyColl
   ): Seq[ErgoTransaction] = {
-    val chainSettings = stateContext.ergoSettings.chainSettings
+    val chainSettings = stateContext.chainSettings
     val propositionBytes = chainSettings.monetary.feePropositionBytes
     val emission = chainSettings.emissionRules
 

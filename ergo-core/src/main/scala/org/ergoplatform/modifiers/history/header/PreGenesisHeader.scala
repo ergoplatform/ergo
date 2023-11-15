@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history.header
 
-import org.ergoplatform.nodeView.history.ErgoHistory.EmptyHistoryHeight
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.EmptyHistoryHeight
 import scorex.core.idToBytes
 
 /**

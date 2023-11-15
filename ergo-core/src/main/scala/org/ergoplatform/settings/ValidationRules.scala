@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.ErgoHistory._
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import scorex.core.validation.{InvalidModifier, ModifierValidator}
 import scorex.core.validation.ValidationResult.Invalid

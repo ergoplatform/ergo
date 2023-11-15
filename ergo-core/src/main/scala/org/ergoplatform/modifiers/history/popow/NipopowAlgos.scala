@@ -5,7 +5,6 @@ import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, DifficultySeria
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ChainSettings, Constants}
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32

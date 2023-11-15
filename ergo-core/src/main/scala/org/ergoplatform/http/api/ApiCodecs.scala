@@ -28,6 +28,9 @@ import sigmastate.crypto.VerifierMessage.Challenge
 import sigmastate.crypto._
 import sigmastate.interpreter._
 import sigmastate.serialization.OpCodes
+import sigma.AnyValue
+import org.ergoplatform.nodeView.state.SnapshotsInfo
+import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.sdk.JsonCodecs
 import sigmastate.eval.Extensions.ArrayOps
 
@@ -79,6 +82,15 @@ trait ApiCodecs extends JsonCodecs {
   }
 
   implicit val proveDlogEncoder: Encoder[ProveDlog] = _.pkBytes.asJson
+
+  implicit val balancesSnapshotEncoder: Encoder[WalletDigest] = { v =>
+    import v._
+    Json.obj(
+      "height" -> height.asJson,
+      "balance" -> walletBalance.asJson,
+      "assets" -> walletAssetBalances.toMap.map(x => (x._1: String, x._2)).asJson //toMap to have assets as JSON map
+    )
+  }
 
   // this val is named "anyRegisterIdEncoder" because parent trait already contains
   // "registerIdEncoder" which is actually a KeyEncoder for NonMandatoryRegisterId
@@ -229,7 +241,25 @@ trait ApiCodecs extends JsonCodecs {
     }
   }
 
+  implicit val hintExtractionRequestEncoder: Encoder[HintExtractionRequest] = {hr =>
+    Map(
+      "tx" -> hr.tx.asJson,
+      "real" -> hr.real.asJson,
+      "simulated" -> hr.simulated.asJson,
+      "inputsRaw" -> hr.inputs.asJson,
+      "dataInputsRaw" -> hr.dataInputs.asJson
+    ).asJson
+  }
 
+  implicit val hintExtractionRequestDecoder: Decoder[HintExtractionRequest] = {cursor =>
+    for {
+      tx <- cursor.downField("tx").as[ErgoTransaction]
+      real <- cursor.downField("real").as[Seq[SigmaBoolean]]
+      simulated <- cursor.downField("simulated").as[Seq[SigmaBoolean]]
+      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
+      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+    } yield HintExtractionRequest(tx, real, simulated, inputs, dataInputs)
+  }
 
   implicit val firstProverMessageEncoder: Encoder[FirstProverMessage] = {
     case cmtDlog: FirstDLogProverMessage =>

@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.history
 import akka.actor.ActorContext
 
 import java.io.File
-import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}

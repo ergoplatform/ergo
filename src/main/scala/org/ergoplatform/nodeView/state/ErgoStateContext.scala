@@ -34,9 +34,9 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
                                 override val genesisStateDigest: ADDigest,
                                 override val currentParameters: Parameters,
                                 override val validationSettings: ErgoValidationSettings,
-                                override val votingData: VotingData)(implicit ergoSettings: ErgoSettings)
+                                override val votingData: VotingData)(implicit chainSettings: ChainSettings)
   extends ErgoStateContext(lastHeaders, lastExtensionOpt, genesisStateDigest, currentParameters,
-                            validationSettings, votingData)(ergoSettings) {
+                            validationSettings, votingData)(chainSettings) {
 
   override def sigmaPreHeader: sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
@@ -65,7 +65,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                        val currentParameters: Parameters,
                        val validationSettings: ErgoValidationSettings,
                        val votingData: VotingData)
-                      (implicit val ergoSettings: ErgoSettings)
+                      (implicit val chainSettings: ChainSettings)
   extends BlockchainStateContext
     with BytesSerializable
     with ScorexEncoding
@@ -73,8 +73,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   override type M = ErgoStateContext
 
-  private val votingSettings = ergoSettings.chainSettings.voting
-  private val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
+  private val votingSettings = chainSettings.voting
+  private val popowAlgos = new NipopowAlgos(chainSettings)
 
   override def sigmaPreHeader: sigma.PreHeader =
     PreHeader.toSigma(lastHeaders.headOption.getOrElse(PreHeader.fake))
@@ -107,7 +107,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
-  override def serializer: ErgoSerializer[M] = ErgoStateContextSerializer(ergoSettings)
+  override def serializer: ErgoSerializer[M] = ErgoStateContextSerializer(chainSettings)
 
   /**
     * @return state context corresponding to a block after last known one with fields provided
@@ -134,7 +134,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   def simplifiedUpcoming(): UpcomingStateContext = {
     val minerPk = org.ergoplatform.mining.group.generator
     val version = lastHeaderOpt.map(_.version).getOrElse(Header.InitialVersion)
-    val nBits = lastHeaderOpt.map(_.nBits).getOrElse(ergoSettings.chainSettings.initialNBits)
+    val nBits = lastHeaderOpt.map(_.nBits).getOrElse(chainSettings.initialNBits)
     val timestamp = lastHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
     val votes = Array.emptyByteArray
     val proposedUpdate = ErgoValidationSettingsUpdate.empty
@@ -227,14 +227,14 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
             val proposedVotes = votes.map(_ -> 1)
             val newVoting = VotingData(proposedVotes)
             new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, params,
-              extractedValidationSettings, newVoting)(ergoSettings)
+              extractedValidationSettings, newVoting)(chainSettings)
           }
         case _ =>
           val newVotes = votes
           val newVotingResults = newVotes.foldLeft(votingData) { case (v, id) => v.update(id) }
           state.result.toTry.map { _ =>
             new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, currentParameters, validationSettings,
-              newVotingResults)(ergoSettings)
+              newVotingResults)(chainSettings)
           }
       }
     }.flatten
@@ -332,16 +332,16 @@ object ErgoStateContext {
     */
   val eip27Vote: Byte = 8
 
-  def empty(settings: ErgoSettings, parameters: Parameters): ErgoStateContext = {
-    empty(settings.chainSettings.genesisStateDigest, settings, parameters)
+  def empty(chainSettings: ChainSettings, parameters: Parameters): ErgoStateContext = {
+    empty(chainSettings.genesisStateDigest, chainSettings, parameters)
   }
 
   /**
     * Initialize empty state context
     */
-  def empty(genesisStateDigest: ADDigest, settings: ErgoSettings, parameters: Parameters): ErgoStateContext = {
+  def empty(genesisStateDigest: ADDigest, chainSettings: ChainSettings, parameters: Parameters): ErgoStateContext = {
     new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters, ErgoValidationSettings.initial,
-      VotingData.empty)(settings)
+      VotingData.empty)(chainSettings)
   }
 
   /**
@@ -352,14 +352,14 @@ object ErgoStateContext {
   def recover(genesisStateDigest: ADDigest,
               extension: Extension,
               lastHeaders: Seq[Header])
-             (settings: ErgoSettings): Try[ErgoStateContext] = {
-    val vs = settings.chainSettings.voting
+             (chainSettings: ChainSettings): Try[ErgoStateContext] = {
+    val vs = chainSettings.voting
     if (lastHeaders.lastOption.exists(_.height % vs.votingLength == 0)) {
       val currentHeader = lastHeaders.last
       Parameters.parseExtension(currentHeader.height, extension).flatMap { params =>
         ErgoValidationSettings.parseExtension(extension).map { validationSettings =>
           new ErgoStateContext(lastHeaders.reverse, Some(extension), genesisStateDigest, params,
-            validationSettings, VotingData.empty)(settings)
+            validationSettings, VotingData.empty)(chainSettings)
         }
       }
     } else {
@@ -369,7 +369,7 @@ object ErgoStateContext {
 
 }
 
-case class ErgoStateContextSerializer(ergoSettings: ErgoSettings) extends ErgoSerializer[ErgoStateContext] {
+case class ErgoStateContextSerializer(chainSettings: ChainSettings) extends ErgoSerializer[ErgoStateContext] {
 
   private val Eip27SupportValue = 100 // see comment in serialize()
 
@@ -413,7 +413,7 @@ case class ErgoStateContextSerializer(ergoSettings: ErgoSettings) extends ErgoSe
     }
 
     new ErgoStateContext(lastHeaders, lastExtensionOpt, genesisDigest, params, validationSettings,
-      votingData)(ergoSettings)
+      votingData)(chainSettings)
   }
 
 }

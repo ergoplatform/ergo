@@ -203,7 +203,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
     val ms = MonetarySettings(minerRewardDelay = delta)
     val st = settings.copy(chainSettings = settings.chainSettings.copy(monetary = ms))
-    val sc = ErgoStateContext.empty(genesisStateDigest, st, parameters)
+    val sc = ErgoStateContext.empty(genesisStateDigest, st.chainSettings, parameters)
     val txBoxes = bh.boxes.grouped(inputsNum).map(_.values.toIndexedSeq).toSeq
 
     val blockTx =

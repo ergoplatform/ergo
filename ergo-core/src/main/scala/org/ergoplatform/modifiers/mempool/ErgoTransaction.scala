@@ -225,7 +225,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                                        stateContext: ErgoStateContext): Try[Unit] = {
     val res: Try[Unit] = Try {
 
-      lazy val reemissionSettings = stateContext.ergoSettings.chainSettings.reemission
+      lazy val reemissionSettings = stateContext.chainSettings.reemission
       lazy val reemissionRules = reemissionSettings.reemissionRules
 
       lazy val reemissionTokenId = ModifierId @@@ reemissionSettings.reemissionTokenId
@@ -234,7 +234,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       lazy val emissionNftId = ModifierId @@@ reemissionSettings.emissionNftId
       lazy val emissionNftIdBytes = reemissionSettings.emissionNftIdBytes
 
-      lazy val chainSettings = stateContext.ergoSettings.chainSettings
+      lazy val chainSettings = stateContext.chainSettings
       lazy val emissionRules = chainSettings.emissionRules
 
       lazy val height = stateContext.currentHeight
@@ -436,7 +436,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val currentTxCost = validation.result.payload.get
         verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
       }
-      .validate(txReemission, !stateContext.ergoSettings.chainSettings.reemission.checkReemissionRules ||
+      .validate(txReemission, !stateContext.chainSettings.reemission.checkReemissionRules ||
         verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifier(id, id, modifierTypeId))
   }
 

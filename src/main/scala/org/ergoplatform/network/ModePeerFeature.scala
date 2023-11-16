@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import io.circe.{Encoder, Json}
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{NodeConfigurationSettings, PeerFeatureDescriptors}
+import org.ergoplatform.settings.{ClientCapabilities, PeerFeatureDescriptors}
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
 import scorex.core.serialization.ErgoSerializer
@@ -64,22 +64,22 @@ object ModePeerFeature {
     */
   val UTXOSetBootstrapped = -2
 
-  def apply(nodeSettings: NodeConfigurationSettings): ModePeerFeature = {
-    val popowBootstrapped = if (nodeSettings.nipopowSettings.nipopowBootstrap) {
+  def apply(clientCapabilities: ClientCapabilities): ModePeerFeature = {
+    val popowBootstrapped = if (clientCapabilities.nipopowSettings.nipopowBootstrap) {
       Some(NiPoPoWDefaultFlag)
     } else {
       None
     }
 
-    val blocksKept = if (nodeSettings.utxoSettings.utxoBootstrap) {
+    val blocksKept = if (clientCapabilities.utxoSettings.utxoBootstrap) {
       UTXOSetBootstrapped
     } else {
-      nodeSettings.blocksToKeep
+      clientCapabilities.blocksToKeep
     }
 
     new ModePeerFeature(
-      nodeSettings.stateType,
-      nodeSettings.verifyTransactions,
+      clientCapabilities.stateType,
+      clientCapabilities.verifyTransactions,
       popowBootstrapped,
       blocksKept
     )

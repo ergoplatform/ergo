@@ -57,15 +57,26 @@ trait NipopowSettingsReader {
 }
 
 /**
+  * Features client may have enabled, they are reported to other peers
+  */
+trait ClientCapabilities {
+  val stateType: StateType
+  val verifyTransactions: Boolean
+  val blocksToKeep: Int
+  val utxoSettings: UtxoSettings
+  val nipopowSettings: NipopowSettings
+}
+
+/**
   * Configuration file for Ergo node regime
   *
   * @see src/main/resources/application.conf for parameters description
   */
-case class NodeConfigurationSettings(stateType: StateType,
-                                     verifyTransactions: Boolean,
-                                     blocksToKeep: Int,
-                                     utxoSettings: UtxoSettings,
-                                     nipopowSettings: NipopowSettings,
+case class NodeConfigurationSettings(override val stateType: StateType,
+                                     override val verifyTransactions: Boolean,
+                                     override val blocksToKeep: Int,
+                                     override val utxoSettings: UtxoSettings,
+                                     override val nipopowSettings: NipopowSettings,
                                      mining: Boolean,
                                      maxTransactionCost: Int,
                                      maxTransactionSize: Int,
@@ -85,7 +96,7 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      adProofsSuffixLength: Int,
                                      extraIndex: Boolean,
                                      blacklistedTransactions: Seq[String] = Seq.empty,
-                                     checkpoint: Option[CheckpointSettings] = None) {
+                                     checkpoint: Option[CheckpointSettings] = None) extends ClientCapabilities {
   /**
     * Whether the node keeping all the full blocks of the blockchain or not.
     * @return true if the blockchain is pruned, false if not

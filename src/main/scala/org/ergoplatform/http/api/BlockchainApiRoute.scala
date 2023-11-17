@@ -29,7 +29,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.Success
 
 case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, indexer: ActorRef)
-                        (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+                        (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs with ApiExtraCodecs {
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 

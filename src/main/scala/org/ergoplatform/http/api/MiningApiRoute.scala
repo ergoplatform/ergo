@@ -23,7 +23,7 @@ case class MiningApiRoute(miner: ActorRef,
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(ergoSettings).encoder
+  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(ergoSettings.chainSettings).encoder
 
   override val route: Route = pathPrefix("mining") {
     candidateR ~

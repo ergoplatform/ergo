@@ -6,7 +6,6 @@ import scorex.crypto.authds.avltree.batch.AvlTreeParameters
 import sigmastate.Values
 import sigmastate.Values.ErgoTree
 
-
 object Constants {
   /**
     * Length of hash function output used around the Ergo code

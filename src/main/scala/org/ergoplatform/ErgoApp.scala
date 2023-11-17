@@ -18,7 +18,7 @@ import scorex.core.api.http._
 import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network._
-import scorex.core.network.message.Message.MessageCode
+import scorex.core.network.message.MessageConstants.MessageCode
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings

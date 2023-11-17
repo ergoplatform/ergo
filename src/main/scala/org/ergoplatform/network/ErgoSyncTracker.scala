@@ -1,8 +1,8 @@
 package org.ergoplatform.network
 
 
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
-import org.ergoplatform.nodeView.history.ErgoHistory.{Height, Time}
+import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import scorex.core.consensus.{Fork, Older, PeerChainStatus, Unknown}
 import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings
@@ -86,7 +86,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
     val seniorsBefore = numOfSeniors()
     statuses.adjust(peer){
       case None =>
-        ErgoPeerStatus(peer, status, height.getOrElse(ErgoHistory.EmptyHistoryHeight), None, None)
+        ErgoPeerStatus(peer, status, height.getOrElse(EmptyHistoryHeight), None, None)
       case Some(existingPeer) =>
         existingPeer.copy(status = status, height = height.getOrElse(existingPeer.height))
     }

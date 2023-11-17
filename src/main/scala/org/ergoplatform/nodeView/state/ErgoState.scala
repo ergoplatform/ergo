@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters, NodeConfigurationSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -207,7 +207,7 @@ object ErgoState extends ScorexLogging {
                         additionalRegisters: AdditionalRegisters = Map.empty): ErgoBox = {
     import sigmastate.eval._
 
-    val creationHeight: Int = ErgoHistory.EmptyHistoryHeight
+    val creationHeight: Int = EmptyHistoryHeight
 
     val transactionId: ModifierId = ErgoBox.allZerosModifierId
     val boxIndex: Short = 0: Short

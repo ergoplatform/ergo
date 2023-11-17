@@ -21,53 +21,6 @@ trait CheckpointingSettingsReader extends ModifierIdReader {
 }
 
 /**
-  * Settings related to state bootstrapping with UTXO set snapshots. See ergo.node.utxo section for settings description.
-  */
-case class UtxoSettings(utxoBootstrap: Boolean, storingUtxoSnapshots: Int, p2pUtxoSnapshots: Int)
-
-/**
-  * Custom settings reader for `UtxoSettings`
-  */
-trait UtxoSettingsReader {
-  implicit val utxoSettingsReader: ValueReader[UtxoSettings] = { (cfg, path) =>
-    UtxoSettings(
-      cfg.as[Boolean](s"$path.utxoBootstrap"),
-      cfg.as[Int](s"$path.storingUtxoSnapshots"),
-      cfg.as[Int](s"$path.p2pUtxoSnapshots")
-    )
-  }
-}
-
-
-/**
-  * Settings related to headers-chain bootstrapping with NiPoPoWs. See ergo.node.nipopow section for settings description.
-  */
-case class NipopowSettings(nipopowBootstrap: Boolean, p2pNipopows: Int)
-
-/**
-  * Custom settings reader for `NipopowSettings`
-  */
-trait NipopowSettingsReader {
-  implicit val nipopowSettingsReader: ValueReader[NipopowSettings] = { (cfg, path) =>
-    NipopowSettings(
-      cfg.as[Boolean](s"$path.nipopowBootstrap"),
-      cfg.as[Int](s"$path.p2pNipopows")
-    )
-  }
-}
-
-/**
-  * Features client may have enabled, they are reported to other peers
-  */
-trait ClientCapabilities {
-  val stateType: StateType
-  val verifyTransactions: Boolean
-  val blocksToKeep: Int
-  val utxoSettings: UtxoSettings
-  val nipopowSettings: NipopowSettings
-}
-
-/**
   * Configuration file for Ergo node regime
   *
   * @see src/main/resources/application.conf for parameters description

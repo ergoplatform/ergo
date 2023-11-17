@@ -9,13 +9,12 @@ import akka.util.Timeout
 import scorex.core.app.{ScorexContext, Version}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DisconnectedPeer, HandshakedPeer}
 import org.ergoplatform.network.ModePeerFeature
-import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.network.message.Message.MessageCode
+import scorex.core.network.message.MessageConstants.MessageCode
 import scorex.core.network.message.Message
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
 import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
-import org.ergoplatform.nodeView.history.ErgoHistory.Time
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Time
 import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 
@@ -69,7 +68,7 @@ class NetworkController(ergoSettings: ErgoSettings,
     * Storing timestamp of a last message got via p2p network.
     * Used to check whether connectivity is lost.
     */
-  private var lastIncomingMessageTime: ErgoHistory.Time = 0L
+  private var lastIncomingMessageTime: Time = 0L
   private val activityDelta: Long = 60 * 1000 // 1 min
 
   //check own declared address for validity

@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
 import org.ergoplatform.sdk.wallet.protocol.context.BlockchainStateContext
 import org.ergoplatform.settings.ValidationRules._
@@ -120,7 +120,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                version: Byte): UpcomingStateContext = {
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val forkVote = votes.contains(Parameters.SoftFork)
-    val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
+    val height = ErgoHistoryUtils.heightOf(lastHeaderOpt) + 1
     val (calculatedParams, updated) = currentParameters.update(height, forkVote, votingData.epochVotes, proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
     UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
@@ -139,7 +139,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val votes = Array.emptyByteArray
     val proposedUpdate = ErgoValidationSettingsUpdate.empty
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
-    val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
+    val height = ErgoHistoryUtils.heightOf(lastHeaderOpt) + 1
     val (calculatedParams, updated) = currentParameters.update(height, forkVote = false, votingData.epochVotes, proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
     UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,

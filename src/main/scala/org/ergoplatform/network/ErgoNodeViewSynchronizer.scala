@@ -6,11 +6,10 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
-import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionFromRemote}
 import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
@@ -57,6 +56,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncTracker: ErgoSyncTracker,
                                deliveryTracker: DeliveryTracker)(implicit ex: ExecutionContext)
   extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
+
+  import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 
   type EncodedManifestId = ModifierId
 
@@ -706,7 +707,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                       typeId: NetworkObjectTypeId.Value,
                                       requestedModifiers: Map[ModifierId, Array[Byte]],
                                       remote: ConnectedPeer): Unit  = {
-    Constants.modifierSerializers.get(typeId) match {
+    modifierSerializers.get(typeId) match {
       case Some(serializer: ErgoSerializer[BlockSection]@unchecked) =>
         // parse all modifiers and put them to modifiers cache
         val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)

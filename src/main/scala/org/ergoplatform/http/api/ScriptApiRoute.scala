@@ -29,7 +29,7 @@ import scala.util.{Failure, Success, Try}
 
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs with ApiRequestsCodecs {
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)

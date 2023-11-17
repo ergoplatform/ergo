@@ -3,7 +3,7 @@ package scorex.core.network.peer
 import org.ergoplatform.settings.PeerFeatureDescriptors
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
-import scorex.core.network.message.Message
+import scorex.core.network.message.MessageConstants
 import scorex.core.serialization.ErgoSerializer
 import scorex.util.serialization._
 
@@ -32,7 +32,7 @@ object SessionIdPeerFeatureSerializer extends ErgoSerializer[SessionIdPeerFeatur
   }
 
   override def parse(r: Reader): SessionIdPeerFeature = {
-    val networkMagic = r.getBytes(Message.MagicLength)
+    val networkMagic = r.getBytes(MessageConstants.MagicLength)
     val sessionId = r.getLong()
     SessionIdPeerFeature(networkMagic, sessionId)
   }

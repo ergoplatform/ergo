@@ -20,8 +20,6 @@ case class Message[Content](spec: MessageSpec[Content],
                             source: Option[ConnectedPeer])
   extends DeadLetterSuppression {
 
-  import Message._
-
   /**
     * Message data bytes
     */

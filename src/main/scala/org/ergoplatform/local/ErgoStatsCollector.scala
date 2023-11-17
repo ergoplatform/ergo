@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
 import scorex.core.network.ConnectedPeer
@@ -86,7 +87,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         bestHeaderOpt = h.bestHeaderOpt,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id)),
-        genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption,
+        genesisBlockIdOpt = h.headerIdsAtHeight(GenesisHeight).headOption,
         stateRoot = Some(Algos.encode(s.rootDigest)),
         stateVersion = Some(s.version),
         parameters = s.stateContext.currentParameters
@@ -112,7 +113,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     case ChangedHistory(h: ErgoHistory@unchecked) if h.isInstanceOf[ErgoHistory] =>
 
       if (nodeInfo.genesisBlockIdOpt.isEmpty) {
-        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption)
+        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(GenesisHeight).headOption)
       }
 
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,

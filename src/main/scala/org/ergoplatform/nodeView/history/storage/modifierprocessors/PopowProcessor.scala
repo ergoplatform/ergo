@@ -4,7 +4,7 @@ import org.ergoplatform.local.{CorrectNipopowProofVerificationResult, NipopowPro
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, NipopowProofSerializer, PoPowHeader, PoPowParams}
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowErgoAlgos, NipopowProof, NipopowProofSerializer, PoPowHeader, PoPowParams}
 import org.ergoplatform.nodeView.history.ErgoHistoryConstants.GenesisHeight
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{ChainSettings, NipopowSettings}
@@ -108,7 +108,7 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
     */
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
     val proofParams = PoPowParams(m, k, continuous = true)
-    nipopowAlgos.prove(historyReader, headerIdOpt = headerIdOpt)(proofParams)
+    NipopowErgoAlgos.prove(historyReader, headerIdOpt = headerIdOpt, chainSettings)(proofParams)
   }
 
   /**

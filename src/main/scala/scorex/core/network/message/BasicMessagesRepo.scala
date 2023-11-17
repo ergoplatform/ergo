@@ -4,10 +4,8 @@ import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos
-import scorex.core.consensus.SyncInfo
 import scorex.core.network._
 import scorex.core.network.message.MessageConstants.MessageCode
-import scorex.core.serialization.ErgoSerializer
 import scorex.core.NodeViewModifier
 import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._

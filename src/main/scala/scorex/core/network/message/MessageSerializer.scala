@@ -10,7 +10,7 @@ import scala.util.Try
 
 class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
 
-  import Message.{ChecksumLength, HeaderLength, MagicLength}
+  import MessageConstants.{ChecksumLength, HeaderLength, MagicLength}
 
   import scala.language.existentials
 

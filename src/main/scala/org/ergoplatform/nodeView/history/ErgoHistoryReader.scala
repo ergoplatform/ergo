@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, NonHeaderBlockSection}
-import org.ergoplatform.nodeView.history.ErgoHistory.{EmptyHistoryHeight, GenesisHeight, Height}
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.{EmptyHistoryHeight, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, HeadersProcessor}

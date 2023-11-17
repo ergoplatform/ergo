@@ -19,9 +19,9 @@ case class PaymentRequest(address: ErgoAddress,
                           registers: Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]])
   extends TransactionGenerationRequest
 
-class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentRequest] {
+class PaymentRequestEncoder(ergoSettings: ErgoSettings) extends Encoder[PaymentRequest] {
 
-  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder
+  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(ergoSettings.chainSettings).encoder
 
   def apply(request: PaymentRequest): Json = {
     Json.obj(
@@ -34,9 +34,9 @@ class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentReque
 
 }
 
-class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentRequest] {
+class PaymentRequestDecoder(ergoSettings: ErgoSettings) extends Decoder[PaymentRequest] {
 
-  val addressEncoders: ErgoAddressJsonEncoder = ErgoAddressJsonEncoder(settings)
+  val addressEncoders: ErgoAddressJsonEncoder = ErgoAddressJsonEncoder(ergoSettings.chainSettings)
 
   implicit def addressDecoder: Decoder[ErgoAddress] = addressEncoders.decoder
 

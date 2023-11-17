@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import sigma.AnyValue
 import sigmastate.Values.SigmaBoolean
 
-trait ApiRequestsCodes extends ApiCodecs {
+trait ApiRequestsCodecs extends ApiCodecs {
   implicit val hintExtractionRequestEncoder: Encoder[HintExtractionRequest] = { hr =>
     Map(
       "tx" -> hr.tx.asJson,

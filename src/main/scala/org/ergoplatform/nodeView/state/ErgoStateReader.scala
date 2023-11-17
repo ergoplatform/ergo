@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Height
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, Parameters}
 import scorex.core.{NodeViewComponent, VersionTag}

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.ErgoSerializer
@@ -24,7 +24,7 @@ final case class WalletDigest(height: Int,
 object WalletDigest {
 
   val empty: WalletDigest =
-    WalletDigest(ErgoHistory.EmptyHistoryHeight, 0, mutable.WrappedArray.empty)
+    WalletDigest(EmptyHistoryHeight, 0, mutable.WrappedArray.empty)
 
 }
 

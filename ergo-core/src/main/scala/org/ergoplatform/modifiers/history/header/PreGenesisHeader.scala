@@ -14,7 +14,7 @@ object PreGenesisHeader extends Header(
   transactionsRoot = null,
   timestamp = 0L,
   nBits = 0L,
-  height = ErgoHistory.EmptyHistoryHeight,
+  height = EmptyHistoryHeight,
   extensionRoot = null,
   powSolution = null,
   votes = null,

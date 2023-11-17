@@ -387,7 +387,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   def deriveExternalCandidate(blockCandidate: CandidateBlock,
                               pk: ProveDlog,
                               mandatoryTxIds: Seq[ModifierId]): WorkMessage = {
-    val headerCandidate = CandidateGenerator.deriveUnprovenHeader(blockCandidate)
+    val headerCandidate = CandidateUtils.deriveUnprovenHeader(blockCandidate)
     val msg = msgByHeader(headerCandidate)
     val b = getB(blockCandidate.nBits)
     val hOpt = if (blockCandidate.version == 1) {
@@ -417,7 +417,7 @@ object AutolykosPowScheme {
     */
   def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Int) = {
 
-    val height = parentOpt.map(parent => parent.height + 1).getOrElse(ErgoHistory.GenesisHeight)
+    val height = parentOpt.map(parent => parent.height + 1).getOrElse(GenesisHeight)
 
     val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 

@@ -2,15 +2,13 @@ package org.ergoplatform.modifiers.history.header
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants.{GenesisHeight, Difficulty}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, PreHeader}
 import org.ergoplatform.modifiers.{BlockSection, HeaderTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
-import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.serialization.ErgoSerializer
@@ -91,7 +89,7 @@ case class Header(override val version: Header.Version,
 
   override lazy val serializer: ErgoSerializer[Header] = HeaderSerializer
 
-  lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
+  lazy val isGenesis: Boolean = height == GenesisHeight
 
   /**
     * Checks that modifier m corresponds to this header

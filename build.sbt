@@ -272,10 +272,8 @@ lazy val ergoCore = (project in file("ergo-core"))
     commonSettings,
     name := "ergo-core",
     libraryDependencies ++= Seq(
-      "com.typesafe.akka" %% "akka-actor" % akkaVersion,
       "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
       "com.iheart" %% "ficus" % ficusVersion,
-      "com.github.ben-manes.caffeine" % "caffeine" % "2.9.3", // use 3.x only for java 11+
       effectiveSigma,
       (effectiveSigma % Test).classifier("tests")
     ),

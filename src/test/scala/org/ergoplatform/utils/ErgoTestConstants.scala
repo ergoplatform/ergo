@@ -46,7 +46,7 @@ trait ErgoTestConstants extends ScorexLogging {
     Parameters(0, Parameters.DefaultParameters ++ extension, ErgoValidationSettingsUpdate.empty)
   }
 
-  val initSettings: ErgoSettings = ErgoSettings.read(Args(Some("src/test/resources/application.conf"), None))
+  val initSettings: ErgoSettings = ErgoSettingsReader.read(Args(Some("src/test/resources/application.conf"), None))
 
   implicit val settings: ErgoSettings = initSettings
 

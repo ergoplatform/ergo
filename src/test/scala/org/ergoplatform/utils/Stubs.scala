@@ -11,13 +11,13 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryConstants}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.{ProcessingOutcome, SortingOption}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
-import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
+import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.scanning.Scan
@@ -182,7 +182,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case RescanWallet(_) => sender ! Success(())
 
-      case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistory.GenesisHeight, error = None)
+      case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistoryConstants.GenesisHeight, error = None)
 
       case _: CheckSeed => sender() ! true
 

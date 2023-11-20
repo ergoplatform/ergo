@@ -4,14 +4,14 @@ import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.HistoryTestHelpers
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
@@ -126,7 +126,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     val h = localHistoryGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = localStateGen.sample.get
-    val settings = ErgoSettings.read()
+    val settings = ErgoSettingsReader.read()
     val pool = ErgoMemPool.empty(settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")

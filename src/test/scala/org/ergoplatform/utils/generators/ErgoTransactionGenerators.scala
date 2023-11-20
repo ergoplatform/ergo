@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionSigningRequest}
@@ -61,7 +61,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[ErgoTree]): Gen[ErgoBox] = {
-    ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = ErgoHistory.EmptyHistoryHeight)
+    ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = EmptyHistoryHeight)
   }
 
   def unspendableErgoBoxGen(minValue: Long = parameters.minValuePerByte * 200,

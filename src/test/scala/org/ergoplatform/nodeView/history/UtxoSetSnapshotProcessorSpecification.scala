@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -19,7 +20,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
   val epochLength = 20
 
   val utxoSetSnapshotProcessor = new UtxoSetSnapshotProcessor {
-    var minimalFullBlockHeightVar = ErgoHistory.GenesisHeight
+    var minimalFullBlockHeightVar = GenesisHeight
     override protected val settings: ErgoSettings = s.copy(chainSettings =
       s.chainSettings.copy(voting = s.chainSettings.voting.copy(votingLength = epochLength)))
     override protected val historyStorage: HistoryStorage = HistoryStorage(settings)

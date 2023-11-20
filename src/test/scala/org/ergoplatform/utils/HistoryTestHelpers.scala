@@ -1,8 +1,9 @@
 package org.ergoplatform.utils
 
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{EmptyBlockSectionProcessor, FullBlockPruningProcessor, ToDownloadProcessor}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
 import org.scalacheck.Gen
@@ -84,7 +85,7 @@ object HistoryTestHelpers {
     val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
     val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
     val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
-    runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)
+    runtimeMirror.reflect(pp).reflectField(f).set(GenesisHeight)
     val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f2).set(true)
   }

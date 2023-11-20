@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.state.wrapped
 
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.state.DigestState

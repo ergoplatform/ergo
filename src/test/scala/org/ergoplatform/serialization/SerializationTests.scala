@@ -6,10 +6,11 @@ import org.ergoplatform.modifiers.history.extension.ExtensionSerializer
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.popow.NipopowProofSerializer
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
+import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigestSerializer
 import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
-import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer, ErgoValidationSettingsUpdateSerializer}
+import org.ergoplatform.settings.{ErgoValidationSettings, ErgoValidationSettingsSerializer, ErgoValidationSettingsUpdateSerializer}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
@@ -30,7 +31,7 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
   property("Serializers should be defined for all block sections") {
     val block = invalidErgoFullBlockGen.sample.get
     block.toSeq.foreach { s =>
-      Constants.modifierSerializers.get(s.modifierTypeId) should not be None
+      ErgoNodeViewSynchronizer.modifierSerializers.get(s.modifierTypeId) should not be None
     }
   }
 

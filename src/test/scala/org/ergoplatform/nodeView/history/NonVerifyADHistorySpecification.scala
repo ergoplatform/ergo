@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.crypto.hash.Digest32
@@ -268,7 +269,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
 
     chain.headers.foreach { header =>
-      val inHeight = history.heightOf(header.parentId).getOrElse(ErgoHistory.EmptyHistoryHeight)
+      val inHeight = history.heightOf(header.parentId).getOrElse(EmptyHistoryHeight)
 
       history.contains(header) shouldBe false
       history.applicable(header) shouldBe true

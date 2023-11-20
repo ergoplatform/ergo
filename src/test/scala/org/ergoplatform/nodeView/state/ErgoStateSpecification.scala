@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.{Args, ErgoSettingsReader}
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalacheck.Gen
@@ -66,7 +66,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   }
 
   property("generateGenesisUtxoState & generateGenesisDigestState are compliant") {
-    val settings = ErgoSettings.read(Args.empty)
+    val settings = ErgoSettingsReader.read(Args.empty)
     val dir = createTempDir
     val rootHash = createUtxoState(settings)._1.rootDigest
     val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings).rootDigest

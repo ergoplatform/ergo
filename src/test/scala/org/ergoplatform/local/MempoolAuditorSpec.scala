@@ -4,9 +4,9 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.ProcessingOutcome
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}

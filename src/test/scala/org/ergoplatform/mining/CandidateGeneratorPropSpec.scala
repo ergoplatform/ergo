@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoTreePredef
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.MonetarySettings
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
@@ -199,7 +199,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
     val bh     = boxesHolderGen.sample.get
     var us     = createUtxoState(bh, parameters)
-    val height = ErgoHistory.EmptyHistoryHeight
+    val height = EmptyHistoryHeight
 
     val ms = MonetarySettings(minerRewardDelay = delta)
     val st = settings.copy(chainSettings = settings.chainSettings.copy(monetary = ms))
@@ -248,7 +248,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
       Gen.nonEmptyListOf(validErgoTransactionGenTemplate(minAssets = 0, propositionGen = feeProp))
     ) { btxs =>
       val blockTxs = btxs.map(_._2)
-      val height   = ErgoHistory.EmptyHistoryHeight
+      val height   = EmptyHistoryHeight
       val txs = CandidateGenerator.collectRewards(
         us.emissionBoxOpt,
         height,

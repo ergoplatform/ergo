@@ -1,18 +1,20 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.utils
+import org.ergoplatform.utils.ScorexEncoder
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Digest32
 import scorex.util._
 
 
-object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
+object Algos extends ErgoAlgos with utils.ScorexEncoding {
 
   // ErgoAlgos in sigmastate extends scorex.util.ScorexEncoding where encoder is BytesEncoder
   // but here we use scorex.core.utils.ScorexEncoding where encoder is ScorexEncoder
   // After ScorexEncoder is moved (there is even a todo for that) from scorex.core to scorex.util
   //  we can fix this ugliness.
-  override implicit val encoder: scorex.core.utils.ScorexEncoder = scorex.core.utils.ScorexEncoder.default
+  override implicit val encoder: ScorexEncoder = utils.ScorexEncoder.default
 
   lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())
 

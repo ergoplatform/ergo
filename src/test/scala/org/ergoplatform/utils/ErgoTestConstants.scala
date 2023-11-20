@@ -6,6 +6,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
+import org.ergoplatform.network.{PeerSpec, Version}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.settings.Constants.HashLength
@@ -16,8 +17,6 @@ import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.{DataInput, ErgoBox, ErgoTreePredef}
-import scorex.core.app.Version
-import scorex.core.network.PeerSpec
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
@@ -82,9 +81,9 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultVersion: Byte = 0
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val emptyVSUpdate = ErgoValidationSettingsUpdate.empty
-  val emptyStateContext: UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings.chainSettings, parameters)
+  val emptyStateContext: UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings, parameters)
     .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
-  def stateContextWith(parameters: Parameters): UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings.chainSettings, parameters)
+  def stateContextWith(parameters: Parameters): UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings, parameters)
     .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest

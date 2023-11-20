@@ -6,14 +6,14 @@ import akka.io.Tcp._
 import akka.io.{IO, Tcp}
 import akka.pattern.ask
 import akka.util.Timeout
-import scorex.core.app.{ScorexContext, Version}
+import scorex.core.app.ScorexContext
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DisconnectedPeer, HandshakedPeer}
-import org.ergoplatform.network.ModePeerFeature
+import org.ergoplatform.network.{ModePeerFeature, Version}
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.network.message.MessageConstants.MessageCode
-import scorex.core.network.message.Message
-import scorex.core.network.peer.PeerManager.ReceivableMessages._
-import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
+import org.ergoplatform.network.message.MessageConstants.MessageCode
+import org.ergoplatform.network.message.Message
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages._
+import org.ergoplatform.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
 import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Time
 import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging

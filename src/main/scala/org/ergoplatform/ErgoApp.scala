@@ -13,15 +13,14 @@ import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader, NetworkType}
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader, NetworkType, ScorexSettings}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network._
-import scorex.core.network.message.MessageConstants.MessageCode
-import scorex.core.network.message._
-import scorex.core.network.peer.PeerManagerRef
-import scorex.core.settings.ScorexSettings
+import org.ergoplatform.network.message.MessageConstants.MessageCode
+import org.ergoplatform.network.message._
+import org.ergoplatform.network.peer.PeerManagerRef
 import scorex.util.ScorexLogging
 
 import java.net.InetSocketAddress

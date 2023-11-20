@@ -16,8 +16,8 @@ import org.ergoplatform.settings.ErgoSettingsReader
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
-import scorex.core.network.peer.PeerInfo
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.serialization.ErgoSerializer
 
 import scala.concurrent.ExecutionContextExecutor
 

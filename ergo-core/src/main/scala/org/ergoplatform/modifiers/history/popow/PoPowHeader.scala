@@ -3,12 +3,13 @@ package org.ergoplatform.modifiers.history.popow
 import cats.Traverse
 import cats.implicits.{catsStdInstancesForEither, catsStdInstancesForList}
 import io.circe.{Decoder, Encoder, Json}
+import org.ergoplatform.core.BytesSerializable
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.Extension.merkleTree
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
-import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.Side
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
@@ -144,12 +145,12 @@ object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
 
   override def serialize(obj: PoPowHeader, w: Writer): Unit = {
     val headerBytes = obj.header.bytes
-    w.putUInt(headerBytes.length)
+    w.putUInt(headerBytes.length.toLong)
     w.putBytes(headerBytes)
-    w.putUInt(obj.interlinks.size)
+    w.putUInt(obj.interlinks.size.toLong)
     obj.interlinks.foreach(x => w.putBytes(idToBytes(x)))
     val proofBytes = merkleProofSerializer.serialize(obj.interlinksProof)
-    w.putUInt(proofBytes.length)
+    w.putUInt(proofBytes.length.toLong)
     w.putBytes(proofBytes)
   }
 

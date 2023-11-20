@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history.popow
 import io.circe.{Decoder, Encoder}
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps
 
@@ -178,21 +178,21 @@ object NipopowProof {
 class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[NipopowProof] {
 
   override def serialize(obj: NipopowProof, w: Writer): Unit = {
-    w.putUInt(obj.m)
-    w.putUInt(obj.k)
-    w.putUInt(obj.prefix.size)
+    w.putUInt(obj.m.toLong)
+    w.putUInt(obj.k.toLong)
+    w.putUInt(obj.prefix.size.toLong)
     obj.prefix.foreach { h =>
       val hBytes = h.bytes
-      w.putUInt(hBytes.length)
+      w.putUInt(hBytes.length.toLong)
       w.putBytes(hBytes)
     }
     val suffixHeadBytes = obj.suffixHead.bytes
-    w.putUInt(suffixHeadBytes.length)
+    w.putUInt(suffixHeadBytes.length.toLong)
     w.putBytes(suffixHeadBytes)
-    w.putUInt(obj.suffixTail.size)
+    w.putUInt(obj.suffixTail.size.toLong)
     obj.suffixTail.foreach { h =>
       val hBytes = h.bytes
-      w.putUInt(hBytes.length)
+      w.putUInt(hBytes.length.toLong)
       w.putBytes(hBytes)
     }
     w.put(if (obj.continuous) 1 else 0)

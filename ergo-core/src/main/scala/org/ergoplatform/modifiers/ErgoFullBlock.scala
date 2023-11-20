@@ -2,13 +2,13 @@ package org.ergoplatform.modifiers
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
+import org.ergoplatform.TransactionsCarryingPersistentNodeViewModifier
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import scorex.core.serialization.ErgoSerializer
-import scorex.core.TransactionsCarryingPersistentNodeViewModifier
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.ModifierId
 
 case class ErgoFullBlock(header: Header,

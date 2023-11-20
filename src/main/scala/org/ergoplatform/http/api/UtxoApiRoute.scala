@@ -6,14 +6,10 @@ import akka.pattern.ask
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.{
-  ErgoStateReader,
-  UtxoSetSnapshotPersistence,
-  UtxoStateReader
-}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoSetSnapshotPersistence, UtxoStateReader}
+import org.ergoplatform.settings.RESTApiSettings
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.settings.Constants
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.eval.Extensions.ArrayByteOps

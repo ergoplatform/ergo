@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers
 
-import scorex.core.serialization.BytesSerializable
+import org.ergoplatform.core.BytesSerializable
 import scorex.util.{ModifierId, bytesToId}
 
 trait ErgoNodeViewModifier { self: BytesSerializable =>

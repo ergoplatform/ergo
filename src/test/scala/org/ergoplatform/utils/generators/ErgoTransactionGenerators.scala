@@ -324,13 +324,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   } yield {
     blocks match {
       case _ :: _ =>
-        val sc = new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty)(settings.chainSettings)
+        val sc = new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty)
         blocks.foldLeft(sc -> 1) { case ((c, h), b) =>
           val block = b.copy(header = b.header.copy(height = h, votes = votes(h - 1)))
           c.appendFullBlock(block).get -> (h + 1)
         }._1
       case _ =>
-        ErgoStateContext.empty(stateRoot, settings.chainSettings, parameters)
+        ErgoStateContext.empty(stateRoot, settings, parameters)
     }
   }
 

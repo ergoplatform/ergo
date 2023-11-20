@@ -1,16 +1,16 @@
 package org.ergoplatform.network
 
 
+import org.ergoplatform.consensus.{Fork, Older, PeerChainStatus, Unknown}
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
-import scorex.core.consensus.{Fork, Older, PeerChainStatus, Unknown}
+import org.ergoplatform.settings.NetworkSettings
 import scorex.core.network.ConnectedPeer
-import scorex.core.settings.NetworkSettings
 import scorex.util.ScorexLogging
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scorex.core.utils.MapPimpMutable
+import org.ergoplatform.utils.MapPimpMutable
 
 /**
   * Data structures and methods to keep status of peers, find ones with expired status to send sync message etc

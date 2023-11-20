@@ -1,9 +1,9 @@
 package org.ergoplatform.modifiers.history.header
 
+import org.ergoplatform.core.idToBytes
 import org.ergoplatform.mining.AutolykosSolutionSerializer
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import scorex.core.idToBytes
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
@@ -26,13 +26,13 @@ object HeaderSerializer extends ErgoSerializer[Header] {
     w.putULong(h.timestamp)
     w.putBytes(h.extensionRoot)
     DifficultySerializer.serialize(h.nBits, w)
-    w.putUInt(h.height)
+    w.putUInt(h.height.toLong)
     w.putBytes(h.votes)
 
     // For block version >= 2, this new byte encodes length of possible new fields.
     // Set to 0 for now, so no new fields.
     if (h.version > Header.InitialVersion) {
-      w.putUByte(0: Byte)
+      w.putUByte(0)
     }
   }
 

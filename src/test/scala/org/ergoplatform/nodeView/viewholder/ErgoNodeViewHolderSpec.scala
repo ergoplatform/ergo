@@ -14,6 +14,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
+import org.ergoplatform.testkit.utils.NoShrink
 import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.ProcessingOutcome.Accepted
 import scorex.crypto.authds.{ADKey, SerializedAdProof}

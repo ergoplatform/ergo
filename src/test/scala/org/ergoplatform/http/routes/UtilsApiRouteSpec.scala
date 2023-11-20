@@ -1,18 +1,16 @@
 package org.ergoplatform.http.routes
 
 import java.net.InetSocketAddress
-
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{P2PKAddress, Pay2SAddress, Pay2SHAddress}
 import org.ergoplatform.http.api.ErgoUtilsApiRoute
+import org.ergoplatform.settings.RESTApiSettings
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.serialization.ErgoTreeSerializer
 

@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import akka.actor.ActorContext
+import org.ergoplatform.consensus.ProgressInfo
 
 import java.io.File
 import org.ergoplatform.mining.AutolykosPowScheme
@@ -13,8 +14,7 @@ import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.LoggingUtil
-import scorex.core.consensus.ProgressInfo
-import scorex.core.validation.RecoverableModifierError
+import org.ergoplatform.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}

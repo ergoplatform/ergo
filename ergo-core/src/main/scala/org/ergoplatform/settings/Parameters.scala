@@ -4,7 +4,7 @@ import com.google.common.primitives.Ints
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Height
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 
@@ -386,9 +386,9 @@ object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
 
   override def serialize(params: Parameters, w: Writer): Unit = {
     require(params.parametersTable.nonEmpty, s"$params is empty")
-    w.putUInt(params.height)
+    w.putUInt(params.height.toLong)
     val paramsSize = params.parametersTable.size
-    w.putUInt(paramsSize)
+    w.putUInt(paramsSize.toLong)
     params.parametersTable.foreach { case (k, v) =>
       w.put(k)
       w.putInt(v)

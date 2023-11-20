@@ -16,8 +16,7 @@ import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import org.ergoplatform.{ErgoBox, P2PKAddress}
-import scorex.core.NodeViewComponent
+import org.ergoplatform.{ErgoBox, NodeViewComponent, P2PKAddress}
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
 import sigmastate.crypto.DLogProtocol.DLogProverInput

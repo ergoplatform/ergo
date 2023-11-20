@@ -3,11 +3,12 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
-import org.ergoplatform._
+import org.ergoplatform.{EphemerealNodeViewModifier, _}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
+import org.ergoplatform.modifiers.transaction.Transaction
 import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -15,17 +16,14 @@ import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
-import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.utils.{BoxUtils, ScorexEncoding}
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
-import scorex.core.EphemerealNodeViewModifier
-import scorex.core.serialization.ErgoSerializer
-import scorex.core.transaction.Transaction
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
+import org.ergoplatform.serialization.ErgoSerializer
+import org.ergoplatform.validation.ValidationResult.fromValidationState
+import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -118,7 +116,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     // Cost limit per block
     val maxCost = stateContext.currentParameters.maxBlockCost.toLong
 
-    val input = inputs(inputIndex)
+    val input = inputs(inputIndex.toInt)
 
     // Just in case, should always be true if client implementation is correct.
     if (!box.id.sameElements(input.boxId)) {
@@ -191,7 +189,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
         val totalAssetsAccessCost =
           ErgoBoxAssetExtractor.totalAssetsAccessCost(inAssetsNum, inAssets.size, outAssetsNum, outAssets.size, tokenAccessCost)
-        val newCost = addExact(currentTxCost, totalAssetsAccessCost)
+        val newCost = addExact(currentTxCost, totalAssetsAccessCost.toLong)
 
         validationBefore
           // Check that transaction is not too costly considering all the assets
@@ -328,7 +326,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           require(sentToReemission == toBurn, "Burning condition violated")
         }
       } else {
-        Success(())
       }
     }
 
@@ -367,10 +364,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
     val initialCost: Long = addExact(
-      ErgoInterpreter.interpreterInitCost,
-      multiplyExact(boxesToSpend.size, stateContext.currentParameters.inputCost),
-      multiplyExact(dataBoxes.size, stateContext.currentParameters.dataInputCost),
-      multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
+      ErgoInterpreter.interpreterInitCost.toLong,
+      multiplyExact(boxesToSpend.size.toLong, stateContext.currentParameters.inputCost.toLong),
+      multiplyExact(dataBoxes.size.toLong, stateContext.currentParameters.dataInputCost.toLong),
+      multiplyExact(outputCandidates.size.toLong, stateContext.currentParameters.outputCost.toLong),
     )
 
     // Cost limit per block

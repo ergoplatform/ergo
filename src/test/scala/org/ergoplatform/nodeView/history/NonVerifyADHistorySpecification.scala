@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.consensus.{Equal, Fork, Older, Younger}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -10,7 +11,6 @@ import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.crypto.hash.Digest32
-import scorex.core.consensus.{Older, Younger, Fork, Equal}
 
 import scala.util.Random
 

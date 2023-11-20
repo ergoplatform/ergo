@@ -16,8 +16,8 @@ import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform._
-import scorex.core.VersionTag
-import scorex.core.utils.ScorexEncoding
+import org.ergoplatform.core.VersionTag
+import org.ergoplatform.utils.ScorexEncoding
 import scorex.util.ScorexLogging
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}

@@ -5,9 +5,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{EmptyBlockSectionProcessor, FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.SortingOption
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings._
+import org.ergoplatform.settings.{ScorexSettings, _}
 import org.scalacheck.Gen
-import scorex.core.settings.ScorexSettings
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 

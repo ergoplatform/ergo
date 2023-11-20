@@ -1,10 +1,12 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.core.BytesSerializable
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
+import org.ergoplatform.utils
 import org.ergoplatform.validation.SigmaValidationSettings
-import scorex.core.serialization.{BytesSerializable, ErgoSerializer}
-import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationSettings}
+import org.ergoplatform.serialization.ErgoSerializer
+import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.util.serialization.{Reader, Writer}
 
 import scala.util.Try
@@ -113,7 +115,7 @@ object ErgoValidationSettings {
     if (values.isEmpty) {
       ErgoValidationSettings.initial
     } else {
-      val bytes = scorex.core.utils.concatBytes(values)
+      val bytes = utils.concatBytes(values)
       ErgoValidationSettingsSerializer.parseBytes(bytes)
     }
   }

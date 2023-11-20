@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier.LocallyGeneratedModifier
-import scorex.core.validation.MalformedModifierError
+import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.ModifierId
 
 import scala.concurrent.duration._

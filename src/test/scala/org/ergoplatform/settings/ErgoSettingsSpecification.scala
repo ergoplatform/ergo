@@ -3,7 +3,6 @@ package org.ergoplatform.settings
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.settings.RESTApiSettings
 
 import java.net.{InetSocketAddress, URL}
 import scala.concurrent.duration._

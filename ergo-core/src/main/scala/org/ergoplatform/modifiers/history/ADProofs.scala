@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.{NetworkObjectTypeId, NonHeaderBlockSection, P
 import org.ergoplatform.modifiers.state._
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.avltree.batch.{Lookup => _, _}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -97,7 +97,7 @@ object ADProofsSerializer extends ErgoSerializer[ADProofs] {
 
   override def serialize(obj: ADProofs, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.headerId))
-    w.putUInt(obj.proofBytes.size)
+    w.putUInt(obj.proofBytes.size.toLong)
     w.putBytes(obj.proofBytes)
   }
 

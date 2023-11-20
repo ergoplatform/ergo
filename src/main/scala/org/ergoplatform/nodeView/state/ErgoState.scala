@@ -15,9 +15,9 @@ import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters, NodeConfigurationSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.validation.ValidationResult.Valid
-import scorex.core.validation.{ModifierValidator, ValidationResult}
-import scorex.core.{VersionTag, idToVersion}
+import org.ergoplatform.validation.ValidationResult.Valid
+import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
+import org.ergoplatform.core.{VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16

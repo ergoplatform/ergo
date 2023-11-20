@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.VersionTag
-import scorex.core.serialization.{ManifestSerializer, SubtreeSerializer}
+import org.ergoplatform.serialization.{ManifestSerializer, SubtreeSerializer}
 import scorex.db.LDBVersionedStore
 import scorex.util.ModifierId
 

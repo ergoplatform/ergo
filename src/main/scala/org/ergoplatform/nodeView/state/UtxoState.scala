@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.core.VersionTag
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -12,9 +13,9 @@ import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperation
 import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
-import scorex.core._
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.ModifierValidator
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.core._
+import org.ergoplatform.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -49,7 +50,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
-    store.get(scorex.core.versionToBytes(version)) match {
+    store.get(versionToBytes(version)) match {
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
@@ -143,7 +144,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
             var proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
 
-            if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
+            if (!store.get(org.ergoplatform.core.idToBytes(fb.id))
+                  .exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
               throw new Exception("Storage kept roothash is not equal to the declared one")
             }
 

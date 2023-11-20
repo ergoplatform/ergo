@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import org.ergoplatform.CriticalSystemException
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.BlockSection
@@ -13,10 +14,8 @@ import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import scorex.core.consensus.ProgressInfo
-import scorex.core.consensus.ModifierSemanticValidity
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayWrapper
 import scorex.util._
 import scorex.util.encode.Base16

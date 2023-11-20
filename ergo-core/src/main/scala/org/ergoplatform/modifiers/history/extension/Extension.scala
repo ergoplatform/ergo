@@ -6,7 +6,7 @@ import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.{ExtensionTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Digest32

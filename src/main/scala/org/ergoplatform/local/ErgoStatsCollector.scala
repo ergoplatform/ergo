@@ -18,7 +18,7 @@ import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPee
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoSyncTracker
 import scorex.util.ScorexLogging
-import scorex.core.network.peer.PeersStatus
+import org.ergoplatform.network.peer.PeersStatus
 
 import java.net.URL
 import scala.concurrent.ExecutionContextExecutor

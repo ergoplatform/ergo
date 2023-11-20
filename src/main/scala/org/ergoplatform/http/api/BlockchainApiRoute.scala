@@ -16,10 +16,9 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hash
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.ApiError.{BadRequest, InternalError}
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
+import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
 import spire.implicits.cfor

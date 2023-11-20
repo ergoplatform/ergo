@@ -11,7 +11,7 @@ package object mining {
 
   type PrivateKey = BigInt
 
-  val PublicKeyLength: Byte = 33
+  val PublicKeyLength: Int = 33
 
   val group: BcDlogGroup = CryptoConstants.dlogGroup
 

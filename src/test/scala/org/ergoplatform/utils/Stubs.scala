@@ -9,6 +9,7 @@ import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.network.{Handshake, PeerSpec, Version}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryConstants}
@@ -24,7 +25,7 @@ import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings._
+import org.ergoplatform.settings.{ScorexSettings, _}
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
@@ -33,11 +34,9 @@ import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
-import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
-import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
-import scorex.core.network.{Handshake, PeerSpec}
-import scorex.core.settings.ScorexSettings
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
+import scorex.core.network.PeerSpec
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.ByteArrayWrapper
@@ -257,7 +256,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! Success(tx)
 
       case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
-        val sc = ErgoStateContext.empty(settings.chainSettings, parameters)
+        val sc = ErgoStateContext.empty(settings, parameters)
         sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
           utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
         }

@@ -2,12 +2,12 @@ package org.ergoplatform.bench.misc
 
 import java.io.{InputStream, OutputStream}
 import com.google.common.primitives.Ints
+import org.ergoplatform.NodeViewModifier
 import org.ergoplatform.Utils._
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.serialization.ErgoSerializer
-import scorex.core.NodeViewModifier
+import org.ergoplatform.serialization.ErgoSerializer
 
 object ModifierWriter {
 

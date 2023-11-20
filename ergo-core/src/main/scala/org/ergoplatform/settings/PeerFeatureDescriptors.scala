@@ -1,8 +1,7 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.network.ModeFeatureSerializer
-import scorex.core.network.PeerFeature
-import scorex.core.network.peer.{LocalAddressPeerFeatureSerializer, RestApiUrlPeerFeatureSerializer, SessionIdPeerFeatureSerializer}
+import org.ergoplatform.network.{ModeFeatureSerializer, PeerFeature}
+import org.ergoplatform.network.peer.{LocalAddressPeerFeatureSerializer, RestApiUrlPeerFeatureSerializer, SessionIdPeerFeatureSerializer}
 
 /**
   * Repository of existing peer feature identifiers, stores their ids along with serializers

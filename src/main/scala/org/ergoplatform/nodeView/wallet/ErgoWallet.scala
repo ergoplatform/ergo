@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.boxes.{ReemissionData, ReplaceCompactCollectBoxSelector}
-import scorex.core.VersionTag
+import org.ergoplatform.core.VersionTag
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
@@ -64,7 +64,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
   }
 
   def rollback(to: VersionTag): Try[ErgoWallet] =
-    historyReader.heightOf(scorex.core.versionToId(to)) match {
+    historyReader.heightOf(org.ergoplatform.core.versionToId(to)) match {
       case Some(_) =>
         walletActor ! Rollback(to)
         Success(this)

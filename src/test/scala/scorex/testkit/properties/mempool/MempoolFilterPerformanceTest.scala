@@ -3,6 +3,7 @@ package scorex.testkit.properties.mempool
 import java.security.MessageDigest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.testkit.properties.mempool.MemoryPoolTest
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks

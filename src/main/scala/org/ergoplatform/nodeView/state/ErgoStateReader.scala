@@ -1,10 +1,10 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, NodeViewComponent}
 import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Height
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, Parameters}
-import scorex.core.{NodeViewComponent, VersionTag}
+import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.LDBVersionedStore

@@ -10,8 +10,9 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.testkit.generators
+import org.ergoplatform.testkit.utils.AkkaFixture
 import scorex.testkit.generators._
-import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
 
 import scala.concurrent.Await
@@ -22,11 +23,11 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
   extends AnyPropSpec
     with Matchers
     with ScorexLogging
-    with SyntacticallyTargetedModifierProducer
-    with TotallyValidModifierProducer[ST]
-    with SemanticallyInvalidModifierProducer[ST]
-    with CustomModifierProducer[ST]
-    with ObjectGenerators {
+    with generators.SyntacticallyTargetedModifierProducer
+    with generators.TotallyValidModifierProducer[ST]
+    with generators.SemanticallyInvalidModifierProducer[ST]
+    with generators.CustomModifierProducer[ST]
+    with generators.ObjectGenerators {
 
   def nodeViewHolder(implicit system: ActorSystem): (ActorRef, TestProbe, BlockSection, ST, ErgoHistory)
 
@@ -314,9 +315,9 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       // generate the second fork with the invalid block
       val fork2Mods = withView(node) { v =>
         customModifiers(v.history, v.state,
-          Seq[ModifierProducerTemplateItem](Valid,
-            SynInvalid, // invalid modifier
-            Valid, Valid, Valid, Valid, Valid, Valid))
+          Seq[generators.ModifierProducerTemplateItem](generators.Valid,
+            generators.SynInvalid, // invalid modifier
+            generators.Valid, generators.Valid, generators.Valid, generators.Valid, generators.Valid, generators.Valid))
       }
       // apply the first fork with valid blocks
       fork1Mods.foreach { mod => node ! LocallyGeneratedModifier(mod) }

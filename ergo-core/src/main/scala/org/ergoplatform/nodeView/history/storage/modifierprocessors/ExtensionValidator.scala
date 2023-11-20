@@ -4,8 +4,8 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandida
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.settings.ValidationRules._
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{InvalidModifier, ValidationState}
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.validation.{InvalidModifier, ValidationState}
 import scorex.util.bytesToId
 
 /**

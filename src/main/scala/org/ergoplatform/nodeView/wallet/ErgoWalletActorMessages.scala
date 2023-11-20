@@ -13,7 +13,7 @@ import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform._
-import scorex.core.VersionTag
+import org.ergoplatform.core.VersionTag
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
 import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}

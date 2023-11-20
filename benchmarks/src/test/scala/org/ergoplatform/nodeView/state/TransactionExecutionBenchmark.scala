@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.NVBenchmark
 import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.utils.{HistoryTestHelpers, RandomWrapper}
-import scorex.core.validation.ValidationResult.Valid
+import org.ergoplatform.validation.ValidationResult.Valid
 import scorex.db.ByteArrayWrapper
 
 import scala.collection.mutable

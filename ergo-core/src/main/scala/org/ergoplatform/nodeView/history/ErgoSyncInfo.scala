@@ -1,10 +1,10 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.NodeViewModifier
+import org.ergoplatform.consensus.SyncInfo
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.NodeViewModifier
-import scorex.core.consensus.SyncInfo
-import scorex.core.network.message.SyncInfoMessageSpec
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.network.message.SyncInfoMessageSpec
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 

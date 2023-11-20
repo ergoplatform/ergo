@@ -3,9 +3,7 @@ package org.ergoplatform.network
 import io.circe.{Encoder, Json}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{ClientCapabilities, PeerFeatureDescriptors}
-import scorex.core.network.PeerFeature
-import scorex.core.network.PeerFeature.Id
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -25,7 +23,7 @@ case class ModePeerFeature(stateType: StateType,
                            blocksToKeep: Int) extends PeerFeature {
   override type M = ModePeerFeature
 
-  override val featureId: Id = PeerFeatureDescriptors.ModeFeatureId
+  override val featureId: PeerFeature.Id = PeerFeatureDescriptors.ModeFeatureId
 
   override def serializer: ErgoSerializer[ModePeerFeature] = ModeFeatureSerializer
 

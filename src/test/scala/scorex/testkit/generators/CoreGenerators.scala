@@ -1,5 +1,6 @@
 package scorex.testkit.generators
 
+import org.ergoplatform.testkit.generators.ObjectGenerators
 import org.scalacheck.Gen
 import scorex.core.{VersionTag, idToVersion}
 

@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.local.{CorrectNipopowProofVerificationResult, NipopowProofVerificationResult, NipopowVerifier}
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -9,7 +10,6 @@ import org.ergoplatform.nodeView.history.ErgoHistoryConstants.GenesisHeight
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{ChainSettings, NipopowSettings}
 import org.ergoplatform.settings.Constants.HashLength
-import scorex.core.consensus.ProgressInfo
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, ScorexLogging}
 

@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.{BlockSection, HeaderTypeId, NetworkObjectType
 import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._

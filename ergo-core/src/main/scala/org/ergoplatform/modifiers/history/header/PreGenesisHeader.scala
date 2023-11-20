@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.history.header
 
+import org.ergoplatform.core.idToBytes
 import org.ergoplatform.nodeView.history.ErgoHistoryConstants.EmptyHistoryHeight
-import scorex.core.idToBytes
 
 /**
   * A fake header that is used to fill the chain that starts from the beginning

@@ -8,8 +8,8 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
-import scorex.core.validation.{InvalidModifier, ModifierValidator}
-import scorex.core.validation.ValidationResult.Invalid
+import org.ergoplatform.validation.{InvalidModifier, ModifierValidator}
+import org.ergoplatform.validation.ValidationResult.Invalid
 import scorex.util.ModifierId
 
 object ValidationRules {

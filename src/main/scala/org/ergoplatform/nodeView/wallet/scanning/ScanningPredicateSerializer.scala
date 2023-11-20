@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.SType

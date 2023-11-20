@@ -11,7 +11,7 @@ import scorex.core.network.Broadcast
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.RecheckMempool
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
-import scorex.core.network.message.{InvData, InvSpec, Message}
+import org.ergoplatform.network.message.{InvData, InvSpec, Message}
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._

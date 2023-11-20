@@ -11,14 +11,13 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransacti
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import scorex.core.api.http.ApiError.{BadRequest, NotExists}
+import org.ergoplatform.http.api.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 
 import scala.concurrent.Future

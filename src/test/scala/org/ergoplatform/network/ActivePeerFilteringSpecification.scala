@@ -1,8 +1,8 @@
 package org.ergoplatform.network
 
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.network.peer.PeerInfo
-import scorex.core.network.peer.PeerManager.ReceivableMessages.SeenPeers
+import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.SeenPeers
 
 import java.net.{InetAddress, InetSocketAddress}
 

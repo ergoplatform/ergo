@@ -6,7 +6,7 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.header.Header.Version
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.crypto.CryptoConstants
 import sigmastate.crypto.CryptoConstants.EcPointType

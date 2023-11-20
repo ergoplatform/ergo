@@ -7,7 +7,7 @@ import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLD
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.serialization.ManifestSerializer
+import org.ergoplatform.serialization.ManifestSerializer
 
 import scala.concurrent.Future
 import scala.util.Try

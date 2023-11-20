@@ -21,7 +21,7 @@ trait DBSpec extends TestFileUtils {
 
   protected def byteString32(s: String): Array[Byte] = Algos.hash(byteString(s))
 
-  protected def withDb(body: DB => Unit): Unit = {
+  protected def withDb[T](body: DB => T): T = {
     val options = new Options()
     options.createIfMissing(true)
     options.verifyChecksums(true)
@@ -32,10 +32,10 @@ trait DBSpec extends TestFileUtils {
 
   protected def versionId(s: String): Array[Byte] = byteString32(s)
 
-  protected def withStore(body: LDBKVStore => Unit): Unit =
+  protected def withStore[T](body: LDBKVStore => T): T =
     withDb { db: DB => body(new LDBKVStore(db)) }
 
-  protected def withVersionedStore(keepVersions: Int)(body: LDBVersionedStore => Unit): Unit = {
+  protected def withVersionedStore[T](keepVersions: Int)(body: LDBVersionedStore => T): T = {
     val db = new LDBVersionedStore(createTempDir, keepVersions)
     try body(db) finally db.close()
   }

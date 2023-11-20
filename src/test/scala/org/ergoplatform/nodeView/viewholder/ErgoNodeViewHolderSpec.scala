@@ -15,8 +15,8 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome.Accepted
+import org.ergoplatform.testkit.utils.NoShrink
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
-import scorex.testkit.utils.NoShrink
 import scorex.util.{ModifierId, bytesToId}
 
 class ErgoNodeViewHolderSpec extends ErgoPropertyTest with HistoryTestHelpers with NodeViewTestOps with NoShrink {

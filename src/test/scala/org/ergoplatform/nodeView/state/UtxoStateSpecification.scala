@@ -9,13 +9,13 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
-import scorex.core.transaction.TooHighCostError
 import scorex.crypto.authds.ADKey
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId}

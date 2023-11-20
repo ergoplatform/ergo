@@ -45,7 +45,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Number of elements in a table to find k-sum problem solution on top of
     */
-  val NBase: Int = Math.pow(2, n).toInt
+  val NBase: Int = Math.pow(2, n.toDouble).toInt
 
   /**
     * Initial height since which table (`N` value) starting to increase by 5% per `IncreasePeriodForN` blocks
@@ -91,7 +91,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Constant data to be added to hash function to increase its calculation time
     */
-  val M: Array[Byte] = (0 until 1024).toArray.flatMap(i => Longs.toByteArray(i))
+  val M: Array[Byte] = (0 until 1024).toArray.flatMap(i => Longs.toByteArray(i.toLong))
 
   /**
     * Checks that `header` contains correct solution of the Autolykos PoW puzzle.

@@ -1,10 +1,10 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.testkit.properties.mempool.MempoolFilterPerformanceTest
 import org.ergoplatform.utils.generators.{ErgoGenerators, ErgoTransactionGenerators}
 import org.scalacheck.Gen
 import org.scalatest.propspec.AnyPropSpec
-import scorex.testkit.properties.mempool.MempoolFilterPerformanceTest
 
 class MempoolPerformanceBench extends AnyPropSpec
   with MempoolFilterPerformanceTest

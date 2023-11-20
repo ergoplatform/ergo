@@ -2,15 +2,15 @@ package org.ergoplatform.modifiers.history
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
+import org.ergoplatform.TransactionsCarryingPersistentNodeViewModifier
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.{BlockTransactionsTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core._
 import org.ergoplatform.modifiers.history.header.Header.Version
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
 import scorex.crypto.hash.Digest32
@@ -137,9 +137,9 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
   override def serialize(bt: BlockTransactions, w: Writer): Unit = {
     w.putBytes(idToBytes(bt.headerId))
     if (bt.blockVersion > 1) {
-      w.putUInt(MaxTransactionsInBlock + bt.blockVersion)
+      w.putUInt(MaxTransactionsInBlock.toLong + bt.blockVersion)
     }
-    w.putUInt(bt.txs.size)
+    w.putUInt(bt.txs.size.toLong)
     bt.txs.foreach { tx =>
       ErgoTransactionSerializer.serialize(tx, w)
     }

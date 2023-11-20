@@ -3,10 +3,10 @@ package org.ergoplatform.mining
 import com.google.common.primitives.Ints
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.testkit.utils.NoShrink
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
-import scorex.testkit.utils.NoShrink
 import scorex.util.encode.Base16
 
 class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {

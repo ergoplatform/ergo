@@ -1,7 +1,7 @@
 package org.ergoplatform.sanity
 
 import akka.actor.ActorRef
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, PersistentNodeViewModifier}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -14,16 +14,16 @@ import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.testkit.generators.{ModifierProducerTemplateItem, SynInvalid, Valid}
+import org.ergoplatform.testkit.properties.HistoryTests
+import org.ergoplatform.testkit.properties.mempool.{MempoolRemovalTest, MempoolTransactionsTest}
+import org.ergoplatform.testkit.properties.state.StateApplicationTest
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.scalacheck.Gen
 import scorex.core.network.DeliveryTracker
-import scorex.core.{PersistentNodeViewModifier, bytesToId}
+import scorex.core.bytesToId
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.testkit.generators.{ModifierProducerTemplateItem, SynInvalid, Valid}
-import scorex.testkit.properties._
-import scorex.testkit.properties.mempool.{MempoolRemovalTest, MempoolTransactionsTest}
-import scorex.testkit.properties.state.StateApplicationTest
 import scorex.utils.Random
 
 import scala.concurrent.ExecutionContext

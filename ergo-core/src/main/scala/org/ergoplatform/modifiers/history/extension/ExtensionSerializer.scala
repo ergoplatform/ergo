@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.history.extension
 
 import org.ergoplatform.settings.Constants
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{bytesToId, idToBytes}
 

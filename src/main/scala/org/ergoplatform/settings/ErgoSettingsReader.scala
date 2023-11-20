@@ -9,7 +9,6 @@ import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.nodeView.state.StateType.Digest
 import org.ergoplatform.ErgoApp
-import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
 import org.ergoplatform.settings.ErgoSettings.{configPath, scorexConfigPath}
 

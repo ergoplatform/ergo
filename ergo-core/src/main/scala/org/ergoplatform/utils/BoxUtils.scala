@@ -12,7 +12,7 @@ object BoxUtils {
 
   /** Minimal amount for transaction for a box of maximum size*/
   @inline
-  def sufficientAmount(parameters: Parameters): Long = ErgoBox.MaxBoxSize * parameters.minValuePerByte
+  def sufficientAmount(parameters: Parameters): Long = ErgoBox.MaxBoxSize * parameters.minValuePerByte.toLong
 
   /** Used when complete instance of ErgoBox is unavailable. */
   @inline
@@ -39,5 +39,5 @@ object BoxUtils {
     )
 
   @inline
-  def minimalErgoAmount(box: ErgoBox, parameters: Parameters): Long = box.bytes.length * parameters.minValuePerByte
+  def minimalErgoAmount(box: ErgoBox, parameters: Parameters): Long = box.bytes.length * parameters.minValuePerByte.toLong
 }

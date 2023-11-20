@@ -356,7 +356,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     val maxCost = (Int.MaxValue - 10) / 10 // cannot use Int.MaxValue directly due to overflow when it is converted to block cost
     val ps = Parameters(0, DefaultParameters.updated(MaxBlockCostIncrease, maxCost), emptyVSUpdate)
     val sc = new ErgoStateContext(Seq.empty, None, genesisStateDigest, ps, ErgoValidationSettings.initial,
-      VotingData.empty)(settings.chainSettings)
+      VotingData.empty)(settings)
       .upcoming(org.ergoplatform.mining.group.generator,
         0L,
         settings.chainSettings.initialNBits,
@@ -478,7 +478,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
                               LaunchParameters.parametersTable.updated(Parameters.BlockVersion, blockVersion),
                               LaunchParameters.proposedUpdate)
       new ErgoStateContext(Seq(header), None, genesisStateDigest, params, ErgoValidationSettings.initial,
-        VotingData.empty)(settings.chainSettings)
+        VotingData.empty)(settings)
     }
 
     def stateContextForTx(tx: ErgoTransaction, blockVersion: Byte): ErgoStateContext = {

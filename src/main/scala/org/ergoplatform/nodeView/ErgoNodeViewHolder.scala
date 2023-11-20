@@ -2,8 +2,8 @@ package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
-import org.ergoplatform.ErgoApp
-import org.ergoplatform.CriticalSystemException
+import org.ergoplatform.{CriticalSystemException, ErgoApp, TransactionsCarryingPersistentNodeViewModifier}
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId}
@@ -13,18 +13,16 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.wallet.utils.FileUtils
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, NetworkType}
-import scorex.core._
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, NetworkType, ScorexSettings}
+import org.ergoplatform.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerProcessNipopow.ProcessNipopow
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
-import scorex.core.consensus.ProgressInfo
-import scorex.core.settings.ScorexSettings
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.RecoverableModifierError
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 

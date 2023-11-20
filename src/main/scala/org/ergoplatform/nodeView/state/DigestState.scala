@@ -14,8 +14,8 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
-import scorex.core._
-import scorex.core.utils.ScorexEncoding
+import org.ergoplatform.core._
+import org.ergoplatform.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 
@@ -89,7 +89,7 @@ class DigestState protected(override val version: VersionTag,
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
     log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
-    val versionBytes = scorex.core.versionToBytes(version)
+    val versionBytes = org.ergoplatform.core.versionToBytes(version)
     Try(store.rollbackTo(versionBytes)).map { _ =>
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(versionBytes).get
@@ -145,7 +145,7 @@ class DigestState protected(override val version: VersionTag,
 
     val toUpdate = DigestState.metadata(newVersion, newRootHash, newStateContext)
 
-    store.update(scorex.core.versionToBytes(newVersion), Seq.empty, toUpdate).map { _ =>
+    store.update(org.ergoplatform.core.versionToBytes(newVersion), Seq.empty, toUpdate).map { _ =>
       new DigestState(newVersion, newRootHash, store, ergoSettings)
     }
   }
@@ -165,7 +165,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
     val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
-    store.update(scorex.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
+    store.update(org.ergoplatform.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
       new DigestState(version, rootHash, store, settings)
     }
   }
@@ -209,7 +209,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
   protected def metadata(newVersion: VersionTag,
                          newRootHash: ADDigest,
                          newStateContext: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = Seq(
-    scorex.core.versionToBytes(newVersion) -> newRootHash,
+    org.ergoplatform.core.versionToBytes(newVersion) -> newRootHash,
     ErgoStateReader.ContextKey -> newStateContext.bytes
   )
 

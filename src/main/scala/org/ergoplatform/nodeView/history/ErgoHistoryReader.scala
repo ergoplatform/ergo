@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.NodeViewComponent
+import org.ergoplatform.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
@@ -9,10 +11,8 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, HeadersProcessor}
 import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
-import scorex.core.NodeViewComponent
-import scorex.core.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.MalformedModifierError
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec

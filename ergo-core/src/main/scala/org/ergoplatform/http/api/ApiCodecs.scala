@@ -15,7 +15,7 @@ import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import scorex.core.validation.ValidationResult
+import org.ergoplatform.validation.ValidationResult
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.hash.Digest

@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
 object HistoryModifierSerializer extends ErgoSerializer[BlockSection] {

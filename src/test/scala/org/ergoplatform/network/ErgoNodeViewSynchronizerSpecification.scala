@@ -2,6 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
+import org.ergoplatform.PersistentNodeViewModifier
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
@@ -17,14 +18,13 @@ import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
-import scorex.core.PersistentNodeViewModifier
 import scorex.core.network.ModifiersStatus.{Received, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.message._
-import scorex.core.network.peer.PeerInfo
+import org.ergoplatform.network.message._
+import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
-import scorex.core.serialization.ErgoSerializer
-import scorex.testkit.utils.AkkaFixture
+import org.ergoplatform.serialization.ErgoSerializer
+import org.ergoplatform.testkit.utils.AkkaFixture
 
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}

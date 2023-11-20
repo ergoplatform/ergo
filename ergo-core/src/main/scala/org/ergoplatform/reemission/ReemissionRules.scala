@@ -26,7 +26,7 @@ class ReemissionRules(reemissionSettings: ReemissionSettings) extends Reemission
     */
   def reemissionForHeight(height: Height,
                           emissionRules: EmissionRules): Long = {
-    val emission = emissionRules.emissionAtHeight(height)
+    val emission = emissionRules.emissionAtHeight(height.toLong)
     if (height >= reemissionSettings.activationHeight &&
       emission >= (basicChargeAmount + 3) * EmissionRules.CoinsInOneErgo) {
       basicChargeAmount * EmissionRules.CoinsInOneErgo

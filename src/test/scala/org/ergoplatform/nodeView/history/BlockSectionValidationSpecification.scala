@@ -1,12 +1,12 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistoryTestHelpers
-import scorex.core.consensus.ModifierSemanticValidity
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import scorex.util.encode.Base16

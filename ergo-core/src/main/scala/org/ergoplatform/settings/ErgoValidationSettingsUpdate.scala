@@ -1,7 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.validation.RuleStatusSerializer
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
@@ -27,12 +27,12 @@ object ErgoValidationSettingsUpdateSerializer extends ErgoSerializer[ErgoValidat
 
   override def serialize(obj: ErgoValidationSettingsUpdate, w: Writer): Unit = {
     val sigmaWriter = new SigmaByteWriter(w, None)
-    w.putUInt(obj.rulesToDisable.length)
+    w.putUInt(obj.rulesToDisable.length.toLong)
     obj.rulesToDisable.foreach { r =>
-      w.putUShort(r)
+      w.putUShort(r.toInt)
     }
 
-    w.putUInt(obj.statusUpdates.length)
+    w.putUInt(obj.statusUpdates.length.toLong)
     obj.statusUpdates.foreach { r =>
       w.putUShort(r._1 - FirstRule)
       RuleStatusSerializer.serialize(r._2, sigmaWriter)

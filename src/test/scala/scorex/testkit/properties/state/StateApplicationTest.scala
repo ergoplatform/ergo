@@ -2,7 +2,9 @@ package scorex.testkit.properties.state
 
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState}
+import org.ergoplatform.testkit.properties.state.StateTests
 import org.scalacheck.Gen
+
 import scala.collection.mutable.ListBuffer
 
 

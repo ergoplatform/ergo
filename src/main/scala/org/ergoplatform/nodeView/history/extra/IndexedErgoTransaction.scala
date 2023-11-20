@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.DataInput
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
 import spire.implicits.cfor

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.state
 
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 
@@ -31,7 +31,7 @@ object VotingDataSerializer extends ErgoSerializer[VotingData] {
     w.putUShort(obj.epochVotes.length)
     obj.epochVotes.foreach { case (id, cnt) =>
       w.put(id)
-      w.putUInt(cnt)
+      w.putUInt(cnt.toLong)
     }
   }
 

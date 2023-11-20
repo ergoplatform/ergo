@@ -14,9 +14,10 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
 import org.scalatest.Assertion
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
+import org.ergoplatform.testkit.SerializationTests
 
-class SerializationTests extends ErgoPropertyTest with WalletGenerators with scorex.testkit.SerializationTests {
+class SerializationTests extends ErgoPropertyTest with WalletGenerators with SerializationTests {
 
   def checkSerializationRoundtripAndSize[A <: ErgoNodeViewModifier](generator: Gen[A],
                                                                     serializer: ErgoSerializer[A]): Assertion = {
@@ -48,7 +49,7 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
   }
 
   property("ErgoStateContext serialization") {
-    val serializer = ErgoStateContextSerializer(settings.chainSettings)
+    val serializer = ErgoStateContextSerializer(settings)
     val b = ergoStateContextGen.sample.get
     val recovered = serializer.parseBytes(serializer.toBytes(b))
     serializer.toBytes(b) shouldEqual serializer.toBytes(recovered)

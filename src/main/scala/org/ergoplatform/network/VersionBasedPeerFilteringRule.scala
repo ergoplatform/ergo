@@ -1,6 +1,5 @@
 package org.ergoplatform.network
 
-import scorex.core.app.Version
 import scorex.core.network.ConnectedPeer
 
 /**

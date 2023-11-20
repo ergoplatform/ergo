@@ -9,34 +9,34 @@ import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, NetworkSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionFromRemote}
-import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
-import scorex.core.{NodeViewModifier, idsToString}
+import org.ergoplatform.core.idsToString
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerProcessNipopow.ProcessNipopow
 import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoSetSnapshotPersistence, UtxoStateReader}
-import scorex.core.network.message._
-import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
+import org.ergoplatform.network.message._
+import org.ergoplatform.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
-import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.settings.NetworkSettings
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.MalformedModifierError
+import org.ergoplatform.network.message.{InvData, Message, ModifiersData}
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
-import scorex.core.network.peer.PenaltyType
+import org.ergoplatform.network.peer.PenaltyType
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.NodeViewModifier
+import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
-import scorex.core.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
-import scorex.core.transaction.TooHighCostError
+import org.ergoplatform.modifiers.transaction.TooHighCostError
+import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 
 import scala.annotation.tailrec

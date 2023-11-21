@@ -206,7 +206,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     }
 
     // wait for mempool to be cleaned
-    scorex.core.utils.untilTimeout(5.minute, 500.millis) {
+    org.ergoplatform.utils.untilTimeout(5.minute, 500.millis) {
       log.debug(s"Wait until transactions in mempool will be included into blocks. Currents size: ${requestReaders.m.size}")
       requestReaders.m.size shouldBe 0
       system.terminate()

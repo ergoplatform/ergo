@@ -6,11 +6,11 @@ import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{ScanResults, SpentInputData}
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.core.VersionTag
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.core.VersionTag
 import scorex.util.encode.Base16
 
 import scala.collection.compat.immutable.ArraySeq

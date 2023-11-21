@@ -272,6 +272,8 @@ lazy val ergoCore = (project in file("ergo-core"))
     commonSettings,
     name := "ergo-core",
     libraryDependencies ++= Seq(
+      "com.typesafe.akka" %% "akka-stream" % akkaVersion, // required for akka-http to compile
+      "com.typesafe.akka" %% "akka-actor" % akkaVersion, // required for akka-http to compile
       "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
       "com.iheart" %% "ficus" % ficusVersion,
       effectiveSigma,

@@ -4,6 +4,7 @@ import akka.actor.{Actor, Props}
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId, TokenId}

@@ -19,9 +19,9 @@ import org.ergoplatform.testkit.properties.HistoryTests
 import org.ergoplatform.testkit.properties.mempool.{MempoolRemovalTest, MempoolTransactionsTest}
 import org.ergoplatform.testkit.properties.state.StateApplicationTest
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
+import org.ergoplatform.core.bytesToId
 import org.scalacheck.Gen
 import scorex.core.network.DeliveryTracker
-import scorex.core.bytesToId
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.utils.Random

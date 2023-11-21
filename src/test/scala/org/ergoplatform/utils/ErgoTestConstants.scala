@@ -81,9 +81,9 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultVersion: Byte = 0
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val emptyVSUpdate = ErgoValidationSettingsUpdate.empty
-  val emptyStateContext: UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings, parameters)
+  val emptyStateContext: UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings.chainSettings, parameters)
     .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
-  def stateContextWith(parameters: Parameters): UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings, parameters)
+  def stateContextWith(parameters: Parameters): UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings.chainSettings, parameters)
     .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest

@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.testkit.utils.NoShrink
 import org.ergoplatform.utils.HistoryTestHelpers
-
+import org.ergoplatform.consensus.ModifierSemanticValidity._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 

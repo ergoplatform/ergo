@@ -7,7 +7,6 @@ import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.testkit.generators.SemanticallyValidModifierProducer
 
 trait StateTests[ST <: ErgoState[ST]]
   extends AnyPropSpec

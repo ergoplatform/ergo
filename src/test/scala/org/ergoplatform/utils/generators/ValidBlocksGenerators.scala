@@ -14,7 +14,7 @@ import org.ergoplatform.testkit.TestkitHelpers
 import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
-import scorex.core.VersionTag
+import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.avltree.batch.Remove
 import scorex.crypto.authds.ADDigest
 import scorex.db.ByteArrayWrapper

@@ -13,7 +13,6 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier.Loca
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.testkit.generators
 import org.ergoplatform.testkit.utils.AkkaFixture
-import scorex.testkit.generators._
 import scorex.util.ScorexLogging
 
 import scala.concurrent.Await

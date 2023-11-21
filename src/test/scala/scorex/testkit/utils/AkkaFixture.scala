@@ -3,7 +3,6 @@ package scorex.testkit.utils
 import java.util.concurrent.atomic.AtomicInteger
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
-import org.ergoplatform.testkit.utils.SysId
 
 object SysId {
   private val i = new AtomicInteger()

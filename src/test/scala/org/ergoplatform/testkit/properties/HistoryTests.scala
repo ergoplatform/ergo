@@ -1,5 +1,6 @@
 package org.ergoplatform.testkit.properties
 
+import org.ergoplatform.consensus.ModifierSemanticValidity.Valid
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.testkit.TestkitHelpers

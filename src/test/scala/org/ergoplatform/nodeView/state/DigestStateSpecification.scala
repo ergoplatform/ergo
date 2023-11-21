@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
-import scorex.core._
+import org.ergoplatform.core._
 import scorex.crypto.authds.ADDigest
 import sigmastate.interpreter.ProverResult
 

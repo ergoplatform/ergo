@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettingsReader
 import org.scalacheck.Gen
-import scorex.core.idToBytes
+import org.ergoplatform.core.idToBytes
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.serialization.ErgoSerializer

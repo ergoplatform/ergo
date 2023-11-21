@@ -11,7 +11,7 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 
 class VerifyNonADHistorySpecification extends HistoryTestHelpers {
-  import scorex.core.utils.MapPimp
+  import org.ergoplatform.utils.MapPimp
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)

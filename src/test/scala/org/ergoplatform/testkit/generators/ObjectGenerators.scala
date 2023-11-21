@@ -11,7 +11,7 @@ import org.scalacheck.Gen.{const, some}
 import org.scalacheck.{Arbitrary, Gen}
 import org.ergoplatform.network.message.{InvData, ModifiersData}
 import org.ergoplatform.network.peer.{PeerInfo, RestApiUrlPeerFeature}
-import scorex.core.network.ConnectedPeer
+import scorex.core.network.{ConnectedPeer, ConnectionDirection, ConnectionId, Incoming, Outgoing}
 import scorex.util.{ModifierId, bytesToId}
 
 trait ObjectGenerators {

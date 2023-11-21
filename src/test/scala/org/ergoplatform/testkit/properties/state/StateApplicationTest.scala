@@ -5,7 +5,6 @@ import org.ergoplatform.nodeView.state.{DigestState, ErgoState}
 import org.scalacheck.Gen
 import scala.collection.mutable.ListBuffer
 
-
 trait StateApplicationTest[ST <: ErgoState[ST]] extends StateTests[ST] {
 
   lazy val stateGenWithValidModifier: Gen[(ST, BlockSection)] = {

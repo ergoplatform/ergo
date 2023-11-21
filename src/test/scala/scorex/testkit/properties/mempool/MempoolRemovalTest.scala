@@ -5,7 +5,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.testkit.TestkitHelpers
 import org.ergoplatform.testkit.generators.ArbitraryTransactionsCarryingModifierProducer
-import org.ergoplatform.testkit.properties.mempool.MemoryPoolTest
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec

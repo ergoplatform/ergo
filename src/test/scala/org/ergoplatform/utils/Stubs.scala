@@ -36,7 +36,7 @@ import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
-import scorex.core.network.PeerSpec
+import org.ergoplatform.network.PeerSpec
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.ByteArrayWrapper
@@ -256,7 +256,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! Success(tx)
 
       case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
-        val sc = ErgoStateContext.empty(settings, parameters)
+        val sc = ErgoStateContext.empty(settings.chainSettings, parameters)
         sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
           utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
         }

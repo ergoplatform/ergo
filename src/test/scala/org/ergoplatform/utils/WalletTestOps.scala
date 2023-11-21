@@ -70,7 +70,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   def getUtxoState(implicit ctx: Ctx): UtxoState = getCurrentState.asInstanceOf[UtxoState]
 
   def getHeightOf(state: ErgoState[_])(implicit ctx: Ctx): Option[Int] =
-    getHistory.heightOf(scorex.core.versionToId(state.version))
+    getHistory.heightOf(org.ergoplatform.core.versionToId(state.version))
 
   def makeGenesisBlock(script: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty)
                       (implicit ctx: Ctx): ErgoFullBlock = {

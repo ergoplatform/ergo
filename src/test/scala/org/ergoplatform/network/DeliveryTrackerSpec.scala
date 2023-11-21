@@ -7,6 +7,9 @@ import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.testkit.generators.ObjectGenerators
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.util.ModifierId
+import scorex.core.network.DeliveryTracker
+import scorex.core.network.ModifiersStatus._
+
 
 class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {
 

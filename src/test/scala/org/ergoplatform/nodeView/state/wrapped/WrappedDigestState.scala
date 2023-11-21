@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.VersionTag
+import org.ergoplatform.core.VersionTag
 
 import scala.util.Try
 

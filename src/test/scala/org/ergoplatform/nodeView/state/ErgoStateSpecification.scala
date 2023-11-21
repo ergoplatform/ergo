@@ -8,7 +8,7 @@ import org.ergoplatform.settings.{Args, ErgoSettingsReader}
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalacheck.Gen
-import scorex.core.bytesToVersion
+import org.ergoplatform.core.bytesToVersion
 import org.ergoplatform.validation.ValidationResult.Valid
 import scorex.db.ByteArrayWrapper
 
@@ -163,28 +163,28 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     val expectedCost = 185160
 
     // successful validation
-    ErgoState.execTransactions(txs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe Valid(expectedCost)
+    ErgoState.execTransactions(txs, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe Valid(expectedCost)
 
     // cost limit exception expected when crossing MaxBlockCost
     val tooManyTxs = (1 to 10).flatMap(_ => generateTxs)
     assert(
-      ErgoState.execTransactions(tooManyTxs, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))).errors.head.message.contains(
+      ErgoState.execTransactions(tooManyTxs, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))).errors.head.message.contains(
         "Accumulated cost of block transactions should not exceed <maxBlockCost>"
       )
     )
 
     // missing box in state
-    ErgoState.execTransactions(txs, stateContext)(_ => Failure(new RuntimeException)).errors.head.message shouldBe
+    ErgoState.execTransactions(txs, stateContext, settings.nodeSettings)(_ => Failure(new RuntimeException)).errors.head.message shouldBe
       "Every input of the transaction should be in UTXO. null"
 
     // tx validation should kick in and detect block height violation
     val invalidTx = invalidErgoTransactionGen.sample.get
     assert(
-      ErgoState.execTransactions(txs :+ invalidTx, stateContext)(id => Try(boxes.getOrElse(ByteArrayWrapper(id), invalidTx.outputs.head)))
+      ErgoState.execTransactions(txs :+ invalidTx, stateContext, settings.nodeSettings)(id => Try(boxes.getOrElse(ByteArrayWrapper(id), invalidTx.outputs.head)))
         .errors.head.message.startsWith("Transaction outputs should have creationHeight not exceeding block height.")
     )
 
     // no transactions are valid
-    assert(ErgoState.execTransactions(Seq.empty, stateContext)(id => Try(boxes(ByteArrayWrapper(id)))).isValid)
+    assert(ErgoState.execTransactions(Seq.empty, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))).isValid)
   }
 }

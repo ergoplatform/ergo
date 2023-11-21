@@ -4,6 +4,7 @@ import java.net.InetSocketAddress
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{P2PKAddress, Pay2SAddress, Pay2SHAddress}

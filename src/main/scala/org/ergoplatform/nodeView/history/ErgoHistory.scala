@@ -16,6 +16,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.consensus.ProgressInfo
 import scorex.core.validation.RecoverableModifierError
+import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
@@ -310,6 +311,11 @@ object ErgoHistory extends ScorexLogging {
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
         }
+    }
+
+    // hack to get broken 1b4053106ae6fce38f9a902f5d06f5a9eb5bb413dfd958ae1cd6aa5a657d1950
+    history.modifierBytesById(ModifierId @@ "1b4053106ae6fce38f9a902f5d06f5a9eb5bb413dfd958ae1cd6aa5a657d1950").foreach{bs =>
+      println(s"1b4053106ae6fce38f9a902f5d06f5a9eb5bb413dfd958ae1cd6aa5a657d1950 bytes: ${Base16.encode(bs)}")
     }
 
     repairIfNeeded(history)

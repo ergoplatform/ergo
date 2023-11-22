@@ -3,8 +3,7 @@ package org.ergoplatform.utils
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.scalatest.{EitherValues, OptionValues}
-import scorex.core.network.peer.PeerInfo
-import scorex.core.utils.ScorexEncoding
+import org.ergoplatform.network.peer.PeerInfo
 import scorex.util.ScorexLogging
 
 import java.net.InetSocketAddress

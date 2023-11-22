@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.serialization.ManifestSerializer
+import org.ergoplatform.serialization.ManifestSerializer
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBFactory, LDBKVStore}

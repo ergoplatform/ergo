@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCode, StatusCod
 import akka.http.scaladsl.server.{Directives, Route}
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
+import org.ergoplatform.http.api.ApiError
 
 import scala.concurrent.Future
 import scala.language.implicitConversions

@@ -1,15 +1,15 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.local.{CorrectNipopowProofVerificationResult, NipopowProofVerificationResult, NipopowVerifier}
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, NipopowProofSerializer, PoPowHeader, PoPowParams}
-import org.ergoplatform.nodeView.history.ErgoHistory.GenesisHeight
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowErgoAlgos, NipopowProof, NipopowProofSerializer, PoPowHeader, PoPowParams}
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.GenesisHeight
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{ChainSettings, NipopowSettings}
 import org.ergoplatform.settings.Constants.HashLength
-import scorex.core.consensus.ProgressInfo
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, ScorexLogging}
 
@@ -108,7 +108,7 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
     */
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
     val proofParams = PoPowParams(m, k, continuous = true)
-    nipopowAlgos.prove(historyReader, headerIdOpt = headerIdOpt)(proofParams)
+    NipopowErgoAlgos.prove(historyReader, headerIdOpt = headerIdOpt, chainSettings)(proofParams)
   }
 
   /**

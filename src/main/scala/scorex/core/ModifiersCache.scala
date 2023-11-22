@@ -1,8 +1,8 @@
 package scorex.core
 
+import org.ergoplatform.consensus.ContainsModifiers
 import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import scorex.core.consensus.ContainsModifiers
 
 import scala.annotation.tailrec
 import scala.collection.mutable

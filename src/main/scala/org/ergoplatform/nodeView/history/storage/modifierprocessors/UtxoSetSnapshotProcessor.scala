@@ -2,14 +2,15 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoState}
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
 import org.ergoplatform.settings.{Algos, ErgoAlgos, ErgoSettings}
-import scorex.core.VersionTag
+import org.ergoplatform.core.VersionTag
 import scorex.core.network.ConnectedPeer
-import scorex.core.serialization.SubtreeSerializer
+import org.ergoplatform.serialization.SubtreeSerializer
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
@@ -46,7 +47,7 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     *         After first full-block block application not needed anymore.
     */
   def isUtxoSnapshotApplied: Boolean = {
-    readMinimalFullBlockHeight() > ErgoHistory.GenesisHeight
+    readMinimalFullBlockHeight() > GenesisHeight
   }
 
   /**

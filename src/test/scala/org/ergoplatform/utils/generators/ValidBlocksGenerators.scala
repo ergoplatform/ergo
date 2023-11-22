@@ -10,14 +10,14 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.testkit.TestkitHelpers
 import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
-import scorex.core.VersionTag
+import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.avltree.batch.Remove
 import scorex.crypto.authds.ADDigest
 import scorex.db.ByteArrayWrapper
-import scorex.testkit.TestkitHelpers
 
 import scala.annotation.tailrec
 import scala.collection.mutable

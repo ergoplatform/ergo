@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Height
 
 /**
   * Interface to methods providing updating and reading height of first full block stored in local database

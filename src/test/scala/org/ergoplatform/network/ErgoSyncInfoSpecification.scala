@@ -5,7 +5,7 @@ import java.nio.ByteBuffer
 import com.google.common.primitives.Ints
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoMessageSpec, ErgoSyncInfoV1}
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.network.message.{Message, MessageSerializer}
+import org.ergoplatform.network.message.{Message, MessageSerializer}
 import scorex.crypto.hash
 import scorex.util.ModifierId
 import scorex.util.encode.Base16

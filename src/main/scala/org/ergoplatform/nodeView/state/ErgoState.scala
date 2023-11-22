@@ -10,14 +10,14 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters, NodeConfigurationSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.validation.ValidationResult.Valid
-import scorex.core.validation.{ModifierValidator, ValidationResult}
-import scorex.core.{VersionTag, idToVersion}
+import org.ergoplatform.validation.ValidationResult.Valid
+import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
+import org.ergoplatform.core.{VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
@@ -103,7 +103,8 @@ object ErgoState extends ScorexLogging {
     * @return Result of transactions execution with total cost inside
     */
   def execTransactions(transactions: Seq[ErgoTransaction],
-                       currentStateContext: ErgoStateContext)
+                       currentStateContext: ErgoStateContext,
+                       nodeSettings: NodeConfigurationSettings)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
@@ -130,7 +131,7 @@ object ErgoState extends ScorexLogging {
       }
     }
 
-    val checkpointHeight = currentStateContext.ergoSettings.nodeSettings.checkpoint.map(_.height).getOrElse(0)
+    val checkpointHeight = nodeSettings.checkpoint.map(_.height).getOrElse(0)
     if (currentStateContext.currentHeight <= checkpointHeight) {
       Valid(0L)
     } else {
@@ -206,7 +207,7 @@ object ErgoState extends ScorexLogging {
                         additionalRegisters: AdditionalRegisters = Map.empty): ErgoBox = {
     import sigmastate.eval._
 
-    val creationHeight: Int = ErgoHistory.EmptyHistoryHeight
+    val creationHeight: Int = EmptyHistoryHeight
 
     val transactionId: ModifierId = ErgoBox.allZerosModifierId
     val boxIndex: Short = 0: Short

@@ -3,7 +3,7 @@ package org.ergoplatform.settings
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import scorex.util.ModifierId
 
@@ -21,51 +21,15 @@ trait CheckpointingSettingsReader extends ModifierIdReader {
 }
 
 /**
-  * Settings related to state bootstrapping with UTXO set snapshots. See ergo.node.utxo section for settings description.
-  */
-case class UtxoSettings(utxoBootstrap: Boolean, storingUtxoSnapshots: Int, p2pUtxoSnapshots: Int)
-
-/**
-  * Custom settings reader for `UtxoSettings`
-  */
-trait UtxoSettingsReader {
-  implicit val utxoSettingsReader: ValueReader[UtxoSettings] = { (cfg, path) =>
-    UtxoSettings(
-      cfg.as[Boolean](s"$path.utxoBootstrap"),
-      cfg.as[Int](s"$path.storingUtxoSnapshots"),
-      cfg.as[Int](s"$path.p2pUtxoSnapshots")
-    )
-  }
-}
-
-
-/**
-  * Settings related to headers-chain bootstrapping with NiPoPoWs. See ergo.node.nipopow section for settings description.
-  */
-case class NipopowSettings(nipopowBootstrap: Boolean, p2pNipopows: Int)
-
-/**
-  * Custom settings reader for `NipopowSettings`
-  */
-trait NipopowSettingsReader {
-  implicit val nipopowSettingsReader: ValueReader[NipopowSettings] = { (cfg, path) =>
-    NipopowSettings(
-      cfg.as[Boolean](s"$path.nipopowBootstrap"),
-      cfg.as[Int](s"$path.p2pNipopows")
-    )
-  }
-}
-
-/**
   * Configuration file for Ergo node regime
   *
   * @see src/main/resources/application.conf for parameters description
   */
-case class NodeConfigurationSettings(stateType: StateType,
-                                     verifyTransactions: Boolean,
-                                     blocksToKeep: Int,
-                                     utxoSettings: UtxoSettings,
-                                     nipopowSettings: NipopowSettings,
+case class NodeConfigurationSettings(override val stateType: StateType,
+                                     override val verifyTransactions: Boolean,
+                                     override val blocksToKeep: Int,
+                                     override val utxoSettings: UtxoSettings,
+                                     override val nipopowSettings: NipopowSettings,
                                      mining: Boolean,
                                      maxTransactionCost: Int,
                                      maxTransactionSize: Int,
@@ -85,7 +49,7 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      adProofsSuffixLength: Int,
                                      extraIndex: Boolean,
                                      blacklistedTransactions: Seq[String] = Seq.empty,
-                                     checkpoint: Option[CheckpointSettings] = None) {
+                                     checkpoint: Option[CheckpointSettings] = None) extends ClientCapabilities {
   /**
     * Whether the node keeping all the full blocks of the blockchain or not.
     * @return true if the blockchain is pruned, false if not

@@ -1,10 +1,10 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.{ErgoBox, NodeViewComponent}
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Height
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, Parameters}
-import scorex.core.{NodeViewComponent, VersionTag}
+import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.LDBVersionedStore
@@ -66,10 +66,10 @@ object ErgoStateReader extends ScorexLogging {
     */
   def storageStateContext(store: LDBVersionedStore, settings: ErgoSettings): ErgoStateContext = {
     store.get(ErgoStateReader.ContextKey)
-      .flatMap(b => ErgoStateContextSerializer(settings).parseBytesTry(b).toOption)
+      .flatMap(b => ErgoStateContextSerializer(settings.chainSettings).parseBytesTry(b).toOption)
       .getOrElse {
         log.warn("Can't read blockchain parameters from database")
-        ErgoStateContext.empty(settings, LaunchParameters)
+        ErgoStateContext.empty(settings.chainSettings, LaunchParameters)
       }
   }
 
@@ -94,13 +94,13 @@ object ErgoStateReader extends ScorexLogging {
       if (lastHeaders.size != Constants.LastHeadersInContext) {
         Failure(new Exception(s"Only ${lastHeaders.size} headers found in reconstructStateContextBeforeEpoch"))
       } else {
-        val empty = ErgoStateContext.empty(settings, LaunchParameters)
+        val empty = ErgoStateContext.empty(settings.chainSettings, LaunchParameters)
         val esc = new ErgoStateContext( lastHeaders,
                                         None,
                                         empty.genesisStateDigest,
                                         empty.currentParameters,
                                         empty.validationSettings,
-                                        empty.votingData)(settings)
+                                        empty.votingData)(settings.chainSettings)
         Success(esc)
       }
     }

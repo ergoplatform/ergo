@@ -38,6 +38,7 @@ val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
 val sigmaStateVersion = "5.0.12"
+val ficusVersion = "1.4.7"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -76,7 +77,7 @@ libraryDependencies ++= Seq(
   "org.iq80.leveldb" % "leveldb" % "0.12",
   
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
-  "com.iheart" %% "ficus" % "1.4.7",
+  "com.iheart" %% "ficus" % ficusVersion,
   "ch.qos.logback" % "logback-classic" % "1.3.5",
   "com.google.guava" % "guava" % "21.0",
   "com.github.ben-manes.caffeine" % "caffeine" % "2.9.3", // use 3.x only for java 11+
@@ -130,6 +131,8 @@ val opts = Seq(
 
 javaOptions in run ++= opts
 scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
+val scalacOpts = Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
+
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
@@ -262,6 +265,24 @@ lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
   .dependsOn(avldb)
   .enablePlugins(JmhPlugin)
 
+lazy val ergoCore = (project in file("ergo-core"))
+  .dependsOn(avldb % "test->test;compile->compile")
+  .dependsOn(ergoWallet % "test->test;compile->compile")
+  .settings(
+    commonSettings,
+    name := "ergo-core",
+    libraryDependencies ++= Seq(
+      "com.typesafe.akka" %% "akka-stream" % akkaVersion, // required for akka-http to compile
+      "com.typesafe.akka" %% "akka-actor" % akkaVersion, // required for akka-http to compile
+      "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
+      "com.iheart" %% "ficus" % ficusVersion,
+      effectiveSigma,
+      (effectiveSigma % Test).classifier("tests")
+    ),
+    scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+    scalacOptions in(Compile, compile) --= scalacOpts,
+  )
+
 lazy val ergoWallet = (project in file("ergo-wallet"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
@@ -297,6 +318,7 @@ lazy val ergo = (project in file("."))
     scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
     javacOptions in(Compile, compile) ++= javacReleaseOption
   )
+  .dependsOn(ergoCore % "test->test;compile->compile")
   .dependsOn(ergoWallet % "test->test;compile->compile")
   .dependsOn(avldb % "test->test;compile->compile")
   .configs(It2Test)

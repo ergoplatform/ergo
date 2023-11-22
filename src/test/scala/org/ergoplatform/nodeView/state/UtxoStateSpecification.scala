@@ -9,13 +9,13 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.modifiers.transaction.TooHighCostError
+import org.ergoplatform.core.idToVersion
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
-import scorex.core._
-import scorex.core.transaction.TooHighCostError
 import scorex.crypto.authds.ADKey
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId}
@@ -62,7 +62,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
   property("Founders should be able to spend genesis founders box") {
     var (us, bh) = createUtxoState(settings)
     val foundersBox = genesisBoxes.last
-    var height: Int = ErgoHistory.GenesisHeight
+    var height: Int = GenesisHeight
 
     val settingsPks = settings.chainSettings.foundersPubkeys
       .map(str => groupElemFromBytes(Base16.decode(str).get))
@@ -160,7 +160,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
   property("proofsForTransactions") {
     var (us: UtxoState, bh) = createUtxoState(settings)
-    var height: Int = ErgoHistory.GenesisHeight
+    var height: Int = GenesisHeight
     forAll(defaultHeaderGen) { header =>
       val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
       val txs = t._1
@@ -184,7 +184,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     var bh = BoxHolder(Seq(genesisEmissionBox))
     var us = createUtxoState(bh, parameters)
 
-    var height: Int = ErgoHistory.GenesisHeight
+    var height: Int = GenesisHeight
     // generate chain of correct full blocks
     val chain = (0 until 10) map { _ =>
       val header = defaultHeaderGen.sample.value

@@ -1,6 +1,7 @@
 package scorex.core.api.http
 
 import akka.http.scaladsl.server._
+import org.ergoplatform.http.api.ApiError
 
 object ApiRejectionHandler {
 

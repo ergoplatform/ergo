@@ -1,11 +1,12 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.settings.Algos
-import scorex.core.consensus.ProgressInfo
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
@@ -222,7 +223,7 @@ trait FullBlockProcessor extends HeadersProcessor {
         s"New best block is ${toApply.last.header.encodedId} " +
         s"with height ${toApply.last.header.height} " +
         s"updates block ${prevBest.map(_.encodedId).getOrElse("None")} " +
-        s"with height ${ErgoHistory.heightOf(prevBest.map(_.header))}"
+        s"with height ${ErgoHistoryUtils.heightOf(prevBest.map(_.header))}"
     }
     log.info(s"Full block ${appliedBlock.encodedId} appended, " +
       s"going to apply ${toApply.length}$toRemoveStr modifiers. $newStatusStr")
@@ -285,6 +286,6 @@ object FullBlockProcessor {
   def emptyCache: IncompleteFullChainCache = IncompleteFullChainCache(TreeMap.empty(ord))
 
   def chainStatusKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("main_chain".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("main_chain".getBytes(CharsetName) ++ idToBytes(id)))
 
 }

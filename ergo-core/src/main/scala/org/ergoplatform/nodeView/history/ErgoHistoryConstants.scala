@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoLikeContext
 object ErgoHistoryConstants {
   /**
    * Type for time, represents machine-specific timestamp of a transaction
-   * or block section, as miliseconds passed since beginning of UNIX
+   * or block section, as milliseconds passed since beginning of UNIX
    * epoch on the machine
    */
   type Time = Long

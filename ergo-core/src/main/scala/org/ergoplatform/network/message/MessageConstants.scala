@@ -1,5 +1,8 @@
 package org.ergoplatform.network.message
 
+/**
+  * Type aliases and constants related to P2P network messages formats
+  */
 object MessageConstants {
   type MessageCode = Byte
 

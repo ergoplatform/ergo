@@ -535,7 +535,7 @@ trait ApiCodecs extends JsonCodecs {
       "inputs" -> iEt.inputs.asJson,
       "dataInputs" -> iEt.dataInputs.asJson,
       "outputs" -> iEt.outputs.asJson,
-      "size" -> iEt.txSize.asJson
+      "size" -> iEt.size.asJson
     )
   }
 

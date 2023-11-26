@@ -28,13 +28,14 @@ import scala.concurrent.duration.{Duration, SECONDS}
 import scala.concurrent.{Await, Future}
 import scala.util.Success
 
-case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, indexer: ActorRef)
+case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, indexerOpt: Option[ActorRef])
                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  private implicit val segmentTreshold: Int =
+  private implicit val segmentTreshold: Int = indexerOpt.map { indexer =>
     Await.result[Int]((indexer ? GetSegmentTreshold).asInstanceOf[Future[Int]], Duration(3, SECONDS))
+  }.getOrElse(0)
 
   private val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 5)
 

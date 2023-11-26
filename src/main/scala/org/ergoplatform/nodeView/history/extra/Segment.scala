@@ -307,8 +307,8 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       txs.clear()
       txs ++= tmp
       if (txs.isEmpty && txSegmentCount > 0) { // entire current tx set removed, retrieving more from database if possible
-        val segmentId = txSegmentId(parentId, txSegmentCount - 1)
-        history.typedExtraIndexById[T](idMod(segmentId)).get.txs ++=: txs
+        val segmentId = idMod(txSegmentId(parentId, txSegmentCount - 1))
+        history.typedExtraIndexById[T](segmentId).get.txs ++=: txs
         toRemove += segmentId
         txSegmentCount -= 1
       }
@@ -320,8 +320,8 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       boxes.clear()
       boxes ++= tmp
       if (boxes.isEmpty && boxSegmentCount > 0) { // entire current box set removed, retrieving more from database if possible
-        val segmentId = boxSegmentId(parentId, boxSegmentCount - 1)
-        history.typedExtraIndexById[T](idMod(segmentId)).get.boxes ++=: boxes
+        val segmentId = idMod(boxSegmentId(parentId, boxSegmentCount - 1))
+        history.typedExtraIndexById[T](segmentId).get.boxes ++=: boxes
         toRemove += segmentId
         boxSegmentCount -= 1
       }
@@ -418,19 +418,21 @@ object SegmentSerializer {
   }
 
   def serialize(s: Segment[_], w: Writer): Unit = {
-    w.putUInt(s.txs.length)
+    w.putInt(s.txs.length)
     cfor(0)(_ < s.txs.length, _ + 1) { i => w.putLong(s.txs(i)) }
-    w.putUInt(s.boxes.length)
+    w.putInt(s.boxes.length)
     cfor(0)(_ < s.boxes.length, _ + 1) { i => w.putLong(s.boxes(i)) }
     w.putInt(s.boxSegmentCount)
     w.putInt(s.txSegmentCount)
   }
 
   def parse(r: Reader, s: Segment[_]): Unit = {
-    val txnsLen: Long = r.getUInt()
-    cfor(0)(_ < txnsLen, _ + 1) { _ => s.txs.+=(r.getLong()) }
-    val boxesLen: Long = r.getUInt()
-    cfor(0)(_ < boxesLen, _ + 1) { _ => s.boxes.+=(r.getLong()) }
+    val txnsLen: Int = r.getInt()
+    s.txs.sizeHint(txnsLen)
+    cfor(0)(_ < txnsLen, _ + 1) { _ => s.txs += r.getLong() }
+    val boxesLen: Int = r.getInt()
+    s.boxes.sizeHint(boxesLen)
+    cfor(0)(_ < boxesLen, _ + 1) { _ => s.boxes += r.getLong() }
     s.boxSegmentCount = r.getInt()
     s.txSegmentCount = r.getInt()
   }

@@ -19,8 +19,6 @@ case class IndexerState(indexedHeight: Int,
 
   def rollbackInProgress: Boolean = rollbackTo > 0
 
-  def updateCaughtUp(chainHeight: Int): IndexerState = copy(caughtUp = indexedHeight == chainHeight)
-
   def incrementIndexedHeight: IndexerState = copy(indexedHeight = indexedHeight + 1)
 
   def incrementTxIndex: IndexerState = copy(globalTxIndex = globalTxIndex + 1)

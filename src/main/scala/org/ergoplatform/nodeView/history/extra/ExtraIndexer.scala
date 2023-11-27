@@ -301,7 +301,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
     log.info(s"Buffered block $height / $chainHeight [txs: ${bt.txs.length}, boxes: $boxCount] (buffer: $modCount / $saveLimit)")
 
-    newState.updateCaughtUp(headerOpt.map(_.height).getOrElse(chainHeight))
+    val maxHeight = headerOpt.map(_.height).getOrElse(chainHeight)
+    newState.copy(caughtUp = newState.indexedHeight == maxHeight)
   }
 
   /**
@@ -372,7 +373,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     newState = newState.incrementBoxIndex
 
     // Save changes
-    newState = newState.copy(indexedHeight = height, rollbackTo = 0).updateCaughtUp(chainHeight)
+    newState = newState.copy(indexedHeight = height, rollbackTo = 0)
     historyStorage.removeExtra(toRemove.toArray)
     saveProgress(newState, writeLog = false)
 

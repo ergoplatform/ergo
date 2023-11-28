@@ -8,7 +8,7 @@ import scorex.util.ModifierId
 import scala.collection.mutable
 import scala.util.Try
 
-object NipopowErgoAlgos {
+object NipopowProverAlgos {
   /**
    * Computes NiPoPow proof for the chain stored in `histReader`'s database,
    * or a prefix of the chain which contains a specific header (if `headerIdOpt` is specified).

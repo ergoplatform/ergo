@@ -123,10 +123,10 @@ object BlockTransactions extends ApiCodecs {
   implicit val jsonDecoder: Decoder[BlockTransactions] = { c: HCursor =>
     for {
       headerId <- c.downField("headerId").as[ModifierId]
-      transactions <- c.downField("transactions").as[mutable.WrappedArray[ErgoTransaction]]
+      transactions <- c.downField("transactions").as[mutable.ArraySeq[ErgoTransaction]]
       blockVersion <- c.downField("blockVersion").as[Version]
       size <- c.downField("size").as[Int]
-    } yield BlockTransactions(headerId, blockVersion, transactions, Some(size))
+    } yield BlockTransactions(headerId, blockVersion, transactions.toSeq, Some(size))
   }
 }
 

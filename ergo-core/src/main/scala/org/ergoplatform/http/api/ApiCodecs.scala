@@ -32,6 +32,7 @@ import org.ergoplatform.sdk.JsonCodecs
 import sigmastate.eval.Extensions.ArrayOps
 
 import java.math.BigInteger
+import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
 
 
@@ -262,7 +263,7 @@ trait ApiCodecs extends JsonCodecs {
   implicit val positionDecoder: Decoder[NodePosition] = { c =>
     c.as[String].flatMap {s =>
       Try(s.split("-").map(_.toInt)) match {
-        case Success(seq) => Right(NodePosition(seq))
+        case Success(seq) => Right(NodePosition(ArraySeq.unsafeWrapArray(seq)))
         case Failure(e) => Left(DecodingFailure.fromThrowable(e, List()))
       }
     }
@@ -387,7 +388,7 @@ trait ApiCodecs extends JsonCodecs {
     for {
       secretHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("secretHints"))
       publicHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("publicHints"))
-    } yield TransactionHintsBag(secretHints.mapValues(HintsBag.apply), publicHints.mapValues(HintsBag.apply))
+    } yield TransactionHintsBag(secretHints.view.mapValues(HintsBag.apply).toMap, publicHints.view.mapValues(HintsBag.apply).toMap)
   }
 }
 

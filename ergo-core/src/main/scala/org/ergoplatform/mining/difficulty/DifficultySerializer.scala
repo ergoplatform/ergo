@@ -68,7 +68,7 @@ object DifficultySerializer extends ErgoSerializer[NBits] {
   }
 
   /** Parse 4 bytes from the byte array (starting at the offset) as unsigned 32-bit integer in big endian format. */
-  def readUint32BE(bytes: Array[Byte]): Long = ((bytes(0) & 0xffl) << 24) | ((bytes(1) & 0xffl) << 16) | ((bytes(2) & 0xffl) << 8) | (bytes(3) & 0xffl)
+  def readUint32BE(bytes: Array[Byte]): Long = ((bytes(0) & 0xffL) << 24) | ((bytes(1) & 0xffL) << 16) | ((bytes(2) & 0xffL) << 8) | (bytes(3) & 0xffL)
 
   def uint32ToByteArrayBE(value: Long): Array[Byte] = {
     Array(0xFF & (value >> 24), 0xFF & (value >> 16), 0xFF & (value >> 8), 0xFF & value).map(_.toByte)

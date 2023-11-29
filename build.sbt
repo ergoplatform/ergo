@@ -5,8 +5,8 @@ logLevel := Level.Debug
 
 // this values should be in sync with ergo-wallet/build.sbt
 val scala211 = "2.11.12"
-val scala212 = "2.12.10"
-val scala213 = "2.13.8"
+val scala212 = "2.12.18"
+val scala213 = "2.13.12"
 
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
@@ -208,7 +208,9 @@ scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 
 lazy val avldb = (project in file("avldb"))
+  .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
+    crossScalaVersions := Seq(scala213, scalaVersion.value),
     commonSettings,
     name := "avldb",
     // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
@@ -216,6 +218,7 @@ lazy val avldb = (project in file("avldb"))
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
     // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
     scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+    scalacOptions in(Compile, compile) --= scalacOpts,
     javacOptions in(Compile, compile) ++= javacReleaseOption,
     libraryDependencies ++= Seq(
       // database dependencies
@@ -244,9 +247,11 @@ lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
   .enablePlugins(JmhPlugin)
 
 lazy val ergoCore = (project in file("ergo-core"))
+  .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .dependsOn(avldb % "test->test;compile->compile")
   .dependsOn(ergoWallet % "test->test;compile->compile")
   .settings(
+    crossScalaVersions := Seq(scala213, scalaVersion.value),
     commonSettings,
     name := "ergo-core",
     libraryDependencies ++= Seq(

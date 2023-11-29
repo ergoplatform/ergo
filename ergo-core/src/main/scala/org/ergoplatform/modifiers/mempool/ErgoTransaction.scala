@@ -183,7 +183,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     ErgoBoxAssetExtractor.extractAssets(boxesToSpend) match {
       case Success((inAssets, inAssetsNum)) =>
-        lazy val newAssetId = mutable.WrappedArray.make(inputs.head.boxId)
+        lazy val newAssetId = mutable.ArraySeq(inputs.head.boxId)
         val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
         val currentTxCost = validationBefore.result.payload.get
 

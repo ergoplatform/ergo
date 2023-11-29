@@ -1,7 +1,7 @@
 // this values should be in sync with root (i.e. ../build.sbt)
 val scala211 = "2.11.12"
-val scala212 = "2.12.10"
-val scala213 = "2.13.8"
+val scala212 = "2.12.18"
+val scala213 = "2.13.12"
 
 val circeVersion = "0.13.0"
 val circeVersion211 = "0.10.0"

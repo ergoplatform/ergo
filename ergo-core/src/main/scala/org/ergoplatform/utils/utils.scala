@@ -28,7 +28,7 @@ package object utils {
     r
   }
 
-  def concatBytes(seq: Traversable[Array[Byte]]): Array[Byte] = {
+  def concatBytes(seq: Iterable[Array[Byte]]): Array[Byte] = {
     val length: Int = seq.map(_.length).sum
     val result: Array[Byte] = new Array[Byte](length)
     var pos: Int = 0

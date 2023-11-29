@@ -4,8 +4,6 @@ import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCode, StatusCod
 import akka.http.scaladsl.server.{Directives, Route}
 import io.circe.syntax._
 
-import scala.language.implicitConversions
-
 case class ApiError(statusCode: StatusCode, reason: String = "") {
 
   def apply(detail: String): Route = complete(detail)

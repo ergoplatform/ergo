@@ -5,6 +5,8 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{bytesToId, idToBytes}
 
+import scala.collection.compat.immutable.LazyList
+
 object ExtensionSerializer extends ErgoSerializer[Extension] {
 
   override def serialize(obj: Extension, w: Writer): Unit = {
@@ -21,7 +23,7 @@ object ExtensionSerializer extends ErgoSerializer[Extension] {
     val startPosition = r.position
     val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val fieldsSize = r.getUShort()
-    val fieldsView = (1 to fieldsSize).toStream.map { _ =>
+    val fieldsView = (1 to fieldsSize).to(LazyList).map { _ =>
       val key = r.getBytes(Extension.FieldKeySize)
       val length = r.getUByte()
       val value = r.getBytes(length)

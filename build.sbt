@@ -36,6 +36,8 @@ lazy val commonSettings = Seq(
 val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
+val akkaHttpVersion211 = "10.1.15"
+val akkaVersion211 = "2.5.31"
 
 val sigmaStateVersion = "5.0.12"
 val ficusVersion = "1.4.7"
@@ -43,13 +45,6 @@ val ficusVersion = "1.4.7"
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 val effectiveSigma = "org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion
-
-val apiDependencies = Seq(
-  "io.circe" %% "circe-core" % circeVersion,
-  "io.circe" %% "circe-generic" % circeVersion,
-  "io.circe" %% "circe-parser" % circeVersion,
-  "de.heikoseeberger" %% "akka-http-circe" % "1.20.0"
-)
 
 libraryDependencies ++= Seq(
   effectiveSigma.force()
@@ -240,14 +235,18 @@ Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 lazy val avldb = (project in file("avldb"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
-    crossScalaVersions := Seq(scala213, scalaVersion.value),
+    crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
     commonSettings,
     name := "avldb",
     // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
     // see https://github.com/eclipse/jetty.project/issues/3244
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
     // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
-    scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+    scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11")
+      Seq.empty
+    else
+      Seq("-release", "8")
+      ),
     scalacOptions in(Compile, compile) --= scalacOpts,
     javacOptions in(Compile, compile) ++= javacReleaseOption,
   )
@@ -273,19 +272,23 @@ lazy val ergoCore = (project in file("ergo-core"))
   .dependsOn(avldb % "test->test;compile->compile")
   .dependsOn(ergoWallet % "test->test;compile->compile")
   .settings(
-    crossScalaVersions := Seq(scala213, scalaVersion.value),
+    crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
     commonSettings,
     name := "ergo-core",
     libraryDependencies ++= Seq(
-      "com.typesafe.akka" %% "akka-stream" % akkaVersion, // required for akka-http to compile
-      "com.typesafe.akka" %% "akka-actor" % akkaVersion, // required for akka-http to compile
-      "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-stream" % (if (scalaVersion.value == scala211) akkaVersion211 else akkaVersion), // required for akka-http to compile
+      "com.typesafe.akka" %% "akka-http" % (if (scalaVersion.value == scala211) akkaHttpVersion211 else akkaHttpVersion),
       "com.iheart" %% "ficus" % ficusVersion,
       effectiveSigma,
       (effectiveSigma % Test).classifier("tests")
     ),
-    scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+    scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11")
+      Seq.empty
+    else
+      Seq("-release", "8")
+      ),
     scalacOptions in(Compile, compile) --= scalacOpts,
+    scalacOptions in(Compile, compile) ++= Seq("-Xexperimental"),
   )
 
 lazy val ergoWallet = (project in file("ergo-wallet"))

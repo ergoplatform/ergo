@@ -17,7 +17,9 @@ This is not efficient at all. Most of new block's transactions are already avail
 bottlenecking network bandwidth after two minutes of delay is also downgrading network performance.
 
 Also, while average block delay in Ergo is 2 minutes, variance is high, and often a user may wait 10 minutes for 
-first confirmation.   
+first confirmation. Proposals to lower variance are introducing experimental and controversial changes in consensus protocol.
+Changing block delay via hardfork would have a lot of harsh consequences (e.g. many contracts relying on current block 
+delay would be broken). Thus it makes sense to consider weaker notions of confirmation. 
 
 Sub-Blocks
 ----------
@@ -31,7 +33,13 @@ regularly via a deterministic procedure (called difficulty readjustment algorith
 
 Aside of blocks, *superblocks" are also used in the Ergo protocol, for building NiPoPoWs on top of them. A superblock is
 a block which is more difficult to find than an ordinary, for example, for a (level-1) superblock *S* we may require 
-*H(b) < T/2*, and in general, we can call n-level superblock a block *S* for which *H(b) < T/2^n*. Please note that a
+*H(S) < T/2*, and in general, we can call n-level superblock a block *S* for which *H(S) < T/2^n*. Please note that a
 superblock is also a valid block (every superblock is passing block PoW test).
 
-Similarly, we can go in opposite direction and use *subblocks*
+Similarly, we can go in opposite direction and use *subblocks*, so blocks with lower difficulty. We can set *t = T/64*
+and define superblock *s* as *H(s) < t*, then miner can generate on average 64 subblocks (including normal block itself)
+per block generation period. Please note that, unlike superblocks, subblocks are not blocks, but a block is passing 
+subblock check.
+
+Subblocks are similar to block shares already used in pooled mining. Rather, this proposal is considering to use 
+sub-blocks for improving transactions propagation and providing a framework for weaker confirmations.

@@ -323,10 +323,6 @@ lazy val ergo = (project in file("."))
   .dependsOn(avldb % "test->test;compile->compile")
   .configs(It2Test)
 
-lazy val benchmarks = (project in file("benchmarks"))
-  .settings(commonSettings, name := "ergo-benchmarks")
-  .dependsOn(ergo % "test->test")
-  .enablePlugins(JmhPlugin)
 
 // PGP key for signing a release build published to sonatype
 // signing is done by sbt-pgp plugin

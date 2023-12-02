@@ -3,7 +3,7 @@ package org.ergoplatform.bench
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.Utils
 import org.ergoplatform.Utils.BenchReport
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FullBlockApplied
 import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext

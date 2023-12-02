@@ -4,7 +4,7 @@ import org.ergoplatform.Utils
 import org.ergoplatform.Utils.BenchReport
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.NVBenchmark
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.HistoryTestHelpers
 
 object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark {
@@ -15,7 +15,7 @@ object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark {
 
     val startTs = System.currentTimeMillis()
 
-    val realNetworkSetting = ErgoSettings.read(Args(Some("src/main/resources/application.conf"), None))
+    val realNetworkSetting = ErgoSettingsReader.read(Args(Some("src/main/resources/application.conf"), None))
 
     val blocks = readBlocks
 

@@ -1,10 +1,9 @@
 package org.ergoplatform.bench
 
 import java.io.FileOutputStream
-
 import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import scorex.util.ScorexLogging
 
 
@@ -14,7 +13,7 @@ object HistoryExtractor extends ScorexLogging {
 
     lazy val cfgPath: Option[String] = args.headOption
     lazy val outputFile: String = args.lift(1).getOrElse("blocks.dat")
-    lazy val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
+    lazy val ergoSettings: ErgoSettings = ErgoSettingsReader.read(Args(cfgPath, None))
 
     val os = new FileOutputStream(outputFile)
     val h = ErgoHistory.readOrGenerate(ergoSettings)(null)

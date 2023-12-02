@@ -1,8 +1,6 @@
 package org.ergoplatform.validation
 
-import akka.http.scaladsl.server.Route
 import io.circe.{ACursor, DecodingFailure}
-import org.ergoplatform.http.api.ApiError
 import org.ergoplatform.validation.ValidationResult.{Invalid, Valid}
 
 import scala.concurrent.Future
@@ -50,13 +48,6 @@ sealed trait ValidationResult[+T] {
   def toDecoderResult(implicit cursor: ACursor): Either[DecodingFailure, T] = this match {
     case Valid(value) => Right(value)
     case Invalid(_) => Left(DecodingFailure(message, cursor.history))
-  }
-
-  /** Convert validation result to akka http route
-    */
-  def toApi(onSuccess: T => Route): Route = this match {
-    case Valid(value) => onSuccess(value)
-    case Invalid(_) => ApiError.BadRequest(message)
   }
 
 }

@@ -54,24 +54,11 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
   "io.circe" %% "circe-parser" % circeVersion,
-  "de.heikoseeberger" %% "akka-http-circe" % "1.20.0",
-  
-  "org.ethereum" % "leveldbjni-all" % "1.18.3",
-  //the following pure-java leveldb implementation is needed only on specific platforms, such as 32-bit Raspberry Pi
-  //in future, it could be reasonable to have special builds with this Java db only, and for most of platforms use
-  //jni wrapper over native library included in leveldbjni-all
-  "org.iq80.leveldb" % "leveldb" % "0.12",
-  
-  "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
-  "com.iheart" %% "ficus" % ficusVersion,
+
   "ch.qos.logback" % "logback-classic" % "1.3.5",
-  "com.google.guava" % "guava" % "21.0",
-  "com.github.ben-manes.caffeine" % "caffeine" % "2.9.3", // use 3.x only for java 11+
-  "com.github.scopt" %% "scopt" % "4.0.1",
 
   // test dependencies
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
-  "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.3" % "test",
   "org.scalatest" %% "scalatest" % "3.2.10" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
@@ -230,6 +217,14 @@ lazy val avldb = (project in file("avldb"))
     // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
     scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
     javacOptions in(Compile, compile) ++= javacReleaseOption,
+    libraryDependencies ++= Seq(
+      // database dependencies
+      "org.ethereum" % "leveldbjni-all" % "1.18.3",
+      //the following pure-java leveldb implementation is needed only on specific platforms, such as 32-bit Raspberry Pi
+      //in future, it could be reasonable to have special builds with this Java db only, and for most of platforms use
+      //jni wrapper over native library included in leveldbjni-all
+      "org.iq80.leveldb" % "leveldb" % "0.12"
+    )
   )
 
 lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
@@ -289,7 +284,7 @@ inConfig(It2Test)(Defaults.testSettings ++ Seq(
 
 lazy val ergo = (project in file("."))
   .settings(
-    commonSettings, 
+    commonSettings,
     name := "ergo",
     // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
     // see https://github.com/eclipse/jetty.project/issues/3244
@@ -304,7 +299,20 @@ lazy val ergo = (project in file("."))
       "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
       "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
       "com.typesafe.akka" %% "akka-parsing" % akkaHttpVersion,
-      "org.bitlet" % "weupnp" % "0.1.4"
+      "org.bitlet" % "weupnp" % "0.1.4",
+      // command line args parsing
+      "com.github.scopt" %% "scopt" % "4.0.1",
+
+      // API dependencies
+      "de.heikoseeberger" %% "akka-http-circe" % "1.20.0",
+
+      // app dependencies
+      // jaxb-api is included only to avoid a runtime exception
+      "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
+
+      // caching, bloom filters, Longs/Ints
+      "com.google.guava" % "guava" % "21.0",
+      "com.github.ben-manes.caffeine" % "caffeine" % "2.9.3" // use 3.x only for java 11+
     )
   )
   .dependsOn(ergoCore % "test->test;compile->compile")

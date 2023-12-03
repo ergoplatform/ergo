@@ -44,25 +44,11 @@ val ficusVersion = "1.4.7"
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 val effectiveSigma = "org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion
 
-val apiDependencies = Seq(
-  "io.circe" %% "circe-core" % circeVersion,
-  "io.circe" %% "circe-generic" % circeVersion,
-  "io.circe" %% "circe-parser" % circeVersion,
-  "de.heikoseeberger" %% "akka-http-circe" % "1.20.0"
-)
 
 libraryDependencies ++= Seq(
   effectiveSigma.force()
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
-
-  // network dependencies 
-  "com.typesafe.akka" %% "akka-actor" % akkaVersion,
-  "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
-  "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
-  "com.typesafe.akka" %% "akka-parsing" % akkaHttpVersion,
-  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-  "org.bitlet" % "weupnp" % "0.1.4",
   
   // api dependencies 
   "io.circe" %% "circe-core" % circeVersion,
@@ -83,16 +69,13 @@ libraryDependencies ++= Seq(
   "com.github.ben-manes.caffeine" % "caffeine" % "2.9.3", // use 3.x only for java 11+
   "com.github.scopt" %% "scopt" % "4.0.1",
 
+  // test dependencies
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.3" % "test",
   "org.scalatest" %% "scalatest" % "3.2.10" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
-
-  "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
-  "io.circe" %% "circe-core" % circeVersion,
-  "io.circe" %% "circe-core" % circeVersion % "test",
 
   "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % "test",
@@ -272,9 +255,6 @@ lazy val ergoCore = (project in file("ergo-core"))
     commonSettings,
     name := "ergo-core",
     libraryDependencies ++= Seq(
-      "com.typesafe.akka" %% "akka-stream" % akkaVersion, // required for akka-http to compile
-      "com.typesafe.akka" %% "akka-actor" % akkaVersion, // required for akka-http to compile
-      "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
       "com.iheart" %% "ficus" % ficusVersion,
       effectiveSigma,
       (effectiveSigma % Test).classifier("tests")
@@ -316,7 +296,16 @@ lazy val ergo = (project in file("."))
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
     // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
     scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
-    javacOptions in(Compile, compile) ++= javacReleaseOption
+    javacOptions in(Compile, compile) ++= javacReleaseOption,
+    libraryDependencies ++= Seq(
+      // network dependencies
+      "com.typesafe.akka" %% "akka-stream" % akkaVersion, // required for akka-http to compile
+      "com.typesafe.akka" %% "akka-actor" % akkaVersion, // required for akka-http to compile
+      "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-parsing" % akkaHttpVersion,
+      "org.bitlet" % "weupnp" % "0.1.4"
+    )
   )
   .dependsOn(ergoCore % "test->test;compile->compile")
   .dependsOn(ergoWallet % "test->test;compile->compile")

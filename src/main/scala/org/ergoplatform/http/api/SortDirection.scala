@@ -1,5 +1,8 @@
 package org.ergoplatform.http.api
 
+/**
+  * Encoded results sorting direction (in ascending or descending order)
+  */
 object SortDirection {
 
   type Direction = Byte

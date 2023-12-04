@@ -8,7 +8,12 @@ import scorex.util.ModifierId
 import scala.collection.mutable
 import scala.util.Try
 
-object NipopowProverAlgos {
+/**
+  * Container for NiPoPoW methods working with blockchain database instead of in-memory collections,
+  * for performance's sake.
+  */
+object NipopowProverDbAlgos {
+
   /**
    * Computes NiPoPow proof for the chain stored in `histReader`'s database,
    * or a prefix of the chain which contains a specific header (if `headerIdOpt` is specified).
@@ -111,4 +116,5 @@ object NipopowProverAlgos {
       NipopowProof(new NipopowAlgos(chainSettings), m, k, prefix, suffixHead, suffixTail, params.continuous)
     }
   }
+
 }

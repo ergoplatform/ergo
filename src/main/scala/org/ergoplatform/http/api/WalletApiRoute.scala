@@ -28,7 +28,7 @@ import akka.http.scaladsl.server.MissingQueryParamRejection
 case class WalletApiRoute(readersHolder: ActorRef,
                           nodeViewActorRef: ActorRef,
                           ergoSettings: ErgoSettings)
-                         (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs with ApiNodeViewCodecs with ApiRequestsCodecs {
+                         (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs with ApiExtraCodecs with ApiRequestsCodecs {
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val assetIssueRequestDecoder: AssetIssueRequestDecoder = new AssetIssueRequestDecoder(ergoSettings)

@@ -1,10 +1,9 @@
 package org.ergoplatform.it
 
 import java.io.File
-
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants
 import org.scalatest.freespec.AnyFreeSpec
 
 import scala.async.Async
@@ -51,7 +50,7 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       // 1. Let the first node mine `chainLength + delta` blocks
       Async.await(minerAIsolated.waitForHeight(chainLength + delta))
 
-      val genesisA = Async.await(minerAIsolated.headerIdsByHeight(ErgoHistory.GenesisHeight)).head
+      val genesisA = Async.await(minerAIsolated.headerIdsByHeight(ErgoHistoryConstants.GenesisHeight)).head
 
       val minerBIsolated: Node = docker.startDevNetNode(minerBConfig, isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeB, remoteVolumeB))).get
@@ -59,7 +58,7 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       // 2. Let another node mine `chainLength` blocks
       Async.await(minerBIsolated.waitForHeight(chainLength))
 
-      val genesisB = Async.await(minerBIsolated.headerIdsByHeight(ErgoHistory.GenesisHeight)).head
+      val genesisB = Async.await(minerBIsolated.headerIdsByHeight(ErgoHistoryConstants.GenesisHeight)).head
 
       genesisA should not equal genesisB
 

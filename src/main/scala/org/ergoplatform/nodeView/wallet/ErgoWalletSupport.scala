@@ -5,7 +5,7 @@ import cats.implicits._
 import org.ergoplatform.ErgoBox.{BoxId, R4, R5, R6}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey}
@@ -283,7 +283,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                                             dataInputsRaw: Seq[String]): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
     require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issuance requests")
 
-    val userInputs = ErgoWalletService.stringsToBoxes(inputsRaw)
+    val userInputs = ErgoWalletServiceUtils.stringsToBoxes(inputsRaw)
 
     val inputBoxes = if (userInputs.nonEmpty) {
       // make TrackedBox sequence out of boxes provided
@@ -336,7 +336,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         val targetAssetsWithBurn = AssetUtils.mergeAssets(targetAssets, burnTokensMap)
 
         val selectionOpt = boxSelector.select(inputBoxes.iterator, targetBalance, targetAssetsWithBurn)
-        val dataInputs = ErgoWalletService.stringsToBoxes(dataInputsRaw).toIndexedSeq
+        val dataInputs = ErgoWalletServiceUtils.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
           prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes

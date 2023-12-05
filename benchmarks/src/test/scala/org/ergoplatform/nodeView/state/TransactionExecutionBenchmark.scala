@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.NVBenchmark
 import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.utils.{HistoryTestHelpers, RandomWrapper}
-import scorex.core.validation.ValidationResult.Valid
+import org.ergoplatform.validation.ValidationResult.Valid
 import scorex.db.ByteArrayWrapper
 
 import scala.collection.mutable
@@ -41,7 +41,7 @@ object TransactionExecutionBenchmark extends HistoryTestHelpers with NVBenchmark
     val boxes = bh.boxes
     def bench: Long =
       Utils.time {
-        assert(ErgoState.execTransactions(txs, emptyStateContext)(id => Try(boxes(ByteArrayWrapper(id)))) == Valid(178665000))
+        assert(ErgoState.execTransactions(txs, emptyStateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))) == Valid(178665000))
       }.toLong
 
     (0 to WarmupRuns).foreach(_ => bench)

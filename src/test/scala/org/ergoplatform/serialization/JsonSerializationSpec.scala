@@ -4,7 +4,7 @@ import io.circe.syntax._
 import io.circe.{ACursor, Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId}
-import org.ergoplatform.http.api.ApiCodecs
+import org.ergoplatform.http.api.{ApiCodecs, ApiNodeViewCodecs}
 import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.Constants.ScanId
@@ -24,7 +24,7 @@ import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import scala.util.Random
 
 
-class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs {
+class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs with ApiNodeViewCodecs {
 
   property("ErgoFullBlock should be encoded into JSON and decoded back correctly") {
 
@@ -52,7 +52,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   }
 
   property("PaymentRequest should be serialized to json") {
-    val ergoSettings = ErgoSettings.read()
+    val ergoSettings = ErgoSettingsReader.read()
     implicit val requestEncoder: Encoder[PaymentRequest] = new PaymentRequestEncoder(ergoSettings)
     implicit val requestDecoder: Decoder[PaymentRequest] = new PaymentRequestDecoder(ergoSettings)
     forAll(paymentRequestGen) { request =>
@@ -88,7 +88,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   }
 
   property("AssetIssueRequest should be serialized to json") {
-    val ergoSettings = ErgoSettings.read()
+    val ergoSettings = ErgoSettingsReader.read()
     implicit val requestEncoder: Encoder[AssetIssueRequest] = new AssetIssueRequestEncoder(ergoSettings)
     implicit val requestDecoder: Decoder[AssetIssueRequest] = new AssetIssueRequestDecoder(ergoSettings)
     forAll(assetIssueRequestGen) { request =>

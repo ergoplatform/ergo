@@ -5,19 +5,19 @@ import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.HeaderSerializer
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedHistory, ChangedMempool}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedHistory, ChangedMempool}
 import org.ergoplatform.network.ErgoSyncTracker
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.ErgoSettingsReader
 import org.scalacheck.Gen
-import scorex.core.idToBytes
+import org.ergoplatform.core.idToBytes
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
-import scorex.core.network.peer.PeerInfo
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.serialization.ErgoSerializer
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -58,7 +58,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
-    val settings = ErgoSettings.read()
+    val settings = ErgoSettingsReader.read()
     val pool = ErgoMemPool.empty(settings)
     val v = h.bestFullBlockIdOpt.orElse(h.bestHeaderIdOpt)
     v.foreach(id => s.store.update(idToBytes(id), Seq(), Seq()).get)

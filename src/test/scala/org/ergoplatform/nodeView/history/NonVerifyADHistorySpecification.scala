@@ -1,15 +1,16 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.consensus.{Equal, Fork, Older, Younger}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.crypto.hash.Digest32
-import scorex.core.consensus.{Older, Younger, Fork, Equal}
 
 import scala.util.Random
 
@@ -268,7 +269,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
 
     chain.headers.foreach { header =>
-      val inHeight = history.heightOf(header.parentId).getOrElse(ErgoHistory.EmptyHistoryHeight)
+      val inHeight = history.heightOf(header.parentId).getOrElse(EmptyHistoryHeight)
 
       history.contains(header) shouldBe false
       history.applicable(header) shouldBe true

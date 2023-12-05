@@ -1,7 +1,7 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.{ADKey, ADValue, Balance}
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, hashFn}
 import scorex.crypto.authds.avltree.batch.serialization.ProxyInternalNode

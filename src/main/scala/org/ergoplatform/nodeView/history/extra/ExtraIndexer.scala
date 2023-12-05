@@ -6,7 +6,7 @@ import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FullBlockApplied, Rollback}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FullBlockApplied, Rollback}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeightKey, getIndex}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.{GetSegmentTreshold, StartExtraIndexer}
@@ -529,12 +529,4 @@ object ExtraIndexer {
 
   def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef =
     system.actorOf(Props.create(classOf[ExtraIndexer], cacheSettings, chainSettings.addressEncoder))
-}
-
-/**
-  * Base trait for all additional indexes made by ExtraIndexer
-  */
-trait ExtraIndex {
-  lazy val id: ModifierId = bytesToId(serializedId)
-  def serializedId: Array[Byte]
 }

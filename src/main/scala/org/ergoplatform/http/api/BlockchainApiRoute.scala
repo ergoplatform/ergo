@@ -16,10 +16,9 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hash
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.ApiError.{BadRequest, InternalError}
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
+import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
 import spire.implicits.cfor
@@ -29,7 +28,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.Success
 
 case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, indexer: ActorRef)
-                        (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+                        (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs with ApiExtraCodecs {
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
@@ -400,15 +399,5 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     (pathPrefix("balanceForAddress") & get & addressPass) { address =>
       ApiResponse(getAddressBalanceTotal(address))
     }
-
-}
-
-object SortDirection {
-
-  type Direction = Byte
-
-  val ASC: Direction = 1.asInstanceOf[Direction]
-  val DESC: Direction = 0.asInstanceOf[Direction]
-  val INVALID: Direction = (-1).asInstanceOf[Direction]
 
 }

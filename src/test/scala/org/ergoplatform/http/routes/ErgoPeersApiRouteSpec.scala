@@ -14,8 +14,8 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
-import scorex.core.network.peer.PeerManager.ReceivableMessages.GetAllPeers
-import scorex.core.settings.RESTApiSettings
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.GetAllPeers
+import org.ergoplatform.settings.RESTApiSettings
 
 import java.net.InetSocketAddress
 import scala.concurrent.Future

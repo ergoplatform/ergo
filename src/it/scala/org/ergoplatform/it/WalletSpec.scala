@@ -12,7 +12,7 @@ import org.ergoplatform.it.util.RichEither
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestEncoder, RequestsHolder, RequestsHolderEncoder}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoWalletServiceImpl}
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
@@ -29,7 +29,7 @@ class WalletSpec extends AsyncWordSpec with IntegrationSuite with WalletTestOps 
 
   override implicit def executionContext: ExecutionContext = ErgoTestHelpers.defaultExecutionContext
 
-  val ergoSettings: ErgoSettings = ErgoSettings.read(
+  val ergoSettings: ErgoSettings = ErgoSettingsReader.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
 
   private val nodeConfig: Config = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs.head)

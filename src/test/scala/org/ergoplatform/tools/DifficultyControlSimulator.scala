@@ -2,8 +2,8 @@ package org.ergoplatform.tools
 
 import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, DifficultySerializer}
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Difficulty
+import org.ergoplatform.settings.ErgoSettingsReader
 import org.ergoplatform.utils.generators.ErgoGenerators
 
 import scala.annotation.tailrec
@@ -86,7 +86,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   def printTestnetData(): Unit = {
     val baseHeader = defaultHeaderGen.sample.get
-    val chainSettings = ErgoSettings.read().chainSettings.copy(epochLength = 1)
+    val chainSettings = ErgoSettingsReader.read().chainSettings.copy(epochLength = 1)
     val difficultyControl = new DifficultyAdjustment(chainSettings)
 
     val headers = Source.fromResource("difficulty.csv").getLines().toSeq.tail.map { line =>

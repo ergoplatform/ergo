@@ -5,12 +5,11 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.http.api.ApiError.BadRequest
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
-import scorex.core.api.http.ApiError.BadRequest
-import scorex.core.api.http.{ApiError, ApiResponse, ApiRoute}
-import scorex.core.settings.RESTApiSettings
-import scorex.core.utils.ScorexEncoding
+import scorex.core.api.http.{ApiResponse, ApiRoute}
+import org.ergoplatform.utils.ScorexEncoding
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigmastate.crypto.DLogProtocol.ProveDlog

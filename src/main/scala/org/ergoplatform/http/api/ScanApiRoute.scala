@@ -6,14 +6,13 @@ import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.ApiError.BadRequest
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 
 import scala.util.{Failure, Success}
 import ScanEntities._
 import org.ergoplatform.ErgoBox.R1
+import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.wallet.Constants.ScanId
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.serialization.ErgoTreeSerializer

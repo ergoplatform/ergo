@@ -1,6 +1,7 @@
 package scorex.core.api.http
 
 import akka.http.scaladsl.server.ExceptionHandler
+import org.ergoplatform.http.api.ApiError
 
 import scala.util.control.NonFatal
 

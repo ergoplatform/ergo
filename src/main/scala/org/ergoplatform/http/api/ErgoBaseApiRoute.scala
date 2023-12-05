@@ -8,13 +8,13 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.api.http.{ApiError, ApiRoute}
+import scorex.core.api.http.ApiRoute
 import scorex.util.{bytesToId, ModifierId}
 import akka.pattern.ask
 import io.circe.syntax.EncoderOps
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome._
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.ProcessingOutcome
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.ProcessingOutcome._
 import scorex.util.encode.Base16
 import sigmastate.Values.ErgoTree
 import sigmastate.serialization.ErgoTreeSerializer

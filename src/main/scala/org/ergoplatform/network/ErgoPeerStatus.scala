@@ -1,11 +1,9 @@
 package org.ergoplatform.network
 
 import io.circe.{Encoder, Json}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.app.Version
-import scorex.core.consensus.PeerChainStatus
+import org.ergoplatform.consensus.PeerChainStatus
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import scorex.core.network.ConnectedPeer
-import org.ergoplatform.nodeView.history.ErgoHistory.Time
 
 /**
   * Container for status of another peer

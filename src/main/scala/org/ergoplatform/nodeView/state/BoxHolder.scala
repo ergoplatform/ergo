@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoBox
-import scorex.core.VersionTag
+import org.ergoplatform.core.VersionTag
 import scorex.db.ByteArrayWrapper
 
 import scala.collection.immutable.SortedMap

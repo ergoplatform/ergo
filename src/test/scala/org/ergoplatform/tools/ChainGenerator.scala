@@ -9,8 +9,8 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.SortingOption
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
@@ -32,7 +32,7 @@ import scala.util.Try
 object ChainGenerator extends App with ErgoTestHelpers {
 
   val realNetworkSetting = {
-    val initSettings = ErgoSettings.read(Args(None, Some(NetworkType.TestNet)))
+    val initSettings = ErgoSettingsReader.read(Args(None, Some(NetworkType.TestNet)))
     initSettings.copy(chainSettings = initSettings.chainSettings.copy(genesisId = None))
   }
 
@@ -94,7 +94,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
                    acc: Seq[ModifierId]): Seq[ModifierId] = {
     val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
     if (time < System.currentTimeMillis()) {
-      val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
+      val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(GenesisHeight),
         initBox, state.stateContext)
 
       val candidate = genCandidate(prover.hdPubKeys.head.key, last, time, txs, state)

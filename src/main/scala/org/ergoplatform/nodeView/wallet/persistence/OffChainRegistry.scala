@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.PaymentsScanId
@@ -92,7 +92,7 @@ case class OffChainRegistry(height: Int,
 object OffChainRegistry {
 
   def empty: OffChainRegistry =
-    OffChainRegistry(ErgoHistory.EmptyHistoryHeight, ArraySeq.empty, ArraySeq.empty)
+    OffChainRegistry(EmptyHistoryHeight, ArraySeq.empty, ArraySeq.empty)
 
   def init(walletRegistry: WalletRegistry):OffChainRegistry = {
     val unspent = walletRegistry.unspentBoxes(PaymentsScanId)

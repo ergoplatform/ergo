@@ -10,9 +10,9 @@ import org.ergoplatform.nodeView.history.UtxoSetScanner._
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.ScanBoxesFromUtxoSnapshot
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.ScanBoxesFromUtxoSnapshot
+import org.ergoplatform.serialization.ManifestSerializer
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import scorex.core.serialization.ManifestSerializer
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
 import scorex.crypto.hash.Blake2b256
 import scorex.db.ByteArrayWrapper

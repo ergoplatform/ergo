@@ -17,6 +17,7 @@ import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
+import org.ergoplatform.nodeView.history.UtxoSetScanner.StartUtxoSetScan
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.util.ScorexLogging
 import scala.concurrent.duration._
@@ -230,9 +231,9 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       context.become(loadedWallet(newState))
 
-    case ScanBoxesFromUtxoSnapshot(chunks: ArrayBuffer[(ModifierId,Array[ErgoBox])], current: Int, total: Int) =>
-      val newState = chunks.zipWithIndex.foldLeft(state) { case (accState, ((id, boxes), i)) =>
-        val chunk = current - chunks.size + i + 1
+    case ScanBoxesFromUtxoSnapshot(subtrees, current, total) =>
+      val newState = subtrees.zipWithIndex.foldLeft(state) { case (accState, ((id, boxes), i)) =>
+        val chunk = current - subtrees.size + i + 1
         ergoWalletService.scanSnapshotChunk(accState, boxes, id, settings.walletSettings.dustLimit) match {
           case Failure(ex) =>
             val errorMsg = s"Failed to scan ${boxes.length} boxes in chunk $chunk / $total: ${ex.getMessage}"

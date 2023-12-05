@@ -1,7 +1,7 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import scorex.core.serialization.ManifestSerializer.MainnetManifestDepth
+import org.ergoplatform.serialization.ManifestSerializer.MainnetManifestDepth
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{noStoreSerializer, topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}

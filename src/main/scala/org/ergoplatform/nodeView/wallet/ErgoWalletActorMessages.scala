@@ -17,6 +17,7 @@ import org.ergoplatform.core.VersionTag
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
 import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 object ErgoWalletActorMessages {
@@ -32,6 +33,14 @@ object ErgoWalletActorMessages {
 
 
   // Publicly available signals for the wallet actor
+
+  /**
+   * Scan AVL subtrees containing UTXOs
+   * @param subtrees - AVL subtrees to scan
+   * @param current - current number of last subtree
+   * @param total - total number of subtrees
+   */
+  final case class ScanBoxesFromUtxoSnapshot(subtrees: ArrayBuffer[(ModifierId,Array[ErgoBox])], current: Int, total: Int)
 
   /**
    * Command to scan offchain transaction

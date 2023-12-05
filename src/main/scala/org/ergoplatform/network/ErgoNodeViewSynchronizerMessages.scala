@@ -11,9 +11,14 @@ import scorex.core.network.ConnectedPeer
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoLikeContext.Height
 
+/**
+  * Repository of messages processed ErgoNodeViewSynchronizer actor
+  */
 object ErgoNodeViewSynchronizerMessages {
-    // getLocalSyncInfo messages
-    case object SendLocalSyncInfo
+  /**
+    * Signal which is instructing ErgoNodeViewSynchronizer to send sync message to peers (when it is needed)
+    */
+  case object SendLocalSyncInfo
 
     /**
      * Check delivery of modifier with type `modifierTypeId` and id `modifierId`.

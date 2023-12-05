@@ -12,7 +12,7 @@ import scala.util.Try
   * Container for NiPoPoW methods working with blockchain database instead of in-memory collections,
   * for performance's sake.
   */
-object NipopowProverDbAlgos {
+object NipopowProverWithDbAlgs {
 
   /**
    * Computes NiPoPow proof for the chain stored in `histReader`'s database,

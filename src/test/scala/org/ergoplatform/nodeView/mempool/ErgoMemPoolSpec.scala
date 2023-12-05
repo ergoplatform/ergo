@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.{ErgoBoxCandidate, Input}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.{SortingOption, ProcessingOutcome}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{SortingOption, ProcessingOutcome}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.ErgoSettings

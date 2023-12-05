@@ -6,10 +6,10 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import .LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.testkit.generators
 import org.ergoplatform.testkit.utils.AkkaFixture

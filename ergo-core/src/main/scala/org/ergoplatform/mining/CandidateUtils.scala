@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.header.HeaderWithoutPow
 import scorex.crypto.hash.Digest32
 
 /**
-  *
+  * Functions related to block candidate generation
   */
 object CandidateUtils {
   /**

@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.state.wrapped
 import java.io.File
 import akka.actor.ActorRef
 import org.ergoplatform.{ErgoBox, TransactionsCarryingPersistentNodeViewModifier}
-import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.state._

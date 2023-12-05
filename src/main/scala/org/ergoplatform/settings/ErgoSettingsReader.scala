@@ -15,6 +15,9 @@ import org.ergoplatform.settings.ErgoSettings.{configPath, scorexConfigPath}
 import java.net.{InetAddress, URL}
 import scala.util.Try
 
+/**
+  * Functions to read configs (ErgoSettings instances)
+  */
 object ErgoSettingsReader extends ScorexLogging
   with PowSchemeReaders
   with NodeConfigurationReaders

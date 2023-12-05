@@ -11,7 +11,6 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSe
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
-import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
 import org.ergoplatform.http.api.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof

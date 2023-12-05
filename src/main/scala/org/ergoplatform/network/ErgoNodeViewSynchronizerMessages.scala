@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.network.ConnectedPeer
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.modifiers.history.popow.NipopowProof
 
 /**
   * Repository of messages processed ErgoNodeViewSynchronizer actor
@@ -133,4 +134,12 @@ object ErgoNodeViewSynchronizerMessages {
      * @param blockId     - id of a block corresponding to the UTXO set snapshot
      */
     case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
+
+  /**
+    * Command for a central node view holder component to process NiPoPoW proof,
+    * and possibly initialize headers chain from a best NiPoPoW proof known, when enough proofs collected
+    *
+    * @param nipopowProof - proof to initialize history from
+    */
+  case class ProcessNipopow(nipopowProof: NipopowProof)
 }

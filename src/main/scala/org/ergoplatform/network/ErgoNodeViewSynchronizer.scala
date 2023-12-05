@@ -16,7 +16,6 @@ import scorex.core.network.ModifiersStatus.Requested
 import org.ergoplatform.core.idsToString
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.network.ErgoNodeViewSynchronizerProcessNipopow.ProcessNipopow
 import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoSetSnapshotPersistence, UtxoStateReader}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}

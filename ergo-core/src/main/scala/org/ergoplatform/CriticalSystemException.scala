@@ -1,4 +1,4 @@
 package org.ergoplatform
 
-/** Exception that triggers proper system shutdown */
+/** Exception that triggers system shutdown */
 case class CriticalSystemException(message: String) extends Exception(message)

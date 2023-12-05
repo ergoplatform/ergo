@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransacti
 import org.ergoplatform.network.{Handshake, PeerSpec, Version}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryConstants}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -181,7 +181,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case RescanWallet(_) => sender ! Success(())
 
-      case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistoryConstants.GenesisHeight, error = None)
+      case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistoryUtils.GenesisHeight, error = None)
 
       case _: CheckSeed => sender() ! true
 

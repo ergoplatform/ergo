@@ -9,7 +9,7 @@ import org.scalatest.propspec.AnyPropSpec
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier.LocallyGeneratedModifier
+import .LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.testkit.generators.{CustomModifierProducer, ModifierProducerTemplateItem, ObjectGenerators, SemanticallyInvalidModifierProducer, SynInvalid, SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer, Valid}
 import org.ergoplatform.testkit.utils.AkkaFixture

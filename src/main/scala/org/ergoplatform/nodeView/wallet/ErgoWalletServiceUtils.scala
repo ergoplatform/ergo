@@ -6,6 +6,9 @@ import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.util.encode.Base16
 import scala.util.Try
 
+/**
+  * Additional types and functions used in ErgoWalletService
+  */
 object ErgoWalletServiceUtils {
   /**
    * Result of "deriveNextKey" operation

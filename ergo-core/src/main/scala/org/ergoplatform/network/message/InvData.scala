@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.NetworkObjectTypeId
 import scorex.util.ModifierId
 
 /**
-  * P2P network message which is encoding "inventory", 
+  * P2P network message which is encoding "inventory", transactions or block sections the node has
   *
   * @param typeId
   * @param ids

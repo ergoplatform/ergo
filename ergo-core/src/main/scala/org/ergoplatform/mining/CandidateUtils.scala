@@ -5,6 +5,9 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.history.header.HeaderWithoutPow
 import scorex.crypto.hash.Digest32
 
+/**
+  *
+  */
 object CandidateUtils {
   /**
    * Derives header without pow from [[CandidateBlock]].

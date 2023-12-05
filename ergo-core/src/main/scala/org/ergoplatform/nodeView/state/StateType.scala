@@ -32,6 +32,8 @@ object StateType {
     override val requireProofs: Boolean = true
   }
 
+  val values: Seq[StateType] = Seq(Utxo, Digest)
+
   def fromCode(code: StateTypeCode): StateType = if (code == Utxo.stateTypeCode) {
     Utxo
   } else if (code == Digest.stateTypeCode) {

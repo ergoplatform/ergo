@@ -43,3 +43,15 @@ subblock check.
 
 Subblocks are similar to block shares already used in pooled mining. Rather, this proposal is considering to use 
 sub-blocks for improving transactions propagation and providing a framework for weaker confirmations.
+
+Sub-Blocks And Transactions Propagation
+---------------------------------------
+
+Let's consider that new block is just generated. Miners A and B (among others) are working on a new block. Users are
+submitting new unconfirmed transactions at the same time to the p2p network, and eventually they are reaching miners 
+(including A and B, but at a given time a transaction could be in one of the mempools just, not necessarily both, it 
+could also be somewhere else and not known to both A and B).
+
+Then, for example, miner A is generating a sub-block committing to new transactions after last block. It sends sub-block
+header as well as weak transaction ids (6 bytes hashes) to peers. 
+

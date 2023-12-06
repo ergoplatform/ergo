@@ -43,8 +43,14 @@ object SubBlockAlgos {
   // previous sub block id
   // transactions since last sub blocks (8 byte ids?)
 
-  // todo: move `txsSinceLastSub` to a dedicated message
-  case class SubBlockInfo(version: Byte, subBlock: Header, prevSubBlockId: Array[Byte])
+  /**
+    * Sub-block message, sent by the node to peers when a sub-block is generated
+    * @param version - message version (to allow injecting new fields)
+    * @param subBlock - subblock
+    * @param prevSubBlockId - previous sub block id `subBlock` is following, if missed, sub-block is linked
+    *                         to a previous block
+    */
+  case class SubBlockInfo(version: Byte, subBlock: Header, prevSubBlockId: Option[Array[Byte]])
 
   object SubBlockInfo {
 

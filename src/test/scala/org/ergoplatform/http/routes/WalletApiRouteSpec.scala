@@ -264,6 +264,19 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "return unspent wallet boxes with specified limit and offset" in {
+    val limit = 1
+    val offset = 0
+
+    val postfixWithLimitOffset = s"/boxes/unspent?limit=$limit&offset=$offset"
+
+    Get(prefix + postfixWithLimitOffset) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe limit 
+    }
+  }
+
   it should "return wallet transactions" in {
     Get(prefix + "/transactions") ~> route ~> check {
       status shouldBe StatusCodes.OK

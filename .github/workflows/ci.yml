@@ -7,8 +7,8 @@ on:
       - develop
   pull_request:
     types:
-      - opened
-      - synchronize    
+      - opened  
+      - synchronize
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

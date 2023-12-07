@@ -13,7 +13,7 @@ import scala.concurrent.Future
 trait WalletApiOperations extends ErgoBaseApiRoute {
 
   val readersHolder: ActorRef
-  val MaxLimit = 500
+  val MaxLimit = 2500
 
   private def isLegalOffset(offset: Int): Boolean = offset >= 0
 
@@ -33,7 +33,7 @@ trait WalletApiOperations extends ErgoBaseApiRoute {
       "maxConfirmations".as[Int] ? -1, 
       "minInclusionHeight".as[Int] ? 0, 
       "maxInclusionHeight".as[Int] ? -1,
-      "limit".as[Int] ? 50,
+      "limit".as[Int] ? 500,
       "offset".as[Int] ? 0  
     ).tfilter(
       isLegalBoxParamCombination,

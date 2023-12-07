@@ -4487,7 +4487,8 @@ paths:
           type: integer
           format: int32
           minimum: 1
-          default: 50
+          default: 500
+          maximum: 2500
       - in: query
         name: offset
         required: false
@@ -4596,7 +4597,8 @@ paths:
           type: integer
           format: int32
           minimum: 1
-          default: 50
+          default: 500
+          maximum: 2500
       - in: query
         name: offset
         required: false

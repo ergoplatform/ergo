@@ -13,19 +13,32 @@ import scala.concurrent.Future
 trait WalletApiOperations extends ErgoBaseApiRoute {
 
   val readersHolder: ActorRef
+  val MaxLimit = 500
 
-  private val isLegalBoxParamCombination: ((Int, Int, Int, Int)) => Boolean = {
-    case (minConfNum, _, _, maxHeight) =>
+  private def isLegalOffset(offset: Int): Boolean = offset >= 0
+
+  private def isLegalLimit(limit: Int): Boolean = limit >= 1 && limit <= MaxLimit
+
+  private val isLegalBoxParamCombination: ((Int, Int, Int, Int, Int, Int)) => Boolean = {
+    case (minConfNum, _, _, maxHeight, limit, offset) =>
+      isLegalOffset(offset) && 
+      isLegalLimit(limit) &&
       // maxInclusionHeight cannot be specified when we consider unconfirmed
       !(minConfNum == -1 && maxHeight != -1)
   }
 
-  val boxParams: Directive[(Int, Int, Int, Int)] =
-    parameters("minConfirmations".as[Int] ? 0, "maxConfirmations".as[Int] ? -1, "minInclusionHeight".as[Int] ? 0, "maxInclusionHeight".as[Int] ? -1)
-      .tfilter(
-        isLegalBoxParamCombination,
-        ValidationRejection("maxInclusionHeight cannot be specified when we consider unconfirmed")
-      )
+  val boxParams: Directive[(Int, Int, Int, Int, Int, Int)] =
+    parameters(
+      "minConfirmations".as[Int] ? 0, 
+      "maxConfirmations".as[Int] ? -1, 
+      "minInclusionHeight".as[Int] ? 0, 
+      "maxInclusionHeight".as[Int] ? -1,
+      "limit".as[Int] ? 50,
+      "offset".as[Int] ? 0  
+    ).tfilter(
+      isLegalBoxParamCombination,
+      ValidationRejection("maxInclusionHeight cannot be specified when we consider unconfirmed")
+    )
 
   /**
     * Filter function that filters boxes by height or number of confirmations.

@@ -5567,6 +5567,25 @@ paths:
           type: integer
           format: int32
           default: -1
+      - in: query
+        name: limit
+        required: false
+        description: amount of elements to retrieve
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 500
+          maximum: 2500
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -5634,6 +5653,25 @@ paths:
           type: integer
           format: int32
           default: -1
+      - in: query
+        name: limit
+        required: false
+        description: amount of elements to retrieve
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 500
+          maximum: 2500
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
     get:
       security:
         - ApiKeyAuth: [api_key]

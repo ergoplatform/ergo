@@ -24,4 +24,4 @@ jobs:
       - name: Create release binary files
         run: python ci/release-binaries.py
       - name: Put binary files into release
-        run: gh release upload $ERGO_RELEASE_TAG $(echo $(find release/ -name "ergo-node-*" -exec basename {} \;))
+        run: gh release upload $ERGO_RELEASE_TAG $(echo $(find release -name "ergo-node-*"))

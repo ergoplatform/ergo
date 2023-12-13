@@ -10,9 +10,9 @@ env:
 jobs:
   release-binaries:
     name: Publish release binaries
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     env:
-      ERGO_RELEASE_PLATFORM: linux-x64
+      ERGO_RELEASE_PLATFORM: macos-x64
       ERGO_RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v4
@@ -24,4 +24,4 @@ jobs:
       - name: Create release binary files
         run: python ci/release-binaries.py
       - name: Put binary files into release
-        run: gh release upload $ERGO_RELEASE_TAG -p "ergo-node-*"
+        run: gh release upload $ERGO_RELEASE_TAG $(echo $(find release/ -name "ergo-node-*" -exec basename {} \;))

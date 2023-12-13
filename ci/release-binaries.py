@@ -90,7 +90,7 @@ jre/bin/java -jar {JAR_FILENAME}
     
     shutil.copytree(f"{target}/jre", f"{app_dir}/jre")
     shutil.copyfile(JAR_FILENAME, f"{app_dir}/{JAR_FILENAME}")
-    shutil.make_archive(f"ergo-node-{VERSION}-{target}", 'zip', app_dir)
+    shutil.make_archive(f"release/ergo-node-{VERSION}-{target}", 'zip', app_dir)
 
 def make_linux(target):
     app_dir = f"{target}/ergo-node"
@@ -113,7 +113,7 @@ exit
     
     shutil.copytree(f"{target}/jre", f"{app_dir}/jre")
     shutil.copyfile(JAR_FILENAME, f"{app_dir}/{JAR_FILENAME}")
-    with tarfile.open(f"ergo-node-{VERSION}-{target}.tar.gz", "w:gz") as tar:
+    with tarfile.open(f"release/ergo-node-{VERSION}-{target}.tar.gz", "w:gz") as tar:
        tar.add(app_dir)
 
 def make_macos(target):
@@ -174,7 +174,7 @@ open -a Terminal $MY_PATH/{app_script_file}
     shutil.copyfile(JAR_FILENAME, f"{app_dir}/Contents/MacOS/{JAR_FILENAME}")
     shutil.copyfile("ci/ergo.icns", f"{app_dir}/Contents/Resources/ergo.icns")
 
-    with tarfile.open(f"ergo-node-{VERSION}-{target}.tar.gz", "w:gz") as tar:
+    with tarfile.open(f"release/ergo-node-{VERSION}-{target}.tar.gz", "w:gz") as tar:
        tar.add(app_dir)
 
 def process_download(entry):
@@ -205,6 +205,7 @@ def get_main_jre(jre, subfolder) -> str:
 logging.warning(f"Starting release binaries for ergo-node")
 
 main_jre = get_main_jre(MAIN_JRE, JRE_SUBFOLDER)
+os.makedirs("release", exist_ok=True)
 
 with ThreadPool(JDKS.__len__()) as pool:
   pool.map(process_download, JDKS.items())

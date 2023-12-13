@@ -83,13 +83,14 @@ Write-Host @"
 {SCRIPT_LOGO}
 
 "@ -ForegroundColor Red
-jre/bin/java -jar {JAR_FILENAME}
+jre/bin/java -jar -Xmx4G {JAR_FILENAME} --mainnet -c ergo.conf 
     """
     with open(f"{app_dir}/ergo-node.ps1", "w") as f:
        f.write(app_script)
     
     shutil.copytree(f"{target}/jre", f"{app_dir}/jre")
     shutil.copyfile(JAR_FILENAME, f"{app_dir}/{JAR_FILENAME}")
+    shutil.copyfile("ergo.conf", f"{app_dir}/ergo.conf")
     shutil.make_archive(f"release/ergo-node-{VERSION}-{target}", 'zip', app_dir)
 
 def make_linux(target):
@@ -104,7 +105,7 @@ cat << EOF
 
 EOF
 echo '\033[0m'
-./jre/bin/java -jar {JAR_FILENAME}
+./jre/bin/java -jar -Xmx4G {JAR_FILENAME} --mainnet -c ergo.conf
 exit
     """
     with open(f"{app_dir}/ergo-node.sh", "w") as f:
@@ -113,6 +114,7 @@ exit
     
     shutil.copytree(f"{target}/jre", f"{app_dir}/jre")
     shutil.copyfile(JAR_FILENAME, f"{app_dir}/{JAR_FILENAME}")
+    shutil.copyfile("ergo.conf", f"{app_dir}/ergo.conf")
     with tarfile.open(f"release/ergo-node-{VERSION}-{target}.tar.gz", "w:gz") as tar:
        tar.add(app_dir)
 
@@ -151,7 +153,7 @@ cat << EOF
 
 EOF
 echo '\033[0m'
-$SRC/jre/bin/java -jar $SRC/{JAR_FILENAME}
+$SRC/jre/bin/java -jar -Xmx4G $SRC/{JAR_FILENAME} --mainnet -c $SRC/ergo.conf
 
 exit
     """
@@ -172,6 +174,7 @@ open -a Terminal $MY_PATH/{app_script_file}
 
     shutil.copytree(f"{target}/jre", f"{app_dir}/Contents/MacOS/jre")
     shutil.copyfile(JAR_FILENAME, f"{app_dir}/Contents/MacOS/{JAR_FILENAME}")
+    shutil.copyfile("ergo.conf", f"{app_dir}/Contents/MacOS/ergo.conf")
     shutil.copyfile("ci/ergo.icns", f"{app_dir}/Contents/Resources/ergo.icns")
 
     with tarfile.open(f"release/ergo-node-{VERSION}-{target}.tar.gz", "w:gz") as tar:
@@ -206,6 +209,16 @@ logging.warning(f"Starting release binaries for ergo-node")
 
 main_jre = get_main_jre(MAIN_JRE, JRE_SUBFOLDER)
 os.makedirs("release", exist_ok=True)
+
+ergo_conf = """
+ergo {
+    node {
+       mining = false
+    }
+}
+"""
+with open("ergo.conf", "w") as f:
+       f.write(ergo_conf)
 
 with ThreadPool(JDKS.__len__()) as pool:
   pool.map(process_download, JDKS.items())

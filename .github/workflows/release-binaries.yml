@@ -16,7 +16,8 @@ jobs:
       - uses: actions/setup-python@v4
 
       - name: Download ergo node jar 
-        run: gh release download $GITHUB_REF -p "ergo*"
+        run: echo $GITHUB_REF
+        run: gh release download $GITHUB_REF -p "ergo*"     
       - name: Create release binary files
         run: python ci/release-binaries.py
         env:

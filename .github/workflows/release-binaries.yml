@@ -1,0 +1,25 @@
+name: Publish release-binaries
+
+on:
+  release:
+    types: [published]
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  release-binaries:
+    name: Publish release binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+
+      - name: Download ergo node jar 
+        run: gh release download $GITHUB_REF -p "ergo*"
+      - name: Create release binary files
+        run: python ci/release-binaries.py
+        env:
+          ERGO_RELEASE_PLATFORM: linux-x64
+          ERGO_RELEASE_TAG: ${{ vars.GITHUB_REF }}
+      - run: gh release upload $GITHUB_REF -p "ergo-node-*"

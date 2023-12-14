@@ -444,7 +444,7 @@ class ExtraIndexer(cacheSettings: CacheSettings,
   }
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
-    log.error(s"Attempted extra indexer restart due to $message ", reason)
+    log.error(s"Attempted extra indexer restart due to ${reason.getMessage} ", reason)
     super.preRestart(reason, message)
   }
 

@@ -438,8 +438,15 @@ class ExtraIndexer(cacheSettings: CacheSettings,
     context.system.eventStream.subscribe(self, classOf[StartExtraIndexer])
   }
 
-  override def postStop(): Unit =
-    log.info(s"Stopped extra indexer at height ${if(lastWroteToDB > 0) lastWroteToDB else indexedHeight}")
+  override def postStop(): Unit = {
+    log.error(s"Stopped extra indexer at height ${if(lastWroteToDB > 0) lastWroteToDB else indexedHeight}")
+    super.postStop()
+  }
+
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted extra indexer restart due to $message ", reason)
+    super.preRestart(reason, message)
+  }
 
   override def receive: Receive = {
 

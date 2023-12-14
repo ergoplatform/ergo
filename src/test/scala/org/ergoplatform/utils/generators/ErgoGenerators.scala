@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1, ErgoSync
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
+import org.ergoplatform.testkit.generators.CoreGenerators
 import org.ergoplatform.utils.ErgoTestConstants
 import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.ergoplatform.wallet.utils.Generators
@@ -21,7 +22,6 @@ import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.matchers.should.Matchers
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
-import scorex.testkit.generators.CoreGenerators
 import sigmastate.Values.ErgoTree
 import sigmastate.crypto.CryptoConstants.EcPointType
 import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}

@@ -6,13 +6,12 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.modifiers.history.popow.{PoPowHeader, NipopowProof}
+import org.ergoplatform.http.api.ApiError.BadRequest
+import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowHeader}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.ApiError.BadRequest
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 import scorex.util.ModifierId
 
 import scala.concurrent.Future

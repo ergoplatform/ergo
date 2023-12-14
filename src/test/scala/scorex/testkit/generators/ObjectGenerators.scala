@@ -3,16 +3,15 @@ package scorex.testkit.generators
 import java.net.{InetAddress, InetSocketAddress, URL}
 import akka.actor.ActorRef
 import akka.util.ByteString
+import org.ergoplatform.NodeViewModifier
 import org.ergoplatform.modifiers.NetworkObjectTypeId
-import org.ergoplatform.network.ModePeerFeature
+import org.ergoplatform.network.{ModePeerFeature, PeerFeature, PeerSpec, Version}
 import org.ergoplatform.nodeView.state.StateType
 import org.scalacheck.Gen.{const, some}
 import org.scalacheck.{Arbitrary, Gen}
-import scorex.core.app.Version
-import scorex.core.network.message.{InvData, ModifiersData}
+import org.ergoplatform.network.message.{InvData, ModifiersData}
 import scorex.core.network._
-import scorex.core.network.peer.{PeerInfo, RestApiUrlPeerFeature}
-import scorex.core.NodeViewModifier
+import org.ergoplatform.network.peer.{PeerInfo, RestApiUrlPeerFeature}
 import scorex.util.{ModifierId, bytesToId}
 
 trait ObjectGenerators {

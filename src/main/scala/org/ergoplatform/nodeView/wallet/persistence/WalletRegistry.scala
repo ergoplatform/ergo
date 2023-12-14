@@ -13,7 +13,7 @@ import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
-import scorex.core.VersionTag
+import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.db.LDBVersionedStore
 import scorex.util.encode.Base16
@@ -314,7 +314,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
 
   def rollback(version: VersionTag): Try[Unit] = {
     cache.clear()
-    store.rollbackTo(scorex.core.versionToBytes(version))
+    store.rollbackTo(org.ergoplatform.core.versionToBytes(version))
   }
 
   /**

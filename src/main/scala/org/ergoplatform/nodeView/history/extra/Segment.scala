@@ -18,7 +18,7 @@ import scala.reflect.ClassTag
 
 /**
  * Class to manage the tracking of transactions/boxes in relation to some other object (ErgoTree/token).
- * When [[ExtraIndexerBase.segmentTreshold]] number of transaction/box indexes are accumulated, new instances of the parent object are created to contain them.
+ * When [[ExtraIndexerBase.segmentThreshold]] number of transaction/box indexes are accumulated, new instances of the parent object are created to contain them.
  * This mechanism is used to prevent excessive serialization/deserialization delays caused by objects with a lot of transaction/box indexes.
  * @param parentId - identifier of parent object
  * @param factory  - parent object factory

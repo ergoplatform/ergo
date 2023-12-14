@@ -1,7 +1,6 @@
 package scorex.testkit.utils
 
 import java.util.concurrent.atomic.AtomicInteger
-
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
 

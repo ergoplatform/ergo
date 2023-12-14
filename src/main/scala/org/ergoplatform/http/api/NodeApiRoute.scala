@@ -4,9 +4,8 @@ import akka.actor.{ActorRefFactory, ActorSystem}
 import akka.http.scaladsl.server.Route
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.RemoteShutdown
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.duration._
 

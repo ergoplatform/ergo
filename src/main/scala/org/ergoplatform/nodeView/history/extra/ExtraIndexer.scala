@@ -554,11 +554,3 @@ object ExtraIndexer {
     system.actorOf(props.withDispatcher(GlobalConstants.IndexerDispatcher))
   }
 }
-
-/**
-  * Base trait for all additional indexes made by ExtraIndexer
-  */
-trait ExtraIndex {
-  lazy val id: ModifierId = bytesToId(serializedId)
-  def serializedId: Array[Byte]
-}

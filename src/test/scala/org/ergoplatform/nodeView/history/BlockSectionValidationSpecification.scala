@@ -1,12 +1,13 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.utils.HistoryTestHelpers
-import scorex.core.consensus.ModifierSemanticValidity
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -75,7 +76,7 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     history.writeMinimalFullBlockHeight(history.bestHeaderOpt.get.height + 1)
     history.isHeadersChainSyncedVar = true
     history.applicableTry(section) shouldBe 'failure
-    history.writeMinimalFullBlockHeight(ErgoHistory.GenesisHeight)
+    history.writeMinimalFullBlockHeight(GenesisHeight)
 
     // should not be able to apply if corresponding header is marked as invalid
     history.applicableTry(section) shouldBe 'success

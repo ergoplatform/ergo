@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, Segment}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
-import scorex.core.utils.ScorexEncoding
+import org.ergoplatform.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 

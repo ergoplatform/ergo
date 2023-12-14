@@ -6,14 +6,13 @@ import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.ApiError.BadRequest
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 
 import scala.util.{Failure, Success}
 import ScanEntities._
 import org.ergoplatform.ErgoBox.R1
+import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.wallet.Constants.ScanId
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.serialization.ErgoTreeSerializer
@@ -66,19 +65,21 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) {
-    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight) =>
+    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight, limit, offset) =>
       val scanId = ScanId @@ scanIdInt.toShort
       val considerUnconfirmed = minConfNum == -1
       withWallet(_.scanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight).map {
         _.filter(boxConfirmationFilter(_, minConfNum, maxConfNum))
+        .slice(offset, offset + limit)
       })
   }
 
   def spentR: Route = (path("spentBoxes" / IntNumber) & get & boxParams) {
-    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight) =>
+    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight, limit, offset) =>
       val scanId = ScanId @@ scanIdInt.toShort
       withWallet(_.scanSpentBoxes(scanId).map {
         _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
+        .slice(offset, offset + limit)
       })
   }
 

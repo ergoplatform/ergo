@@ -454,8 +454,13 @@ class ExtraIndexer(cacheSettings: CacheSettings,
   }
 
   override def postStop(): Unit = {
-    log.info(s"Stopped extra indexer")
+    log.error(s"Stopped extra indexer")
     super.postStop()
+  }
+
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted extra indexer restart due to ${reason.getMessage} ", reason)
+    super.preRestart(reason, message)
   }
 
   override def receive: Receive = {

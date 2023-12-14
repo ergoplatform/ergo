@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.serialization.ErgoSerializer

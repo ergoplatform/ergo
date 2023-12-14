@@ -12,9 +12,9 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
 import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
-import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.core._
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}

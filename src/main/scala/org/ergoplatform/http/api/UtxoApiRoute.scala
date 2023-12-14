@@ -18,7 +18,7 @@ import scala.concurrent.Future
 case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiSettings)(
   implicit val context: ActorRefFactory
 ) extends ErgoBaseApiRoute
-  with ApiCodecs with ApiNodeViewCodecs {
+  with ApiCodecs with ApiExtraCodecs {
 
   private def getState: Future[ErgoStateReader] =
     (readersHolder ? GetReaders).mapTo[Readers].map(_.s)

@@ -3,7 +3,7 @@ package org.ergoplatform.network
 
 import org.ergoplatform.consensus.{Fork, Older, PeerChainStatus, Unknown}
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.NetworkSettings
 import scorex.core.network.ConnectedPeer
 import scorex.util.ScorexLogging

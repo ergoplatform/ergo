@@ -1,6 +1,6 @@
 package org.ergoplatform.network.peer
 
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.net.{InetAddress, InetSocketAddress}
 import org.ergoplatform.settings.ErgoSettings

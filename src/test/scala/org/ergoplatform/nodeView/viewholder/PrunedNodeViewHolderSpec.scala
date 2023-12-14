@@ -3,12 +3,12 @@ package org.ergoplatform.nodeView.viewholder
 import akka.actor.ActorRef
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, VotingSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
-import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
 import org.ergoplatform.testkit.utils.NoShrink
 
 import scala.concurrent.duration._

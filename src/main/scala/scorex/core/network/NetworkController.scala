@@ -14,7 +14,7 @@ import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.Message
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages._
 import org.ergoplatform.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Time
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Time
 import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 

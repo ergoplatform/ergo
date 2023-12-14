@@ -3,7 +3,7 @@ package org.ergoplatform.settings
 import com.google.common.primitives.Ints
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Height
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._

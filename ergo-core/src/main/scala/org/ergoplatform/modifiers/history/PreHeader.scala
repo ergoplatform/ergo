@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.header.Header._
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.Constants
 import scorex.util._
 import sigmastate.crypto.CryptoConstants.EcPointType

@@ -3,7 +3,7 @@ package org.ergoplatform.settings
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.SortingOption
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import scorex.util.ModifierId
 

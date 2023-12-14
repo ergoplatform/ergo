@@ -4,8 +4,8 @@ import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.Algos
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId, idToBytes}

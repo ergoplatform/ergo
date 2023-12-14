@@ -2,7 +2,7 @@ package org.ergoplatform.tools
 
 import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, DifficultySerializer}
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Difficulty
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import org.ergoplatform.settings.ErgoSettingsReader
 import org.ergoplatform.utils.generators.ErgoGenerators
 

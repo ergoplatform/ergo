@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.SortingOption
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoPropertyTest
 

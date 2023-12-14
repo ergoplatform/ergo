@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.state.wrapped
 import java.io.File
 import akka.actor.ActorRef
 import org.ergoplatform.{ErgoBox, TransactionsCarryingPersistentNodeViewModifier}
-import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.state._
@@ -11,6 +10,7 @@ import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.core.{VersionTag, idToVersion}
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}

@@ -96,9 +96,13 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       buffer.get(segmentId) match {
         case Some(segment) =>
           val i: Int = binarySearch(segment.boxes, boxNumAbs)
-          segment.boxes(i) = -segment.boxes(i)
+          if(i >= 0) {
+            segment.boxes(i) = -segment.boxes(i)
+          }else {
+            log.error(s"Box $boxNum not found in predicted segment of parent: ${segment.boxes.mkString("[", ",", "]")}")
+          }
         case None =>
-          log.warn(s"Box $boxNum not found in any segment of parent when trying to spend")
+          log.error(s"Box $boxNum not found in any segment of parent")
       }
     }
   }

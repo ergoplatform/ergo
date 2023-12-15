@@ -36,56 +36,59 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   private implicit val ec: ExecutionContextExecutor = context.dispatcher
 
   /**
-   * Max buffer size (determined by config)
-   */
+    * Max buffer size (determined by config)
+    */
   protected val saveLimit: Int
 
   /**
-   * Number of transaction/box numberic indexes object segments contain
-   */
+    * Number of transaction/box numberic indexes object segments contain
+    */
   protected implicit val segmentTreshold: Int
 
   /**
-   * Address encoder instance
-   */
+    * Address encoder instance
+    */
   protected implicit val addressEncoder: ErgoAddressEncoder
 
   /**
-   * Database handle
-   */
+    * Database handle
+    */
   protected var _history: ErgoHistory = _
 
   protected def chainHeight: Int = _history.fullBlockHeight
+
   protected def history: ErgoHistoryReader = _history.getReader
+
   protected def historyStorage: HistoryStorage = _history.historyStorage
 
   // fast access buffers
   protected val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
-  protected val boxes: mutable.HashMap[ModifierId,IndexedErgoBox] = mutable.HashMap.empty[ModifierId,IndexedErgoBox]
-  protected val trees: mutable.HashMap[ModifierId,IndexedErgoAddress] = mutable.HashMap.empty[ModifierId,IndexedErgoAddress]
-  protected val tokens: mutable.HashMap[ModifierId,IndexedToken] = mutable.HashMap.empty[ModifierId,IndexedToken]
-  protected val segments: mutable.HashMap[ModifierId,Segment[_]] = mutable.HashMap.empty[ModifierId,Segment[_]]
+  protected val boxes: mutable.HashMap[ModifierId, IndexedErgoBox] = mutable.HashMap.empty[ModifierId, IndexedErgoBox]
+  protected val trees: mutable.HashMap[ModifierId, IndexedErgoAddress] = mutable.HashMap.empty[ModifierId, IndexedErgoAddress]
+  protected val tokens: mutable.HashMap[ModifierId, IndexedToken] = mutable.HashMap.empty[ModifierId, IndexedToken]
+  protected val segments: mutable.HashMap[ModifierId, Segment[_]] = mutable.HashMap.empty[ModifierId, Segment[_]]
 
   /**
-   * Input tokens in a transaction, cleared after every transaction
-   */
+    * Input tokens in a transaction, cleared after every transaction
+    */
   private val inputTokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
 
   /**
-   * Holds upcoming blocks to be indexed, and when empty, it is filled back from multiple threads
-   */
-  private val blockCache: concurrent.Map[Int,BlockTransactions] = new ConcurrentHashMap[Int,BlockTransactions]().asScala
+    * Holds upcoming blocks to be indexed, and when empty, it is filled back from multiple threads
+    */
+  private val blockCache: concurrent.Map[Int, BlockTransactions] = new ConcurrentHashMap[Int, BlockTransactions]().asScala
   private var readingUpTo: Int = 0
 
   /**
-   * Get transactions for specified height, preferably from cache, or from database.
-   * If indexer is getting close to emptying cache, asynchronously reads 1000 blocks into it
-   * @param height - blockheight to get transations from
-   * @return transactions at height
-   */
+    * Get transactions for specified height, preferably from cache, or from database.
+    * If indexer is getting close to emptying cache, asynchronously reads 1000 blocks into it
+    *
+    * @param height - blockheight to get transations from
+    * @return transactions at height
+    */
   private def getBlockTransactionsAt(height: Int): BlockTransactions = {
     val txs = blockCache.remove(height).getOrElse(history.bestBlockTransactionsAt(height).get)
-    if(height % 1000 == 0) blockCache.keySet.filter(_ < height).map(blockCache.remove)
+    if (height % 1000 == 0) blockCache.keySet.filter(_ < height).map(blockCache.remove)
     if (readingUpTo - height < 300 && chainHeight - height > 1000) {
       readingUpTo = math.min(height + 1001, chainHeight)
       val blockNums = height + 1 to readingUpTo by 50
@@ -153,11 +156,11 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   }
 
   /**
-   * Add or subtract a box from a token in the buffer or in database.
-   *
-   * @param id             - token id
-   * @param spendOrReceive - IndexedErgoBox to receive (Right) or spend (Left)
-   */
+    * Add or subtract a box from a token in the buffer or in database.
+    *
+    * @param id             - token id
+    * @param spendOrReceive - IndexedErgoBox to receive (Right) or spend (Left)
+    */
   private def findAndUpdateToken(id: ModifierId, spendOrReceive: Either[IndexedErgoBox, IndexedErgoBox]): Unit = {
     tokens.get(id).map { token =>
       spendOrReceive match {
@@ -183,8 +186,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   private def modCount: Int = general.length + boxes.size + trees.size + tokens.size
 
   /**
-   * Write buffered indexes to database and clear buffers.
-   */
+    * Write buffered indexes to database and clear buffers.
+    */
   private def saveProgress(state: IndexerState, writeLog: Boolean = true): Unit = {
 
     val start: Long = System.currentTimeMillis
@@ -230,9 +233,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     * @param headerOpt - header to index blocktransactions of (used after caught up with chain)
     */
   protected def index(state: IndexerState, headerOpt: Option[Header] = None): IndexerState = {
-
-    val bt = headerOpt.map { header =>
-      history.typedModifierById[BlockTransactions](header.transactionsId).get
+    val bt = headerOpt.flatMap { header =>
+      history.typedModifierById[BlockTransactions](header.transactionsId)
     }.getOrElse(getBlockTransactionsAt(state.indexedHeight))
     val height = headerOpt.map(_.height).getOrElse(state.indexedHeight)
 
@@ -308,7 +310,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   /**
     * Remove all indexes after a given height and revert address balances.
     *
-    * @param state - current state of indexer
+    * @param state  - current state of indexer
     * @param height - starting height
     */
   protected def removeAfter(state: IndexerState, height: Int): IndexerState = {
@@ -325,7 +327,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
     // remove all tx indexes
     newState = newState.decrementTxIndex
-    while(newState.globalTxIndex > txTarget) {
+    while (newState.globalTxIndex > txTarget) {
       val tx: IndexedErgoTransaction = NumericTxIndex.getTxByNumber(history, newState.globalTxIndex).get
       tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach { iEb => // undo all spendings
 
@@ -351,11 +353,11 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
     // remove all box indexes, tokens and address balances
     newState = newState.decrementBoxIndex
-    while(newState.globalBoxIndex > boxTarget) {
+    while (newState.globalBoxIndex > boxTarget) {
       val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, newState.globalBoxIndex).get
       cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
         history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
-          if(token.boxId == iEb.id) { // token created, delete
+          if (token.boxId == iEb.id) { // token created, delete
             toRemove += token.id
             log.info(s"Removing token ${token.tokenId} created in box ${iEb.id} at height ${iEb.inclusionHeight}")
           } else // no token created, update
@@ -389,7 +391,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       self ! Index()
 
     case Index() if state.caughtUp =>
-      if(modCount > 0) saveProgress(state)
+      if (modCount > 0) saveProgress(state)
       blockCache.clear()
       log.info("Indexer caught up with chain")
 
@@ -407,10 +409,18 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         log.warn(s"Rollback already in progress")
         stash()
       } else {
-        val branchHeight: Int = history.heightOf(branchPoint).get
-        if (branchHeight < state.indexedHeight) {
-          context.become(loaded(state.copy(rollbackTo = branchHeight)))
-          self ! RemoveAfter(branchHeight)
+        history.heightOf(branchPoint) match {
+          case Some(branchHeight) =>
+            if (branchHeight < state.indexedHeight) {
+              context.become (loaded (state.copy (rollbackTo = branchHeight) ) )
+              self ! RemoveAfter (branchHeight)
+            }
+          case None =>
+            log.error(s"No rollback height found for $branchPoint")
+            // todo: we try to continue scanning without doing rollback, could this be done at all?
+            val newState = state.copy(rollbackTo = 0)
+            context.become(loaded(newState))
+            unstashAll()
         }
       }
 
@@ -434,8 +444,9 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
 /**
   * Actor that constructs an index of database elements.
+  *
   * @param cacheSettings - cacheSettings to use for saveLimit size
-  * @param ae - ergo address encoder to use for handling addresses
+  * @param ae            - ergo address encoder to use for handling addresses
   */
 class ExtraIndexer(cacheSettings: CacheSettings,
                    ae: ErgoAddressEncoder)
@@ -485,6 +496,7 @@ object ExtraIndexer {
   object ReceivableMessages {
     /**
       * Initialize ExtraIndexer and start indexing.
+      *
       * @param history - handle to database
       */
     case class StartExtraIndexer(history: ErgoHistory)
@@ -495,14 +507,15 @@ object ExtraIndexer {
     case class GetSegmentTreshold()
 
     /**
-     * Index block at current indexer height
-     */
+      * Index block at current indexer height
+      */
     case class Index()
 
     /**
-     * Remove and roll back all indexes after branchHeight
-     * @param branchHeight - height of last block to keep
-     */
+      * Remove and roll back all indexes after branchHeight
+      *
+      * @param branchHeight - height of last block to keep
+      */
     case class RemoveAfter(branchHeight: Int)
   }
 
@@ -520,7 +533,7 @@ object ExtraIndexer {
     "0123456789abcdef".toCharArray.zipWithIndex.foreach { case (c, i) =>
       index(c) = i.toByte
     }
-    "abcdef".toCharArray.foreach{ c =>
+    "abcdef".toCharArray.foreach { c =>
       index(c.toUpper) = index(c)
     }
     index
@@ -528,18 +541,19 @@ object ExtraIndexer {
 
   /**
     * Faster id to bytes - no safety checks
+    *
     * @param id - ModifierId to convert to byte representation
     * @return an array of bytes
     */
   private[extra] def fastIdToBytes(id: ModifierId): Array[Byte] = {
     val x: Array[Byte] = new Array[Byte](id.length / 2)
-    cfor(0)(_ < id.length, _ + 2) {i => x(i / 2) = ((hexIndex(id(i)) << 4) | hexIndex(id(i + 1))).toByte}
+    cfor(0)(_ < id.length, _ + 2) { i => x(i / 2) = ((hexIndex(id(i)) << 4) | hexIndex(id(i + 1))).toByte }
     x
   }
 
   /**
-   * Current newest database schema version. Used to force extra database resync.
-   */
+    * Current newest database schema version. Used to force extra database resync.
+    */
   val NewestVersion: Int = 5
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
@@ -550,7 +564,9 @@ object ExtraIndexer {
   val SchemaVersionKey: Array[Byte] = Algos.hash("schema version")
 
   def getIndex(key: Array[Byte], history: HistoryStorage): ByteBuffer =
-    ByteBuffer.wrap(history.modifierBytesById(bytesToId(key)).getOrElse(Array.fill[Byte](8){0}))
+    ByteBuffer.wrap(history.modifierBytesById(bytesToId(key)).getOrElse(Array.fill[Byte](8) {
+      0
+    }))
 
   def getIndex(key: Array[Byte], history: ErgoHistoryReader): ByteBuffer = getIndex(key, history.historyStorage)
 

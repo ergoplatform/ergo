@@ -375,7 +375,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     newState = newState.incrementBoxIndex
 
     // Save changes
-    newState = newState.copy(indexedHeight = height, rollbackTo = 0)
+    newState = newState.copy(indexedHeight = height, rollbackTo = 0, caughtUp = true)
     historyStorage.removeExtra(toRemove.toArray)
     saveProgress(newState, writeLog = false)
 
@@ -396,13 +396,16 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       log.info("Indexer caught up with chain")
 
     // after the indexer caught up with the chain, stay up to date
-    case FullBlockApplied(header: Header) if state.caughtUp =>
-      if (!state.rollbackInProgress) {
+    case FullBlockApplied(header: Header) if state.caughtUp && !state.rollbackInProgress =>
+      if (header.height == state.indexedHeight + 1) { // applied block is next in line
         val newState: IndexerState = index(state.incrementIndexedHeight, Some(header))
         saveProgress(newState)
         context.become(loaded(newState))
-      } else
-        stash()
+      } else if(header.height > state.indexedHeight + 1) { // applied block is ahead of indexer
+        context.become(loaded(state.copy(caughtUp = false)))
+        self ! Index()
+      } else // applied block has already been indexed, skipping duplicate
+        log.warn(s"Skipping block ${header.id} applied at height ${header.height}, indexed height is ${state.indexedHeight}")
 
     case Rollback(branchPoint: ModifierId) =>
       if (state.rollbackInProgress) {
@@ -417,7 +420,6 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
             }
           case None =>
             log.error(s"No rollback height found for $branchPoint")
-            // todo: we try to continue scanning without doing rollback, could this be done at all?
             val newState = state.copy(rollbackTo = 0)
             context.become(loaded(newState))
             unstashAll()

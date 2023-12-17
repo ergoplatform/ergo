@@ -312,7 +312,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       txs ++= tmp
       if (txs.isEmpty && txSegmentCount > 0) { // entire current tx set removed, retrieving more from database if possible
         val segmentId = idMod(txSegmentId(parentId, txSegmentCount - 1))
-        history.typedExtraIndexById[T](segmentId).get.txs ++=: txs
+        txs ++= history.typedExtraIndexById[T](segmentId).get.txs
         toRemove += segmentId
         txSegmentCount -= 1
       }
@@ -325,7 +325,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       boxes ++= tmp
       if (boxes.isEmpty && boxSegmentCount > 0) { // entire current box set removed, retrieving more from database if possible
         val segmentId = idMod(boxSegmentId(parentId, boxSegmentCount - 1))
-        history.typedExtraIndexById[T](segmentId).get.boxes ++=: boxes
+        boxes ++= history.typedExtraIndexById[T](segmentId).get.boxes
         toRemove += segmentId
         boxSegmentCount -= 1
       }

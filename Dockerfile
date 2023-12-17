@@ -4,9 +4,9 @@ COPY build.sbt findbugs-exclude.xml ./
 COPY project/ project/
 COPY avldb/build.sbt avldb/build.sbt
 COPY avldb/project/ avldb/project/
+COPY ergo-core/build.sbt ergo-core/build.sbt
 COPY ergo-wallet/build.sbt ergo-wallet/build.sbt
 COPY ergo-wallet/project/ ergo-wallet/project/
-COPY benchmarks/build.sbt benchmarks/build.sbt
 RUN sbt update
 COPY . ./
 RUN sbt assembly

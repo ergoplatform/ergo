@@ -5,6 +5,7 @@ COPY project/ project/
 COPY avldb/build.sbt avldb/build.sbt
 COPY avldb/project/ avldb/project/
 COPY ergo-core/build.sbt ergo-core/build.sbt
+COPY ergo-core/project/ ergo-core/project/
 COPY ergo-wallet/build.sbt ergo-wallet/build.sbt
 COPY ergo-wallet/project/ ergo-wallet/project/
 RUN sbt update

@@ -39,7 +39,7 @@ class ExtraIndexerSpecification extends ErgoPropertyTest with ExtraIndexerBase w
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
 
   override protected val saveLimit: Int = 1 // save every block
-  override protected implicit val segmentTreshold: Int = 8 // split to smaller segments
+  override protected implicit val segmentThreshold: Int = 8 // split to smaller segments
   override protected implicit val addressEncoder: ErgoAddressEncoder = initSettings.chainSettings.addressEncoder
 
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,

@@ -96,9 +96,9 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       buffer.get(segmentId) match {
         case Some(segment) =>
           val i: Int = binarySearch(segment.boxes, boxNumAbs)
-          if(i >= 0) {
+          if (i >= 0) {
             segment.boxes(i) = -segment.boxes(i)
-          }else {
+          } else {
             log.error(s"Box $boxNum not found in predicted segment of parent: ${segment.boxes.mkString("[", ",", "]")}")
           }
         case None =>
@@ -108,7 +108,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
   }
 
   /**
-   * Create an array of parent objects each containing [[ExtraIndexerBase.segmentTreshold]] number of transaction/box indexes.
+   * Create an array of parent objects each containing [[ExtraIndexerBase.segmentThreshold]] number of transaction/box indexes.
    * These objects have their ids calculated by "txSegmentId" and "boxSegmentId" respectively.
    *
    * @return array of parent objects

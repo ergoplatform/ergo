@@ -41,9 +41,9 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   protected val saveLimit: Int
 
   /**
-    * Number of transaction/box numberic indexes object segments contain
+    * Number of transaction/box numeric indexes object segments contain
     */
-  protected implicit val segmentTreshold: Int
+  protected implicit val segmentThreshold: Int
 
   /**
     * Address encoder instance
@@ -434,8 +434,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       log.info(s"Successfully rolled back indexes to $branchHeight")
       unstashAll()
 
-    case GetSegmentTreshold =>
-      sender ! segmentTreshold
+    case GetSegmentThreshold =>
+      sender ! segmentThreshold
 
     case _ =>
 
@@ -456,7 +456,7 @@ class ExtraIndexer(cacheSettings: CacheSettings,
 
   override val saveLimit: Int = cacheSettings.history.extraCacheSize * 20
 
-  override implicit val segmentTreshold: Int = 512
+  override implicit val segmentThreshold: Int = 512
 
   override implicit val addressEncoder: ErgoAddressEncoder = ae
 
@@ -506,7 +506,7 @@ object ExtraIndexer {
     /**
       * Retreive the currently used segment treshold
       */
-    case class GetSegmentTreshold()
+    case class GetSegmentThreshold()
 
     /**
       * Index block at current indexer height

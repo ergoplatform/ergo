@@ -215,8 +215,9 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       ((((general ++= boxes.values) ++= trees.values) ++= tokens.values) ++= segments.values).toArray
     )
 
-    if (writeLog)
+    if (writeLog) {
       log.info(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
+    }
 
     // clear buffers for next batch
     general.clear()
@@ -320,64 +321,68 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     saveProgress(newState, writeLog = false)
     log.info(s"Rolling back indexes from ${state.indexedHeight} to $height")
 
-    val lastTxToKeep: ErgoTransaction = history.bestBlockTransactionsAt(height).get.txs.last
-    val txTarget: Long = history.typedExtraIndexById[IndexedErgoTransaction](lastTxToKeep.id).get.globalIndex
-    val boxTarget: Long = history.typedExtraIndexById[IndexedErgoBox](bytesToId(lastTxToKeep.outputs.last.id)).get.globalIndex
-    val toRemove: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]
+    try {
+      val lastTxToKeep: ErgoTransaction = history.bestBlockTransactionsAt(height).get.txs.last
+      val txTarget: Long = history.typedExtraIndexById[IndexedErgoTransaction](lastTxToKeep.id).get.globalIndex
+      val boxTarget: Long = history.typedExtraIndexById[IndexedErgoBox](bytesToId(lastTxToKeep.outputs.last.id)).get.globalIndex
+      val toRemove: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]
 
-    // remove all tx indexes
-    newState = newState.decrementTxIndex
-    while (newState.globalTxIndex > txTarget) {
-      val tx: IndexedErgoTransaction = NumericTxIndex.getTxByNumber(history, newState.globalTxIndex).get
-      tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach { iEb => // undo all spendings
+      // remove all tx indexes
+      newState = newState.decrementTxIndex
+      while (newState.globalTxIndex > txTarget) {
+        val tx: IndexedErgoTransaction = NumericTxIndex.getTxByNumber(history, newState.globalTxIndex).get
+        tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach { iEb => // undo all spendings
 
-        iEb.spendingHeightOpt = None
-        iEb.spendingTxIdOpt = None
+          iEb.spendingHeightOpt = None
+          iEb.spendingTxIdOpt = None
 
-        val address = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get.addBox(iEb, record = false)
-        address.findAndModBox(iEb.globalIndex, history)
-        historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.buffer.values)
+          val address = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get.addBox(iEb, record = false)
+          address.findAndModBox(iEb.globalIndex, history)
+          historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.buffer.values)
 
-        cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
-          history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
-            token.findAndModBox(iEb.globalIndex, history)
-            historyStorage.insertExtra(Array.empty, Array[ExtraIndex](token) ++ token.buffer.values)
+          cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
+            history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
+              token.findAndModBox(iEb.globalIndex, history)
+              historyStorage.insertExtra(Array.empty, Array[ExtraIndex](token) ++ token.buffer.values)
+            }
           }
         }
+        toRemove += tx.id // tx by id
+        toRemove += bytesToId(NumericTxIndex.indexToBytes(newState.globalTxIndex)) // tx id by number
+        newState = newState.decrementTxIndex
       }
-      toRemove += tx.id // tx by id
-      toRemove += bytesToId(NumericTxIndex.indexToBytes(newState.globalTxIndex)) // tx id by number
-      newState = newState.decrementTxIndex
-    }
-    newState = newState.incrementTxIndex
+      newState = newState.incrementTxIndex
 
-    // remove all box indexes, tokens and address balances
-    newState = newState.decrementBoxIndex
-    while (newState.globalBoxIndex > boxTarget) {
-      val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, newState.globalBoxIndex).get
-      cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
-        history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
-          if (token.boxId == iEb.id) { // token created, delete
-            toRemove += token.id
-            log.info(s"Removing token ${token.tokenId} created in box ${iEb.id} at height ${iEb.inclusionHeight}")
-          } else // no token created, update
-            toRemove ++= token.rollback(txTarget, boxTarget, _history)
-        }
-      }
-      history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).map { address =>
-        address.spendBox(iEb)
-        toRemove ++= address.rollback(txTarget, boxTarget, _history)
-      }
-      toRemove += iEb.id // box by id
-      toRemove += bytesToId(NumericBoxIndex.indexToBytes(newState.globalBoxIndex)) // box id by number
+      // remove all box indexes, tokens and address balances
       newState = newState.decrementBoxIndex
-    }
-    newState = newState.incrementBoxIndex
+      while (newState.globalBoxIndex > boxTarget) {
+        val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, newState.globalBoxIndex).get
+        cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
+          history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
+            if (token.boxId == iEb.id) { // token created, delete
+              toRemove += token.id
+              log.info(s"Removing token ${token.tokenId} created in box ${iEb.id} at height ${iEb.inclusionHeight}")
+            } else // no token created, update
+              toRemove ++= token.rollback(txTarget, boxTarget, _history)
+          }
+        }
+        history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).map { address =>
+          address.spendBox(iEb)
+          toRemove ++= address.rollback(txTarget, boxTarget, _history)
+        }
+        toRemove += iEb.id // box by id
+        toRemove += bytesToId(NumericBoxIndex.indexToBytes(newState.globalBoxIndex)) // box id by number
+        newState = newState.decrementBoxIndex
+      }
+      newState = newState.incrementBoxIndex
 
-    // Save changes
-    newState = newState.copy(indexedHeight = height, rollbackTo = 0, caughtUp = true)
-    historyStorage.removeExtra(toRemove.toArray)
-    saveProgress(newState, writeLog = false)
+      // Save changes
+      newState = newState.copy(indexedHeight = height, rollbackTo = 0, caughtUp = true)
+      historyStorage.removeExtra(toRemove.toArray)
+      saveProgress(newState, writeLog = false)
+    } catch {
+      case t: Throwable => log.error(s"removeAfter during rollback failed due to: ${t.getMessage}", t)
+    }
 
     newState
   }

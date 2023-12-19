@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._

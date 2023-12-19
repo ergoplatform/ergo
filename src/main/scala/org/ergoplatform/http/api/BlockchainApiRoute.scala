@@ -10,16 +10,15 @@ import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Direction, INVALID}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.GetSegmentTreshold
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.GetSegmentThreshold
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, getIndex}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.ApiError.{BadRequest, InternalError}
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
+import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
 import spire.implicits.cfor
@@ -28,13 +27,14 @@ import scala.concurrent.duration.{Duration, SECONDS}
 import scala.concurrent.{Await, Future}
 import scala.util.Success
 
-case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, indexer: ActorRef)
-                        (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings, indexerOpt: Option[ActorRef])
+                        (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs with ApiExtraCodecs {
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  private implicit val segmentTreshold: Int =
-    Await.result[Int]((indexer ? GetSegmentTreshold).asInstanceOf[Future[Int]], Duration(3, SECONDS))
+  private implicit val segmentTreshold: Int = indexerOpt.map { indexer =>
+    Await.result[Int]((indexer ? GetSegmentThreshold).asInstanceOf[Future[Int]], Duration(3, SECONDS))
+  }.getOrElse(0)
 
   private val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 5)
 
@@ -400,15 +400,5 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     (pathPrefix("balanceForAddress") & get & addressPass) { address =>
       ApiResponse(getAddressBalanceTotal(address))
     }
-
-}
-
-object SortDirection {
-
-  type Direction = Byte
-
-  val ASC: Direction = 1.asInstanceOf[Direction]
-  val DESC: Direction = 0.asInstanceOf[Direction]
-  val INVALID: Direction = (-1).asInstanceOf[Direction]
 
 }

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn

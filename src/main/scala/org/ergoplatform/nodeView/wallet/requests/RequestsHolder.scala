@@ -26,10 +26,10 @@ case class RequestsHolder(requests: Seq[TransactionGenerationRequest],
 
 }
 
-class RequestsHolderEncoder(settings: ErgoSettings) extends Encoder[RequestsHolder] with ApiCodecs {
+class RequestsHolderEncoder(ergoSettings: ErgoSettings) extends Encoder[RequestsHolder] with ApiCodecs {
 
-  implicit val transactionRequestEncoder: TransactionRequestEncoder = new TransactionRequestEncoder(settings)
-  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder
+  implicit val transactionRequestEncoder: TransactionRequestEncoder = new TransactionRequestEncoder(ergoSettings)
+  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(ergoSettings.chainSettings).encoder
 
   def apply(holder: RequestsHolder): Json = {
     Json.obj(

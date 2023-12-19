@@ -1,9 +1,9 @@
 package org.ergoplatform.nodeView.history
 
 import akka.actor.ActorContext
+import org.ergoplatform.consensus.ProgressInfo
 
 import java.io.File
-import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
@@ -12,10 +12,9 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.S
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.settings._
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.LoggingUtil
-import scorex.core.consensus.ProgressInfo
-import scorex.core.validation.RecoverableModifierError
+import org.ergoplatform.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
@@ -234,25 +233,6 @@ trait ErgoHistory
 
 object ErgoHistory extends ScorexLogging {
 
-  /**
-    * Type for time, represents machine-specific timestamp of a transaction
-    * or block section, as miliseconds passed since beginning of UNIX
-    * epoch on the machine
-    */
-  type Time = Long
-
-  type Height = ErgoLikeContext.Height // Int
-  type Score = BigInt
-  type Difficulty = BigInt
-  type NBits = Long
-
-  val CharsetName = "UTF-8"
-
-  val EmptyHistoryHeight: Int = 0
-  val GenesisHeight: Int = EmptyHistoryHeight + 1 // first block has height == 1
-
-  def heightOf(headerOpt: Option[Header]): Int = headerOpt.map(_.height).getOrElse(EmptyHistoryHeight)
-
   def historyDir(settings: ErgoSettings): File = {
     val dir = new File(s"${settings.directory}/history")
     dir.mkdirs()
@@ -313,26 +293,6 @@ object ErgoHistory extends ScorexLogging {
     }
 
     repairIfNeeded(history)
-
-    // temporary hack which is injecting nipopow proof to the database to make it possible to bootstrap with
-    // nipopows + utxo set snapshot soon after 5.0.13 release
-    // todo: remove after height 1,096,693 on the mainnet
-    val bestHeaderHeight = history.headersHeight
-    if (bestHeaderHeight > 1054000 && bestHeaderHeight < 1096693 && history.readPopowProofBytesFromDb().isEmpty) {
-      // we store nipopow proof for height 1,044,469 corresponding to UTXO set snapshot
-      // @ # 1,044,479 already taken by 5.0.12 nodes
-      val block1044469Id = "25a11667e38e62412522c062d90b073afd9ed9551080ff4e0a67d1757ce18b98"
-      history.popowProofBytes(
-        history.P2PNipopowProofM,
-        history.P2PNipopowProofK,
-        Some(ModifierId @@ block1044469Id)) match {
-        case Success(proofBytes) =>
-          log.info("Writing nipopow proof bytes for height 1,044,469")
-          db.insert(Array(history.NipopowSnapshotHeightKey -> proofBytes), Array.empty[BlockSection])
-        case Failure(e) =>
-          log.warn("Can't dump NiPoPoW proof bytes for height 1,044,469", e)
-      }
-    }
 
     log.info("History database read")
     if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled

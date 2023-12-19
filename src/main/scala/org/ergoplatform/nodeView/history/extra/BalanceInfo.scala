@@ -4,7 +4,7 @@ import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.fastIdToBytes
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import spire.implicits.cfor

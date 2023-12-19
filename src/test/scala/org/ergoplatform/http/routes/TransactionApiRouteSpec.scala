@@ -11,12 +11,11 @@ import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId, To
 import org.ergoplatform.http.api.{ApiCodecs, TransactionsApiRoute}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, RESTApiSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.SType
 import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}

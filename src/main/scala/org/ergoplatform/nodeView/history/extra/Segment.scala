@@ -18,7 +18,7 @@ import scala.reflect.ClassTag
 
 /**
  * Class to manage the tracking of transactions/boxes in relation to some other object (ErgoTree/token).
- * When [[ExtraIndexerBase.segmentTreshold]] number of transaction/box indexes are accumulated, new instances of the parent object are created to contain them.
+ * When [[ExtraIndexerBase.segmentThreshold]] number of transaction/box indexes are accumulated, new instances of the parent object are created to contain them.
  * This mechanism is used to prevent excessive serialization/deserialization delays caused by objects with a lot of transaction/box indexes.
  * @param parentId - identifier of parent object
  * @param factory  - parent object factory
@@ -96,15 +96,19 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       buffer.get(segmentId) match {
         case Some(segment) =>
           val i: Int = binarySearch(segment.boxes, boxNumAbs)
-          segment.boxes(i) = -segment.boxes(i)
+          if (i >= 0) {
+            segment.boxes(i) = -segment.boxes(i)
+          } else {
+            log.error(s"Box $boxNum not found in predicted segment of parent: ${segment.boxes.mkString("[", ",", "]")}")
+          }
         case None =>
-          log.warn(s"Box $boxNum not found in any segment of parent when trying to spend")
+          log.error(s"Box $boxNum not found in any segment of parent")
       }
     }
   }
 
   /**
-   * Create an array of parent objects each containing [[ExtraIndexerBase.segmentTreshold]] number of transaction/box indexes.
+   * Create an array of parent objects each containing [[ExtraIndexerBase.segmentThreshold]] number of transaction/box indexes.
    * These objects have their ids calculated by "txSegmentId" and "boxSegmentId" respectively.
    *
    * @return array of parent objects
@@ -307,8 +311,8 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       txs.clear()
       txs ++= tmp
       if (txs.isEmpty && txSegmentCount > 0) { // entire current tx set removed, retrieving more from database if possible
-        val segmentId = txSegmentId(parentId, txSegmentCount - 1)
-        history.typedExtraIndexById[T](idMod(segmentId)).get.txs ++=: txs
+        val segmentId = idMod(txSegmentId(parentId, txSegmentCount - 1))
+        txs ++= history.typedExtraIndexById[T](segmentId).get.txs
         toRemove += segmentId
         txSegmentCount -= 1
       }
@@ -320,8 +324,8 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       boxes.clear()
       boxes ++= tmp
       if (boxes.isEmpty && boxSegmentCount > 0) { // entire current box set removed, retrieving more from database if possible
-        val segmentId = boxSegmentId(parentId, boxSegmentCount - 1)
-        history.typedExtraIndexById[T](idMod(segmentId)).get.boxes ++=: boxes
+        val segmentId = idMod(boxSegmentId(parentId, boxSegmentCount - 1))
+        boxes ++= history.typedExtraIndexById[T](segmentId).get.boxes
         toRemove += segmentId
         boxSegmentCount -= 1
       }
@@ -418,19 +422,21 @@ object SegmentSerializer {
   }
 
   def serialize(s: Segment[_], w: Writer): Unit = {
-    w.putUInt(s.txs.length)
+    w.putInt(s.txs.length)
     cfor(0)(_ < s.txs.length, _ + 1) { i => w.putLong(s.txs(i)) }
-    w.putUInt(s.boxes.length)
+    w.putInt(s.boxes.length)
     cfor(0)(_ < s.boxes.length, _ + 1) { i => w.putLong(s.boxes(i)) }
     w.putInt(s.boxSegmentCount)
     w.putInt(s.txSegmentCount)
   }
 
   def parse(r: Reader, s: Segment[_]): Unit = {
-    val txnsLen: Long = r.getUInt()
-    cfor(0)(_ < txnsLen, _ + 1) { _ => s.txs.+=(r.getLong()) }
-    val boxesLen: Long = r.getUInt()
-    cfor(0)(_ < boxesLen, _ + 1) { _ => s.boxes.+=(r.getLong()) }
+    val txnsLen: Int = r.getInt()
+    s.txs.sizeHint(txnsLen)
+    cfor(0)(_ < txnsLen, _ + 1) { _ => s.txs += r.getLong() }
+    val boxesLen: Int = r.getInt()
+    s.boxes.sizeHint(boxesLen)
+    cfor(0)(_ < boxesLen, _ + 1) { _ => s.boxes += r.getLong() }
     s.boxSegmentCount = r.getInt()
     s.txSegmentCount = r.getInt()
   }

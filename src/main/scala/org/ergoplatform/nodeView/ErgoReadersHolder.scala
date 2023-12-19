@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._

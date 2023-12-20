@@ -1,7 +1,6 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.serialization.ManifestSerializer.MainnetManifestDepth
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{noStoreSerializer, topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
@@ -155,7 +154,13 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     }
   }
 
-  def iterateAVLTree(fromIndex: Int)(handleSubtree: BatchAVLProverSubtree[DigestType] => Unit): Unit =
+  /**
+   * Split the AVL+ tree to 2&#94;depth number of subtrees and process them
+   * @param fromIndex - only start processing subtrees from this index
+   * @param depth - depth at whitch to split AVL+ tree to subtrees
+   * @param handleSubtree - function to process subtree
+   */
+  def iterateAVLTree(fromIndex: Int, depth: Int)(handleSubtree: BatchAVLProverSubtree[DigestType] => Unit): Unit =
     store.processSnapshot { dbReader =>
 
       var current: Int = 0
@@ -172,7 +177,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
 
       def proxyLoop(label: Array[Byte], level: Int): Unit =
         noStoreSerializer.parseBytes(dbReader.get(label)) match {
-          case in: ProxyInternalNode[DigestType] if level == MainnetManifestDepth =>
+          case in: ProxyInternalNode[DigestType] if level == depth =>
             if(current >= fromIndex) handleSubtree(subtree(in.leftLabel))
             current += 1
             if(current >= fromIndex) handleSubtree(subtree(in.rightLabel))

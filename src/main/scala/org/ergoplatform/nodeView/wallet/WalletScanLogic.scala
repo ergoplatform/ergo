@@ -198,6 +198,9 @@ object WalletScanLogic extends ScorexLogging {
 
     val scanRes = ScanResults(myOutputs, Seq.empty, Seq.empty)
 
+    /** Pass subtreeId as blockId; set height to 0 so when UTXO set scan is finished normal wallet scan
+     *  will start with the first non-pruned block (see [[ErgoWalletState.expectedNextBlockHeight]])
+     */
     updateRegistryAndOffchain(registry, offChainRegistry, outputsFilter, scanRes, subtreeId, 0)
   }
 

@@ -8,6 +8,7 @@ import org.ergoplatform._
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.{Algos, ErgoAlgos}
 import org.ergoplatform.wallet.Constants.ScanId
@@ -31,8 +32,8 @@ import org.ergoplatform.sdk.JsonCodecs
 import sigmastate.eval.Extensions.ArrayOps
 
 import java.math.BigInteger
-import scala.util.{Failure, Success, Try}
 import scala.annotation.nowarn
+import scala.util.{Failure, Success, Try}
 
 
 trait ApiCodecs extends JsonCodecs {
@@ -53,8 +54,7 @@ trait ApiCodecs extends JsonCodecs {
   protected implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = { proof =>
     Json.obj(
       "leafData" -> proof.leafData.asJson,
-      "levels" -> proof.levels.asJson,
-    )
+      "levels" -> proof.levels.asJson)
   }
 
   implicit val secretStringEncoder: Encoder[SecretString] = { secret =>
@@ -184,6 +184,7 @@ trait ApiCodecs extends JsonCodecs {
     } yield ErgoTransaction(ergoLikeTx)
   }
 
+  @nowarn
   implicit val sigmaLeafEncoder: Encoder[SigmaLeaf] = {
     leaf =>
       val op = leaf.opCode.toByte.asJson
@@ -193,6 +194,7 @@ trait ApiCodecs extends JsonCodecs {
       }
   }
 
+  @nowarn
   implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
     sigma =>
       val op = sigma.opCode.toByte.asJson
@@ -262,12 +264,13 @@ trait ApiCodecs extends JsonCodecs {
   implicit val positionDecoder: Decoder[NodePosition] = { c =>
     c.as[String].flatMap {s =>
       Try(s.split("-").map(_.toInt)) match {
-        case Success(seq) => Right(NodePosition(seq))
+        case Success(seq) => Right(NodePosition(seq.toIndexedSeq))
         case Failure(e) => Left(DecodingFailure.fromThrowable(e, List()))
       }
     }
   }
 
+  @nowarn
   implicit val commitmentHintEncoder: Encoder[CommitmentHint] = { ch =>
     val commonFields: Json = (ch match {
       case own: OwnCommitment =>
@@ -309,6 +312,7 @@ trait ApiCodecs extends JsonCodecs {
     }
   }
 
+  @nowarn
   implicit val proofEncoder: Encoder[SecretProven] = { sp =>
     val proofType = sp match {
       case _: RealSecretProof => "proofReal"

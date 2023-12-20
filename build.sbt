@@ -44,16 +44,10 @@ val ficusVersion = "1.4.7"
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 val effectiveSigma = "org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion
 
-
 libraryDependencies ++= Seq(
   effectiveSigma.force()
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
-  
-  // api dependencies 
-  "io.circe" %% "circe-core" % circeVersion,
-  "io.circe" %% "circe-generic" % circeVersion,
-  "io.circe" %% "circe-parser" % circeVersion,
 
   "ch.qos.logback" % "logback-classic" % "1.3.5",
 
@@ -210,14 +204,14 @@ Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 lazy val avldb = (project in file("avldb"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
-    crossScalaVersions := Seq(scala213, scalaVersion.value),
+    crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
     commonSettings,
     name := "avldb",
     // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
     // see https://github.com/eclipse/jetty.project/issues/3244
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
     // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
-    scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+    scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8")),
     scalacOptions in(Compile, compile) --= scalacOpts,
     javacOptions in(Compile, compile) ++= javacReleaseOption,
     libraryDependencies ++= Seq(
@@ -251,7 +245,7 @@ lazy val ergoCore = (project in file("ergo-core"))
   .dependsOn(avldb % "test->test;compile->compile")
   .dependsOn(ergoWallet % "test->test;compile->compile")
   .settings(
-    crossScalaVersions := Seq(scala213, scalaVersion.value),
+    crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
     commonSettings,
     name := "ergo-core",
     libraryDependencies ++= Seq(
@@ -259,7 +253,7 @@ lazy val ergoCore = (project in file("ergo-core"))
       effectiveSigma,
       (effectiveSigma % Test).classifier("tests")
     ),
-    scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+    scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8")),
     scalacOptions in(Compile, compile) --= scalacOpts,
   )
 
@@ -298,6 +292,10 @@ lazy val ergo = (project in file("."))
     scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
     javacOptions in(Compile, compile) ++= javacReleaseOption,
     libraryDependencies ++= Seq(
+      // api dependencies
+      "io.circe" %% "circe-core" % circeVersion,
+      "io.circe" %% "circe-generic" % circeVersion,
+      "io.circe" %% "circe-parser" % circeVersion,
       // network dependencies
       "com.typesafe.akka" %% "akka-stream" % akkaVersion, // required for akka-http to compile
       "com.typesafe.akka" %% "akka-actor" % akkaVersion, // required for akka-http to compile

@@ -47,13 +47,13 @@ publishTo := {
 
 pomIncludeRepository := { _ => false }
 
-scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
+scalacOptions ++= Seq("-feature", "-deprecation")
 
 // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
 // see https://github.com/eclipse/jetty.project/issues/3244
 // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
 // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
-scalacOptions in(Compile, compile) ++= Seq("-release", "8")
-scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard")
+scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8"))
+scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xfatal-warnings")
 
 enablePlugins(ReproducibleBuildsPlugin)

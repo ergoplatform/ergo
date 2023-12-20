@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.settings.{Algos, ErgoSettings}

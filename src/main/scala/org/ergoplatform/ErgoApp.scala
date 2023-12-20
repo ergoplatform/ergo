@@ -107,13 +107,13 @@ class ErgoApp(args: Args) extends ScorexLogging {
       None
     }
 
-  if(ergoSettings.nodeSettings.extraIndex)
-    require(
-      ergoSettings.nodeSettings.stateType.holdsUtxoSet && !ergoSettings.nodeSettings.isFullBlocksPruned,
-      "Node must store full UTXO set and all blocks to run extra indexer."
-    )
   // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
-  private val indexer: ActorRef = ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings)
+  private val indexerOpt: Option[ActorRef] =
+    if (ergoSettings.nodeSettings.extraIndex) {
+      Some(ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings))
+    } else {
+      None
+    }
 
   UtxoSetScanner(nodeViewHolderRef)
 
@@ -185,7 +185,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
-    BlockchainApiRoute(readersHolderRef, ergoSettings, indexer),
+    BlockchainApiRoute(readersHolderRef, ergoSettings, indexerOpt),
     ErgoPeersApiRoute(
       peerManagerRef,
       networkControllerRef,

@@ -13,8 +13,8 @@ import scorex.util.{bytesToId, ModifierId}
 import akka.pattern.ask
 import io.circe.syntax.EncoderOps
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.ProcessingOutcome
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.ProcessingOutcome._
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome._
 import scorex.util.encode.Base16
 import sigmastate.Values.ErgoTree
 import sigmastate.serialization.ErgoTreeSerializer

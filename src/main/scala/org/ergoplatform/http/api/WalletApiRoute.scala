@@ -28,7 +28,7 @@ import akka.http.scaladsl.server.MissingQueryParamRejection
 case class WalletApiRoute(readersHolder: ActorRef,
                           nodeViewActorRef: ActorRef,
                           ergoSettings: ErgoSettings)
-                         (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs with ApiNodeViewCodecs with ApiRequestsCodecs {
+                         (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs with ApiExtraCodecs with ApiRequestsCodecs {
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val assetIssueRequestDecoder: AssetIssueRequestDecoder = new AssetIssueRequestDecoder(ergoSettings)
@@ -305,23 +305,26 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) {
-    (minConfNum, maxConfNum, minHeight, maxHeight) =>
+    (minConfNum, maxConfNum, minHeight, maxHeight, limit, offset) =>
       val considerUnconfirmed = minConfNum == -1
-      withWallet {
-        _.walletBoxes(unspentOnly = true, considerUnconfirmed)
-          .map {
-            _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
+      withWallet { wallet =>
+        wallet.walletBoxes(unspentOnly = true, considerUnconfirmed)
+          .map { boxes =>
+            boxes
+              .filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
+              .slice(offset, offset + limit)
           }
       }
   }
 
   def boxesR: Route = (path("boxes") & get & boxParams) {
-    (minConfNum, maxConfNum, minHeight, maxHeight) =>
+    (minConfNum, maxConfNum, minHeight, maxHeight, limit, offset)  =>
       val considerUnconfirmed = minConfNum == -1
       withWallet {
         _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
           .map {
             _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
+            .slice(offset, offset + limit)
           }
       }
   }

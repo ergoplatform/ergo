@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoTreePredef
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.MonetarySettings
 import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}

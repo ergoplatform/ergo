@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes._
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils._
 import spire.syntax.all.cfor
 
 import scala.annotation.tailrec

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
@@ -20,6 +20,9 @@ import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
+/**
+  * Repository for messages processed by ErgoWalletActors
+  */
 object ErgoWalletActorMessages {
 
   // Private signals the wallet actor sends to itself

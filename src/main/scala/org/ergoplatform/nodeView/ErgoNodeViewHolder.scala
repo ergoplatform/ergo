@@ -9,17 +9,15 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransacti
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolTypes.ProcessingOutcome
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.wallet.utils.FileUtils
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, NetworkType, ScorexSettings}
 import org.ergoplatform.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.network.ErgoNodeViewSynchronizerProcessNipopow.ProcessNipopow
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier._
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.RecoverableModifierError

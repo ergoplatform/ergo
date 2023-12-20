@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoState}
 import org.ergoplatform.nodeView.state.UtxoState.SubtreeId

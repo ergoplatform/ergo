@@ -65,19 +65,21 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) {
-    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight) =>
+    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight, limit, offset) =>
       val scanId = ScanId @@ scanIdInt.toShort
       val considerUnconfirmed = minConfNum == -1
       withWallet(_.scanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight).map {
         _.filter(boxConfirmationFilter(_, minConfNum, maxConfNum))
+        .slice(offset, offset + limit)
       })
   }
 
   def spentR: Route = (path("spentBoxes" / IntNumber) & get & boxParams) {
-    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight) =>
+    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight, limit, offset) =>
       val scanId = ScanId @@ scanIdInt.toShort
       withWallet(_.scanSpentBoxes(scanId).map {
         _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
+        .slice(offset, offset + limit)
       })
   }
 

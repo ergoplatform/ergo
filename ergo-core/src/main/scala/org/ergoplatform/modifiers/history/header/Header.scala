@@ -8,7 +8,7 @@ import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, PreHeader}
 import org.ergoplatform.modifiers.{BlockSection, HeaderTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.serialization.ErgoSerializer

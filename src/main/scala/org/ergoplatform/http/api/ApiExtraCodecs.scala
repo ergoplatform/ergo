@@ -6,15 +6,23 @@ import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.sdk.JsonCodecs
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.getAddress
 import org.ergoplatform.nodeView.history.extra.{BalanceInfo, IndexedErgoBox, IndexedErgoTransaction, IndexedToken}
+import org.ergoplatform.nodeView.state.SnapshotsInfo
+import org.ergoplatform.nodeView.state.UtxoState.ManifestId
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 
+/**
+  * JSON codecs related to extra indices (available via /blockchain API methods), and also few codecs for wallet
+  * digest (wallet balances) and UTXO snapshot manifests
+  */
 trait ApiExtraCodecs extends JsonCodecs {
-  implicit val ergoAddressEncoder: ErgoAddressEncoder = null
+
+  def ergoAddressEncoder: ErgoAddressEncoder
 
   implicit val indexedBoxEncoder: Encoder[IndexedErgoBox] = { iEb =>
     iEb.box.asJson.deepMerge(Json.obj(
       "globalIndex" -> iEb.globalIndex.asJson,
       "inclusionHeight" -> iEb.inclusionHeight.asJson,
-      "address" -> ergoAddressEncoder.toString(getAddress(iEb.box.ergoTree)).asJson,
+      "address" -> ergoAddressEncoder.toString(getAddress(iEb.box.ergoTree)(ergoAddressEncoder)).asJson,
       "spentTransactionId" -> iEb.spendingTxIdOpt.asJson
     ))
   }
@@ -38,7 +46,7 @@ trait ApiExtraCodecs extends JsonCodecs {
       "inputs" -> iEt.inputs.asJson,
       "dataInputs" -> iEt.dataInputs.asJson,
       "outputs" -> iEt.outputs.asJson,
-      "size" -> iEt.txSize.asJson
+      "size" -> iEt.size.asJson
     )
   }
 
@@ -80,4 +88,29 @@ trait ApiExtraCodecs extends JsonCodecs {
       "unconfirmed" -> tBal._2.asJson
     )
   }
+
+
+  implicit val balancesSnapshotEncoder: Encoder[WalletDigest] = { v =>
+    import v._
+    Json.obj(
+      "height" -> height.asJson,
+      "balance" -> walletBalance.asJson,
+      "assets" -> walletAssetBalances.toMap.map(x => (x._1: String, x._2)).asJson //toMap to have assets as JSON map
+    )
+  }
+
+  implicit val SnapshotInfoEncoder: Encoder[SnapshotsInfo] = { si =>
+    Json.obj(
+      "availableManifests" -> si.availableManifests.map { case (height, manifest) =>
+        height -> manifest
+      }.asJson
+    )
+  }
+
+  implicit val SnapshotInfoDecoder: Decoder[SnapshotsInfo] = { cursor =>
+    for {
+      availableManifests <- Decoder.decodeMap[Int, ManifestId].tryDecode(cursor.downField("availableManifests"))
+    } yield new SnapshotsInfo(availableManifests)
+  }
+
 }

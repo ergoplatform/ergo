@@ -6,14 +6,14 @@ import akka.util.Timeout
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolderLocallyGeneratedModifier.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.ModifierId
 

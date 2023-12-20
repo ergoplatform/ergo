@@ -4,7 +4,7 @@ import io.circe.syntax._
 import io.circe.{ACursor, Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId}
-import org.ergoplatform.http.api.{ApiCodecs, ApiNodeViewCodecs}
+import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs}
 import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -24,7 +24,11 @@ import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import scala.util.Random
 
 
-class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs with ApiNodeViewCodecs {
+class JsonSerializationSpec extends ErgoPropertyTest
+  with WalletGenerators
+  with ApiCodecs
+  with ApiRequestsCodecs
+  with ApiExtraCodecs {
 
   property("ErgoFullBlock should be encoded into JSON and decoded back correctly") {
 

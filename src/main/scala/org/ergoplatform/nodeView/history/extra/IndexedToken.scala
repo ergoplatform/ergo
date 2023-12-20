@@ -49,9 +49,10 @@ case class IndexedToken(tokenId: ModifierId,
 
     val toRemove: ArrayBuffer[ModifierId] = rollbackState(txTarget, boxTarget, history.getReader)
 
-    if (boxCount == 0)
+    if (boxCount == 0) {
       toRemove += id // all segments empty after rollback, delete parent
-    else
+      log.info(s"Removing token $tokenId because no more boxes are associated with it")
+    } else
       history.historyStorage.insertExtra(Array.empty, Array(this)) // save the changes made to this address
 
     toRemove.toArray
@@ -99,6 +100,17 @@ case class IndexedToken(tokenId: ModifierId,
    */
   override private[extra] def filterMempool(boxes: Seq[ErgoBox]): Seq[ErgoBox] =
     boxes.filter(_.additionalTokens.exists(_._1.toModifierId == tokenId))
+
+  /**
+   * Increase emission amount of this token. Sometimes tokens get created in multiple boxes.
+   * @param plus - emission amount to add
+   * @return updated token
+   */
+  private[extra] def addEmissionAmount(plus: Long): IndexedToken = {
+    val updated = IndexedToken(tokenId, boxId, amount + plus, name, description, decimals, boxes)
+    updated.buffer ++= buffer
+    updated
+  }
 
 }
 

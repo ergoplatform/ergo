@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import org.scalacheck.Gen

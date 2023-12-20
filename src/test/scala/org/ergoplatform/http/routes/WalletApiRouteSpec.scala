@@ -6,7 +6,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import io.circe.{Decoder, Json}
-import org.ergoplatform.http.api.{ApiCodecs, ApiNodeViewCodecs, WalletApiRoute}
+import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
@@ -28,7 +28,8 @@ class WalletApiRouteSpec extends AnyFlatSpec
   with Stubs
   with FailFastCirceSupport
   with ApiCodecs
-  with ApiNodeViewCodecs {
+  with ApiRequestsCodecs
+  with ApiExtraCodecs {
 
   implicit val timeout: RouteTestTimeout = RouteTestTimeout(145.seconds)
 

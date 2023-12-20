@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import io.circe.{Encoder, Json}
 import org.ergoplatform.consensus.PeerChainStatus
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import scorex.core.network.ConnectedPeer
 
 /**

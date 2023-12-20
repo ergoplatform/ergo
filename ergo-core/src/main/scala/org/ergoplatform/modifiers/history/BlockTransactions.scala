@@ -150,15 +150,15 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
     val headerId: ModifierId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val verOrCount = r.getUInt().toIntExact
 
-    /**
-      * A hack to avoid need for a database rescan if older version of the serializer was used to put.
-      * block transactions into.
-      *
-      * We consider that in a block there could be no more than 10,000,000 transactions.
-      *
-      * Then the new serializer puts 10,000,000 + block version (while the old one just puts tx count with no version),
-      * and the reader knows that a new serializer was used if the first unsigned integer read is more than 10,000,000.
-      */
+    /*
+     * A hack to avoid need for a database rescan if older version of the serializer was used to put.
+     * block transactions into.
+     *
+     * We consider that in a block there could be no more than 10,000,000 transactions.
+     *
+     * Then the new serializer puts 10,000,000 + block version (while the old one just puts tx count with no version),
+     * and the reader knows that a new serializer was used if the first unsigned integer read is more than 10,000,000.
+     */
     var blockVersion = 1: Byte
     var txCount = verOrCount
     if (verOrCount > MaxTransactionsInBlock) {

@@ -4,7 +4,10 @@ import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import scorex.util.{ModifierId, ScorexLogging}
 import scala.util.Random
 
-object ErgoMemPoolTypes extends ScorexLogging {
+/**
+  * Additional types and functions used in ErgoMemPool
+  */
+object ErgoMemPoolUtils extends ScorexLogging {
 
   /**
    * Hierarchy of sorting strategies for mempool transactions

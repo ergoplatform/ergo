@@ -3,7 +3,7 @@ package org.ergoplatform.mining
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants.Height
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import sigmastate.crypto.DLogProtocol.ProveDlog
 
 

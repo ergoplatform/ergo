@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header.{Timestamp, Version}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer, HeaderWithoutPow}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.ErgoHistoryConstants.GenesisHeight
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}

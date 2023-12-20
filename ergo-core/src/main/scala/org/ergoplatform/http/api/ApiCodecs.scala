@@ -8,7 +8,6 @@ import org.ergoplatform._
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.{Algos, ErgoAlgos}
 import org.ergoplatform.wallet.Constants.ScanId
@@ -32,8 +31,8 @@ import org.ergoplatform.sdk.JsonCodecs
 import sigmastate.eval.Extensions.ArrayOps
 
 import java.math.BigInteger
-import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
+import scala.annotation.nowarn
 
 
 trait ApiCodecs extends JsonCodecs {
@@ -263,7 +262,7 @@ trait ApiCodecs extends JsonCodecs {
   implicit val positionDecoder: Decoder[NodePosition] = { c =>
     c.as[String].flatMap {s =>
       Try(s.split("-").map(_.toInt)) match {
-        case Success(seq) => Right(NodePosition(ArraySeq.unsafeWrapArray(seq)))
+        case Success(seq) => Right(NodePosition(seq))
         case Failure(e) => Left(DecodingFailure.fromThrowable(e, List()))
       }
     }

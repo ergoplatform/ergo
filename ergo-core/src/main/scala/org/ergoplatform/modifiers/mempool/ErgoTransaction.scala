@@ -367,8 +367,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       ErgoInterpreter.interpreterInitCost.toLong,
       multiplyExact(boxesToSpend.size.toLong, stateContext.currentParameters.inputCost.toLong),
       multiplyExact(dataBoxes.size.toLong, stateContext.currentParameters.dataInputCost.toLong),
-      multiplyExact(outputCandidates.size.toLong, stateContext.currentParameters.outputCost.toLong),
-    )
+      multiplyExact(outputCandidates.size.toLong, stateContext.currentParameters.outputCost.toLong))
 
     // Cost limit per block
     val maxCost = stateContext.currentParameters.maxBlockCost.toLong

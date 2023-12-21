@@ -2,10 +2,13 @@ package org.ergoplatform.modifiers.transaction
 
 
 /**
-  * A transaction is an atomic state modifier
+  * A basic trait for entities which can be signed
   */
 trait Signable {
 
+  /**
+    * Bytes to be signed
+    */
   val messageToSign: Array[Byte]
-  
+
 }

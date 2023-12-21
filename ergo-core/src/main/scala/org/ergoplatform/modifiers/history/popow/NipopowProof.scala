@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps
+import scorex.util.ScorexLogging
 
 /**
   * A structure representing NiPoPow proof as a persistent modifier.

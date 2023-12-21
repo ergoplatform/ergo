@@ -4,8 +4,6 @@ import io.circe.Encoder
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-
 
 /**
   * Block section, so a header, or block transactions, or extension, or ADProofs.
@@ -31,11 +29,3 @@ object BlockSection {
   /** Immutable empty array can be shared to avoid allocations. */
   val emptyArray: Array[BlockSection] = Array.empty[BlockSection]
 }
-
-
-trait TransactionsCarryingBlockSection
-  extends BlockSection {
-
-  def transactions: Seq[ErgoTransaction]
-}
-

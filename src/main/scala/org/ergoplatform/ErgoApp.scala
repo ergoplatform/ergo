@@ -43,7 +43,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
   )
 
   val seedNodes = ergoSettings.scorexSettings.network.knownPeers
-  println("sn: " + seedNodes)
 
   log.info(s"Working directory: ${ergoSettings.directory}")
   log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")

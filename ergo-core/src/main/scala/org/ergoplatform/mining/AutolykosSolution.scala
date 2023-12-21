@@ -1,5 +1,7 @@
 package org.ergoplatform.mining
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.util.BigIntegers
@@ -35,7 +37,7 @@ object AutolykosSolution extends ApiCodecs {
   val wForV2: EcPointType = CryptoConstants.dlogGroup.generator
   val dForV2: BigInt = 0
 
-  implicit val jsonEncoder: Encoder[AutolykosSolution] = { s: AutolykosSolution =>
+  implicit val jsonEncoder: Encoder[AutolykosSolution] = Encoder.instance { s: AutolykosSolution =>
     Map(
       "pk" -> s.pk.asJson,
       "w" -> s.w.asJson,
@@ -44,7 +46,7 @@ object AutolykosSolution extends ApiCodecs {
     ).asJson
   }
 
-  implicit val jsonDecoder: Decoder[AutolykosSolution] = { c: HCursor =>
+  implicit val jsonDecoder: Decoder[AutolykosSolution] = Decoder.instance { c: HCursor =>
     for {
       pkOpt <- c.downField("pk").as[Option[EcPointType]]
       wOpt <- c.downField("w").as[Option[EcPointType]]

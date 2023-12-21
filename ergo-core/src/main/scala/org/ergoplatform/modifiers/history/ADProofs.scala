@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
@@ -75,7 +77,7 @@ object ADProofs extends ApiCodecs {
 
   def proofDigest(proofBytes: SerializedAdProof): Digest32 = Algos.hash(proofBytes)
 
-  implicit val jsonEncoder: Encoder[ADProofs] = { proof: ADProofs =>
+  implicit val jsonEncoder: Encoder[ADProofs] = Encoder.instance { proof: ADProofs =>
     Map(
       "headerId" -> Algos.encode(proof.headerId).asJson,
       "proofBytes" -> Algos.encode(proof.proofBytes).asJson,
@@ -84,7 +86,7 @@ object ADProofs extends ApiCodecs {
     ).asJson
   }
 
-  implicit val jsonDecoder: Decoder[ADProofs] = { c: HCursor =>
+  implicit val jsonDecoder: Decoder[ADProofs] = Decoder.instance { c: HCursor =>
     for {
       headerId <- c.downField("headerId").as[ModifierId]
       proofBytes <- c.downField("proofBytes").as[Array[Byte]]

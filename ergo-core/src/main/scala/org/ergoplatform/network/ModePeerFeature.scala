@@ -83,7 +83,7 @@ object ModePeerFeature {
     )
   }
 
-  implicit val jsonEncoder: Encoder[ModePeerFeature] = { mf: ModePeerFeature =>
+  implicit val jsonEncoder: Encoder[ModePeerFeature] = Encoder.instance { mf: ModePeerFeature =>
     Json.obj(
       "state" -> mf.stateType.toString.asJson,
       "verifyingTransactions" -> mf.verifyingTransactions.asJson,

@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.TransactionsCarryingPersistentNodeViewModifier
@@ -111,7 +113,7 @@ object BlockTransactions extends ApiCodecs {
   def proofValid(transactionsDigest: Digest32, proof: TransactionMembershipProof): Boolean =
     proofValid(transactionsDigest, proof.proof)
 
-  implicit val jsonEncoder: Encoder[BlockTransactions] = { bt: BlockTransactions =>
+  implicit val jsonEncoder: Encoder[BlockTransactions] = Encoder.instance { bt: BlockTransactions =>
     Map(
       "headerId" -> Algos.encode(bt.headerId).asJson,
       "transactions" -> bt.txs.map(_.asJson).asJson,
@@ -120,7 +122,7 @@ object BlockTransactions extends ApiCodecs {
     ).asJson
   }
 
-  implicit val jsonDecoder: Decoder[BlockTransactions] = { c: HCursor =>
+  implicit val jsonDecoder: Decoder[BlockTransactions] = Decoder.instance { c: HCursor =>
     for {
       headerId <- c.downField("headerId").as[ModifierId]
       transactions <- c.downField("transactions").as[mutable.ArraySeq[ErgoTransaction]]

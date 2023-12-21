@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history.popow
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import cats.Traverse
 import cats.implicits.{catsStdInstancesForEither, catsStdInstancesForList}
 import io.circe.{Decoder, Encoder, Json}
@@ -72,11 +74,11 @@ object PoPowHeader {
     }
   }
 
-  implicit val interlinksEncoder: Encoder[Seq[ModifierId]] = { interlinksVector: Seq[ModifierId] =>
+  implicit val interlinksEncoder: Encoder[Seq[ModifierId]] = Encoder.instance { interlinksVector: Seq[ModifierId] =>
     interlinksVector.map(id => id: String).asJson
   }
 
-  implicit val batchMerkleProofEncoder: Encoder[BatchMerkleProof[Digest32]] = { proof: BatchMerkleProof[Digest32] =>
+  implicit val batchMerkleProofEncoder: Encoder[BatchMerkleProof[Digest32]] = Encoder.instance { proof: BatchMerkleProof[Digest32] =>
     import org.ergoplatform.wallet.serialization.JsonCodecsWrapper.arrayBytesEncoder
 
     val indicesAsJson = proof.indices.map(i => Json.obj(fields =
@@ -93,7 +95,7 @@ object PoPowHeader {
     )
   }
 
-  implicit val batchMerkleProofDecoder: Decoder[BatchMerkleProof[Digest32]] = { p =>
+  implicit val batchMerkleProofDecoder: Decoder[BatchMerkleProof[Digest32]] = Decoder.instance { p =>
     import org.ergoplatform.wallet.serialization.JsonCodecsWrapper.arrayBytesDecoder
 
     for {
@@ -116,7 +118,7 @@ object PoPowHeader {
       proofBytes.map(p => Digest32 @@ p) zip proofSides.map(s => Side @@ s))
   }
 
-  implicit val popowHeaderJsonEncoder: Encoder[PoPowHeader] = { p: PoPowHeader =>
+  implicit val popowHeaderJsonEncoder: Encoder[PoPowHeader] = Encoder.instance { p: PoPowHeader =>
     Map(
       "header" -> p.header.asJson,
       //order in JSON array is preserved according to RFC 7159
@@ -125,7 +127,7 @@ object PoPowHeader {
     ).asJson
   }
 
-  implicit val popowHeaderJsonDecoder: Decoder[PoPowHeader] = { c =>
+  implicit val popowHeaderJsonDecoder: Decoder[PoPowHeader] = Decoder.instance { c =>
     for {
       header <- c.downField("header").as[Header]
       interlinks <- c.downField("interlinks").as[Seq[String]]

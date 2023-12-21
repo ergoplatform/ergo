@@ -409,7 +409,7 @@ object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
     Parameters(height, table.toMap, proposedUpdate)
   }
 
-  implicit val jsonEncoder: Encoder[Parameters] = { p: Parameters =>
+  implicit val jsonEncoder: Encoder[Parameters] = Encoder.instance { p: Parameters =>
     Map(
       "height" -> p.height.asJson,
       "blockVersion" -> p.blockVersion.asJson,

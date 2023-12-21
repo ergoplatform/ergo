@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history.extension
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import com.google.common.primitives.Bytes
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
@@ -87,7 +89,7 @@ object Extension extends ApiCodecs {
     Algos.merkleTree(LeafData @@ fields.map(kvToLeaf))
   }
 
-  implicit val jsonEncoder: Encoder[Extension] = { e: Extension =>
+  implicit val jsonEncoder: Encoder[Extension] = Encoder.instance { e: Extension =>
     Map(
       "headerId" -> Algos.encode(e.headerId).asJson,
       "digest" -> Algos.encode(e.digest).asJson,
@@ -95,7 +97,7 @@ object Extension extends ApiCodecs {
     ).asJson
   }
 
-  implicit val jsonDecoder: Decoder[Extension] = { c: HCursor =>
+  implicit val jsonDecoder: Decoder[Extension] = Decoder.instance { c: HCursor =>
     for {
       headerId <- c.downField("headerId").as[ModifierId]
       fields <- c.downField("fields").as[List[(Array[Byte], Array[Byte])]]

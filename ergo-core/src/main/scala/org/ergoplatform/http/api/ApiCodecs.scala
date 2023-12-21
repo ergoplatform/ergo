@@ -1,5 +1,6 @@
 package org.ergoplatform.http.api
 
+import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
 import org.bouncycastle.util.BigIntegers
@@ -22,7 +23,7 @@ import scorex.crypto.hash.Digest
 import scorex.util.encode.Base16
 import sigmastate.Values.SigmaBoolean
 import sigmastate._
-import sigmastate.crypto.CryptoConstants.EcPointType
+import sigmastate.crypto.CryptoConstants.{EcPointType, EncodedGroupElementLength}
 import sigmastate.crypto.DLogProtocol.{DLogProverInput, FirstDLogProverMessage, ProveDlog}
 import sigmastate.crypto.VerifierMessage.Challenge
 import sigmastate.crypto._
@@ -30,6 +31,7 @@ import sigmastate.interpreter._
 import sigmastate.serialization.OpCodes
 import org.ergoplatform.sdk.JsonCodecs
 import sigmastate.eval.Extensions.ArrayOps
+import sigmastate.utils.Helpers._
 
 import java.math.BigInteger
 import scala.annotation.nowarn
@@ -43,67 +45,67 @@ trait ApiCodecs extends JsonCodecs {
     fromTry(validationResult.toTry)
   }
 
-  implicit val leafDataEncoder: Encoder[LeafData] = xs => Base16.encode(xs).asJson
+  implicit val leafDataEncoder: Encoder[LeafData] = Encoder.instance(xs => Base16.encode(xs).asJson)
 
-  implicit val digestEncoder: Encoder[Digest] = x => Base16.encode(x).asJson
+  implicit val digestEncoder: Encoder[Digest] = Encoder.instance(x => Base16.encode(x).asJson)
 
-  implicit val sideEncoder: Encoder[Side] = _.toByte.asJson
+  implicit val sideEncoder: Encoder[Side] = Encoder.instance(_.toByte.asJson)
 
   implicit val ergoAddressEncoder: ErgoAddressEncoder = null
 
-  protected implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = { proof =>
+  protected implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = Encoder.instance({ proof =>
     Json.obj(
       "leafData" -> proof.leafData.asJson,
       "levels" -> proof.levels.asJson)
-  }
+  })
 
-  implicit val secretStringEncoder: Encoder[SecretString] = { secret =>
+  implicit val secretStringEncoder: Encoder[SecretString] = Encoder.instance({ secret =>
     secret.toStringUnsecure.asJson
-  }
+  })
 
-  implicit val bigIntEncoder: Encoder[BigInt] = { bigInt =>
+  implicit val bigIntEncoder: Encoder[BigInt] = Encoder.instance({ bigInt =>
     JsonNumber.fromDecimalStringUnsafe(bigInt.toString).asJson
-  }
+  })
 
   implicit val difficultyEncoder: Encoder[Difficulty] = bigIntEncoder
 
-  implicit val ecPointDecoder: Decoder[EcPointType] = { implicit cursor =>
+  implicit val ecPointDecoder: Decoder[EcPointType] = Decoder.instance { implicit cursor =>
     for {
       str <- cursor.as[String]
       bytes <- fromTry(Algos.decode(str))
     } yield groupElemFromBytes(bytes)
   }
 
-  implicit val ecPointEncoder: Encoder[EcPointType] = { point: EcPointType =>
+  implicit val ecPointEncoder: Encoder[EcPointType] = Encoder.instance({ point: EcPointType =>
     groupElemToBytes(point).asJson
-  }
+  })
 
-  implicit val proveDlogEncoder: Encoder[ProveDlog] = _.pkBytes.asJson
+  implicit val proveDlogEncoder: Encoder[ProveDlog] = Encoder.instance(_.pkBytes.asJson)
 
   // this val is named "anyRegisterIdEncoder" because parent trait already contains
   // "registerIdEncoder" which is actually a KeyEncoder for NonMandatoryRegisterId
   // todo: rename "registerIdEncoder" into "nonMandatoryRegisterId" in parent trait in sigma repo
-  implicit val anyRegisterIdEncoder: Encoder[RegisterId] = { regId =>
+  implicit val anyRegisterIdEncoder: Encoder[RegisterId] = Encoder.instance({ regId =>
     s"R${regId.number}".asJson
-  }
+  })
 
   // todo: see comment for "RegisterIdEncoder" above
-  implicit val anyRegisterIdDecoder: Decoder[RegisterId] = { implicit cursor =>
+  implicit val anyRegisterIdDecoder: Decoder[RegisterId] = Decoder.instance({ implicit cursor =>
     for {
       regId <- cursor.as[String]
       reg <- fromOption(ErgoBox.registerByName.get(regId))
     } yield reg
-  }
+  })
 
-  implicit val scanIdEncoder: Encoder[ScanId] = { scanId =>
+  implicit val scanIdEncoder: Encoder[ScanId] = Encoder.instance({ scanId =>
     scanId.toShort.asJson
-  }
+  })
 
-  implicit val scanIdDecoder: Decoder[ScanId] = { c: HCursor =>
+  implicit val scanIdDecoder: Decoder[ScanId] = Decoder.instance({ c: HCursor =>
     ScanId @@ c.as[Short]
-  }
+  })
 
-  implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { box =>
+  implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = Encoder.instance({ box =>
     val plainFields = Map(
       "spent" -> box.spendingStatus.spent.asJson,
       "onchain" -> box.chainStatus.onChain.asJson,
@@ -124,7 +126,7 @@ trait ApiCodecs extends JsonCodecs {
         ("spendingTransactionId" -> box.spendingTxIdOpt.asJson)
     }
     fieldsWithTx.asJson
-  }
+  })
 
   implicit val secretBigIntEncoder: Encoder[BigInteger] = Encoder.instance { w =>
     ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(CryptoConstants.groupSize, w)).asJson
@@ -143,7 +145,7 @@ trait ApiCodecs extends JsonCodecs {
       .map(DLogProverInput.apply)
       .map(DlogSecretKey.apply)
 
-  implicit val dhtSecretWrapperEncoder: Encoder[DhtSecretKey] = { dht =>
+  implicit val dhtSecretWrapperEncoder: Encoder[DhtSecretKey] = Encoder.instance({ dht =>
     Json.obj(
       "secret" -> dht.privateInput.w.asJson,
       "g" -> dht.privateInput.commonInput.g.asJson,
@@ -151,9 +153,9 @@ trait ApiCodecs extends JsonCodecs {
       "u" -> dht.privateInput.commonInput.u.asJson,
       "v" -> dht.privateInput.commonInput.v.asJson
     )
-  }
+  })
 
-  implicit val dhtSecretWrapperDecoder: Decoder[DhtSecretKey] = { cursor =>
+  implicit val dhtSecretWrapperDecoder: Decoder[DhtSecretKey] = Decoder.instance({ cursor =>
     for {
       secret <- cursor.downField("secret").as[BigInteger]
       g <- cursor.downField("g").as[EcPointType]
@@ -161,41 +163,41 @@ trait ApiCodecs extends JsonCodecs {
       u <- cursor.downField("u").as[EcPointType]
       v <- cursor.downField("v").as[EcPointType]
     } yield DhtSecretKey(DiffieHellmanTupleProverInput(secret, ProveDHTuple(g, h, u, v)))
-  }
+  })
 
-  implicit val unsignedTransactionEncoder: Encoder[UnsignedErgoTransaction] = { tx =>
+  implicit val unsignedTransactionEncoder: Encoder[UnsignedErgoTransaction] = Encoder.instance({ tx =>
     tx.asInstanceOf[UnsignedErgoLikeTransaction].asJson
-  }
+  })
 
-  implicit val unsignedTransactionDecoder: Decoder[UnsignedErgoTransaction] = { cursor =>
+  implicit val unsignedTransactionDecoder: Decoder[UnsignedErgoTransaction] = Decoder.instance({ cursor =>
     for {
       ergoLikeTx <- cursor.as[UnsignedErgoLikeTransaction]
     } yield UnsignedErgoTransaction(ergoLikeTx)
-  }
+  })
 
-  implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
+  implicit val transactionEncoder: Encoder[ErgoTransaction] = Encoder.instance({ tx =>
     tx.asInstanceOf[ErgoLikeTransaction].asJson
       .mapObject(_.add("size", tx.size.asJson))
-  }
+  })
 
-  implicit val transactionDecoder: Decoder[ErgoTransaction] = { cursor =>
+  implicit val transactionDecoder: Decoder[ErgoTransaction] = Decoder.instance({ cursor =>
     for {
       ergoLikeTx <- cursor.as[ErgoLikeTransaction]
     } yield ErgoTransaction(ergoLikeTx)
-  }
+  })
 
   @nowarn
-  implicit val sigmaLeafEncoder: Encoder[SigmaLeaf] = {
+  implicit val sigmaLeafEncoder: Encoder[SigmaLeaf] = Encoder.instance({
     leaf =>
       val op = leaf.opCode.toByte.asJson
       leaf match {
         case dlog: ProveDlog => Map("op" -> op, "h" -> dlog.value.asJson).asJson
         case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
       }
-  }
+  })
 
   @nowarn
-  implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
+  implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = Encoder.instance({
     sigma =>
       val op = sigma.opCode.toByte.asJson
       sigma match {
@@ -209,7 +211,7 @@ trait ApiCodecs extends JsonCodecs {
         case th: CTHRESHOLD =>
           Map("op" -> op, "args" -> th.children.map(_.asJson).asJson).asJson
       }
-  }
+  })
 
   implicit val sigmaLeafDecoder: Decoder[SigmaLeaf] = Decoder.instance { c =>
     c.downField("op").as[Byte].flatMap {
@@ -233,15 +235,15 @@ trait ApiCodecs extends JsonCodecs {
 
 
 
-  implicit val firstProverMessageEncoder: Encoder[FirstProverMessage] = {
+  implicit val firstProverMessageEncoder: Encoder[FirstProverMessage] = Encoder.instance({
     case cmtDlog: FirstDLogProverMessage =>
       Json.obj("type" -> "dlog".asJson, "a" -> cmtDlog.ecData.asJson)
     case cmtDht: FirstDHTupleProverMessage =>
       Json.obj("type" -> "dht".asJson, "a" -> cmtDht.a.asJson, "b" -> cmtDht.b.asJson)
     case _ => ???
-  }
+  })
 
-  implicit val firstProverMessageDecoder: Decoder[FirstProverMessage] = { c =>
+  implicit val firstProverMessageDecoder: Decoder[FirstProverMessage] = Decoder.instance { c =>
     c.downField("type").as[String].flatMap {
       case h: String if h == "dlog" =>
         for {
@@ -257,21 +259,21 @@ trait ApiCodecs extends JsonCodecs {
     }
   }
 
-  implicit val positionEncoder: Encoder[NodePosition] = { np =>
+  implicit val positionEncoder: Encoder[NodePosition] = Encoder.instance { np =>
     np.positions.mkString("-").asJson
   }
 
-  implicit val positionDecoder: Decoder[NodePosition] = { c =>
+  implicit val positionDecoder: Decoder[NodePosition] = Decoder.instance { c =>
     c.as[String].flatMap {s =>
       Try(s.split("-").map(_.toInt)) match {
-        case Success(seq) => Right(NodePosition(seq.toIndexedSeq))
+        case Success(seq: Array[Int]) => Right(NodePosition(seq))
         case Failure(e) => Left(DecodingFailure.fromThrowable(e, List()))
       }
     }
   }
 
   @nowarn
-  implicit val commitmentHintEncoder: Encoder[CommitmentHint] = { ch =>
+  implicit val commitmentHintEncoder: Encoder[CommitmentHint] = Encoder.instance { ch =>
     val commonFields: Json = (ch match {
       case own: OwnCommitment =>
         Json.obj("hint" -> "cmtWithSecret".asJson, "secret" -> own.secretRandomness.asJson)
@@ -313,7 +315,7 @@ trait ApiCodecs extends JsonCodecs {
   }
 
   @nowarn
-  implicit val proofEncoder: Encoder[SecretProven] = { sp =>
+  implicit val proofEncoder: Encoder[SecretProven] = Encoder.instance { sp =>
     val proofType = sp match {
       case _: RealSecretProof => "proofReal"
       case _: SimulatedSecretProof => "proofSimulated"
@@ -328,7 +330,7 @@ trait ApiCodecs extends JsonCodecs {
     )
   }
 
-  implicit val secretProofDecoder: Decoder[SecretProven] = { c =>
+  implicit val secretProofDecoder: Decoder[SecretProven] = Decoder.instance { c =>
     c.downField("hint").as[String].flatMap {
       case h: String if h == "proofReal" =>
         for {
@@ -362,20 +364,20 @@ trait ApiCodecs extends JsonCodecs {
     }
   }
 
-  implicit val hintEncoder: Encoder[Hint] = {
+  implicit val hintEncoder: Encoder[Hint] = Encoder.instance {
     case cmt: CommitmentHint => cmt.asJson
     case proof: SecretProven => proof.asJson
     case _ => ???
   }
 
-  implicit val hintDecoder: Decoder[Hint] = { cursor =>
+  implicit val hintDecoder: Decoder[Hint] = Decoder.instance { cursor =>
     Seq(commitmentHintDecoder, secretProofDecoder)
       .map(_.apply(cursor))
       .find(_.isRight)
       .getOrElse(Left(DecodingFailure("Can not find suitable decoder", cursor.history)))
   }
 
-  implicit val txHintsEncoder: Encoder[TransactionHintsBag] = { bag =>
+  implicit val txHintsEncoder: Encoder[TransactionHintsBag] = Encoder.instance { bag =>
     Json.obj(
       "secretHints" ->
         bag.secretHints.map { case (inputIdx, inputHints) =>
@@ -387,11 +389,12 @@ trait ApiCodecs extends JsonCodecs {
     )
   }
 
-  implicit val txHintsDecoder: Decoder[TransactionHintsBag] = { cursor =>
+  @nowarn
+  implicit val txHintsDecoder: Decoder[TransactionHintsBag] = Decoder.instance { cursor =>
     for {
       secretHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("secretHints"))
       publicHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("publicHints"))
-    } yield TransactionHintsBag(secretHints.view.mapValues(HintsBag.apply).toMap, publicHints.view.mapValues(HintsBag.apply).toMap)
+    } yield TransactionHintsBag(secretHints.mapValues(HintsBag.apply).toMap, publicHints.mapValues(HintsBag.apply).toMap)
   }
 }
 

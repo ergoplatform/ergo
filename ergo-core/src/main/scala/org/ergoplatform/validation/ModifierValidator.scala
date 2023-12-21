@@ -1,5 +1,7 @@
 package org.ergoplatform.validation
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.utils.ScorexEncoder

@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history.header
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
@@ -159,7 +161,7 @@ object Header extends ApiCodecs {
 
   lazy val GenesisParentId: ModifierId = bytesToId(Array.fill(Constants.HashLength)(0: Byte))
 
-  implicit val jsonEncoder: Encoder[Header] = { h: Header =>
+  implicit val jsonEncoder: Encoder[Header] = Encoder.instance { h: Header =>
     Map(
       "id" -> Algos.encode(h.id).asJson,
       "transactionsRoot" -> Algos.encode(h.transactionsRoot).asJson,
@@ -181,7 +183,7 @@ object Header extends ApiCodecs {
     ).asJson
   }
 
-  implicit val jsonDecoder: Decoder[Header] = { c: HCursor =>
+  implicit val jsonDecoder: Decoder[Header] = Decoder.instance { c: HCursor =>
     for {
       transactionsRoot <- c.downField("transactionsRoot").as[Digest32]
       adProofsRoot <- c.downField("adProofsRoot").as[Digest32]

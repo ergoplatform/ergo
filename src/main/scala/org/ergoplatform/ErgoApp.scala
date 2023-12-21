@@ -41,7 +41,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
     ergoSettings.scorexSettings.restApi.apiKeyHash.isDefined,
     "API key hash must be set"
   )
-  
   log.info(s"Working directory: ${ergoSettings.directory}")
   log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")
 

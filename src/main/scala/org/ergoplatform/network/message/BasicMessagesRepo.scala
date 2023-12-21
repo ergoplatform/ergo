@@ -26,47 +26,7 @@ case class NipopowProofData(m: Int, k: Int, headerId: Option[ModifierId]) {
 
 
 
-/**
-  * The `Inv` message (inventory message) transmits one or more inventories of
-  * objects known to the transmitting peer.
-  * It can be sent unsolicited to announce new transactions or blocks,
-  * or it can be sent in reply to a `SyncInfo` message (or application-specific messages like `GetMempool`).
-  *
-  */
-object InvSpec extends MessageSpecV1[InvData] {
 
-  val maxInvObjects: Int = 400
-
-  override val messageCode: MessageCode = 55: Byte
-  override val messageName: String = "Inv"
-
-  override def serialize(data: InvData, w: Writer): Unit = {
-    val typeId = data.typeId
-    val elems = data.ids
-    require(elems.nonEmpty, "empty inv list")
-    require(elems.lengthCompare(maxInvObjects) <= 0, s"more invs than $maxInvObjects in a message")
-    w.put(typeId)
-    w.putUInt(elems.size)
-    elems.foreach { id =>
-      val bytes = idToBytes(id)
-      assert(bytes.length == NodeViewModifier.ModifierIdSize)
-      w.putBytes(bytes)
-    }
-  }
-
-  override def parse(r: Reader): InvData = {
-    val typeId = NetworkObjectTypeId.fromByte(r.getByte())
-    val count = r.getUInt().toIntExact
-    require(count > 0, "empty inv list")
-    require(count <= maxInvObjects, s"$count elements in a message while limit is $maxInvObjects")
-    val elems = (0 until count).map { _ =>
-      bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
-    }
-
-    InvData(typeId, elems)
-  }
-
-}
 
 /**
   * The `RequestModifier` message requests one or more modifiers from another node.
@@ -204,39 +164,6 @@ class PeersSpec(peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
     }
   }
 }
-
-/**
-  * The `Handshake` message provides information about the transmitting node
-  * to the receiving node at the beginning of a connection. Until both peers
-  * have exchanged `Handshake` messages, no other messages will be accepted.
-  */
-object HandshakeSerializer extends MessageSpecV1[Handshake] {
-  override val messageCode: MessageCode = 75: Byte
-  override val messageName: String = "Handshake"
-
-  val maxHandshakeSize: Int = 8096
-
-  /**
-    * Serializing handshake into a byte writer.
-    *
-    * @param hs - handshake instance
-    * @param w  - writer to write bytes to
-    */
-  override def serialize(hs: Handshake, w: Writer): Unit = {
-    // first writes down handshake time, then peer specification of our node
-    w.putULong(hs.time)
-    PeerSpecSerializer.serialize(hs.peerSpec, w)
-  }
-
-  override def parse(r: Reader): Handshake = {
-    require(r.remaining <= maxHandshakeSize, s"Too big handshake. Size ${r.remaining} exceeds $maxHandshakeSize limit")
-    val time = r.getULong()
-    val data = PeerSpecSerializer.parse(r)
-    Handshake(data, time)
-  }
-
-}
-
 
 /**
   * The `GetSnapshotsInfo` message requests an `SnapshotsInfo` message from the receiving node

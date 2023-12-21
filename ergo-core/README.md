@@ -41,8 +41,10 @@ Then, we are ready to create our Handshake message with peer spec and UNIX time 
 ```scala
 import org.ergoplatform.network.Handshake
 import org.ergoplatform.network.PeerSpec
+import org.ergoplatform.network.HandshakeSerializer
 
 val handshakeMessage = Handshake(mySpec, System.currentTimeMillis())
+val messageSerializedToBytes = HandshakeSerializer.toBytes(handshakeMessage)
 ```
 Now we can serialize the message and send it
 If the message arrived successfully, we'll receive Handshake message back, so we can start to exchange messages with the node
@@ -61,4 +63,20 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 
 val syncMessage = ErgoSyncInfoV2(Seq())
 val messageSerializedToBytes = ErgoSyncInfoMessageSpec.toBytes(emptySync)
+```
+The client will start receiving [InvData](src/main/scala/org/ergoplatform/network/message/InvData.scala) messages with 
+```
+/**
+  * P2P network message which is encoding "inventory", transactions or block sections the node has
+  *
+  * @param typeId
+  * @param ids
+  */
+```
+```scala
+import org.ergoplatform.network.message.InvSpec
+
+{ invDataMessage =>
+  val invData = InvSpec.parseBytesTry(invDataMessage)
+}
 ```

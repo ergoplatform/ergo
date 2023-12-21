@@ -66,7 +66,7 @@
  </check>
  <check level="warning" class="org.scalastyle.scalariform.NumberOfTypesChecker" enabled="true">
   <parameters>
-   <parameter name="maxTypes"><![CDATA[30]]></parameter>
+   <parameter name="maxTypes"><![CDATA[45]]></parameter>
   </parameters>
  </check>
  <check level="warning" class="org.scalastyle.scalariform.CyclomaticComplexityChecker" enabled="true">
@@ -94,7 +94,7 @@
  </check>
  <check level="warning" class="org.scalastyle.scalariform.NumberOfMethodsInTypeChecker" enabled="true">
   <parameters>
-   <parameter name="maxMethods"><![CDATA[30]]></parameter>
+   <parameter name="maxMethods"><![CDATA[45]]></parameter>
   </parameters>
  </check>
  <check level="warning" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true"></check>

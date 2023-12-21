@@ -1,7 +1,7 @@
 package org.ergoplatform.sanity
 
 import akka.actor.ActorRef
-import org.ergoplatform.{ErgoBox, PersistentNodeViewModifier}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -27,7 +27,6 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.utils.Random
 
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
 
 trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
   with StateApplicationTest[ST]
@@ -100,18 +99,7 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
     syncInfoSpec,
     settings,
     syncTracker,
-    deliveryTracker)(ec) {
-
-    protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
-      mod match {
-        case fb: ErgoFullBlock if fb.header.isNew(1.hour) =>
-          fb.toSeq.foreach(s => broadcastModifierInv(s))
-        case h: Header if h.isNew(1.hour) =>
-          broadcastModifierInv(h)
-        case _ =>
-      }
-    }
-  }
+    deliveryTracker)(ec)
 
 }
 

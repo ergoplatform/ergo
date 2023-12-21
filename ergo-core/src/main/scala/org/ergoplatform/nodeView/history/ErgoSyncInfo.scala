@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.NodeViewModifier
 import org.ergoplatform.consensus.SyncInfo
+import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.network.message.SyncInfoMessageSpec
 import org.ergoplatform.serialization.ErgoSerializer
@@ -100,7 +100,7 @@ object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLo
       }
     } else { // parse v1 sync message
       require(length <= ErgoSyncInfo.MaxBlockIds + 1, "Too many block ids in sync info")
-      val ids = (1 to length).map(_ => bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize)))
+      val ids = (1 to length).map(_ => bytesToId(r.getBytes(ErgoNodeViewModifier.ModifierIdSize)))
       ErgoSyncInfoV1(ids)
     }
   }

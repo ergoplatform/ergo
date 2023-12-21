@@ -4,7 +4,7 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.{BlockSection, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
@@ -30,7 +30,6 @@ import org.ergoplatform.network.peer.PenaltyType
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.NodeViewModifier
 import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
@@ -284,7 +283,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! SendToNetwork(msg, Broadcast)
   }
 
-  protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
+  protected def broadcastModifierInv(m: ErgoNodeViewModifier): Unit = {
     broadcastModifierInv(m.modifierTypeId, m.id)
   }
 
@@ -789,10 +788,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     *
     * @return collection of parsed modifiers
     */
-  def parseModifiers[M <: NodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
-                                            modifierTypeId: NetworkObjectTypeId.Value,
-                                            serializer: ErgoSerializer[M],
-                                            remote: ConnectedPeer): Iterable[M] = {
+  def parseModifiers[M <: ErgoNodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
+                                                modifierTypeId: NetworkObjectTypeId.Value,
+                                                serializer: ErgoSerializer[M],
+                                                remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
       serializer.parseBytesTry(bytes) match {
         case Success(mod) if id == mod.id =>
@@ -1177,7 +1176,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
       var size = 5 //message type id + message size
       var batch = mods.takeWhile { case (_, modBytes) =>
-        size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
+        size += ErgoNodeViewModifier.ModifierIdSize + 4 + modBytes.length
         size < ModifiersSpec.maxMessageSize
       }
       if (batch.isEmpty) {
@@ -1616,7 +1615,7 @@ object ErgoNodeViewSynchronizer {
   /**
    * Serializers for block sections and transactions
    */
-  val modifierSerializers: Map[NetworkObjectTypeId.Value, ErgoSerializer[_ <: NodeViewModifier]] =
+  val modifierSerializers: Map[NetworkObjectTypeId.Value, ErgoSerializer[_ <: ErgoNodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       Extension.modifierTypeId -> ExtensionSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,

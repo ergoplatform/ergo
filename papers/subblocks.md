@@ -55,3 +55,13 @@ could also be somewhere else and not known to both A and B).
 Then, for example, miner A is generating a sub-block committing to new transactions after last block. It sends sub-block
 header as well as weak transaction ids (6 bytes hashes) to peers. 
 
+Commitment to Sub-Blocks
+------------------------
+
+Here we consider what kind of footprint sub-blocks would have in consensus-enforced data structures (i.e. on-chain). 
+Proper balance here is critical and hard to achieve. Strict consensus-enforced commitments (when all the 
+sub-blocks committed on-chain) require from all the miners to have all the sub-blocks in order to check them. But, 
+at the same time, consensus-enforced commitments to properly ordered sub-blocks would allow for protocols and 
+applications using sub-blocks data.
+
+We have chosen weak commitments. That is, a miner 

@@ -17,8 +17,10 @@ class ByteArrayUtilsSpec extends AnyPropSpec with ScalaCheckPropertyChecks with 
   property("compare works properly") {
 
     val ordering: Ordering[Array[Byte]] =
-    (o1: Array[Byte], o2: Array[Byte]) =>
-      implicitly[Ordering[Seq[Int]]].compare(o1.toSeq.map(_ & 0xFF), o2.toSeq.map(_ & 0xFF))
+      new Ordering[Array[Byte]] {
+        override def compare(o1: Array[Byte], o2: Array[Byte]): Int =
+          implicitly[Ordering[Seq[Int]]].compare(o1.toSeq.map(_ & 0xFF), o2.toSeq.map(_ & 0xFF))
+      }
 
     forAll(nonEmptyBytesGen, nonEmptyBytesGen) { case (bs1, bs2) =>
       val efficientOrdering = Seq(bs1, bs2).sorted(ByteArrayUtils.ByteArrayOrdering)

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-required_java_version="17"
+required_java_version="1.8"
 java_version=$(java -version 2>&1 | awk -F '"' '/version/ {print $2}')
 
 if [[ $java_version != $required_java_version* ]]; then

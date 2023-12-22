@@ -1,7 +1,6 @@
 package org.ergoplatform.consensus
 
-import org.ergoplatform.PersistentNodeViewModifier
-import org.ergoplatform.modifiers.NetworkObjectTypeId
+import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.utils.ScorexEncoder
 import scorex.util.ModifierId
 
@@ -14,11 +13,11 @@ import scorex.util.ModifierId
   * @param toDownload  - modifiers to download from other nodes
   * @tparam PM - type of used modifier
   */
-case class ProgressInfo[PM <: PersistentNodeViewModifier](branchPoint: Option[ModifierId],
-                                                          toRemove: Seq[PM],
-                                                          toApply: Seq[PM],
-                                                          toDownload: Seq[(NetworkObjectTypeId.Value, ModifierId)])
-                                                         (implicit encoder: ScorexEncoder) {
+case class ProgressInfo[PM <: BlockSection](branchPoint: Option[ModifierId],
+                                            toRemove: Seq[PM],
+                                            toApply: Seq[PM],
+                                            toDownload: Seq[(NetworkObjectTypeId.Value, ModifierId)])
+                                           (implicit encoder: ScorexEncoder) {
 
   if (toRemove.nonEmpty)
     require(branchPoint.isDefined, s"Branch point should be defined for non-empty `toRemove`")

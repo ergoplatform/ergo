@@ -223,7 +223,7 @@ class Parameters(val height: Height,
     case _ => false
   }
 
-  override def hashCode(): Height = height.hashCode() + parametersTable.hashCode()
+  override def hashCode(): Int = height.hashCode() + parametersTable.hashCode()
 }
 
 object Parameters {

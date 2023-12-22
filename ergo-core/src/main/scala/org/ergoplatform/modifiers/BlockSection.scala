@@ -1,16 +1,20 @@
 package org.ergoplatform.modifiers
 
 import io.circe.Encoder
-import org.ergoplatform.PersistentNodeViewModifier
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 
-
 /**
   * Block section, so a header, or block transactions, or extension, or ADProofs.
   */
-trait BlockSection extends PersistentNodeViewModifier with ErgoNodeViewModifier
+trait BlockSection extends ErgoNodeViewModifier {
+  /**
+    * Id of another block section of the same type, which should be applied to the node view before this modifier
+    */
+  def parentId: scorex.util.ModifierId
+
+}
 
 object BlockSection {
 

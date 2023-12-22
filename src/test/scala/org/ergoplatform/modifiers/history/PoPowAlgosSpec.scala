@@ -94,6 +94,16 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     }
   }
 
+  property("lowestCommonAncestor - the same") {
+    val sizes = Seq(10, 100, 1000)
+    sizes.foreach { size =>
+      val chain0 = genChain(size)
+      val chain1 = chain0.map(b => b.copy(header = b.header.copy(sizeOpt = Some(b.header.size))))
+
+      nipopowAlgos.lowestCommonAncestor(chain0.map(_.header), chain1.map(_.header)) shouldBe Some(chain0.last.header)
+    }
+  }
+
   property("bestArg - always equal for equal proofs") {
     val chain0 = genChain(100).map(b => PoPowHeader.fromBlock(b).get)
     val proof0 = nipopowAlgos.prove(chain0)(poPowParams).get

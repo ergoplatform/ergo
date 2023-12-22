@@ -3,8 +3,7 @@ package org.ergoplatform.testkit.generators
 import java.net.{InetAddress, InetSocketAddress, URL}
 import akka.actor.ActorRef
 import akka.util.ByteString
-import org.ergoplatform.NodeViewModifier
-import org.ergoplatform.modifiers.NetworkObjectTypeId
+import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId}
 import org.ergoplatform.network.{ModePeerFeature, PeerFeature, PeerSpec, Version}
 import org.ergoplatform.nodeView.state.StateType
 import org.scalacheck.Gen.{const, some}
@@ -46,7 +45,7 @@ trait ObjectGenerators {
   lazy val positiveByteGen: Gen[Byte] = Gen.choose(1, Byte.MaxValue)
 
 
-  lazy val modifierIdGen: Gen[ModifierId] = Gen.listOfN(NodeViewModifier.ModifierIdSize, Arbitrary.arbitrary[Byte])
+  lazy val modifierIdGen: Gen[ModifierId] = Gen.listOfN(ErgoNodeViewModifier.ModifierIdSize, Arbitrary.arbitrary[Byte])
     .map(id => bytesToId(id.toArray))
 
   lazy val modifierTypeIdGen: Gen[NetworkObjectTypeId.Value] = Arbitrary.arbitrary[Byte].map(t => NetworkObjectTypeId.fromByte(t))

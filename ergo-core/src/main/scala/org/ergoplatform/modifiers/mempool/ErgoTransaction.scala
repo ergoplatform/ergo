@@ -1,14 +1,14 @@
 package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoLikeTransactionSerializer, Input}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
-import org.ergoplatform.{EphemerealNodeViewModifier, _}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
-import org.ergoplatform.modifiers.transaction.Transaction
+import org.ergoplatform.modifiers.transaction.Signable
 import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -57,10 +57,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
                            override val sizeOpt: Option[Int] = None)
   extends ErgoLikeTransaction(inputs, dataInputs, outputCandidates)
-    with Transaction
-    with EphemerealNodeViewModifier
+    with Signable
     with ErgoNodeViewModifier
     with ScorexLogging {
+
+  override val modifierTypeId: NetworkObjectTypeId.Value = TransactionTypeId.value
 
   override val serializedId: Array[Byte] = Algos.hash(messageToSign)
 

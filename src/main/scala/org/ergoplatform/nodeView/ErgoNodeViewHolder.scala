@@ -2,11 +2,11 @@ package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
-import org.ergoplatform.{CriticalSystemException, ErgoApp, TransactionsCarryingPersistentNodeViewModifier}
+import org.ergoplatform.{CriticalSystemException, ErgoApp}
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, TransactionsCarryingBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
@@ -125,7 +125,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def extractTransactions(mod: BlockSection): Seq[ErgoTransaction] = mod match {
-    case tcm: TransactionsCarryingPersistentNodeViewModifier => tcm.transactions
+    case tcm: TransactionsCarryingBlockSection => tcm.transactions
     case _ => Seq.empty
   }
 

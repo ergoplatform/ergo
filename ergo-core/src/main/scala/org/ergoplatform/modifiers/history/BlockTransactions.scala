@@ -2,9 +2,8 @@ package org.ergoplatform.modifiers.history
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
-import org.ergoplatform.TransactionsCarryingPersistentNodeViewModifier
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.{BlockTransactionsTypeId, NetworkObjectTypeId, NonHeaderBlockSection}
+import org.ergoplatform.modifiers.{BlockTransactionsTypeId, NetworkObjectTypeId, NonHeaderBlockSection, TransactionsCarryingBlockSection}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
@@ -33,7 +32,7 @@ case class BlockTransactions(headerId: ModifierId,
                              blockVersion: Version,
                              txs: Seq[ErgoTransaction],
                              override val sizeOpt: Option[Int] = None)
-  extends NonHeaderBlockSection with TransactionsCarryingPersistentNodeViewModifier {
+  extends NonHeaderBlockSection with TransactionsCarryingBlockSection {
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 

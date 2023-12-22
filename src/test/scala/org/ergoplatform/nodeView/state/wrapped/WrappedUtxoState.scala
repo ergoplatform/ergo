@@ -2,9 +2,9 @@ package org.ergoplatform.nodeView.state.wrapped
 
 import java.io.File
 import akka.actor.ActorRef
-import org.ergoplatform.{ErgoBox, TransactionsCarryingPersistentNodeViewModifier}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.{BlockSection, TransactionsCarryingBlockSection}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.settings.Algos.HF
@@ -40,7 +40,7 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
     super.applyModifier(mod, estimatedTip)(generate) match {
       case Success(us) =>
         mod match {
-          case ct: TransactionsCarryingPersistentNodeViewModifier =>
+          case ct: TransactionsCarryingBlockSection =>
             // You can not get block with transactions not being of ErgoTransaction type so no type checks here.
 
             val changes = ErgoState.stateChanges(ct.transactions).get

@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps
+import scorex.util.ScorexLogging
 
 /**
   * A structure representing NiPoPow proof as a persistent modifier.
@@ -28,7 +29,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
                         prefix: Seq[PoPowHeader],
                         suffixHead: PoPowHeader,
                         suffixTail: Seq[Header],
-                        continuous: Boolean) {
+                        continuous: Boolean) extends ScorexLogging {
 
   lazy val serializer: ErgoSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
 
@@ -47,13 +48,20 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return whether this PoPoW proof is better than "that"
     */
   def isBetterThan(that: NipopowProof): Boolean = {
-    if (this.isValid && that.isValid) {
-      popowAlgos.lowestCommonAncestor(headersChain, that.headersChain)
-        .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
-        .exists({ case (thisDivergingChain, thatDivergingChain) =>
-          popowAlgos.bestArg(thisDivergingChain)(m) > popowAlgos.bestArg(thatDivergingChain)(m) })
-    } else {
-      this.isValid
+    try {
+      if (this.isValid && that.isValid) {
+        popowAlgos.lowestCommonAncestor(headersChain, that.headersChain)
+          .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
+          .exists({ case (thisDivergingChain, thatDivergingChain) =>
+            popowAlgos.bestArg(thisDivergingChain)(m) > popowAlgos.bestArg(thatDivergingChain)(m)
+          })
+      } else {
+        this.isValid
+      }
+    } catch {
+      case t: Throwable =>
+        log.error(s"Nipopow proofs comparison (isBetter) failed due to ${t.getMessage}: ", t)
+        false
     }
   }
 

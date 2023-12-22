@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
-import org.ergoplatform.TransactionsCarryingPersistentNodeViewModifier
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -15,8 +14,7 @@ case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
                          extension: Extension,
                          adProofs: Option[ADProofs])
-  extends BlockSection
-    with TransactionsCarryingPersistentNodeViewModifier {
+  extends TransactionsCarryingBlockSection {
 
   override type M = ErgoFullBlock
 

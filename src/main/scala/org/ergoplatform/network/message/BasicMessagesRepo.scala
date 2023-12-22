@@ -1,7 +1,6 @@
 package org.ergoplatform.network.message
 
-import org.ergoplatform.NodeViewModifier
-import org.ergoplatform.modifiers.NetworkObjectTypeId
+import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId}
 import org.ergoplatform.network.{Handshake, PeerSpec, PeerSpecSerializer}
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
@@ -49,7 +48,7 @@ object InvSpec extends MessageSpecV1[InvData] {
     w.putUInt(elems.size)
     elems.foreach { id =>
       val bytes = idToBytes(id)
-      assert(bytes.length == NodeViewModifier.ModifierIdSize)
+      assert(bytes.length == ErgoNodeViewModifier.ModifierIdSize)
       w.putBytes(bytes)
     }
   }
@@ -60,7 +59,7 @@ object InvSpec extends MessageSpecV1[InvData] {
     require(count > 0, "empty inv list")
     require(count <= maxInvObjects, s"$count elements in a message while limit is $maxInvObjects")
     val elems = (0 until count).map { _ =>
-      bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
+      bytesToId(r.getBytes(ErgoNodeViewModifier.ModifierIdSize))
     }
 
     InvData(typeId, elems)
@@ -114,7 +113,7 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
     require(modifiers.nonEmpty, "empty modifiers list")
 
     val (msgCount, msgSize) = modifiers.foldLeft((0, HeaderLength)) { case ((c, s), (_, modifier)) =>
-      val size = s + NodeViewModifier.ModifierIdSize + 4 + modifier.length
+      val size = s + ErgoNodeViewModifier.ModifierIdSize + 4 + modifier.length
       val count = if (size <= maxMsgSizeWithReserve) c + 1 else c
       count -> size
     }
@@ -139,9 +138,9 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
     require(count > 0, s"Illegal message with 0 modifiers of type $typeId")
     val resMap = immutable.Map.newBuilder[ModifierId, Array[Byte]]
     (0 until count).foldLeft(HeaderLength) { case (msgSize, _) =>
-      val id = bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
+      val id = bytesToId(r.getBytes(ErgoNodeViewModifier.ModifierIdSize))
       val objBytesCnt = r.getUInt().toIntExact
-      val newMsgSize = msgSize + NodeViewModifier.ModifierIdSize + objBytesCnt
+      val newMsgSize = msgSize + ErgoNodeViewModifier.ModifierIdSize + objBytesCnt
       if (newMsgSize > maxMsgSizeWithReserve) { // buffer for safety
         throw new Exception("Too big message with modifiers, size: " + maxMsgSizeWithReserve)
       }

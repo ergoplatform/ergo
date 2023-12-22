@@ -2,7 +2,6 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
-import org.ergoplatform.PersistentNodeViewModifier
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
@@ -67,18 +66,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     syncInfoSpec,
     settings,
     syncTracker,
-    deliveryTracker)(ec) {
-
-    protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
-      mod match {
-        case fb: ErgoFullBlock if fb.header.isNew(1.hour) =>
-          fb.toSeq.foreach(s => broadcastModifierInv(s))
-        case h: Header if h.isNew(1.hour) =>
-          broadcastModifierInv(h)
-        case _ =>
-      }
-    }
-  }
+    deliveryTracker)(ec)
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(2.seconds, 100.millis)
   val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)

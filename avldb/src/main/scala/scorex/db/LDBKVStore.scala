@@ -13,6 +13,9 @@ import spire.syntax.all.cfor
   * Both keys and values are var-sized byte arrays.
   */
 class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging {
+
+  db.compactRange(null, null)
+
   /** Immutable empty array can be shared to avoid allocations. */
   private val emptyArrayOfByteArray = Array.empty[Array[Byte]]
 
@@ -46,12 +49,8 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
     * @return - Success(()) in case of successful insertion, Failure otherwise
     */
   def insert(id: K,  value: V): Try[Unit] = {
-    try {
-      db.put(id, value)
-      Success(())
-    } catch {
-      case t: Throwable => Failure(t)
-    }
+    // todo: temporary fix for #2030
+    insert(Array(id), Array(value))
   }
 
   /**

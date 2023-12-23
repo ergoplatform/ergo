@@ -13,13 +13,16 @@ class ByteArrayUtilsSpec extends AnyPropSpec with ScalaCheckPropertyChecks with 
 
   property("compare works properly") {
 
+    val effOrdering: Ordering[Array[Byte]] =
+      (o1: Array[Byte], o2: Array[Byte]) => ByteArrayUtils.compare(o1, o2)
+
     //Simple and inefficient way to order byte arrays, based on
     // https://stackoverflow.com/questions/7109943/how-to-define-orderingarraybyte
     // but we compare unsigned bytes
     val ordering: Ordering[Array[Byte]] = Ordering.by((_: Array[Byte]).toIterable.map(_ & 0xFF))
 
     forAll(nonEmptyBytesGen, nonEmptyBytesGen) { case (bs1, bs2) =>
-      val efficientOrdering = Seq(bs1, bs2).sorted(ByteArrayUtils.ByteArrayOrdering)
+      val efficientOrdering = Seq(bs1, bs2).sorted(effOrdering)
       val simpleOrdering = Seq(bs1, bs2).sorted(ordering)
 
       efficientOrdering(0).sameElements(simpleOrdering(0)) shouldBe true

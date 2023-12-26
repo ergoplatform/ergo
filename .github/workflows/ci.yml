@@ -62,7 +62,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [2.12.10]
+        scala: [2.12.18]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:

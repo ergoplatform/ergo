@@ -44,15 +44,12 @@ class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
     * @param keys - array of 2-byte keys
     * @return BatchMerkleProof or None if keys not found
     */
-  @nowarn("cat=deprecation")
+  @nowarn
   def batchProofFor(keys: Array[Byte]*): Option[BatchMerkleProof[Digest32]] = {
     val indices = keys.flatMap(key => fields.find(_._1 sameElements key)
       .map(Extension.kvToLeaf)
       .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
       .flatMap(leafData => interlinksMerkleTree.elementsHashIndex.get(
-        /* TODO Update in scrypto
-        * WrappedArray deprecated, ArraySeq can be used in 2.12, 2.13 but not 2.11
-         */
         new mutable.WrappedArray.ofByte(leafData))))
     if (indices.isEmpty) None else interlinksMerkleTree.proofByIndices(indices)(Algos.hash)
   }

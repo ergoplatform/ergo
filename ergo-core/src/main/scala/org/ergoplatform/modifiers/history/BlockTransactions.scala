@@ -20,6 +20,7 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.Extensions._
 
+import scala.annotation.nowarn
 import scala.collection.mutable
 
 
@@ -31,6 +32,7 @@ import scala.collection.mutable
   * @param txs          - transactions of the block
   * @param sizeOpt      - (optional) size of the section (cached to not be calculated again)
   */
+@nowarn
 case class BlockTransactions(headerId: ModifierId,
                              blockVersion: Version,
                              txs: Seq[ErgoTransaction],
@@ -122,10 +124,11 @@ object BlockTransactions extends ApiCodecs {
     ).asJson
   }
 
+  @nowarn
   implicit val jsonDecoder: Decoder[BlockTransactions] = Decoder.instance { c: HCursor =>
     for {
       headerId <- c.downField("headerId").as[ModifierId]
-      transactions <- c.downField("transactions").as[mutable.ArraySeq[ErgoTransaction]]
+      transactions <- c.downField("transactions").as[mutable.WrappedArray[ErgoTransaction]]
       blockVersion <- c.downField("blockVersion").as[Version]
       size <- c.downField("size").as[Int]
     } yield BlockTransactions(headerId, blockVersion, transactions.toSeq, Some(size))

@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs
@@ -17,6 +19,7 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.Extensions._
 
+import scala.annotation.nowarn
 import scala.collection.mutable
 
 
@@ -28,6 +31,7 @@ import scala.collection.mutable
   * @param txs          - transactions of the block
   * @param sizeOpt      - (optional) size of the section (cached to not be calculated again)
   */
+@nowarn
 case class BlockTransactions(headerId: ModifierId,
                              blockVersion: Version,
                              txs: Seq[ErgoTransaction],
@@ -110,7 +114,7 @@ object BlockTransactions extends ApiCodecs {
   def proofValid(transactionsDigest: Digest32, proof: TransactionMembershipProof): Boolean =
     proofValid(transactionsDigest, proof.proof)
 
-  implicit val jsonEncoder: Encoder[BlockTransactions] = { bt: BlockTransactions =>
+  implicit val jsonEncoder: Encoder[BlockTransactions] = Encoder.instance { bt: BlockTransactions =>
     Map(
       "headerId" -> Algos.encode(bt.headerId).asJson,
       "transactions" -> bt.txs.map(_.asJson).asJson,
@@ -119,13 +123,14 @@ object BlockTransactions extends ApiCodecs {
     ).asJson
   }
 
-  implicit val jsonDecoder: Decoder[BlockTransactions] = { c: HCursor =>
+  @nowarn
+  implicit val jsonDecoder: Decoder[BlockTransactions] = Decoder.instance { c: HCursor =>
     for {
       headerId <- c.downField("headerId").as[ModifierId]
       transactions <- c.downField("transactions").as[mutable.WrappedArray[ErgoTransaction]]
       blockVersion <- c.downField("blockVersion").as[Version]
       size <- c.downField("size").as[Int]
-    } yield BlockTransactions(headerId, blockVersion, transactions, Some(size))
+    } yield BlockTransactions(headerId, blockVersion, transactions.toSeq, Some(size))
   }
 }
 

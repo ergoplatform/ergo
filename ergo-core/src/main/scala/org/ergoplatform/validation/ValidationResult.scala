@@ -4,7 +4,6 @@ import io.circe.{ACursor, DecodingFailure}
 import org.ergoplatform.validation.ValidationResult.{Invalid, Valid}
 
 import scala.concurrent.Future
-import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 
 /** Base trait for the result of validation

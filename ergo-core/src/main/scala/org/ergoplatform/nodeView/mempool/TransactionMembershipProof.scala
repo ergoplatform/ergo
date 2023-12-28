@@ -19,14 +19,14 @@ case class TransactionMembershipProof(txId: ModifierId, proof: MerkleProof[Diges
 
 object TransactionMembershipProof extends JsonCodecs {
 
-  implicit val merkleProofEncoder: Encoder[MerkleProof[Digest32]] = { mp: MerkleProof[Digest32] =>
+  implicit val merkleProofEncoder: Encoder[MerkleProof[Digest32]] = Encoder.instance { mp: MerkleProof[Digest32] =>
     Json.obj(
       "leaf" -> Algos.encode(mp.leafData).asJson,
       "levels" -> mp.levels.map{case (digest, side) => Algos.encode(side +: digest)}.asJson
     )
   }
 
-  implicit val txMembershipProofEncoder: Encoder[TransactionMembershipProof] = { tmp: TransactionMembershipProof =>
+  implicit val txMembershipProofEncoder: Encoder[TransactionMembershipProof] = Encoder.instance { tmp: TransactionMembershipProof =>
     tmp.proof.asJson
   }
 

@@ -14,12 +14,13 @@ Currently, a block is generated every two minutes on average, and confirmed tran
 other block sections. 
 
 This is not efficient at all. Most of new block's transactions are already available in a node's mempool, and 
-bottlenecking network bandwidth after two minutes of delay is also downgrading network performance.
+bottlenecking network bandwidth after two minutes of (more or less) idle state is also downgrading network performance.
 
 Also, while average block delay in Ergo is 2 minutes, variance is high, and often a user may wait 10 minutes for 
 first confirmation. Proposals to lower variance are introducing experimental and controversial changes in consensus protocol.
 Changing block delay via hardfork would have a lot of harsh consequences (e.g. many contracts relying on current block 
-delay would be broken). Thus it makes sense to consider weaker notions of confirmation. 
+delay would be broken). Thus it makes sense to consider weaker notions of confirmation which still could be useful for 
+a variety of applications. 
 
 Sub-Blocks
 ----------
@@ -64,4 +65,4 @@ sub-blocks committed on-chain) require from all the miners to have all the sub-b
 at the same time, consensus-enforced commitments to properly ordered sub-blocks would allow for protocols and 
 applications using sub-blocks data.
 
-We have chosen weak commitments. That is, a miner 
+We have chosen weak commitments. That is, a miner may (and incentivized to)

@@ -56,8 +56,8 @@ could also be somewhere else and not known to both A and B).
 Then, for example, miner A is generating a sub-block committing to new transactions after last block. It sends sub-block
 header as well as weak transaction ids (6 bytes hashes) to peers. 
 
-Commitment to Sub-Blocks
-------------------------
+Sub-blocks Structure and Commitment to Sub-Blocks
+-------------------------------------------------
 
 Here we consider what kind of footprint sub-blocks would have in consensus-enforced data structures (i.e. on-chain). 
 Proper balance here is critical and hard to achieve. Strict consensus-enforced commitments (when all the 
@@ -65,4 +65,30 @@ sub-blocks committed on-chain) require from all the miners to have all the sub-b
 at the same time, consensus-enforced commitments to properly ordered sub-blocks would allow for protocols and 
 applications using sub-blocks data.
 
-We have chosen weak commitments. That is, a miner may (and incentivized to)
+We have chosen weak commitments. That is, a miner may (and incentivized to) to commit to longest sub-blocks chain 
+since previous full-block, but that there are no any requirements about that in Ergo consensus rules.
+
+New extension key space starting with 0x03 will be used for sub-blocks related data, with one key used per this EIP:
+
+0x03 0x00 - digest of a Merkle tree of longest sub-blocks chain starting with previous block (but not including it).
+
+So first sub-block having full-block as a parent will have empty tree, next one will have only first, and next 
+full-block will commit to all the sub-blocks since previous full-block. 
+
+
+
+Weak confirmations
+------------------
+
+
+
+Sub-Block Based Sidechains
+--------------------------
+
+As L1 incentivization for propagating and committing on-chain to sub-blocks are missed, we consider sidechains as 
+possible option to incentivize miners to participate in the sub-blocks sub-protocol. 
+
+
+
+Incentivization
+---------------

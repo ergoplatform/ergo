@@ -82,6 +82,9 @@ New extension key space starting with 0x03 will be used for sub-blocks related d
 So first sub-block having full-block as a parent will have empty tree, next one will have only first, and next 
 full-block will commit to all the sub-blocks since previous full-block. 
 
+Note that sub-blocks (like blocks) are forming direct acyclic graph (DAG), but only longest sub-blocks chain is 
+committed.
+
 At the same time, no any new checks are planned for the Ergo protocol. Checks are possible for sidechains. 
 
 
@@ -106,3 +109,15 @@ Incentivization
 No incentives to generate and propagate sub-blocks are planned for the Ergo core protocols at the moment. At the same 
 time, incentives can be provided on the sub-block based merge-mined sidechains, or via application-specific agreements
 (where applications may pay to miners for faster confirmations).
+
+
+Weak Confirmations
+------------------
+
+With linearity of transactions history in sub-blocks chain, sub-blocks may be used for getting faster confirmations 
+with weaker security guarantees.
+
+
+Security Considerations and Assumptions 
+---------------------------------------
+

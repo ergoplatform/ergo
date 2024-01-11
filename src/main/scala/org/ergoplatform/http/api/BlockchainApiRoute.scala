@@ -244,10 +244,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean): Future[Seq[IndexedErgoBox]] =
     getHistoryWithMempool.map { case (history, mempool) =>
-      getAddress(addr)(history) match {
-        case Some(addr) => addr.retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed)
-        case None       => Seq.empty[IndexedErgoBox]
-      }
+      getAddress(addr)(history)
+        .getOrElse(IndexedErgoAddress(hashErgoTree(addr.script)))
+        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed)
     }
 
   private def validateAndGetBoxesByAddressUnspent(address: ErgoAddress,
@@ -312,10 +311,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean): Future[Seq[IndexedErgoBox]] =
     getHistoryWithMempool.map { case (history, mempool) =>
-      getAddress(tree)(history) match {
-        case Some(addr) => addr.retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed)
-        case None       => Seq.empty[IndexedErgoBox]
-      }
+      getAddress(tree)(history)
+        .getOrElse(IndexedErgoAddress(hashErgoTree(tree)))
+        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed)
     }
 
   private def getBoxesByErgoTreeUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging & sortDir & unconfirmed) { (tree, offset, limit, dir, unconfirmed) =>
@@ -352,10 +350,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getBoxesByTokenIdUnspent(id: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean): Future[Seq[IndexedErgoBox]] =
     getHistoryWithMempool.map { case (history, mempool) =>
-      history.typedExtraIndexById[IndexedToken](uniqueId(id)) match {
-        case Some(token) => token.retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed)
-        case None        => Seq.empty[IndexedErgoBox]
-      }
+      history.typedExtraIndexById[IndexedToken](uniqueId(id))
+        .getOrElse(IndexedToken(id))
+        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed)
     }
 
   private def getBoxesByTokenIdUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byTokenId") & modifierId & paging & sortDir & unconfirmed) { (id, offset, limit, dir, unconfirmed) =>

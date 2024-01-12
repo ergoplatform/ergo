@@ -302,6 +302,8 @@ lazy val ergo = (project in file("."))
       "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
       "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
       "com.typesafe.akka" %% "akka-parsing" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
+
       "org.bitlet" % "weupnp" % "0.1.4",
       // command line args parsing
       "com.github.scopt" %% "scopt" % "4.0.1",

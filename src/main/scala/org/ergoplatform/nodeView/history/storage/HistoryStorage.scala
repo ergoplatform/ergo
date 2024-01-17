@@ -226,9 +226,9 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
 
 object HistoryStorage {
   def apply(ergoSettings: ErgoSettings): HistoryStorage = {
-    val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
-    val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
-    val extraStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/extra")
+    val indexStore = LDBFactory.createKvDb(new File(s"${ergoSettings.directory}/history/index"))
+    val objectsStore = LDBFactory.createKvDb(new File(s"${ergoSettings.directory}/history/objects"))
+    val extraStore = LDBFactory.createKvDb(new File(s"${ergoSettings.directory}/history/extra"))
     new HistoryStorage(indexStore, objectsStore, extraStore, ergoSettings.cacheSettings)
   }
 }

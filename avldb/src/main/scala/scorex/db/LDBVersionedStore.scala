@@ -1,8 +1,7 @@
 package scorex.db
 
 import java.io.File
-import scorex.db.LDBFactory.factory
-import org.iq80.leveldb._
+import org.rocksdb.{Options, ReadOptions, RocksDB, WriteBatch, WriteOptions}
 
 import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
@@ -37,10 +36,10 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
 
   private var keepVersions: Int = initialKeepVersions
 
-  override val db: DB = createDB(dir, "ldb_main") // storage for main data
+  override val db: RocksDB = createDB(dir, "ldb_main") // storage for main data
   override val lock = new ReentrantReadWriteLock()
 
-  private val undo: DB = createDB(dir, "ldb_undo") // storage for undo data
+  private val undo: RocksDB = createDB(dir, "ldb_undo") // storage for undo data
   private var lsn: LSN = getLastLSN // last assigned logical serial number
   private var versionLsn = ArrayBuffer.empty[LSN] // LSNs of versions (var because we need to invert this array)
 
@@ -52,11 +51,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   //default write options, no sync!
   private val writeOptions = new WriteOptions()
 
-  private def createDB(dir: File, storeName: String): DB = {
+  private def createDB(dir: File, storeName: String): RocksDB = {
     val op = new Options()
-    op.createIfMissing(true)
-    op.paranoidChecks(true)
-    factory.open(new File(dir, storeName), op)
+    op.setCreateIfMissing(true)
+    op.setParanoidChecks(true)
+    LDBFactory.openDb(new File(dir, storeName), op)
   }
 
   /** Set new keep versions threshold, remove not needed versions and return old value of keep versions */
@@ -102,12 +101,12 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
 
   def processAll(consumer: (K, V) => Unit): Unit = {
     lock.readLock().lock()
-    val iterator = db.iterator()
+    val iterator = db.newIterator()
     try {
       iterator.seekToFirst()
-      while (iterator.hasNext) {
-        val n = iterator.next()
-        consumer(n.getKey, n.getValue)
+      while (iterator.isValid) {
+        consumer(iterator.key(), iterator.value())
+        iterator.next()
       }
     } finally {
       iterator.close()
@@ -135,11 +134,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   }
 
   private def getLastLSN: LSN = {
-    val iterator = undo.iterator
+    val iterator = undo.newIterator()
     try {
       iterator.seekToFirst()
-      if (iterator.hasNext) {
-        decodeLSN(iterator.peekNext().getKey)
+      if (iterator.isValid) {
+        decodeLSN(iterator.key())
       } else {
         0
       }
@@ -166,17 +165,17 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     var lastVersion: Option[VersionID] = None
     var lastLsn: LSN = 0
     // We iterate in LSN descending order
-    val iterator = undo.iterator()
+    val iterator = undo.newIterator()
     iterator.seekToFirst()
-    while (iterator.hasNext) {
-      val entry = iterator.next
-      val currVersion = deserializeUndo(entry.getValue).versionID
-      lastLsn = decodeLSN(entry.getKey)
+    while (iterator.isValid) {
+      val currVersion = deserializeUndo(iterator.value()).versionID
+      lastLsn = decodeLSN(iterator.key())
       if (!lastVersion.exists(_.sameElements(currVersion))) {
         versionLsn += lastLsn + 1 // this is first LSN of successor version
         versions += currVersion
         lastVersion = Some(currVersion)
       }
+      iterator.next()
     }
     iterator.close()
     // As far as org.iq80.leveldb doesn't support iteration in reverse order, we have to iterate in the order
@@ -241,8 +240,8 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
              toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
     lock.writeLock().lock()
     val lastLsn = lsn // remember current LSN value
-    val batch = db.createWriteBatch()
-    val undoBatch = undo.createWriteBatch()
+    val batch = new WriteBatch()
+    val undoBatch = new WriteBatch()
     try {
       toRemove.foreach(key => {
         batch.delete(key)
@@ -266,7 +265,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         if (lsn == lastLsn) { // no records were written for this version: generate dummy record
           undoBatch.put(newLSN(), serializeUndo(versionID, new Array[Byte](0), null))
         }
-        undo.write(undoBatch, writeOptions)
+        undo.write(writeOptions, undoBatch)
         if (lastVersion.isEmpty || !versionID.sameElements(lastVersion.get)) {
           versions += versionID
           versionLsn += lastLsn + 1 // first LSN for this version
@@ -284,7 +283,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         }
       }
 
-      db.write(batch, writeOptions)
+      db.write(writeOptions, batch)
       lastVersion = Some(versionID)
     } finally {
       // Make sure you close the batch to avoid resource leaks.
@@ -305,12 +304,12 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     if (deteriorated >= 0) {
       val fromLsn = versionLsn(0)
       val tillLsn = if (deteriorated+1 < versions.size) versionLsn(deteriorated+1) else lsn+1
-      val batch = undo.createWriteBatch()
+      val batch = new WriteBatch()
       try {
         for (lsn <- fromLsn until tillLsn) {
           batch.delete(encodeLSN(lsn))
         }
-        undo.write(batch, writeOptions)
+        undo.write(writeOptions, batch)
       } finally {
         batch.close()
       }
@@ -330,13 +329,6 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     } finally {
       lock.writeLock().unlock()
     }
-    undo.resumeCompactions()
-    db.resumeCompactions()
-  }
-
-  def cleanStop(): Unit = {
-    undo.suspendCompactions()
-    db.suspendCompactions()
   }
 
   override def close(): Unit = {
@@ -356,22 +348,21 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
       val versionIndex = versions.indexWhere(_.sameElements(versionID))
       if (versionIndex >= 0) {
         if (versionIndex != versions.size-1) {
-          val batch = db.createWriteBatch()
-          val undoBatch = undo.createWriteBatch()
+          val batch = new WriteBatch()
+          val undoBatch = new WriteBatch()
           var nUndoRecords: Long = 0
-          val iterator = undo.iterator()
+          val iterator = undo.newIterator()
           var lastLsn: LSN = 0
           try {
             var undoing = true
             iterator.seekToFirst()
-            while (undoing && iterator.hasNext) {
-              val entry = iterator.next()
-              val undo = deserializeUndo(entry.getValue)
+            while (undoing && iterator.isValid) {
+              val undo = deserializeUndo(iterator.value())
               if (undo.versionID.sameElements(versionID)) {
                 undoing = false
-                lastLsn = decodeLSN(entry.getKey)
+                lastLsn = decodeLSN(iterator.key())
               } else {
-                undoBatch.delete(entry.getKey)
+                undoBatch.delete(iterator.key())
                 nUndoRecords += 1
                 if (undo.value == null) {
                   if (undo.key.length != 0) { // dummy record
@@ -381,9 +372,10 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
                   batch.put(undo.key, undo.value)
                 }
               }
+              iterator.next()
             }
-            db.write(batch, writeOptions)
-            undo.write(undoBatch, writeOptions)
+            db.write(writeOptions, batch)
+            undo.write(writeOptions, undoBatch)
           } finally {
             // Make sure you close the batch to avoid resource leaks.
             iterator.close()
@@ -424,11 +416,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     val ro = new ReadOptions()
     try {
       lock.writeLock().lock()
-      ro.snapshot(db.getSnapshot)
+      ro.setSnapshot(db.getSnapshot)
       lock.writeLock().unlock()
 
       object readInterface extends SnapshotReadInterface {
-        def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
+        def get(key: Array[Byte]): Array[Byte] = db.get(ro, key)
       }
       Success(logic(readInterface))
     } catch {

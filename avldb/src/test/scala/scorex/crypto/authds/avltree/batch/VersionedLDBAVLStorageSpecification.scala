@@ -350,7 +350,7 @@ class VersionedLDBAVLStorageSpecification
     blockchainWorkflowTest(prover)
 
     val storage = prover.storage.asInstanceOf[VersionedLDBAVLStorage]
-    val store = LDBFactory.createKvDb(getRandomTempDir.getAbsolutePath)
+    val store = LDBFactory.createKvDb(getRandomTempDir)
 
     val rootNodeLabel = storage.dumpSnapshot(store, manifestDepth, prover.digest.dropRight(1)).get
     rootNodeLabel.sameElements(prover.digest.dropRight(1)) shouldBe true

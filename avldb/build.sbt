@@ -17,7 +17,7 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-  "org.ethereum" % "leveldbjni-all"     % "1.18.3",
+  "org.rocksdb" % "rocksdbjni" % "8.9.1",
   "org.typelevel" %% "spire" % "0.14.1"
 )
 

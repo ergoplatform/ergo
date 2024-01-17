@@ -128,7 +128,7 @@ assemblyMergeStrategy in assembly := {
   case x if x.endsWith("module-info.class") => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
   case PathList("org", "bouncycastle", xs @ _*) => MergeStrategy.first
-  case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
+  case PathList("org", "rocksdb", xs @ _*) => MergeStrategy.first
   case PathList("org", "bouncycastle", xs @ _*) => MergeStrategy.first
   case PathList("javax", "activation", xs @ _*) => MergeStrategy.last
   case PathList("javax", "annotation", xs @ _*) => MergeStrategy.last
@@ -219,11 +219,7 @@ lazy val avldb = (project in file("avldb"))
     javacOptions in(Compile, compile) ++= javacReleaseOption,
     libraryDependencies ++= Seq(
       // database dependencies
-      "org.ethereum" % "leveldbjni-all" % "1.18.3",
-      //the following pure-java leveldb implementation is needed only on specific platforms, such as 32-bit Raspberry Pi
-      //in future, it could be reasonable to have special builds with this Java db only, and for most of platforms use
-      //jni wrapper over native library included in leveldbjni-all
-      "org.iq80.leveldb" % "leveldb" % "0.12"
+      "org.rocksdb" % "rocksdbjni" % "8.9.1"
     )
   )
 

@@ -1,8 +1,10 @@
 package scorex.db
 
+import org.rocksdb.util.SizeUnit
+
 import java.io.File
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import org.iq80.leveldb.{DB, DBFactory, DBIterator, Options, Range, ReadOptions, Snapshot, WriteBatch, WriteOptions}
+import org.rocksdb.{CompactionStyle, CompressionType, Options, ReadOptions, RocksDB, RocksIterator, Snapshot, WriteBatch, WriteOptions}
 import scorex.util.ScorexLogging
 
 import scala.collection.mutable
@@ -13,7 +15,7 @@ import scala.collection.mutable
   * And ergo application (mostly tests) quite frequently doesn't not explicitly close
   * database and tries to reopen it.
   */
-case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLogging {
+case class StoreRegistry() extends ScorexLogging {
 
   val lock = new ReentrantReadWriteLock()
   val map = new mutable.HashMap[File, RegisteredDB]
@@ -23,49 +25,43 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
     * So if database was not explicitly closed, then next attempt to open database with the same path will
     * return existed instance instead of creating new one.
     */
-  case class RegisteredDB(impl: DB, path: File) extends DB {
+  case class RegisteredDB(impl: RocksDB, path: File) {
 
     def get(key: Array[Byte]): Array[Byte] = impl.get(key)
 
-    def get(key: Array[Byte], options: ReadOptions): Array[Byte] = impl.get(key, options)
+    def get(key: Array[Byte], options: ReadOptions): Array[Byte] = impl.get(options, key)
 
-    def iterator: DBIterator = impl.iterator
+    def iterator: RocksIterator = impl.newIterator()
 
-    def iterator(options: ReadOptions): DBIterator = impl.iterator(options)
+    def iterator(options: ReadOptions): RocksIterator = impl.newIterator(options)
 
     def put(key: Array[Byte], value: Array[Byte]): Unit = impl.put(key, value)
 
     def delete(key: Array[Byte]): Unit = impl.delete(key)
 
-    def write(batch: WriteBatch): Unit = impl.write(batch)
+    def write(batch: WriteBatch): Unit = impl.write(new WriteOptions(), batch)
 
-    def write(batch: WriteBatch, options: WriteOptions): Snapshot = impl.write(batch, options)
+    def write(batch: WriteBatch, options: WriteOptions): Unit = impl.write(options, batch)
 
-    def createWriteBatch: WriteBatch = impl.createWriteBatch()
+    def createWriteBatch: WriteBatch = new WriteBatch()
 
-    def put(key: Array[Byte], value: Array[Byte], options: WriteOptions): Snapshot = impl.put(key, value, options)
+    def put(key: Array[Byte], value: Array[Byte], options: WriteOptions): Unit = impl.put(options, key, value)
 
-    def delete(key: Array[Byte], options: WriteOptions): Snapshot = impl.delete(key, options)
+    def delete(key: Array[Byte], options: WriteOptions): Unit = impl.delete(options, key)
 
     def getSnapshot: Snapshot = impl.getSnapshot
 
-    def getApproximateSizes(ranges: Range*): Array[Long] = impl.getApproximateSizes(ranges: _*)
-
     def getProperty(name: String): String = impl.getProperty(name)
-
-    def suspendCompactions(): Unit = impl.suspendCompactions()
-
-    def resumeCompactions(): Unit = impl.resumeCompactions()
 
     def compactRange(begin: Array[Byte], end: Array[Byte]): Unit = impl.compactRange(begin, end)
 
-    override def close(): Unit = {
+    def close(): Unit = {
       remove(path)
       impl.close()
     }
   }
 
-  private def add(file: File, create: => DB): DB = {
+  private def add(file: File, create: => RocksDB): RegisteredDB = {
     lock.writeLock().lock()
     try {
       map.getOrElseUpdate(file, RegisteredDB(create, file))
@@ -83,10 +79,10 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
     }
   }
 
-  def open(path: File, options: Options): DB = {
+  def open(path: File, options: Options): RegisteredDB = {
     lock.writeLock().lock()
     try {
-      add(path, factory.open(path, options))
+      add(path, LDBFactory.openDb(path, options))
     } catch {
       case x: Throwable =>
         log.error(s"Failed to initialize storage: $x. Please check that directory $path exists and is not used by some other active node")
@@ -97,34 +93,24 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
     }
   }
 
-  def destroy(path: File, options: Options): Unit = {
-    factory.destroy(path, options)
-  }
-
-  def repair(path: File, options: Options): Unit = {
-    factory.repair(path, options)
-  }
 }
 
 object LDBFactory extends ScorexLogging {
 
-  private val nativeFactory = "org.fusesource.leveldbjni.JniDBFactory"
-  private val javaFactory = "org.iq80.leveldb.impl.Iq80DBFactory"
-  private val memoryPoolSize = 512 * 1024
-
-  def setLevelDBParams(factory: DBFactory): AnyRef = {
-    val pushMemoryPool = factory.getClass.getDeclaredMethod("pushMemoryPool", classOf[Int])
-    pushMemoryPool.invoke(null, Integer.valueOf(memoryPoolSize))
+  def openDb(path: File, options: Options = new Options()): RocksDB = {
+    path.mkdirs()
+    options.setCreateIfMissing(true)
+      .setWriteBufferSize(128 * SizeUnit.MB)
+      .setMaxWriteBufferNumber(3)
+      .setMaxBackgroundJobs(10)
+      .setCompressionType(CompressionType.NO_COMPRESSION)
+      .setCompactionStyle(CompactionStyle.LEVEL)
+    RocksDB.open(options, path.toString)
   }
 
-  def createKvDb(path: String): LDBKVStore = {
-    val dir = new File(path)
-    dir.mkdirs()
-    val options = new Options()
-    options.createIfMissing(true)
+  def createKvDb(path: File): LDBKVStore = {
     try {
-      val db = factory.open(dir, options)
-      new LDBKVStore(db)
+      new LDBKVStore(openDb(path))
     } catch {
       case x: Throwable =>
         log.error(s"Failed to initialize storage: $x. Please check that directory $path could be accessed " +
@@ -134,43 +120,4 @@ object LDBFactory extends ScorexLogging {
     }
   }
 
-
-  lazy val factory: DBFactory = {
-    val loaders = List(ClassLoader.getSystemClassLoader, this.getClass.getClassLoader)
-
-    // As LevelDB-JNI has problems on Mac (see https://github.com/ergoplatform/ergo/issues/1067),
-    // we are using only pure-Java LevelDB on Mac
-    val isMac = System.getProperty("os.name").toLowerCase().indexOf("mac") >= 0
-    val factories = if(isMac) {
-      List(javaFactory)
-    } else {
-      List(nativeFactory, javaFactory)
-    }
-
-    val pairs = loaders.view
-      .zip(factories)
-      .flatMap { case (loader, factoryName) =>
-        loadFactory(loader, factoryName).map(factoryName -> _)
-      }
-
-    val (name, factory) = pairs.headOption.getOrElse {
-      throw new RuntimeException(s"Could not load any of the factory classes: $factories")
-    }
-
-    if (name == javaFactory) {
-      log.warn("Using the pure java LevelDB implementation which is still experimental")
-    } else {
-      log.info(s"Loaded $name with $factory")
-      setLevelDBParams(factory)
-    }
-    StoreRegistry(factory)
-  }
-
-  private def loadFactory(loader: ClassLoader, factoryName: String): Option[DBFactory] =
-    try Some(loader.loadClass(factoryName).getConstructor().newInstance().asInstanceOf[DBFactory])
-    catch {
-      case e: Throwable =>
-        log.warn(s"Failed to load database factory $factoryName due to: $e")
-        None
-    }
 }

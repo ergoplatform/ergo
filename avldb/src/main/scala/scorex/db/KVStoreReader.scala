@@ -1,8 +1,7 @@
 package scorex.db
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
-
-import org.iq80.leveldb.{DB, ReadOptions}
+import org.rocksdb.{ReadOptions, RocksDB}
 
 import scala.collection.mutable
 
@@ -15,7 +14,7 @@ trait KVStoreReader extends AutoCloseable {
   type K = Array[Byte]
   type V = Array[Byte]
 
-  protected val db: DB
+  protected val db: RocksDB
 
   protected val lock = new ReentrantReadWriteLock()
 
@@ -41,16 +40,16 @@ trait KVStoreReader extends AutoCloseable {
     */
   def getWithFilter(cond: (K, V) => Boolean): Iterator[(K, V)] = {
     val ro = new ReadOptions()
-    ro.snapshot(db.getSnapshot)
-    val iter = db.iterator(ro)
+    ro.setSnapshot(db.getSnapshot)
+    val iter = db.newIterator(ro)
     try {
       iter.seekToFirst()
       val bf = mutable.ArrayBuffer.empty[(K, V)]
-      while (iter.hasNext) {
-        val next = iter.next()
-        val key = next.getKey
-        val value = next.getValue
+      while (iter.isValid) {
+        val key = iter.key()
+        val value = iter.value()
         if (cond(key, value)) bf += (key -> value)
+        iter.next()
       }
       bf.toIterator
     } finally {
@@ -97,18 +96,18 @@ trait KVStoreReader extends AutoCloseable {
     */
   def getRange(start: K, end: K, limit: Int = Int.MaxValue): Array[(K, V)] = {
     val ro = new ReadOptions()
-    ro.snapshot(db.getSnapshot)
-    val iter = db.iterator(ro)
+    ro.setSnapshot(db.getSnapshot)
+    val iter = db.newIterator(ro)
     try {
       iter.seek(start)
       val bf = mutable.ArrayBuffer.empty[(K, V)]
       var elemCounter = 0
-      while (iter.hasNext && elemCounter < limit) {
-        val next = iter.next()
-        if(ByteArrayUtils.compare(next.getKey, end) <= 0) {
+      while (iter.isValid && elemCounter < limit) {
+        if(ByteArrayUtils.compare(iter.key(), end) <= 0) {
           elemCounter += 1
-          bf += (next.getKey -> next.getValue)
+          bf += (iter.key() -> iter.value())
         } else elemCounter = limit // break
+        iter.next()
       }
       bf.toArray[(K,V)]
     } finally {

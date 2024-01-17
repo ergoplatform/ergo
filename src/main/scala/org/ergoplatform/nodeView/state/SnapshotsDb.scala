@@ -10,6 +10,7 @@ import scorex.db.{LDBFactory, LDBKVStore}
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 
+import java.io.File
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
@@ -141,7 +142,7 @@ object SnapshotsDb {
   // internal method to open or init snapshots database in given folder
   // private[nodeView] to use it in tests also
   private[nodeView] def create(dir: String): SnapshotsDb = {
-    val store = LDBFactory.createKvDb(dir)
+    val store = LDBFactory.createKvDb(new File(dir))
     new SnapshotsDb(store)
   }
 

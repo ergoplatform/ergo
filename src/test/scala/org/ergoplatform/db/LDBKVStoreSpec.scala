@@ -40,25 +40,4 @@ class LDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
     }
   }
 
-  property("last key in range") {
-    withStore { store =>
-      val valueA = (byteString("A"), byteString("1"))
-      val valueB = (byteString("B"), byteString("2"))
-      val valueC = (byteString("C"), byteString("1"))
-      val valueD = (byteString("D"), byteString("2"))
-      val valueE = (byteString("E"), byteString("3"))
-      val valueF = (byteString("F"), byteString("4"))
-
-      val values = Array(valueA, valueB, valueC, valueD, valueE, valueF)
-      store.insert(values.map(_._1), values.map(_._2)).get
-
-      store.lastKeyInRange(valueA._1, valueC._1).get.toSeq shouldBe valueC._1.toSeq
-      store.lastKeyInRange(valueD._1, valueF._1).get.toSeq shouldBe valueF._1.toSeq
-      store.lastKeyInRange(valueF._1, byteString32("Z")).get.toSeq shouldBe valueF._1.toSeq
-      store.lastKeyInRange(Array(10: Byte), valueA._1).get.toSeq shouldBe valueA._1.toSeq
-
-      store.lastKeyInRange(Array(10: Byte), Array(11: Byte)).isDefined shouldBe false
-    }
-  }
-
 }

@@ -183,14 +183,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @return identifier of last inserted scan
     */
   def lastUsedScanId: Short = {
-    // pre-3.3.7 method to get last used scan id, now useful to read pre-3.3.7 databases
-    def oldScanId: Option[Short] =
-      store.lastKeyInRange(SmallestPossibleScanId, BiggestPossibleScanId)
-        .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
-
     store.get(lastUsedScanIdKey)
       .map(bs => Shorts.fromByteArray(bs))
-      .orElse(oldScanId)
       .getOrElse(PaymentsScanId)
   }
 
@@ -251,7 +245,7 @@ object WalletStorage {
   def storageFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/storage")
 
   def readOrCreate(settings: ErgoSettings): WalletStorage = {
-    val db = LDBFactory.createKvDb(storageFolder(settings).getPath)
+    val db = LDBFactory.createKvDb(storageFolder(settings))
     new WalletStorage(db, settings)
   }
 

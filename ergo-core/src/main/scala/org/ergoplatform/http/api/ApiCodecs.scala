@@ -23,7 +23,7 @@ import scorex.crypto.hash.Digest
 import scorex.util.encode.Base16
 import sigmastate.Values.SigmaBoolean
 import sigmastate._
-import sigmastate.crypto.CryptoConstants.{EcPointType, EncodedGroupElementLength}
+import sigmastate.crypto.CryptoConstants.EcPointType
 import sigmastate.crypto.DLogProtocol.{DLogProverInput, FirstDLogProverMessage, ProveDlog}
 import sigmastate.crypto.VerifierMessage.Challenge
 import sigmastate.crypto._

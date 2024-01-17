@@ -2,8 +2,6 @@ package scorex.db
 
 object ByteArrayUtils {
 
-  import java.util.Comparator
-
   // Java comparator
   object BYTE_ARRAY_COMPARATOR extends Ordering[Array[Byte]] {
     def compare(o1: Array[Byte], o2: Array[Byte]) = compare(o1, o2)

@@ -6,7 +6,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-import scala.collection.mutable
 import scala.math.Ordering.Implicits._
 
 class ByteArrayUtilsSpec extends AnyPropSpec with ScalaCheckPropertyChecks with Matchers {

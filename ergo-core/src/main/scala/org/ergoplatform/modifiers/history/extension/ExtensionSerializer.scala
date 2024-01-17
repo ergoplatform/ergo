@@ -6,7 +6,6 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{bytesToId, idToBytes}
 
 import scala.annotation.nowarn
-import scala.collection.compat.immutable.LazyList
 
 object ExtensionSerializer extends ErgoSerializer[Extension] {
 

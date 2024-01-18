@@ -20,13 +20,12 @@ import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
 import sigma.Colls
-import sigmastate.AND
-import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant, TrueLeaf}
-import sigmastate.crypto.CryptoConstants
-import sigmastate.crypto.DLogProtocol.ProveDlog
-import sigmastate.eval._
+import sigma.ast.ErgoTree.ZeroHeader
+import sigma.ast._
+import sigma.crypto.CryptoConstants
+import sigma.data.ProveDlog
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigma.interpreter.{ContextExtension, ProverResult}
 import sigmastate.eval.Extensions._
 
 import scala.util.{Random, Try}
@@ -109,7 +108,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
         new ProverResult(Base16.decode("5aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340").get, new ContextExtension(Map()))),
     )
     val outputCandidates: IndexedSeq[ErgoBoxCandidate] = IndexedSeq(
-      new ErgoBoxCandidate(1000000000L, minerPk, height, Colls.emptyColl, Map()),
+      new ErgoBoxCandidate(1000000000L, ErgoTree.fromSigmaBoolean(minerPk), height, Colls.emptyColl, Map()),
       new ErgoBoxCandidate(1000000L, settings.chainSettings.monetary.feeProposition, height, Colls.emptyColl, Map())
     )
     val tx = ErgoTransaction(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate])
@@ -123,7 +122,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
     // tx with registers in outputs
     val outputCandidates2: IndexedSeq[ErgoBoxCandidate] = IndexedSeq(
-      new ErgoBoxCandidate(1000000000L, minerPk, height, Colls.emptyColl,
+      new ErgoBoxCandidate(1000000000L, ErgoTree.fromSigmaBoolean(minerPk), height, Colls.emptyColl,
         Map(
           R6 -> IntConstant(10),
           R4 -> ByteConstant(1),
@@ -131,7 +130,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
           R7 -> LongArrayConstant(Array(1L, 2L, 1234123L)),
           R8 -> ByteArrayConstant(Base16.decode("123456123456123456123456123456123456123456123456123456123456123456").get),
         )),
-      new ErgoBoxCandidate(1000000000L, minerPk, height, Colls.emptyColl, Map())
+      new ErgoBoxCandidate(1000000000L, ErgoTree.fromSigmaBoolean(minerPk), height, Colls.emptyColl, Map())
     )
     val tx2 = ErgoTransaction(inputs: IndexedSeq[Input], outputCandidates2: IndexedSeq[ErgoBoxCandidate])
 
@@ -436,7 +435,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
     forAll(smallPositiveInt) { inputsNum =>
 
-      val nonTrivialTrueGen = Gen.const(AND(Seq(TrueLeaf, TrueLeaf)).toSigmaProp.treeWithSegregation)
+      val nonTrivialTrueGen = Gen.const(ErgoTree.withSegregation(ZeroHeader, AND(Seq(TrueLeaf, TrueLeaf)).toSigmaProp))
       val gen = validErgoTransactionGenTemplate(0, 0, inputsNum, nonTrivialTrueGen)
       val (from, tx) = gen.sample.get
       tx.statelessValidity().isSuccess shouldBe true

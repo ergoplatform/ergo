@@ -4,10 +4,10 @@ import org.ergoplatform.core.BytesSerializable
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.utils
-import org.ergoplatform.validation.SigmaValidationSettings
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.util.serialization.{Reader, Writer}
+import sigma.validation.SigmaValidationSettings
 
 import scala.util.Try
 

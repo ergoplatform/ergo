@@ -15,18 +15,19 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
 import org.ergoplatform.testkit.generators.CoreGenerators
 import org.ergoplatform.utils.ErgoTestConstants
-import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
+import sigma.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.matchers.should.Matchers
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
-import sigmastate.Values.ErgoTree
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.crypto.{CryptoConstants, DiffieHellmanTupleProverInput, ProveDHTuple}
-import sigmastate.interpreter.ProverResult
+import sigma.ast.ErgoTree
+import sigma.crypto.{CryptoConstants, EcPointType}
+import sigma.data.{ProveDHTuple, ProveDlog}
+import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigmastate.crypto.DiffieHellmanTupleProverInput
+import sigma.interpreter.ProverResult
 
 import scala.util.Random
 
@@ -58,7 +59,7 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
 
-  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(_.toSigmaProp)
+  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(dl => ErgoTree.fromSigmaBoolean(dl))
 
   lazy val ergoPropositionGen: Gen[ErgoTree] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogTreeGen)
 
@@ -181,7 +182,7 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
   lazy val ergoValidationSettingsUpdateGen: Gen[ErgoValidationSettingsUpdate] = for {
     n <- Gen.choose(1, 200)
     disabledRules = ValidationRules.rulesSpec.filter(_._2.mayBeDisabled).keys.take(n).toSeq
-    replacedRuleCode <- Gen.choose(org.ergoplatform.validation.ValidationRules.FirstRuleId, Short.MaxValue)
+    replacedRuleCode <- Gen.choose(sigma.validation.ValidationRules.FirstRuleId, Short.MaxValue)
     changedRuleValue <- genBoundedBytes(0, 127)
     statuses <- Gen.listOf(Gen.oneOf(DisabledRule, EnabledRule, ReplacedRule(replacedRuleCode), ChangedRule(changedRuleValue)))
     statusUpdates = org.ergoplatform.validation.ValidationRules.ruleSpecs.take(statuses.size).map(_.id).zip(statuses)

@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import scorex.util.encode.Base16
-import sigmastate.Values.ByteArrayConstant
+import sigma.ast.ByteArrayConstant
 import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.language.implicitConversions

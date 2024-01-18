@@ -17,11 +17,10 @@ import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
-import sigmastate.SType
-import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
 import sigma.Extensions._
+import sigma.eval.Extensions.EvalIterableOps
+import sigma.ast.{ByteArrayConstant, EvaluatedValue, SType}
 
 import java.net.InetSocketAddress
 import scala.concurrent.duration._

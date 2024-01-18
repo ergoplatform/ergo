@@ -24,10 +24,9 @@ import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
-import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
-import sigmastate.eval.Extensions.ArrayOps
+import sigma.ast.{ByteArrayConstant, ErgoTree, EvaluatedValue, FalseLeaf, SType, TrueLeaf}
+import sigma.Extensions.ArrayOps
 import sigmastate.helpers.TestingHelpers.testBox
-import sigmastate.{SType, Values}
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.Random
@@ -92,7 +91,7 @@ class ErgoWalletServiceSpec
           ErgoLikeTransaction(IndexedSeq(), IndexedSeq()),
           creationOutIndex = 0,
           None,
-          testBox(1L, Values.TrueLeaf.toSigmaProp, 0),
+          testBox(1L, ErgoTree.fromProposition(TrueLeaf.toSigmaProp), 0),
           Set(PaymentsScanId)
         )
       )
@@ -127,7 +126,7 @@ class ErgoWalletServiceSpec
       case (ergoBoxes, _) =>
         val ergoBox = ergoBoxes.head
 
-        val registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = Option(Map(ErgoBox.R4 -> sigmastate.Values.FalseLeaf))
+        val registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = Option(Map(ErgoBox.R4 -> FalseLeaf))
         val illegalAssetIssueRequest = AssetIssueRequest(address = pks.head, Some(1), amount = 1, "test", "test", 4, registers)
         val invalidCandidates = requestsToBoxCandidates(Seq(illegalAssetIssueRequest), ergoBox.id, startHeight, parameters, pks)
         invalidCandidates.failed.get.getMessage shouldBe "Additional registers contain R0...R6"

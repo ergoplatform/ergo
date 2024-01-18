@@ -23,11 +23,11 @@ import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
 import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
-import sigmastate.Values.ErgoTree
-import sigmastate.crypto.DLogProtocol.ProveDlog
+import sigma.ast.ErgoTree
+import sigma.data.ProveDlog
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
+import sigma.eval.Extensions.EvalIterableOps
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -55,7 +55,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
     value <- validValueGen
-  } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
+  } yield new ErgoBoxCandidate(value, ErgoTree.fromSigmaBoolean(prop), h, tokens.toColl, ar)
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = ergoBoxGen(propGen = trueLeafGen)
 
@@ -337,7 +337,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   def transactionSigningRequestGen(includeInputs: Boolean): Gen[TransactionSigningRequest] = for {
     (secret, pubKey) <- dlogSecretWithPublicImageGen
     (secretDh, _) <- dhtSecretWithPublicImageGen
-    (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
+    (inputBoxes, utx) <- validUnsignedErgoTransactionGen(ErgoTree.fromSigmaBoolean(pubKey))
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
     secretSeq = Seq(ExternalSecret(DlogSecretKey(secret)), ExternalSecret(DhtSecretKey(secretDh)))
   } yield TransactionSigningRequest(utx, TransactionHintsBag.empty, secretSeq,

@@ -11,7 +11,7 @@ import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen
-import sigmastate.Values.ByteArrayConstant
+import sigma.ast.ByteArrayConstant
 
 trait WalletGenerators extends ErgoTransactionGenerators with Generators {
 

@@ -44,7 +44,7 @@ import org.ergoplatform.network.PeerSpec
 import org.ergoplatform.network.HandshakeSerializer
 
 val handshakeMessage = Handshake(mySpec, System.currentTimeMillis())
-val messageSerializedToBytes = HandshakeSerializer.toBytes(handshakeMessage)
+val handshakeMessageSerialized = HandshakeSerializer.toBytes(handshakeMessage)
 ```
 Now we can serialize the message and send it
 If the message arrived successfully, we'll receive Handshake message back, so we can start to exchange messages with the node
@@ -62,7 +62,7 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfoV2
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 
 val syncMessage = ErgoSyncInfoV2(Seq())
-val messageSerializedToBytes = ErgoSyncInfoMessageSpec.toBytes(emptySync)
+val syncMessageSerialized = ErgoSyncInfoMessageSpec.toBytes(syncMessage)
 ```
 The client will start receiving [InvData](src/main/scala/org/ergoplatform/network/message/InvData.scala) messages with 
 ```

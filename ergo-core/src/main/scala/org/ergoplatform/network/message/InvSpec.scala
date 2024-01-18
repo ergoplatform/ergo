@@ -1,6 +1,6 @@
 package org.ergoplatform.network.message
 
-import org.ergoplatform.NodeViewModifier
+import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import scorex.util.Extensions.LongOps
@@ -30,7 +30,7 @@ object InvSpec extends MessageSpecV1[InvData] {
     w.putUInt(elems.size)
     elems.foreach { id =>
       val bytes = idToBytes(id)
-      assert(bytes.length == NodeViewModifier.ModifierIdSize)
+      assert(bytes.length == ErgoNodeViewModifier.ModifierIdSize)
       w.putBytes(bytes)
     }
   }
@@ -41,7 +41,7 @@ object InvSpec extends MessageSpecV1[InvData] {
     require(count > 0, "empty inv list")
     require(count <= maxInvObjects, s"$count elements in a message while limit is $maxInvObjects")
     val elems = (0 until count).map { _ =>
-      bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
+      bytesToId(r.getBytes(ErgoNodeViewModifier.ModifierIdSize))
     }
 
     InvData(typeId, elems)

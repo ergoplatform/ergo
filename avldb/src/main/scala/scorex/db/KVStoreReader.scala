@@ -1,8 +1,9 @@
 package scorex.db
 
-import java.util.concurrent.locks.ReentrantReadWriteLock
-import org.rocksdb.{ReadOptions, RocksDB}
+import org.rocksdb.ReadOptions
+import scorex.db.LDBFactory.RegisteredDB
 
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.collection.mutable
 
 /**
@@ -14,7 +15,7 @@ trait KVStoreReader extends AutoCloseable {
   type K = Array[Byte]
   type V = Array[Byte]
 
-  protected val db: RocksDB
+  protected val db: RegisteredDB
 
   protected val lock = new ReentrantReadWriteLock()
 
@@ -32,37 +33,28 @@ trait KVStoreReader extends AutoCloseable {
     }
   }
 
-
   /**
-    * Iterate through the database to read elements according to a filter function.
-    * @param cond - the filter function
-    * @return iterator over elements satisfying the filter function
+    * Read all the database elements.
+    * @return iterator over database contents
     */
-  def getWithFilter(cond: (K, V) => Boolean): Iterator[(K, V)] = {
+  def getAll: Iterator[(K, V)] = {
     val ro = new ReadOptions()
     ro.setSnapshot(db.getSnapshot)
-    val iter = db.newIterator(ro)
+    val iter = db.iterator(ro)
     try {
       iter.seekToFirst()
       val bf = mutable.ArrayBuffer.empty[(K, V)]
       while (iter.isValid) {
-        val key = iter.key()
-        val value = iter.value()
-        if (cond(key, value)) bf += (key -> value)
+        bf += (iter.key() -> iter.value())
         iter.next()
       }
       bf.toIterator
     } finally {
       iter.close()
-      ro.snapshot().close()
+      db.releaseSnapshot(ro.snapshot())
+      ro.close()
     }
   }
-
-  /**
-    * Read all the database elements.
-    * @return iterator over database contents
-    */
-  def getAll: Iterator[(K, V)] = getWithFilter((_, _) => true)
 
   /** Returns value associated with the key, or default value from user
     */
@@ -97,7 +89,7 @@ trait KVStoreReader extends AutoCloseable {
   def getRange(start: K, end: K, limit: Int = Int.MaxValue): Array[(K, V)] = {
     val ro = new ReadOptions()
     ro.setSnapshot(db.getSnapshot)
-    val iter = db.newIterator(ro)
+    val iter = db.iterator(ro)
     try {
       iter.seek(start)
       val bf = mutable.ArrayBuffer.empty[(K, V)]
@@ -112,7 +104,8 @@ trait KVStoreReader extends AutoCloseable {
       bf.toArray[(K,V)]
     } finally {
       iter.close()
-      ro.snapshot().close()
+      db.releaseSnapshot(ro.snapshot())
+      ro.close()
     }
   }
 

@@ -3,7 +3,8 @@ package org.ergoplatform.db
 import akka.util.ByteString
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.utils.TestFileUtils
-import org.rocksdb.{Options, RocksDB}
+import org.rocksdb.Options
+import scorex.db.LDBFactory.RegisteredDB
 import scorex.db.{LDBFactory, LDBKVStore, LDBVersionedStore}
 
 trait DBSpec extends TestFileUtils {
@@ -20,19 +21,19 @@ trait DBSpec extends TestFileUtils {
 
   protected def byteString32(s: String): Array[Byte] = Algos.hash(byteString(s))
 
-  protected def withDb[T](body: RocksDB => T): T = {
+  protected def withDb[T](body: RegisteredDB => T): T = {
     val options = new Options()
     options.setCreateIfMissing(true)
     options.setParanoidChecks(true)
     options.setMaxOpenFiles(2000)
-    val db = LDBFactory.openDb(createTempDir, options)
+    val db = LDBFactory.open(createTempDir, options)
     try body(db) finally db.close()
   }
 
   protected def versionId(s: String): Array[Byte] = byteString32(s)
 
   protected def withStore[T](body: LDBKVStore => T): T =
-    withDb { db: RocksDB => body(new LDBKVStore(db)) }
+    withDb { db: RegisteredDB => body(new LDBKVStore(db)) }
 
   protected def withVersionedStore[T](keepVersions: Int)(body: LDBVersionedStore => T): T = {
     val db = new LDBVersionedStore(createTempDir, keepVersions)

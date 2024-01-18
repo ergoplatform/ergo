@@ -44,7 +44,7 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     store.rollbackVersions().toSeq.map(_.toSeq) shouldBe Seq(versionId3.toSeq, versionId2.toSeq, versionId.toSeq)
   }
 
-  property("processAll && getWithFilter") {
+  property("processAll && getAll") {
     val version = Longs.toByteArray(Long.MaxValue)
     val k1 = Longs.toByteArray(Int.MaxValue + 1)
     val k2 = Longs.toByteArray(Int.MaxValue + 2)
@@ -53,7 +53,7 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     store.update(version, Seq.empty, Seq(k1 -> v1, k2 -> v2)).get
 
     //read all keys
-    val keys = store.getWithFilter((_, _) => true).toSeq.map(_._1)
+    val keys = store.getAll.toSeq.map(_._1)
 
     val ks = keys.map(_.toSeq)
     ks.contains(k1.toSeq) shouldBe true
@@ -74,7 +74,7 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
 
     store.update(Longs.toByteArray(Long.MinValue), keys, Seq.empty).get
 
-    store.getWithFilter((_, _) => true).toSeq.length shouldBe 0
+    store.getAll.toSeq.length shouldBe 0
 
     var cnt = 0
     store.processAll({ case (_, _) =>

@@ -1,10 +1,11 @@
 package scorex.db
 
-import org.rocksdb.{RocksDB, WriteBatch, WriteOptions}
+import org.rocksdb.{WriteBatch, WriteOptions}
+import scorex.db.LDBFactory.RegisteredDB
 import scorex.util.ScorexLogging
+import spire.syntax.all.cfor
 
 import scala.util.{Failure, Success, Try}
-import spire.syntax.all.cfor
 
 
 /**
@@ -12,9 +13,12 @@ import spire.syntax.all.cfor
   *
   * Both keys and values are var-sized byte arrays.
   */
-class LDBKVStore(protected val db: RocksDB) extends KVStoreReader with ScorexLogging {
+class LDBKVStore(protected val db: RegisteredDB) extends KVStoreReader with ScorexLogging {
   /** Immutable empty array can be shared to avoid allocations. */
   private val emptyArrayOfByteArray = Array.empty[Array[Byte]]
+
+  /** default write options, snyc enabled */
+  private val wo: WriteOptions = new WriteOptions().setSync(true)
 
   /**
     * Update this database atomically with a batch of insertion and removal operations
@@ -30,7 +34,7 @@ class LDBKVStore(protected val db: RocksDB) extends KVStoreReader with ScorexLog
       require(toInsertKeys.length == toInsertValues.length)
       cfor(0)(_ < toInsertKeys.length, _ + 1) { i => batch.put(toInsertKeys(i), toInsertValues(i))}
       cfor(0)(_ < toRemove.length, _ + 1) { i => batch.delete(toRemove(i))}
-      db.write(new WriteOptions(), batch)
+      db.write(wo, batch)
       Success(())
     } catch {
       case t: Throwable => Failure(t)

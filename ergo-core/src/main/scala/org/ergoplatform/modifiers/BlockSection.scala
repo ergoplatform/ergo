@@ -18,7 +18,7 @@ trait BlockSection extends ErgoNodeViewModifier {
 
 object BlockSection {
 
-  implicit val jsonEncoder: Encoder[BlockSection] = {
+  implicit val jsonEncoder: Encoder[BlockSection] = Encoder.instance {
     case h: Header => Header.jsonEncoder(h)
     case bt: BlockTransactions => BlockTransactions.jsonEncoder(bt)
     case adp: ADProofs => ADProofs.jsonEncoder(adp)

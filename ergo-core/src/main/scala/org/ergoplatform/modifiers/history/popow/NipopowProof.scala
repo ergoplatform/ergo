@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history.popow
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import io.circe.{Decoder, Encoder}
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
@@ -159,7 +161,7 @@ object NipopowProof {
   import io.circe.syntax._
   import PoPowHeader._
 
-  implicit val nipopowProofEncoder: Encoder[NipopowProof] = { proof: NipopowProof =>
+  implicit val nipopowProofEncoder: Encoder[NipopowProof] = Encoder.instance { proof: NipopowProof =>
     Map(
       "m" -> proof.m.asJson,
       "k" -> proof.k.asJson,
@@ -170,7 +172,7 @@ object NipopowProof {
     ).asJson
   }
 
-  def nipopowProofDecoder(poPowAlgos: NipopowAlgos): Decoder[NipopowProof] = { c =>
+  def nipopowProofDecoder(poPowAlgos: NipopowAlgos): Decoder[NipopowProof] = Decoder.instance { c =>
     for {
       m <- c.downField("m").as[Int]
       k <- c.downField("k").as[Int]

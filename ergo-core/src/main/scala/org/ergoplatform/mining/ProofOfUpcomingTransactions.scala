@@ -1,5 +1,7 @@
 package org.ergoplatform.mining
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
@@ -33,7 +35,7 @@ object ProofOfUpcomingTransactions {
 
   import TransactionMembershipProof.txMembershipProofEncoder
 
-  implicit val encoder: Encoder[ProofOfUpcomingTransactions] = { p: ProofOfUpcomingTransactions =>
+  implicit val encoder: Encoder[ProofOfUpcomingTransactions] = Encoder.instance { p: ProofOfUpcomingTransactions =>
     val preimageBytes = HeaderSerializer.bytesWithoutPow(p.minHeader)
     Json.obj(
       "msgPreimage" -> Algos.encode(preimageBytes).asJson,

@@ -24,7 +24,7 @@ case class CandidateBlock(parentOpt: Option[Header],
 
 object CandidateBlock {
 
-  implicit val jsonEncoder: Encoder[CandidateBlock] = (c: CandidateBlock) =>
+  implicit val jsonEncoder: Encoder[CandidateBlock] = Encoder.instance((c: CandidateBlock) =>
     Map(
       "parentId" -> c.parentOpt.map(p => Algos.encode(p.id)).getOrElse("None").asJson,
       "version" -> c.version.asJson,
@@ -36,6 +36,6 @@ object CandidateBlock {
       "transactionsNumber" -> c.transactions.length.asJson,
       "votes" -> Algos.encode(c.votes).asJson,
       "extensionHash" -> Algos.encode(c.extension.digest).asJson
-    ).asJson
+    ).asJson)
 
 }

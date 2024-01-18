@@ -25,7 +25,7 @@ case class WorkMessage(msg: Array[Byte],
 
 object WorkMessage extends ApiCodecs {
 
-  implicit val encoder: Encoder[WorkMessage] = { workMessage: WorkMessage =>
+  implicit val encoder: Encoder[WorkMessage] = Encoder.instance { workMessage: WorkMessage =>
     Json.obj(
       List(
         "msg" -> Some(workMessage.msg.asJson),

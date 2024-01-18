@@ -1,5 +1,7 @@
 package org.ergoplatform.validation
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.utils.ScorexEncoder
@@ -100,7 +102,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
   /** Validate the first argument equals the second. This should not be used with `ModifierId` of type `Array[Byte]`.
     * The `error` callback will be provided with detail on argument values for better reporting
     */
-  def validateEquals[A](id: Short, given: => A, expected: => A, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
+  def validateEquals[A](id: Short, `given`: => A, expected: => A, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
     pass((given, expected) match {
       case _ if !settings.isActive(id) => result
       case (a: Array[_], b: Array[_]) if a sameElements[Any] b => result
@@ -112,7 +114,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
 
   /** Validate the `id`s are equal. The `error` callback will be provided with detail on argument values
     */
-  def validateEqualIds(id: Short, given: => ModifierId, expected: => ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
+  def validateEqualIds(id: Short, `given`: => ModifierId, expected: => ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
     pass {
       if (!settings.isActive(id) || given == expected) result
       else settings.getError(id, InvalidModifier(s"Given: ${e.encodeId(given)}, expected ${e.encodeId(expected)}", given, modifierTypeId))

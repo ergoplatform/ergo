@@ -23,6 +23,7 @@ import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.eval.SigmaDsl
 import sigma.Coll
 
+import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -122,7 +123,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val forkVote = votes.contains(Parameters.SoftFork)
     val height = ErgoHistoryUtils.heightOf(lastHeaderOpt) + 1
-    val (calculatedParams, updated) = currentParameters.update(height, forkVote, votingData.epochVotes, proposedUpdate, votingSettings)
+    val (calculatedParams, updated) =
+      currentParameters.update(height, forkVote, ArraySeq.unsafeWrapArray(votingData.epochVotes), proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
     UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
                           calculatedValidationSettings, votingData)
@@ -141,7 +143,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val proposedUpdate = ErgoValidationSettingsUpdate.empty
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val height = ErgoHistoryUtils.heightOf(lastHeaderOpt) + 1
-    val (calculatedParams, updated) = currentParameters.update(height, forkVote = false, votingData.epochVotes, proposedUpdate, votingSettings)
+    val (calculatedParams, updated) =
+      currentParameters.update(height, forkVote = false, ArraySeq.unsafeWrapArray(votingData.epochVotes), proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
     UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
       calculatedValidationSettings, votingData)
@@ -176,7 +179,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       .validateNoFailure(exParseValidationSettings, parsedValidationSettingsTry, extension.id, extension.modifierTypeId)
       .validateTry(parsedParamsTry, e => ModifierValidator.fatal("Failed to parse parameters", extension.id, extension.modifierTypeId, e)) {
         case (vs, parsedParams) =>
-          vs.validateTry(parsedValidationSettingsTry, e => ModifierValidator.fatal("Failed to parse validation settings", extension.id, extension.modifierTypeId, e)) {
+          vs.validateTry(parsedValidationSettingsTry,
+            e => ModifierValidator.fatal("Failed to parse validation settings", extension.id, extension.modifierTypeId, e)) {
             case (currentValidationState, parsedSettings) =>
 
               /*
@@ -192,7 +196,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                 parsedParams -> parsedSettings
               } else {
                 val (params, settingsUpdates) = currentParameters
-                  .update(height, forkVote, votingData.epochVotes, parsedParams.proposedUpdate, votingSettings)
+                  .update(height, forkVote, ArraySeq.unsafeWrapArray(votingData.epochVotes), parsedParams.proposedUpdate, votingSettings)
                 val settings = validationSettings.updated(settingsUpdates)
                 params -> settings
               }

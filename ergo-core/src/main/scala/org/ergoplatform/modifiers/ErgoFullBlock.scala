@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers
 
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.http.api.ApiCodecs
@@ -49,7 +51,7 @@ object ErgoFullBlock extends ApiCodecs {
 
   val modifierTypeId: NetworkObjectTypeId.Value = FullBlockTypeId.value
 
-  implicit val jsonEncoder: Encoder[ErgoFullBlock] = { b: ErgoFullBlock =>
+  implicit val jsonEncoder: Encoder[ErgoFullBlock] = Encoder.instance { b: ErgoFullBlock =>
     Json.obj(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
@@ -59,7 +61,7 @@ object ErgoFullBlock extends ApiCodecs {
     )
   }
 
-  implicit val jsonDecoder: Decoder[ErgoFullBlock] = { c: HCursor =>
+  implicit val jsonDecoder: Decoder[ErgoFullBlock] = Decoder.instance { c: HCursor =>
     for {
       header <- c.downField("header").as[Header]
       transactions <- c.downField("blockTransactions").as[BlockTransactions]
@@ -68,7 +70,7 @@ object ErgoFullBlock extends ApiCodecs {
     } yield ErgoFullBlock(header, transactions, extension, adProofs)
   }
 
-  val blockSizeEncoder: Encoder[ErgoFullBlock] = { b: ErgoFullBlock =>
+  val blockSizeEncoder: Encoder[ErgoFullBlock] = Encoder.instance { b: ErgoFullBlock =>
     Json.obj(
       "id" -> b.header.id.asJson,
       "size" -> b.size.asJson

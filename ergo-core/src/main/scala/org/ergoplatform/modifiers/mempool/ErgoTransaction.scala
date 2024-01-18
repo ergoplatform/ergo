@@ -31,6 +31,7 @@ import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 
 import java.util
+import scala.annotation.nowarn
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -174,6 +175,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, InvalidModifier(s"$id: output $out", id, modifierTypeId))
   }
 
+  @nowarn
   private def verifyAssets(validationBefore: ValidationState[Long],
                            outAssets: Map[Seq[Byte], Long],
                            outAssetsNum: Int,
@@ -368,8 +370,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       ErgoInterpreter.interpreterInitCost.toLong,
       multiplyExact(boxesToSpend.size.toLong, stateContext.currentParameters.inputCost.toLong),
       multiplyExact(dataBoxes.size.toLong, stateContext.currentParameters.dataInputCost.toLong),
-      multiplyExact(outputCandidates.size.toLong, stateContext.currentParameters.outputCost.toLong),
-    )
+      multiplyExact(outputCandidates.size.toLong, stateContext.currentParameters.outputCost.toLong))
 
     // Cost limit per block
     val maxCost = stateContext.currentParameters.maxBlockCost.toLong

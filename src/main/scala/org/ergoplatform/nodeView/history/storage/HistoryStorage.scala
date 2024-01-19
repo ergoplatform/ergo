@@ -125,8 +125,11 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
   /**
     * @return if object with `id` is in the objects database
     */
-  def contains(id: Array[Byte]): Boolean = get(id).isDefined
-  def contains(id: ModifierId): Boolean = get(id).isDefined
+  def contains(id: Array[Byte]): Boolean = objectsStore.contains(id) || extraStore.contains(id)
+  def contains(id: ModifierId): Boolean = {
+    val idBytes = idToBytes(id)
+    objectsStore.contains(idBytes) || extraStore.contains(idBytes)
+  }
 
   def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Array[BlockSection]): Try[Unit] = {
@@ -226,9 +229,9 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
 
 object HistoryStorage {
   def apply(ergoSettings: ErgoSettings): HistoryStorage = {
-    val indexStore = LDBFactory.createKvDb(new File(s"${ergoSettings.directory}/history/index"))
-    val objectsStore = LDBFactory.createKvDb(new File(s"${ergoSettings.directory}/history/objects"))
-    val extraStore = LDBFactory.createKvDb(new File(s"${ergoSettings.directory}/history/extra"))
+    val indexStore = new LDBKVStore(LDBFactory.open(new File(s"${ergoSettings.directory}/history/index")))
+    val objectsStore = new LDBKVStore(LDBFactory.open(new File(s"${ergoSettings.directory}/history/objects")))
+    val extraStore = new LDBKVStore(LDBFactory.open(new File(s"${ergoSettings.directory}/history/extra")))
     new HistoryStorage(indexStore, objectsStore, extraStore, ergoSettings.cacheSettings)
   }
 }

@@ -29,6 +29,7 @@ object LDBFactory extends ScorexLogging {
   case class RegisteredDB(impl: RocksDB, path: File) {
     def get(key: Array[Byte]): Array[Byte] = impl.get(key)
     def get(options: ReadOptions, key: Array[Byte]): Array[Byte] = impl.get(options, key)
+    def contains(key: Array[Byte]): Boolean = impl.keyExists(key)
     def iterator: RocksIterator = impl.newIterator()
     def iterator(options: ReadOptions): RocksIterator = impl.newIterator(options)
     def put(key: Array[Byte], value: Array[Byte]): Unit = impl.put(key, value)
@@ -39,7 +40,8 @@ object LDBFactory extends ScorexLogging {
       lock.writeLock().lock()
       try {
         map.remove(path)
-        impl.syncWal()
+        impl.flushWal(true)
+        impl.cancelAllBackgroundWork(true)
         impl.close()
       } finally {
         lock.writeLock().unlock()
@@ -47,16 +49,26 @@ object LDBFactory extends ScorexLogging {
     }
   }
 
-  def open(path: File, options: Options): RegisteredDB = {
+  private val normalOptions: Options =  new Options()
+    .setCreateIfMissing(true)
+    .setWriteBufferSize(32 * SizeUnit.MB)
+    .setAllowMmapReads(true)
+    .setIncreaseParallelism(4)
+    .setCompressionType(CompressionType.LZ4_COMPRESSION)
+    .setCompactionStyle(CompactionStyle.LEVEL)
+
+  private val testOptions: Options =  new Options()
+    .setCreateIfMissing(true)
+    .setWriteBufferSize(64 * SizeUnit.KB)
+    .setManifestPreallocationSize(32 * SizeUnit.KB)
+    .setCompressionType(CompressionType.LZ4_COMPRESSION)
+    .setCompactionStyle(CompactionStyle.LEVEL)
+
+  def open(path: File): RegisteredDB = {
     lock.writeLock().lock()
     try {
       path.mkdirs()
-      options.setCreateIfMissing(true)
-        .setWriteBufferSize(32 * SizeUnit.MB)
-        .setAllowMmapReads(true)
-        .setIncreaseParallelism(4)
-        .setCompressionType(CompressionType.LZ4_COMPRESSION)
-        .setCompactionStyle(CompactionStyle.UNIVERSAL)
+      val options = if(System.getProperty("dbTest") == null) normalOptions else testOptions
       map.getOrElseUpdate(path, RegisteredDB(RocksDB.open(options, path.toString), path))
     } catch {
       case x: Throwable =>
@@ -65,18 +77,6 @@ object LDBFactory extends ScorexLogging {
         null
     } finally {
       lock.writeLock().unlock()
-    }
-  }
-
-  def createKvDb(path: File): LDBKVStore = {
-    try {
-      new LDBKVStore(open(path, new Options()))
-    } catch {
-      case x: Throwable =>
-        log.error(s"Failed to initialize storage: $x. Please check that directory $path could be accessed " +
-          s"and is not used by some other active node")
-        java.lang.System.exit(2)
-        null
     }
   }
 

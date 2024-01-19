@@ -11,7 +11,7 @@ import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.util.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.{LDBFactory, LDBVersionedStore}
+import scorex.db.{LDBFactory, LDBKVStore, LDBVersionedStore}
 import scorex.util.ByteArrayBuilder
 import scorex.util.serialization.VLQByteBufferWriter
 import scorex.utils.{Random => RandomBytes}
@@ -350,7 +350,7 @@ class VersionedLDBAVLStorageSpecification
     blockchainWorkflowTest(prover)
 
     val storage = prover.storage.asInstanceOf[VersionedLDBAVLStorage]
-    val store = LDBFactory.createKvDb(getRandomTempDir)
+    val store = new LDBKVStore(LDBFactory.open(getRandomTempDir))
 
     val rootNodeLabel = storage.dumpSnapshot(store, manifestDepth, prover.digest.dropRight(1)).get
     rootNodeLabel.sameElements(prover.digest.dropRight(1)) shouldBe true

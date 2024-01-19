@@ -142,7 +142,7 @@ object SnapshotsDb {
   // internal method to open or init snapshots database in given folder
   // private[nodeView] to use it in tests also
   private[nodeView] def create(dir: String): SnapshotsDb = {
-    val store = LDBFactory.createKvDb(new File(dir))
+    val store = new LDBKVStore(LDBFactory.open(new File(dir)))
     new SnapshotsDb(store)
   }
 

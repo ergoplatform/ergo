@@ -1,6 +1,6 @@
 package scorex.db
 
-import org.rocksdb.{Options, ReadOptions, WriteBatch, WriteOptions}
+import org.rocksdb.{ReadOptions, WriteBatch, WriteOptions}
 import scorex.crypto.hash.Blake2b256
 import scorex.db.LDBFactory.RegisteredDB
 import scorex.db.LDBVersionedStore.SnapshotReadInterface
@@ -51,12 +51,8 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   //default write options, no sync!
   private val writeOptions = new WriteOptions()
 
-  private def createDB(dir: File, storeName: String): RegisteredDB = {
-    val op = new Options()
-      .setCreateIfMissing(true)
-      .setParanoidChecks(true)
-    LDBFactory.open(new File(dir, storeName), op)
-  }
+  private def createDB(dir: File, storeName: String): RegisteredDB =
+    LDBFactory.open(new File(dir, storeName))
 
   /** Set new keep versions threshold, remove not needed versions and return old value of keep versions */
   def setKeepVersions(newKeepVersions: Int): Int = {

@@ -34,6 +34,20 @@ trait KVStoreReader extends AutoCloseable {
   }
 
   /**
+   * Query if database contains key
+   * @param key - key
+   * @return true if key exists, false otherwise
+   */
+  def contains(key: K): Boolean = {
+    lock.readLock().lock()
+    try {
+      db.contains(key)
+    } finally {
+      lock.readLock().unlock()
+    }
+  }
+
+  /**
     * Read all the database elements.
     * @return iterator over database contents
     */

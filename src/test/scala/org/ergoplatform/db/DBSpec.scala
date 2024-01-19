@@ -3,7 +3,6 @@ package org.ergoplatform.db
 import akka.util.ByteString
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.utils.TestFileUtils
-import org.rocksdb.Options
 import scorex.db.LDBFactory.RegisteredDB
 import scorex.db.{LDBFactory, LDBKVStore, LDBVersionedStore}
 
@@ -22,11 +21,7 @@ trait DBSpec extends TestFileUtils {
   protected def byteString32(s: String): Array[Byte] = Algos.hash(byteString(s))
 
   protected def withDb[T](body: RegisteredDB => T): T = {
-    val options = new Options()
-    options.setCreateIfMissing(true)
-    options.setParanoidChecks(true)
-    options.setMaxOpenFiles(2000)
-    val db = LDBFactory.open(createTempDir, options)
+    val db = LDBFactory.open(createTempDir)
     try body(db) finally db.close()
   }
 

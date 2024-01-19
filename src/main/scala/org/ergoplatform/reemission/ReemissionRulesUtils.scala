@@ -44,7 +44,7 @@ object ReemissionRulesUtils {
     println(new ErgoAddressEncoder(ErgoAddressEncoder.TestnetNetworkPrefix).fromString(p2sAddress.toString()))
     println("injectioon box p2s: " + p2sAddress)
 
-    val settings = ErgoSettingsReader.read()
+    val settings = ErgoSettingsReader.read()(null)
 
     println("Monetary settings: " + settings.chainSettings.monetary)
     println("Reemission settings: " + settings.chainSettings.reemission)

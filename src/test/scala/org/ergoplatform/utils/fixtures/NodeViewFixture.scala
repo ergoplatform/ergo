@@ -19,7 +19,7 @@ class NodeViewFixture(protoSettings: ErgoSettings, parameters: Parameters) exten
   implicit val executionContext: ExecutionContext = actorSystem.dispatchers.lookup("scorex.executionContext")
   implicit def ctx: NodeViewTestContext = this
 
-  val nodeViewDir: java.io.File = createTempDir
+  val nodeViewDir: java.io.File = createTempDir()
   @volatile var settings: ErgoSettings = protoSettings.copy(directory = nodeViewDir.getAbsolutePath)
   val emission: EmissionRules = new EmissionRules(settings.chainSettings.monetary)
   @volatile var nodeViewHolderRef: ActorRef = ErgoNodeViewRef(settings)

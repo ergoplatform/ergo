@@ -1,7 +1,7 @@
 package org.ergoplatform.wallet.utils
 
 import java.io.File
-import java.nio.file.{Files, Path}
+import java.nio.file.Files
 import scala.collection.JavaConverters._
 import scala.util.Try
 
@@ -18,16 +18,7 @@ trait FileUtils {
     }
   }
 
-  def createTempFile: java.io.File = {
-    val dir = createTempDir
-    val prefix = scala.util.Random.alphanumeric.take(randomPrefixLength).mkString
-    val suffix = scala.util.Random.alphanumeric.take(randomPrefixLength).mkString
-    val file = java.nio.file.Files.createTempFile(dir.toPath, prefix, suffix).toFile
-    file.deleteOnExit()
-    file
-  }
-
-  def createTempDir: java.io.File = {
+  implicit def createTempDir(nothing: Int = 0): java.io.File = {
     val rndString = scala.util.Random.alphanumeric.take(randomPrefixLength).mkString
     createTempDirForPrefix(rndString)
   }

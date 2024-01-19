@@ -20,7 +20,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
 
       val fb = validFullBlock(parentOpt = None, us, bh)
-      val dir2 = createTempDir
+      val dir2 = createTempDir()
       val ds = DigestState.create(Some(us.version), Some(us.rootDigest), dir2, settings)
       ds.applyModifier(fb, None)(_ => ()) shouldBe 'success
       ds.close()

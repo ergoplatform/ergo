@@ -62,7 +62,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
         settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs, genesisId = genesisIdOpt)
     }
 
-    val dir = createTempDir
+    val dir = createTempDir()
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
       nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 

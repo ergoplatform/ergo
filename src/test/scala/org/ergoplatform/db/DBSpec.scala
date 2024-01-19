@@ -21,7 +21,7 @@ trait DBSpec extends TestFileUtils {
   protected def byteString32(s: String): Array[Byte] = Algos.hash(byteString(s))
 
   protected def withDb[T](body: RegisteredDB => T): T = {
-    val db = LDBFactory.open(createTempDir)
+    val db = LDBFactory.open(createTempDir())
     try body(db) finally db.close()
   }
 
@@ -31,7 +31,7 @@ trait DBSpec extends TestFileUtils {
     withDb { db: RegisteredDB => body(new LDBKVStore(db)) }
 
   protected def withVersionedStore[T](keepVersions: Int)(body: LDBVersionedStore => T): T = {
-    val db = new LDBVersionedStore(createTempDir, keepVersions)
+    val db = new LDBVersionedStore(createTempDir(), keepVersions)
     try body(db) finally db.close()
   }
 

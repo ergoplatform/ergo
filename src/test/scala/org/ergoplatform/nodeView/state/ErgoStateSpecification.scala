@@ -67,7 +67,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("generateGenesisUtxoState & generateGenesisDigestState are compliant") {
     val settings = ErgoSettingsReader.read(Args.empty)
-    val dir = createTempDir
+    val dir = createTempDir()
     val rootHash = createUtxoState(settings)._1.rootDigest
     val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings).rootDigest
     rootHash shouldBe expectedRootHash

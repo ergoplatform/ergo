@@ -200,7 +200,7 @@ scapegoatVersion in ThisBuild := "1.3.3"
 scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
-Test / javaOptions := Seq("-DdbTest=true")
+Test / javaOptions := Seq("-Denv=test")
 
 lazy val avldb = (project in file("avldb"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions

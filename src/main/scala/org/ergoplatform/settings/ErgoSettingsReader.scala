@@ -23,12 +23,17 @@ object ErgoSettingsReader extends ScorexLogging
   with NodeConfigurationReaders
   with SettingsReaders {
 
-  def read(args: Args = Args.empty): ErgoSettings = {
+  def read(args: Args = Args.empty)(implicit tmp: Int => File): ErgoSettings = {
     fromConfig(readConfig(args), args.networkTypeOpt)
   }
 
-  def fromConfig(config: Config, desiredNetworkTypeOpt: Option[NetworkType] = None): ErgoSettings = {
-    val directory = config.as[String](s"$configPath.directory")
+  def fromConfig(config: Config, desiredNetworkTypeOpt: Option[NetworkType] = None)(implicit tmp: Int => File): ErgoSettings = {
+    val directory = if(System.getProperty("env") == "test") {
+      val dir = tmp(0)
+      dir.mkdirs()
+      dir.getAbsolutePath
+    } else
+      config.as[String](s"$configPath.directory")
     val networkTypeName = config.as[String](s"$configPath.networkType")
     val networkType = NetworkType.fromString(networkTypeName)
       .getOrElse(throw new Error(s"Unknown `networkType = $networkTypeName`"))

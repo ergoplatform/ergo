@@ -40,7 +40,7 @@ object LDBFactory extends ScorexLogging {
       lock.writeLock().lock()
       try {
         map.remove(path)
-        impl.flushWal(true)
+        impl.syncWal()
         impl.cancelAllBackgroundWork(true)
         impl.close()
       } finally {
@@ -68,7 +68,7 @@ object LDBFactory extends ScorexLogging {
     lock.writeLock().lock()
     try {
       path.mkdirs()
-      val options = if(System.getProperty("dbTest") == null) normalOptions else testOptions
+      val options = if(System.getProperty("env") == "test") testOptions else normalOptions
       map.getOrElseUpdate(path, RegisteredDB(RocksDB.open(options, path.toString), path))
     } catch {
       case x: Throwable =>

@@ -78,7 +78,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
     val s = utxoSetSnapshotProcessor.downloadedChunksIterator().map(s => ModifierId @@ Algos.encode(s.id)).toSeq
     s shouldBe subtreeIdsEncoded
 
-    val dir = createTempDir
+    val dir = createTempDir()
     val store = new LDBVersionedStore(dir, initialKeepVersions = 100)
     val restoredProver = utxoSetSnapshotProcessor.createPersistentProver(store, history, snapshotHeight, blockId).get
     bh.sortedBoxes.foreach { box =>

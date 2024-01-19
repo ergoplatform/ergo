@@ -27,14 +27,14 @@ trait ValidBlocksGenerators
   extends TestkitHelpers with TestFileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
   def createUtxoState(settings: ErgoSettings): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, settings)
+    ErgoState.generateGenesisUtxoState(createTempDir(), settings)
   }
 
   def createUtxoState(bh: BoxHolder, parameters: Parameters): UtxoState =
-    UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    UtxoState.fromBoxHolder(bh, None, createTempDir(), settings, parameters)
 
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
-    DigestState.create(Some(version), Some(digest), createTempDir, settings)
+    DigestState.create(Some(version), Some(digest), createTempDir(), settings)
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new RandomWrapper)

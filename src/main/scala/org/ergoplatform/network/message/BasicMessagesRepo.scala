@@ -11,10 +11,6 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.ModifierId
 import org.ergoplatform.sdk.wallet.Constants.ModifierIdLength
 
-case class NipopowProofData(m: Int, k: Int, headerId: Option[ModifierId]) {
-  def headerIdBytesOpt: Option[Array[Byte]] = headerId.map(Algos.decode).flatMap(_.toOption)
-}
-
 /**
   * The `GetPeer` message requests an `Peers` message from the receiving node,
   * preferably one with lots of `PeerSpec` of other receiving nodes.
@@ -204,79 +200,6 @@ object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
 
     val length = r.getUInt().toIntExact
     r.getBytes(length)
-  }
-
-}
-
-/**
-  * The `GetNipopowProof` message requests a `NipopowProof` message from the receiving node
-  */
-object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
-
-  val SizeLimit = 1000
-
-  val messageCode: MessageCode = 90: Byte
-  val messageName: String = "GetNipopowProof"
-
-  override def serialize(data: NipopowProofData, w: Writer): Unit = {
-    w.putInt(data.m)
-    w.putInt(data.k)
-    data.headerIdBytesOpt match {
-      case Some(idBytes) =>
-        w.put(1)
-        w.putBytes(idBytes)
-      case None =>
-        w.put(0)
-    }
-    w.putUShort(0) // to allow adding new data in future, we are adding possible pad length
-  }
-
-  override def parse(r: Reader): NipopowProofData = {
-    require(r.remaining <= SizeLimit, s"Too big GetNipopowProofSpec message(size: ${r.remaining})")
-
-    val m = r.getInt()
-    val k = r.getInt()
-
-    val headerIdPresents = r.getByte() == 1
-    val headerIdOpt = if (headerIdPresents) {
-      Some(ModifierId @@ Algos.encode(r.getBytes(ModifierIdLength)))
-    } else {
-      None
-    }
-    val remainingBytes = r.getUShort()
-    if (remainingBytes > 0 && remainingBytes < SizeLimit) {
-      r.getBytes(remainingBytes) // current version of reader just skips possible additional bytes
-    }
-    NipopowProofData(m, k, headerIdOpt)
-  }
-
-}
-
-/**
-  * The `NipopowProof` message is a reply to a `GetNipopowProof` message.
-  */
-object NipopowProofSpec extends MessageSpecV1[Array[Byte]] {
-
-  val SizeLimit = 2000000
-  override val messageCode: Byte = 91
-  override val messageName: String = "NipopowProof"
-
-  override def serialize(proof: Array[Byte], w: Writer): Unit = {
-    w.putUInt(proof.length)
-    w.putBytes(proof)
-    w.putUShort(0) // to allow adding new data in future, we are adding possible pad length
-  }
-
-  override def parse(r: Reader): Array[Byte] = {
-    require(r.remaining <= SizeLimit, s"Too big NipopowProofSpec message(size: ${r.remaining})")
-    val proofSize = r.getUInt().toIntExact
-    require(proofSize > 0  && proofSize < SizeLimit)
-    val proof = r.getBytes(proofSize)
-    val remainingBytes = r.getUShort()
-    if (remainingBytes > 0 && remainingBytes < SizeLimit) {
-      r.getBytes(remainingBytes) // current version of reader just skips possible additional bytes
-    }
-    proof
   }
 
 }

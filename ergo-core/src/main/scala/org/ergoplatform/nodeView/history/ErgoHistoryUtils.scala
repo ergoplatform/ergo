@@ -24,5 +24,11 @@ object ErgoHistoryUtils {
   val EmptyHistoryHeight: Int = 0
   val GenesisHeight: Int = EmptyHistoryHeight + 1 // first block has height == 1
 
-  def heightOf(headerOpt: Option[Header]): Int = headerOpt.map(_.height).getOrElse(EmptyHistoryHeight)
+  def heightOf(headerOpt: Option[Header]): Int = {
+    headerOpt match {
+      case Some(header) => header.height
+      case None => EmptyHistoryHeight
+    }
+  }
+  
 }

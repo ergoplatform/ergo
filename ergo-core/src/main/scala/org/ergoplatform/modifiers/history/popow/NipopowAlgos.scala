@@ -106,7 +106,7 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
       }
 
     loop(level = 0).map { case (lvl, size) =>
-      math.pow(2, lvl.toDouble) * size // 2^µ * |C↑µ|
+     (1 << lvl) * size // 2^µ * |C↑µ|
     }.max.toInt
   }
 

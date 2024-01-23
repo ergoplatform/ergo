@@ -1,5 +1,7 @@
 # ergo-core
 
+Toy working example client code available [here](https://github.com/ccellado/ergo-test-client/tree/main).
+
 ## Establishing connections to the node
 
 ```mermaid

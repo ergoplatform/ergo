@@ -564,6 +564,29 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     tx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, emptyStateContext) shouldBe true
   }
 
+
+  property("context extension with neg and pos ids") {
+    val negId: Byte = -20
+
+    ADKey @@ Base16.decode("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742").get
+
+    val b = new ErgoBox(1000000000L, Constants.TrueLeaf, Colls.emptyColl,
+      Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+      0, 0)
+    val ce = ContextExtension(Map(negId -> IntConstant(0), (-negId) -> IntConstant(1)))
+    val input = Input(b.id, ProverResult(Array.emptyByteArray, ce))
+
+    val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
+
+    val utx = UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(oc))
+
+    val tx = defaultProver.sign(utx, IndexedSeq(b), IndexedSeq.empty, emptyStateContext)
+      .map(ErgoTransaction.apply)
+      .get
+
+    tx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, emptyStateContext) shouldBe true
+  }
+
   /*
  import sigma.{AnyValue, Coll}
  import sigmastate.SType

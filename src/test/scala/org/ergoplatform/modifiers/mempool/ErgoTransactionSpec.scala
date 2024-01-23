@@ -104,9 +104,9 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     }.get
     val inputs: IndexedSeq[Input] = IndexedSeq(
       new Input(ADKey @@ Base16.decode("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742").get,
-        new ProverResult(Base16.decode("b4a04b4201da0578be3dac11067b567a73831f35b024a2e623c1f8da230407f63bab62c62ed9b93808b106b5a7e8b1751fa656f4c5de4674").get, new ContextExtension(Map()))),
+        new ProverResult(Base16.decode("b4a04b4201da0578be3dac11067b567a73831f35b024a2e623c1f8da230407f63bab62c62ed9b93808b106b5a7e8b1751fa656f4c5de4674").get, ContextExtension.empty)),
       new Input(ADKey @@ Base16.decode("ca796a4fc9c0d746a69702a77bd78b1a80a5ef5bf5713bbd95d93a4f23b27ead").get,
-        new ProverResult(Base16.decode("5aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340").get, new ContextExtension(Map()))),
+        new ProverResult(Base16.decode("5aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340").get, ContextExtension.empty)),
     )
     val outputCandidates: IndexedSeq[ErgoBoxCandidate] = IndexedSeq(
       new ErgoBoxCandidate(1000000000L, minerPk, height, Colls.emptyColl, Map()),
@@ -542,5 +542,60 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
       }
     }
   }
+
+  property("context extension with neg id") {
+    val negId: Byte = -20
+
+    ADKey @@ Base16.decode("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742").get
+
+    val b = new ErgoBox(1000000000L, Constants.TrueLeaf, Colls.emptyColl,
+                         Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+                  0, 0)
+    val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension(Map(negId -> IntConstant(0)))))
+
+    val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
+
+    val utx = UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(oc))
+
+    val tx = defaultProver.sign(utx, IndexedSeq(b), IndexedSeq.empty, emptyStateContext)
+      .map(ErgoTransaction.apply)
+      .get
+
+    tx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, emptyStateContext) shouldBe true
+  }
+
+  /*
+ import sigma.{AnyValue, Coll}
+ import sigmastate.SType
+ import sigmastate.SType.AnyOps
+ import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
+ import sigmastate.eval.CostingSigmaDslBuilder.Colls
+ import sigmastate.eval.Evaluation.stypeToRType
+ import sigmastate.eval.Extensions.toAnyValue
+ import sigmastate.interpreter.ContextExtension
+
+ val ce = ContextExtension(Map(-6.toByte -> ByteArrayConstant(Array(0: Byte))))
+ val ce2 = ContextExtension.serializer.fromBytes(ContextExtension.serializer.toBytes(ce))
+
+ def contextVars(m: Map[Byte, AnyValue]): Coll[AnyValue] = {
+   val maxKey = if (m.keys.isEmpty) 0 else m.keys.max  // TODO optimize: max takes 90% of this method
+   val res = new Array[AnyValue](maxKey + 1)
+   for ((id, v) <- m) {
+     res(id) = v
+   }
+   Colls.fromArray(res)
+ }
+
+ if (false) {
+   val varMap = ce2.values.map { case (k, v: EvaluatedValue[_]) =>
+     val tVal = stypeToRType[SType](v.tpe)
+     k -> toAnyValue(v.value.asWrappedType)(tVal)
+   }.toMap
+   contextVars(varMap)
+ } */
+
+
+  // val arr = new Array[Int](-5)
+
 
 }

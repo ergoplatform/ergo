@@ -544,7 +544,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   }
 
   property("context extension with neg id") {
-    val negId: Byte = -20
+    val negId: Byte = -1
 
     ADKey @@ Base16.decode("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742").get
 
@@ -557,11 +557,10 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
     val utx = UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(oc))
 
-    val tx = defaultProver.sign(utx, IndexedSeq(b), IndexedSeq.empty, emptyStateContext)
+    val txTry = defaultProver.sign(utx, IndexedSeq(b), IndexedSeq.empty, emptyStateContext)
       .map(ErgoTransaction.apply)
-      .get
 
-    tx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, emptyStateContext) shouldBe true
+    txTry.isSuccess shouldBe false
   }
 
 
@@ -580,45 +579,10 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
 
     val utx = UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(oc))
 
-    val tx = defaultProver.sign(utx, IndexedSeq(b), IndexedSeq.empty, emptyStateContext)
+    val txTry = defaultProver.sign(utx, IndexedSeq(b), IndexedSeq.empty, emptyStateContext)
       .map(ErgoTransaction.apply)
-      .get
 
-    tx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, emptyStateContext) shouldBe true
+    txTry.isSuccess shouldBe false
   }
-
-  /*
- import sigma.{AnyValue, Coll}
- import sigmastate.SType
- import sigmastate.SType.AnyOps
- import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
- import sigmastate.eval.CostingSigmaDslBuilder.Colls
- import sigmastate.eval.Evaluation.stypeToRType
- import sigmastate.eval.Extensions.toAnyValue
- import sigmastate.interpreter.ContextExtension
-
- val ce = ContextExtension(Map(-6.toByte -> ByteArrayConstant(Array(0: Byte))))
- val ce2 = ContextExtension.serializer.fromBytes(ContextExtension.serializer.toBytes(ce))
-
- def contextVars(m: Map[Byte, AnyValue]): Coll[AnyValue] = {
-   val maxKey = if (m.keys.isEmpty) 0 else m.keys.max  // TODO optimize: max takes 90% of this method
-   val res = new Array[AnyValue](maxKey + 1)
-   for ((id, v) <- m) {
-     res(id) = v
-   }
-   Colls.fromArray(res)
- }
-
- if (false) {
-   val varMap = ce2.values.map { case (k, v: EvaluatedValue[_]) =>
-     val tVal = stypeToRType[SType](v.tpe)
-     k -> toAnyValue(v.value.asWrappedType)(tVal)
-   }.toMap
-   contextVars(varMap)
- } */
-
-
-  // val arr = new Array[Int](-5)
-
 
 }

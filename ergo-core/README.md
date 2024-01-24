@@ -6,8 +6,8 @@ Toy working example client code available [here](https://github.com/ccellado/erg
 
 ```mermaid
 sequenceDiagram
-    Client-->>+Node: Establish TCP connection
-    Node->>+Client: Handshake
+    Client-->>Node: Establish TCP connection
+    Node->>Client: Handshake
     Client->>Node: Handhake
     Note over Client,Node: Message exchange started
 ```
@@ -15,7 +15,7 @@ sequenceDiagram
 ### Connect to peer 📞
 First connect to peer node and get `Handshake` message.
 
-For the rest of the guide assume the `Message body` as `byteBuffer`.
+For the rest of the guide assume the message body as `byteBuffer`.
 ```scala
 import org.ergoplatform.network.HandshakeSerializer
 
@@ -94,7 +94,7 @@ The peer node will start sending `SyncInfo` messages to us, since it is checking
 Our client is syncing instead.
 
 ### Send [ErgoSyncInfoV2](src/main/scala/org/ergoplatform/nodeView/history/ErgoSyncInfo.scala) ♲
-with empty `lastHeaders`, so the node knows client is just beginning to sync
+With empty `lastHeaders` so the node knows client is just beginning to sync.
 
 ```scala
 import org.ergoplatform.nodeView.history.ErgoSyncInfoV2

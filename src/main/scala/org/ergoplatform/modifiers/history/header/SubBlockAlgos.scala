@@ -1,14 +1,15 @@
 package org.ergoplatform.modifiers.history.header
 
 import org.ergoplatform.modifiers.history.header.SubBlockAlgos.SubBlockInfo
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scorex.core.{NodeViewModifier, bytesToId, idToBytes}
-import scorex.core.network.message.Message.MessageCode
-import scorex.core.network.message.MessageSpecV1
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.network.message.MessageConstants.MessageCode
+import org.ergoplatform.network.message.MessageSpecV1
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
+import org.ergoplatform.serialization.ErgoSerializer
+import org.ergoplatform.settings.Constants.ModifierIdSize
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.collection.mutable
 
@@ -27,6 +28,8 @@ object SubBlockAlgos {
   val subsPerBlock = 128 // sub blocks per block
 
   val weakTransactionIdLength = 6
+
+  def weakId(tx: ErgoTransaction) = tx.id.take(SubBlockAlgos.weakTransactionIdLength)
 
   def isSub(header: Header, requiredDifficulty: Difficulty): Boolean = {
     val diff = requiredDifficulty / subsPerBlock
@@ -63,14 +66,14 @@ object SubBlockAlgos {
       override def serialize(sbi: SubBlockInfo, w: Writer): Unit = {
         w.put(sbi.version)
         HeaderSerializer.serialize(sbi.subBlock, w)
-        w.putBytes(sbi.prevSubBlockId)
+        w.putOption(sbi.prevSubBlockId){case (w, bs) => w.putBytes(bs)}
       }
 
       override def parse(r: Reader): SubBlockInfo = {
         val version = r.getByte()
         if (version == initialMessageVersion) {
           val subBlock = HeaderSerializer.parse(r)
-          val prevSubBlockId = r.getBytes(32)
+          val prevSubBlockId = r.getOption(r.getBytes(32))
           new SubBlockInfo(version, subBlock, prevSubBlockId)
         } else {
           throw new Exception("Unsupported sub-block message version")
@@ -115,7 +118,7 @@ object SubBlockAlgos {
     }
 
     override def parse(r: Reader): ModifierId = {
-      bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
+      bytesToId(r.getBytes(ModifierIdSize))
     }
   }
 
@@ -175,7 +178,7 @@ object structures {
     */
   def processSubBlock(sbi: SubBlockInfo): (Seq[ModifierId], Seq[ModifierId]) = {
     val sbHeader = sbi.subBlock
-    val prevSbId = bytesToId(sbi.prevSubBlockId)
+    val prevSbId = sbi.prevSubBlockId.map(bytesToId).getOrElse(ModifierId @@ "") // todo: check
     val sbHeight = sbHeader.height
 
     def emptyResult: (Seq[ModifierId], Seq[ModifierId]) = Seq.empty -> Seq.empty

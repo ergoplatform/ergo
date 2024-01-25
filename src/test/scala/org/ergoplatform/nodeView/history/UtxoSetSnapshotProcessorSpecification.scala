@@ -1,12 +1,13 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.HistoryTestHelpers
-import scorex.core.VersionTag
-import scorex.core.serialization.{ManifestSerializer, SubtreeSerializer}
+import org.ergoplatform.core.VersionTag
+import org.ergoplatform.serialization.{ManifestSerializer, SubtreeSerializer}
 import scorex.db.LDBVersionedStore
 import scorex.util.ModifierId
 
@@ -19,7 +20,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
   val epochLength = 20
 
   val utxoSetSnapshotProcessor = new UtxoSetSnapshotProcessor {
-    var minimalFullBlockHeightVar = ErgoHistory.GenesisHeight
+    var minimalFullBlockHeightVar = GenesisHeight
     override protected val settings: ErgoSettings = s.copy(chainSettings =
       s.chainSettings.copy(voting = s.chainSettings.voting.copy(votingLength = epochLength)))
     override protected val historyStorage: HistoryStorage = HistoryStorage(settings)

@@ -3,7 +3,7 @@ package scorex.core.network
 import akka.actor.ActorRef
 import io.circe.{Encoder, Json}
 import org.ergoplatform.network.ModePeerFeature
-import scorex.core.network.peer.PeerInfo
+import org.ergoplatform.network.peer.PeerInfo
 
 /**
   * Peer connected to our node

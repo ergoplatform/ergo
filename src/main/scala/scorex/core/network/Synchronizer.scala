@@ -1,6 +1,6 @@
 package scorex.core.network
 
-import scorex.core.network.message.MessageSpec
+import org.ergoplatform.network.message.MessageSpec
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}

@@ -2,43 +2,39 @@ package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
-import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.{BlockSection, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
-import org.ergoplatform.modifiers.history.popow.NipopowProof
+import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
-import org.ergoplatform.nodeView.history._
-import ErgoNodeViewSynchronizer.{CheckModifiersToDownload, IncomingTxInfo, TransactionProcessingCacheRecord}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.settings.{Algos, ErgoSettings, NetworkSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
-import scorex.core.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionFromRemote}
 import scorex.core.network.ModifiersStatus.Requested
-import scorex.core.{NodeViewModifier, idsToString}
+import org.ergoplatform.core.idsToString
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoSetSnapshotPersistence, UtxoStateReader}
-import scorex.core.network.message._
-import org.ergoplatform.nodeView.wallet.ErgoWalletReader
-import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
+import org.ergoplatform.network.message._
+import org.ergoplatform.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
-import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.settings.NetworkSettings
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.MalformedModifierError
+import org.ergoplatform.network.message.{InvData, Message, ModifiersData}
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
-import scorex.core.network.peer.PenaltyType
+import org.ergoplatform.network.peer.PenaltyType
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
-import scorex.core.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
-import scorex.core.transaction.TooHighCostError
+import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
+import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
+import org.ergoplatform.modifiers.transaction.TooHighCostError
+import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 
 import scala.annotation.tailrec
@@ -58,6 +54,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncTracker: ErgoSyncTracker,
                                deliveryTracker: DeliveryTracker)(implicit ex: ExecutionContext)
   extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
+
+  import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 
   type EncodedManifestId = ModifierId
 
@@ -285,7 +283,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! SendToNetwork(msg, Broadcast)
   }
 
-  protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
+  protected def broadcastModifierInv(m: ErgoNodeViewModifier): Unit = {
     broadcastModifierInv(m.modifierTypeId, m.id)
   }
 
@@ -707,7 +705,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                       typeId: NetworkObjectTypeId.Value,
                                       requestedModifiers: Map[ModifierId, Array[Byte]],
                                       remote: ConnectedPeer): Unit  = {
-    Constants.modifierSerializers.get(typeId) match {
+    modifierSerializers.get(typeId) match {
       case Some(serializer: ErgoSerializer[BlockSection]@unchecked) =>
         // parse all modifiers and put them to modifiers cache
         val parsed: Iterable[BlockSection] = parseModifiers(requestedModifiers, typeId, serializer, remote)
@@ -790,10 +788,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     *
     * @return collection of parsed modifiers
     */
-  def parseModifiers[M <: NodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
-                                            modifierTypeId: NetworkObjectTypeId.Value,
-                                            serializer: ErgoSerializer[M],
-                                            remote: ConnectedPeer): Iterable[M] = {
+  def parseModifiers[M <: ErgoNodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
+                                                modifierTypeId: NetworkObjectTypeId.Value,
+                                                serializer: ErgoSerializer[M],
+                                                remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
       serializer.parseBytesTry(bytes) match {
         case Success(mod) if id == mod.id =>
@@ -1178,7 +1176,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
       var size = 5 //message type id + message size
       var batch = mods.takeWhile { case (_, modBytes) =>
-        size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
+        size += ErgoNodeViewModifier.ModifierIdSize + 4 + modBytes.length
         size < ModifiersSpec.maxMessageSize
       }
       if (batch.isEmpty) {
@@ -1614,127 +1612,13 @@ object ErgoNodeViewSynchronizer {
 
   case object CheckModifiersToDownload
 
-  object ReceivableMessages {
-
-    // getLocalSyncInfo messages
-    case object SendLocalSyncInfo
-
-    /**
-      * Check delivery of modifier with type `modifierTypeId` and id `modifierId`.
-      * `source` may be defined if we expect modifier from concrete peer or None if
-      * we just need some modifier, but don't know who have it
-      *
-      */
-    case class CheckDelivery(source: ConnectedPeer,
-                             modifierTypeId: NetworkObjectTypeId.Value,
-                             modifierId: ModifierId)
-
-    trait PeerManagerEvent
-
-    case class HandshakedPeer(remote: ConnectedPeer) extends PeerManagerEvent
-
-    case class DisconnectedPeer(peer: ConnectedPeer) extends PeerManagerEvent
-
-    trait NodeViewHolderEvent
-
-    trait NodeViewChange extends NodeViewHolderEvent
-
-    case class ChangedHistory(reader: ErgoHistoryReader) extends NodeViewChange
-
-    case class ChangedMempool(mempool: ErgoMemPoolReader) extends NodeViewChange
-
-    case class ChangedVault(reader: ErgoWalletReader) extends NodeViewChange
-
-    case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
-
-    /**
-      * Event which is published when rollback happened (on finding a better chain)
-      * @param branchPoint - block id which is last in the chain after rollback (before applying blocks from a fork)
-      */
-    case class Rollback(branchPoint: ModifierId) extends NodeViewHolderEvent
-
-    case object RollbackFailed extends NodeViewHolderEvent
-
-    // hierarchy of events regarding modifiers application outcome
-    trait ModificationOutcome extends NodeViewHolderEvent
-
-    trait InitialTransactionCheckOutcome extends ModificationOutcome {
-      val transaction: UnconfirmedTransaction
-    }
-
-    case class FailedTransaction(transaction: UnconfirmedTransaction, error: Throwable) extends InitialTransactionCheckOutcome
-
-    case class SuccessfulTransaction(transaction: UnconfirmedTransaction) extends InitialTransactionCheckOutcome
-
-    /**
-      * Transaction declined by the mempool (not permanently invalidated, so pool can accept it in future)
-      */
-    case class DeclinedTransaction(transaction: UnconfirmedTransaction) extends InitialTransactionCheckOutcome
-
-    /**
-      * Transaction which was failed not immediately but after sitting for some time in the mempool or during block
-      * candidate generation
-      */
-    case class FailedOnRecheckTransaction(id : ModifierId, error: Throwable) extends ModificationOutcome
-
-    /**
-      * A signal that block section with id `modifierId` was invalidated due to `error`, but it may be valid in future
-      */
-    case class RecoverableFailedModification(typeId: NetworkObjectTypeId.Value, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
-
-    /**
-      * A signal that block section with id `modifierId` was permanently invalidated during stateless checks
-      */
-    case class SyntacticallyFailedModification(typeId: NetworkObjectTypeId.Value, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
-
-    /**
-      * Signal associated with stateful validation of a block section
-      */
-    case class SemanticallyFailedModification(typeId: NetworkObjectTypeId.Value, modifierId: ModifierId, error: Throwable) extends ModificationOutcome
-
-    /**
-      * Signal associated with stateless validation of a block section
-      */
-    case class SyntacticallySuccessfulModifier(typeId: NetworkObjectTypeId.Value, modifierId: ModifierId) extends ModificationOutcome
-
-    /**
-      * Signal sent by node view holder when a full block is applied to state
-      * @param header - full block's header
-      */
-    case class FullBlockApplied(header: Header) extends ModificationOutcome
-
-    /**
-      * Signal sent after block sections processing (validation and application to state) done
-      * @param headersCacheSize - headers cache size after processing
-      * @param blockSectionsCacheSize - block sections cache size after processing
-      * @param cleared - blocks removed from cache being overfull
-      */
-    case class BlockSectionsProcessingCacheUpdate(headersCacheSize: Int,
-                                                  blockSectionsCacheSize: Int,
-                                                  cleared: (NetworkObjectTypeId.Value, Seq[ModifierId]))
-
-    /**
-      * Command to re-check mempool to clean transactions become invalid while sitting in the mempool up
-      * @param state - up-to-date state to check transaction against
-      * @param mempool - mempool to check
-      */
-    case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
-
-    /**
-      * Signal for a central node view holder component to initialize UTXO state from UTXO set snapshot
-      * stored in the local database
-      *
-      * @param blockHeight - height of a block corresponding to the UTXO set snapshot
-      * @param blockId - id of a block corresponding to the UTXO set snapshot
-      */
-    case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
-
-    /**
-      * Command for a central node view holder component to process NiPoPoW proof,
-      * and possibly initialize headers chain from a best NiPoPoW proof known, when enough proofs collected
-      * @param nipopowProof - proof to initialize history from
-      */
-    case class ProcessNipopow(nipopowProof: NipopowProof)
-  }
-
+  /**
+   * Serializers for block sections and transactions
+   */
+  val modifierSerializers: Map[NetworkObjectTypeId.Value, ErgoSerializer[_ <: ErgoNodeViewModifier]] =
+    Map(Header.modifierTypeId -> HeaderSerializer,
+      Extension.modifierTypeId -> ExtensionSerializer,
+      BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
+      ADProofs.modifierTypeId -> ADProofsSerializer,
+      ErgoTransaction.modifierTypeId -> ErgoTransactionSerializer)
 }

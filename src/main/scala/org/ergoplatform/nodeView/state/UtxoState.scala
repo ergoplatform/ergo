@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.core.VersionTag
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -11,10 +12,10 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
 import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import scorex.core._
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.ModifierValidator
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.core._
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -49,7 +50,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
-    store.get(scorex.core.versionToBytes(version)) match {
+    store.get(versionToBytes(version)) match {
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
@@ -80,7 +81,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
+    val txProcessing = ErgoState.execTransactions(transactions, currentStateContext, ergoSettings.nodeSettings)(checkBoxExistence)
     if (txProcessing.isValid) {
       log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
       val blockOpsTry = ErgoState.stateChanges(transactions).flatMap { stateChanges =>
@@ -143,7 +144,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
             var proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
 
-            if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
+            if (!store.get(org.ergoplatform.core.idToBytes(fb.id))
+                  .exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
               throw new Exception("Storage kept roothash is not equal to the declared one")
             }
 
@@ -192,7 +194,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             }
 
             if (fb.adProofs.isEmpty) {
-              if (fb.height >= estimatedTip.getOrElse(Int.MaxValue) - stateContext.ergoSettings.nodeSettings.adProofsSuffixLength) {
+              if (fb.height >= estimatedTip.getOrElse(Int.MaxValue) - ergoSettings.nodeSettings.adProofsSuffixLength) {
                 val adProofs = ADProofs(fb.header.id, proofBytes)
                 generate(LocallyGeneratedModifier(adProofs))
               }
@@ -309,7 +311,7 @@ object UtxoState {
 
     val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
 
-    val defaultStateContext = ErgoStateContext.empty(settings, parameters)
+    val defaultStateContext = ErgoStateContext.empty(settings.chainSettings, parameters)
     val storage = new VersionedLDBAVLStorage(store)
     val persistentProver = PersistentBatchAVLProver.create(
       p,

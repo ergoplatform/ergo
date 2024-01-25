@@ -20,8 +20,8 @@
             <!-- daily rollover -->
             <fileNamePattern>ergo-%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
 
-            <!-- keep 30 days' worth of history capped at 1GB total size -->
-            <maxHistory>30</maxHistory>
+            <!-- keep 7 days' worth of history capped at 1GB total size -->
+            <maxHistory>7</maxHistory>
             <maxFileSize>500MB</maxFileSize>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>

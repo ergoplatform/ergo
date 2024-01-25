@@ -112,8 +112,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   def readStateContext(parameters: Parameters): ErgoStateContext = {
     cachedStateContext = Some(store
       .get(StateContextKey)
-      .flatMap(r => ErgoStateContextSerializer(settings).parseBytesTry(r).toOption)
-      .getOrElse(ErgoStateContext.empty(settings, parameters))
+      .flatMap(r => ErgoStateContextSerializer(settings.chainSettings).parseBytesTry(r).toOption)
+      .getOrElse(ErgoStateContext.empty(settings.chainSettings, parameters))
     )
     cachedStateContext.get
   }

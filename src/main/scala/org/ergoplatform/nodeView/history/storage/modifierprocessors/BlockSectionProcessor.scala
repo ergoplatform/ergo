@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, BlockSection}
-import scorex.core.consensus.ProgressInfo
-import scorex.core.utils.ScorexEncoding
+import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
+import org.ergoplatform.utils.ScorexEncoding
 
 import scala.util.Try
 

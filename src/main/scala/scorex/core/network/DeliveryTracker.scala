@@ -2,15 +2,15 @@ package scorex.core.network
 
 import akka.actor.Cancellable
 import io.circe.{Encoder, Json}
+import org.ergoplatform.consensus.ContainsModifiers
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.CheckDelivery
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.CheckDelivery
 import org.ergoplatform.nodeView.mempool.ExpiringApproximateCache
 import org.ergoplatform.settings.{ErgoSettings, NetworkCacheSettings}
-import scorex.core.consensus.ContainsModifiers
 import scorex.core.network.DeliveryTracker._
 import scorex.core.network.ModifiersStatus._
-import scorex.core.utils._
+import org.ergoplatform.utils._
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.collection.mutable

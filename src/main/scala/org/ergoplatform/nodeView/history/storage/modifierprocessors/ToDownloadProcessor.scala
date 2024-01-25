@@ -15,7 +15,7 @@ import scala.annotation.tailrec
 trait ToDownloadProcessor
   extends FullBlockPruningProcessor with UtxoSetSnapshotProcessor with BasicReaders with ScorexLogging {
 
-  import scorex.core.utils.MapPimp
+  import org.ergoplatform.utils.MapPimp
 
   protected val settings: ErgoSettings
 

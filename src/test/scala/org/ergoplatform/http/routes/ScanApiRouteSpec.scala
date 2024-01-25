@@ -10,7 +10,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.http.api.ScanEntities.{ScanIdBoxId, ScanIdWrapper}
 import org.ergoplatform.http.api.{ApiCodecs, ScanApiRoute}
 import org.ergoplatform.nodeView.wallet.scanning._
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.wallet.Constants.ScanId
 import org.scalatest.flatspec.AnyFlatSpec
@@ -36,7 +36,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
   val prefix = "/scan"
 
-  val ergoSettings: ErgoSettings = ErgoSettings.read(
+  val ergoSettings: ErgoSettings = ErgoSettingsReader.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = ScanApiRoute(utxoReadersRef, ergoSettings).route
 

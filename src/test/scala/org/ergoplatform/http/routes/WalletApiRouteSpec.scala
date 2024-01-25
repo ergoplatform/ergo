@@ -6,11 +6,11 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import io.circe.{Decoder, Json}
-import org.ergoplatform.http.api.{ApiCodecs, WalletApiRoute}
+import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
-import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Args, Constants, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoAddress, Pay2SAddress}
@@ -27,13 +27,15 @@ class WalletApiRouteSpec extends AnyFlatSpec
   with ScalatestRouteTest
   with Stubs
   with FailFastCirceSupport
-  with ApiCodecs {
+  with ApiCodecs
+  with ApiRequestsCodecs
+  with ApiExtraCodecs {
 
   implicit val timeout: RouteTestTimeout = RouteTestTimeout(145.seconds)
 
   val prefix = "/wallet"
 
-  val ergoSettings: ErgoSettings = ErgoSettings.read(
+  val ergoSettings: ErgoSettings = ErgoSettingsReader.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = WalletApiRoute(digestReadersRef, nodeViewRef, settings).route
   val failingNodeViewRef = system.actorOf(NodeViewStub.failingProps())
@@ -44,7 +46,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
   implicit val paymentRequestEncoder: PaymentRequestEncoder = new PaymentRequestEncoder(ergoSettings)
   implicit val assetIssueRequestEncoder: AssetIssueRequestEncoder = new AssetIssueRequestEncoder(ergoSettings)
   implicit val requestsHolderEncoder: RequestsHolderEncoder = new RequestsHolderEncoder(ergoSettings)
-  implicit val addressJsonDecoder: Decoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).decoder
+  implicit val addressJsonDecoder: Decoder[ErgoAddress] = ErgoAddressJsonEncoder(settings.chainSettings).decoder
 
   val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf)(addressEncoder), 100L, Seq.empty, Map.empty)
   val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf)(addressEncoder), None, 100L, "TEST", "Test", 8)

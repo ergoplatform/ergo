@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView.state.wrapped
 
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.VersionTag
+import org.ergoplatform.core.VersionTag
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 
 import scala.util.Try
 

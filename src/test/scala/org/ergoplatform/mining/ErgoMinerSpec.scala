@@ -10,14 +10,14 @@ import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FullBlockApplied
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -47,7 +47,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     await(minerRef.askWithStatus(GenerateCandidate(mandatoryTransactions, reply = true)).mapTo[Candidate].map(_.externalVersion))
 
   val defaultSettings: ErgoSettings = {
-    val empty = ErgoSettings.read()
+    val empty = ErgoSettingsReader.read()
 
     val nodeSettings = empty.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,
@@ -206,7 +206,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     }
 
     // wait for mempool to be cleaned
-    scorex.core.utils.untilTimeout(5.minute, 500.millis) {
+    org.ergoplatform.utils.untilTimeout(5.minute, 500.millis) {
       log.debug(s"Wait until transactions in mempool will be included into blocks. Currents size: ${requestReaders.m.size}")
       requestReaders.m.size shouldBe 0
       system.terminate()
@@ -376,7 +376,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
     val forkSettings: ErgoSettings = {
-      val empty = ErgoSettings.read()
+      val empty = ErgoSettingsReader.read()
 
       val nodeSettings = empty.nodeSettings.copy(mining = true,
         stateType = StateType.Utxo,

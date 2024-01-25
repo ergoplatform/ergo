@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.ErgoSettings
 
 /**
@@ -51,7 +51,7 @@ trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
         // we have constant min full block height corresponding to first block after utxo set snapshot
         readMinimalFullBlockHeight()
       } else {
-        ErgoHistory.GenesisHeight // keep all blocks in history as no pruning set
+        GenesisHeight // keep all blocks in history as no pruning set
       }
     } else {
       // Start from config.blocksToKeep blocks back

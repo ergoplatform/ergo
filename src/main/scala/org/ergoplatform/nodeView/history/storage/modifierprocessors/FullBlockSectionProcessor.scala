@@ -1,14 +1,14 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
-import scorex.core.consensus.ProgressInfo
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, _}
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.validation.{ModifierValidator, _}
 import scorex.db.ByteArrayWrapper
 import scorex.util.ModifierId
 

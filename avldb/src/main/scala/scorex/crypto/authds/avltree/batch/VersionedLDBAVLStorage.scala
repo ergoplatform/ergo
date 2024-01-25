@@ -114,7 +114,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       }
 
       def dumpSubtree(sid: DigestType): Try[Unit] = {
-        val builder = mutable.ArrayBuilder.make[Byte]()
+        val builder = new mutable.ArrayBuilder.ofByte
         builder.sizeHint(200000)
         subtreeLoop(sid, builder)
         dumpStorage.insert(sid, builder.result())
@@ -141,7 +141,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
 
       require(rootNodeLabel.sameElements(expectedRootHash), "Root node hash changed")
 
-      val manifestBuilder = mutable.ArrayBuilder.make[Byte]()
+      val manifestBuilder = new mutable.ArrayBuilder.ofByte
       manifestBuilder.sizeHint(200000)
       manifestBuilder += rootNodeHeight
       manifestBuilder += manifestDepth

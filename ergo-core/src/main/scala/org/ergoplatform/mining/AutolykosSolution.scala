@@ -1,0 +1,160 @@
+package org.ergoplatform.mining
+
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
+import io.circe.syntax._
+import io.circe.{Decoder, Encoder, HCursor}
+import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.http.api.ApiCodecs
+import org.ergoplatform.mining.AutolykosSolution.pkForV2
+import org.ergoplatform.modifiers.history.header.Header.Version
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.serialization.ErgoSerializer
+import scorex.util.serialization.{Reader, Writer}
+import sigmastate.crypto.CryptoConstants
+import sigmastate.crypto.CryptoConstants.EcPointType
+
+/**
+  * Solution for an Autolykos PoW puzzle.
+  *
+  * In Autolykos v.1 all the four fields are used, in Autolykos v.2 only pk and n fields are used.
+  *
+  * @param pk - miner public key. Should be used to collect block rewards
+  * @param w  - one-time public key. Prevents revealing of miners secret
+  * @param n  - nonce (8 bytes)
+  * @param d  - distance between pseudo-random number, corresponding to nonce `n` and a secret,
+  *           corresponding to `pk`. The lower `d` is, the harder it was to find this solution.
+  */
+case class AutolykosSolution(pk: EcPointType,
+                             w: EcPointType,
+                             n: Array[Byte],
+                             d: BigInt) {
+  val encodedPk: Array[Byte] = groupElemToBytes(pk)
+}
+
+object AutolykosSolution extends ApiCodecs {
+  // "pk", "w" and "d" values for Autolykos v2 solution, where they not passed from outside
+  val pkForV2: EcPointType = CryptoConstants.dlogGroup.identity
+  val wForV2: EcPointType = CryptoConstants.dlogGroup.generator
+  val dForV2: BigInt = 0
+
+  implicit val jsonEncoder: Encoder[AutolykosSolution] = Encoder.instance { s: AutolykosSolution =>
+    Map(
+      "pk" -> s.pk.asJson,
+      "w" -> s.w.asJson,
+      "n" -> Algos.encode(s.n).asJson,
+      "d" -> s.d.asJson(bigIntEncoder)
+    ).asJson
+  }
+
+  implicit val jsonDecoder: Decoder[AutolykosSolution] = Decoder.instance { c: HCursor =>
+    for {
+      pkOpt <- c.downField("pk").as[Option[EcPointType]]
+      wOpt <- c.downField("w").as[Option[EcPointType]]
+      n <- c.downField("n").as[Array[Byte]]
+      dOpt <- c.downField("d").as[Option[BigInt]]
+    } yield {
+      AutolykosSolution(pkOpt.getOrElse(pkForV2), wOpt.getOrElse(wForV2), n, dOpt.getOrElse(dForV2))
+    }
+  }
+
+}
+
+case class WeakAutolykosSolution(pk: EcPointType, n: Array[Byte]) {
+  val encodedPk: Array[Byte] = groupElemToBytes(pk)
+}
+
+object WeakAutolykosSolution extends ApiCodecs {
+  implicit val jsonEncoder: Encoder[WeakAutolykosSolution] = { s: WeakAutolykosSolution =>
+    Map(
+      "pk" -> s.pk.asJson,
+      "n" -> Algos.encode(s.n).asJson
+    ).asJson
+  }
+
+  implicit val jsonDecoder: Decoder[WeakAutolykosSolution] = { c: HCursor =>
+    for {
+      pkOpt <- c.downField("pk").as[Option[EcPointType]]
+      n <- c.downField("n").as[Array[Byte]]
+    } yield {
+      WeakAutolykosSolution(pkOpt.getOrElse(pkForV2), n)
+    }
+  }
+
+}
+
+
+
+/**
+  * Binary serializer for Autolykos v1 solution,
+  * serializing and parsing "pk", "w", "nonce", and "d" values
+  */
+class AutolykosV1SolutionSerializer extends ErgoSerializer[AutolykosSolution] {
+
+  override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
+    val dBytes = BigIntegers.asUnsignedByteArray(obj.d.bigInteger)
+    w.putBytes(groupElemToBytes(obj.pk))
+    w.putBytes(groupElemToBytes(obj.w))
+    require(obj.n.length == 8) // non-consensus check on prover side
+    w.putBytes(obj.n)
+    w.putUByte(dBytes.length)
+    w.putBytes(dBytes)
+  }
+
+  override def parse(r: Reader): AutolykosSolution = {
+    val pk = groupElemFromBytes(r.getBytes(PublicKeyLength))
+    val w = groupElemFromBytes(r.getBytes(PublicKeyLength))
+    val nonce = r.getBytes(8)
+    val dBytesLength = r.getUByte()
+    val d = BigInt(BigIntegers.fromUnsignedByteArray(r.getBytes(dBytesLength)))
+    AutolykosSolution(pk, w, nonce, d)
+  }
+
+}
+
+/**
+  * Binary serializer for Autolykos v2 solution, serializing and parsing "pk" and "nonce" values
+  */
+class AutolykosV2SolutionSerializer extends ErgoSerializer[AutolykosSolution] {
+
+  import AutolykosSolution.{dForV2, wForV2}
+
+  override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
+    w.putBytes(groupElemToBytes(obj.pk))
+    require(obj.n.length == 8) // non-consensus check on prover side
+    w.putBytes(obj.n)
+  }
+
+  override def parse(r: Reader): AutolykosSolution = {
+    val pk = groupElemFromBytes(r.getBytes(PublicKeyLength))
+    val nonce = r.getBytes(8)
+    AutolykosSolution(pk, wForV2, nonce, dForV2)
+  }
+
+}
+
+
+/**
+  * Serializing facade for both Autolykos v1 and v2 solutions
+  */
+object AutolykosSolutionSerializer {
+  private val v1Serializer = new AutolykosV1SolutionSerializer
+  private val v2Serializer = new AutolykosV2SolutionSerializer
+
+  private def serializer(blockVersion: Version): ErgoSerializer[AutolykosSolution] = {
+    if (blockVersion == 1) {
+      v1Serializer
+    } else {
+      v2Serializer
+    }
+  }
+
+  def serialize(blockVersion: Version, solution: AutolykosSolution, w: Writer): Unit = {
+    serializer(blockVersion).serialize(solution, w)
+  }
+
+  def parse(r: Reader, blockVersion: Version): AutolykosSolution = {
+    serializer(blockVersion).parse(r)
+  }
+
+}

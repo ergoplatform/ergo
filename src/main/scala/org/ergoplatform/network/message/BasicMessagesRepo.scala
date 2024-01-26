@@ -3,12 +3,10 @@ package org.ergoplatform.network.message
 import org.ergoplatform.network.{PeerSpec, PeerSpecSerializer}
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.ModifierId
 import org.ergoplatform.sdk.wallet.Constants.ModifierIdLength
 
 /**

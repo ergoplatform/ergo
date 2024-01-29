@@ -544,9 +544,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   }
 
   property("context extension with neg id") {
-    val negId: Byte = -1
-
-    ADKey @@ Base16.decode("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742").get
+    val negId: Byte = -10
 
     val b = new ErgoBox(1000000000L, Constants.TrueLeaf, Colls.emptyColl,
                          Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
@@ -561,13 +559,13 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
       .map(ErgoTransaction.apply)
 
     txTry.isSuccess shouldBe false
+
+    txTry.toEither.left.get.isInstanceOf[NegativeArraySizeException] shouldBe true
   }
 
 
   property("context extension with neg and pos ids") {
     val negId: Byte = -20
-
-    ADKey @@ Base16.decode("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742").get
 
     val b = new ErgoBox(1000000000L, Constants.TrueLeaf, Colls.emptyColl,
       Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
@@ -583,6 +581,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
       .map(ErgoTransaction.apply)
 
     txTry.isSuccess shouldBe false
+
+    txTry.toEither.left.get.isInstanceOf[ArrayIndexOutOfBoundsException] shouldBe true
   }
 
 }

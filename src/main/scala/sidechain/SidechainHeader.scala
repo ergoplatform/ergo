@@ -11,20 +11,22 @@ import scorex.util.{ModifierId, bytesToId}
 
 /**
   */
-// todo: link to prev
-case class MMSidechainHeader(ergoHeader: Header,
-                             prevSidechainHeaderId: Array[Byte],
-                             sideChainDataProof: TransactionMembershipProof,
-                             sidechainTx: ErgoTransaction) {
+// todo: txs digest?
+
+case class SidechainHeader(ergoHeader: Header,
+                           prevSidechainHeaderId: Array[Byte],
+                           sideChainDataProof: TransactionMembershipProof,
+                           sidechainTx: ErgoTransaction,
+                           sidechainStateDigest: Array[Byte] // 33 bytes!
+                          ) {
 
   val sidechainTxId: Array[Byte] = sidechainTx.serializedId
 
   val ergoHeaderId: Array[Version] = ergoHeader.serializedId
 
-  val serializedId: Digest32 = Algos.hash(prevSidechainHeaderId ++ sidechainTxId ++ ergoHeaderId)
+  val serializedId: Digest32 = Algos.hash(prevSidechainHeaderId ++ sidechainTxId ++ ergoHeaderId ++ sidechainStateDigest)
 
   val id: ModifierId = bytesToId(serializedId)
-  
 }
 
 /**
@@ -37,12 +39,19 @@ case class MMSidechainHeader(ergoHeader: Header,
   * * simulation of transfers
   */
 
-object MMSidechainHeader {
+object SidechainHeader {
 
-  def verify(sh: MMSidechainHeader): Boolean = {
+  def generate(ergoHeader: Header,
+               mainChainTx: ErgoTransaction,
+               sidechainTxs: IndexedSeq[ErgoTransaction]): SidechainHeader = {
+      ???
+  }
+
+  def verify(sh: SidechainHeader): Boolean = {
     MainnetPoWVerifier.validate(sh.ergoHeader).isSuccess &&
       sh.sideChainDataProof.proof.valid(sh.ergoHeader.transactionsRoot)
     //todo: enforce linearity
     ???
   }
+  
 }

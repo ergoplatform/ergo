@@ -2,15 +2,30 @@ package sidechain
 
 import org.ergoplatform.mining.MainnetPoWVerifier
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.header.Header.Version
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
+import org.ergoplatform.settings.Algos
+import scorex.crypto.hash.Digest32
+import scorex.util.{ModifierId, bytesToId}
 
 /**
   */
 // todo: link to prev
 case class MMSidechainHeader(ergoHeader: Header,
+                             prevSidechainHeaderId: Array[Byte],
                              sideChainDataProof: TransactionMembershipProof,
-                             sidechainTx: ErgoTransaction)
+                             sidechainTx: ErgoTransaction) {
+
+  val sidechainTxId: Array[Byte] = sidechainTx.serializedId
+
+  val ergoHeaderId: Array[Version] = ergoHeader.serializedId
+
+  val serializedId: Digest32 = Algos.hash(prevSidechainHeaderId ++ sidechainTxId ++ ergoHeaderId)
+
+  val id: ModifierId = bytesToId(serializedId)
+  
+}
 
 /**
   *

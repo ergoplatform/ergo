@@ -15,7 +15,7 @@ import scorex.util.{ModifierId, bytesToId}
 
 case class SidechainHeader(ergoHeader: Header,
                            prevSidechainHeaderId: Array[Byte],
-                           sideChainDataProof: TransactionMembershipProof,
+                           sideChainDataTxProof: TransactionMembershipProof,
                            sidechainTx: ErgoTransaction,
                            sidechainStateDigest: Array[Byte] // 33 bytes!
                           ) {
@@ -43,6 +43,8 @@ case class SidechainBlock(header: SidechainHeader, transactions: IndexedSeq[Ergo
 
 object SidechainHeader {
 
+  val SideChainNFT: ModifierId = ModifierId @@ ""
+
   def generate(ergoHeader: Header,
                mainChainTx: ErgoTransaction,
                sidechainTxs: IndexedSeq[ErgoTransaction]): SidechainBlock = {
@@ -50,8 +52,13 @@ object SidechainHeader {
   }
 
   def verify(sh: SidechainHeader): Boolean = {
-    MainnetPoWVerifier.validate(sh.ergoHeader).isSuccess &&  // todo: lower diff
-      sh.sideChainDataProof.proof.valid(sh.ergoHeader.transactionsRoot)
+    val txProof = sh.sideChainDataTxProof
+    val sidechainDataBox = sh.sidechainTx.outputs.head
+    MainnetPoWVerifier.validate(sh.ergoHeader).isSuccess &&  // check pow todo: lower diff
+      txProof.valid(sh.ergoHeader.transactionsRoot) &&       // check sidechain tx membership
+      txProof.txId == sh.sidechainTx.id &&                   // check provided sidechain is correct
+      sidechainDataBox.tokens.contains(SideChainNFT)         // check that first output has sidechain data MFT
+    // todo: check sidechain data
     //todo: enforce linearity
     ???
   }

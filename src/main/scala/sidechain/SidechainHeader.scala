@@ -29,6 +29,8 @@ case class SidechainHeader(ergoHeader: Header,
   val id: ModifierId = bytesToId(serializedId)
 }
 
+case class SidechainBlock(header: SidechainHeader, transactions: IndexedSeq[ErgoTransaction])
+
 /**
   *
   * Plan to implement simplest sidechain, no additional functionality aside of supporting context ext variable with
@@ -43,15 +45,15 @@ object SidechainHeader {
 
   def generate(ergoHeader: Header,
                mainChainTx: ErgoTransaction,
-               sidechainTxs: IndexedSeq[ErgoTransaction]): SidechainHeader = {
+               sidechainTxs: IndexedSeq[ErgoTransaction]): SidechainBlock = {
       ???
   }
 
   def verify(sh: SidechainHeader): Boolean = {
-    MainnetPoWVerifier.validate(sh.ergoHeader).isSuccess &&
+    MainnetPoWVerifier.validate(sh.ergoHeader).isSuccess &&  // todo: lower diff
       sh.sideChainDataProof.proof.valid(sh.ergoHeader.transactionsRoot)
     //todo: enforce linearity
     ???
   }
-  
+
 }

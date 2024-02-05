@@ -1,5 +1,6 @@
 package sidechain
 
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.MainnetPoWVerifier
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.header.Header.Version
@@ -13,8 +14,16 @@ import scorex.util.{ModifierId, bytesToId}
   */
 // todo: txs digest?
 
+/**
+  * @param ergoHeader
+  * @param sidechainDigest - digest of AVL tree authenticating height -> sidechain header before this header
+  * @param sideChainDataTxProof
+  * @param sidechainTx
+  * @param sidechainStateDigest
+  */
 case class SidechainHeader(ergoHeader: Header,
-                           prevSidechainHeaderId: Array[Byte],
+                           sidechainHeight: Int,
+                           sidechainDigest: Array[Byte], // 33 bytes!
                            sideChainDataTxProof: TransactionMembershipProof,
                            sidechainTx: ErgoTransaction,
                            sidechainStateDigest: Array[Byte] // 33 bytes!
@@ -24,7 +33,7 @@ case class SidechainHeader(ergoHeader: Header,
 
   val ergoHeaderId: Array[Version] = ergoHeader.serializedId
 
-  val serializedId: Digest32 = Algos.hash(prevSidechainHeaderId ++ sidechainTxId ++ ergoHeaderId ++ sidechainStateDigest)
+  val serializedId: Digest32 = Algos.hash(sidechainDigest ++ sidechainTxId ++ ergoHeaderId ++ sidechainStateDigest)
 
   val id: ModifierId = bytesToId(serializedId)
 }
@@ -51,6 +60,10 @@ object SidechainHeader {
       ???
   }
 
+  private def checkSidechainData(sidechainDataBox: ErgoBox): Boolean = {
+    ???
+  }
+
   def verify(sh: SidechainHeader): Boolean = {
     val txProof = sh.sideChainDataTxProof
     val sidechainDataBox = sh.sidechainTx.outputs.head
@@ -58,6 +71,7 @@ object SidechainHeader {
       txProof.valid(sh.ergoHeader.transactionsRoot) &&       // check sidechain tx membership
       txProof.txId == sh.sidechainTx.id &&                   // check provided sidechain is correct
       sidechainDataBox.tokens.contains(SideChainNFT)         // check that first output has sidechain data MFT
+      checkSidechainData(sidechainDataBox)
     // todo: check sidechain data
     //todo: enforce linearity
     ???

@@ -76,7 +76,7 @@ Ergo utilizes three types of tests:
 
 1) Unit and property tests: These can be run using the `sbt test` command.
 2) Integration tests: These tests require Docker to be installed. Run them with the `sudo sbt it:test` command.
-3) Bootstrapping tests: These tests are time-consuming as they verify that the node is syncing with the main network in various regimes. Docker is also required for these tests. Run them with the `sudo sbt it2:test` command.
+3) Bootstrapping tests: These tests are time-consuming as they verify that the node is syncing with the main network in various modes. Docker is also required for these tests. Run them with the `sudo sbt it2:test` command.
 
 ## Setting up the Project in an IDE
 
@@ -86,9 +86,13 @@ Ensure that the project can be built with sbt before opening it in an IDE. You m
 
 To open the project in IntelliJ IDEA, select File / Open and navigate to the project folder. This will initiate the Project Import Wizard, which uses the SBT configuration (build.sbt file) to generate the project configuration files for IDEA. You can view the project configuration in the `File / Project Structure...` dialog. If the import is successful, you should be able to compile the project in the IDE. 
 
+## Modules
+
+* ergo-core 
+
 ## Contributing to Ergo
 
-Ergo is an open-source project and we welcome contributions from developers and testers! Join the discussion on [Ergo Discord](https://discord.gg/kj7s7nb) in the #development channel and check out our [Contributing documentation](https://docs.ergoplatform.com/contribute/).
+Ergo is an open-source project and we welcome contributions from developers and testers! Join the discussion over [Ergo Discord](https://discord.gg/kj7s7nb) in #development channel, or Telegram: https://t.me/ErgoDevelopers. Please also check out our [Contributing documentation](https://docs.ergoplatform.com/contribute/).
 
 ## Frequently Asked Questions
 

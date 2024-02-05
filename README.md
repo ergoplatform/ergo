@@ -88,7 +88,7 @@ To open the project in IntelliJ IDEA, select File / Open and navigate to the pro
 
 ## Modules
 
-* ergo-core 
+* [ergo-core](ergo-core/README.md) 
 
 ## Contributing to Ergo
 

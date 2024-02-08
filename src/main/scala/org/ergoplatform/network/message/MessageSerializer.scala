@@ -1,12 +1,10 @@
 package org.ergoplatform.network.message
 
 import java.nio.ByteOrder
-
 import akka.util.ByteString
 import scorex.core.network.{ConnectedPeer, MaliciousBehaviorException}
 import scorex.crypto.hash.Blake2b256
 import scala.util.Try
-
 
 class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
 
@@ -14,12 +12,12 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
 
   import scala.language.existentials
 
-  private implicit val byteOrder: ByteOrder = ByteOrder.BIG_ENDIAN
+  implicit private val byteOrder: ByteOrder = ByteOrder.BIG_ENDIAN
 
   private val specsMap = Map(specs.map(s => s.messageCode -> s): _*)
     .ensuring(m => m.size == specs.size, "Duplicate message codes")
 
-  def serialize(obj: Message[_]): ByteString = {
+  def serialize[A <: MessageBase[_]](obj: A): ByteString = {
     val builder = ByteString.createBuilder
       .putBytes(magicBytes)
       .putByte(obj.spec.messageCode)
@@ -34,14 +32,17 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
   }
 
   //MAGIC ++ Array(spec.messageCode) ++ Ints.toByteArray(dataLength) ++ dataWithChecksum
-  def deserialize(byteString: ByteString, sourceOpt: Option[ConnectedPeer]): Try[Option[Message[_]]] = Try {
+  def deserialize(
+    byteString: ByteString,
+    sourceOpt: Option[ConnectedPeer]
+  ): Try[Option[Message[_]]] = Try {
     if (byteString.length < HeaderLength) {
       None
     } else {
-      val it = byteString.iterator
-      val magic = it.getBytes(MagicLength)
+      val it      = byteString.iterator
+      val magic   = it.getBytes(MagicLength)
       val msgCode = it.getByte
-      val length = it.getInt
+      val length  = it.getInt
 
       //peer is trying to cause buffer overflow or breaking the parsing
       if (length < 0) {
@@ -53,17 +54,22 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
       } else {
         //peer is from another network
         if (!java.util.Arrays.equals(magic, magicBytes)) {
-          throw MaliciousBehaviorException(s"Wrong magic bytes, expected ${magicBytes.mkString}, got ${magic.mkString} in : ${byteString.utf8String}")
+          throw MaliciousBehaviorException(
+            s"Wrong magic bytes, expected ${magicBytes.mkString}, got ${magic.mkString} in : ${byteString.utf8String}"
+          )
         }
-        val spec = specsMap.getOrElse(msgCode, throw new Error(s"No message handler found for $msgCode"))
+        val spec = specsMap
+          .getOrElse(msgCode, throw new Error(s"No message handler found for $msgCode"))
         val msgData = if (length > 0) {
           val checksum = it.getBytes(ChecksumLength)
-          val data = it.getBytes(length)
-          val digest = Blake2b256.hash(data).take(ChecksumLength)
+          val data     = it.getBytes(length)
+          val digest   = Blake2b256.hash(data).take(ChecksumLength)
 
           //peer reported incorrect checksum
           if (!java.util.Arrays.equals(checksum, digest)) {
-            throw MaliciousBehaviorException(s"Wrong checksum, expected ${digest.mkString}, got ${checksum.mkString}")
+            throw MaliciousBehaviorException(
+              s"Wrong checksum, expected ${digest.mkString}, got ${checksum.mkString}"
+            )
           }
           data
         } else {

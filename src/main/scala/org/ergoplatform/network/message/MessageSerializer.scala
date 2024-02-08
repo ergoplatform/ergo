@@ -12,7 +12,7 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
 
   import scala.language.existentials
 
-  implicit private val byteOrder: ByteOrder = ByteOrder.BIG_ENDIAN
+  private implicit val byteOrder: ByteOrder = ByteOrder.BIG_ENDIAN
 
   private val specsMap = Map(specs.map(s => s.messageCode -> s): _*)
     .ensuring(m => m.size == specs.size, "Duplicate message codes")

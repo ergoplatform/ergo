@@ -44,8 +44,6 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getModifierByIdR
   }
 
-  private val maxHeadersInOneQuery = ergoSettings.chainSettings.epochLength * 2
-
   private def getHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
@@ -105,7 +103,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       val headers = maxHeaderOpt
         .toIndexedSeq
         .flatMap { maxHeader =>
-          history.headerChainBack(maxHeadersInOneQuery, maxHeader, _.height <= fromHeight + 1).headers
+          history.headerChainBack(MaxHeaders, maxHeader, _.height <= fromHeight + 1).headers
         }
       headers.toList.asJson
     }

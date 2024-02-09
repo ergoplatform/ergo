@@ -25,7 +25,8 @@ JLINK_MODULES = "java.base,java.compiler,java.desktop,java.management,java.namin
 MAIN_JRE = os.environ.get("ERGO_RELEASE_PLATFORM") 
 VERSION = os.environ.get("ERGO_RELEASE_TAG")
 
-JAR_FILENAME = f"ergo-{VERSION}.jar"
+# filename is ergo-X.XXX.jar but tag version is vX.XXX
+JAR_FILENAME = f"ergo-{VERSION[1:]}.jar"
 SCRIPT_LOGO = f"""
 
              .-*%@#+-.                                                    

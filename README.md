@@ -90,7 +90,7 @@ To open the project in IntelliJ IDEA, select File / Open and navigate to the pro
 
 This repository has modular structure, so only parts which are needed for an application could be used:
 
-* [avldb](ergo-core/README.md) - implementation of authenticated AVL+ tree used in Ergo, with persistence
+* [avldb](avldb/README.md) - implementation of authenticated AVL+ tree used in Ergo, with persistence
 * [ergo-core](ergo-core/README.md) - functionality needed for an SPV client (P2P messages, block section stuctures, PoW, NiPoPoW)
 * ergo-wallet - Java and Scala functionalities to sign and verify transactions
 

@@ -2,9 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.ActorRef
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.app.Version
-import scorex.core.network.PeerSpec
-import scorex.core.network.peer.PeerInfo
+import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, ConnectionId}
 
 class PeerFilteringRuleSpecification extends ErgoPropertyTest {

@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProverWithDbAlgs, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.generators.ChainGenerator
@@ -94,6 +94,16 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     }
   }
 
+  property("lowestCommonAncestor - the same") {
+    val sizes = Seq(10, 100, 1000)
+    sizes.foreach { size =>
+      val chain0 = genChain(size)
+      val chain1 = chain0.map(b => b.copy(header = b.header.copy(sizeOpt = Some(b.header.size))))
+
+      nipopowAlgos.lowestCommonAncestor(chain0.map(_.header), chain1.map(_.header)) shouldBe Some(chain0.last.header)
+    }
+  }
+
   property("bestArg - always equal for equal proofs") {
     val chain0 = genChain(100).map(b => PoPowHeader.fromBlock(b).get)
     val proof0 = nipopowAlgos.prove(chain0)(poPowParams).get
@@ -127,7 +137,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val h = generateHistory(true, StateType.Digest, false,
       10000, 10000, 10, None)
     val hr = applyChain(h, blocksChain)
-    val proof1 = nipopowAlgos.prove(hr)(poPowParams).get
+    val proof1 = NipopowProverWithDbAlgs.prove(hr, chainSettings = settings.chainSettings)(poPowParams).get
 
     proof0.suffixHead.id shouldBe proof1.suffixHead.id
     proof0.suffixTail.map(_.id) shouldBe proof1.suffixTail.map(_.id)
@@ -145,12 +155,12 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val h = generateHistory(true, StateType.Digest, false,
       10000, 10000, 10, None)
     val hr = applyChain(h, blocksChain.take(at))
-    val proof0 = nipopowAlgos.prove(hr, None)(poPowParams).get
+    val proof0 = NipopowProverWithDbAlgs.prove(hr, None, chainSettings = settings.chainSettings)(poPowParams).get
 
     val id = proof0.suffixHead.header.id
 
     val hrf = applyChain(hr, blocksChain.drop(at))
-    val proof1 = nipopowAlgos.prove(hrf, Some(id))(poPowParams).get
+    val proof1 = NipopowProverWithDbAlgs.prove(hrf, Some(id), chainSettings = settings.chainSettings)(poPowParams).get
 
     proof0.suffixHead.id shouldBe proof1.suffixHead.id
     proof0.suffixTail.map(_.id) shouldBe proof1.suffixTail.map(_.id)

@@ -1,7 +1,8 @@
 package scorex.core.network
 
+import org.ergoplatform.network.PeerSpecSerializer
+import org.ergoplatform.testkit.generators.ObjectGenerators
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.testkit.generators.ObjectGenerators
 import scorex.util.ByteArrayBuilder
 import scorex.util.serialization.{VLQByteBufferReader, VLQByteBufferWriter}
 

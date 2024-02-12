@@ -7,15 +7,14 @@ import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
-import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.api.http.ApiError.BadRequest
-import scorex.core.api.http.{ApiError, ApiResponse}
-import scorex.core.settings.RESTApiSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
+import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import sigmastate.SType

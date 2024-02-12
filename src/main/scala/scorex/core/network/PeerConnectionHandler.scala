@@ -4,13 +4,14 @@ import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
-import scorex.core.app.Version.Eip37ForkVersion
-import scorex.core.app.{ScorexContext, Version}
+import org.ergoplatform.network.{Handshake, HandshakeSerializer, PeerSpec, Version}
+import org.ergoplatform.network.Version.Eip37ForkVersion
+import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
 import scorex.core.network.PeerConnectionHandler.ReceivableMessages
-import scorex.core.network.message.{HandshakeSerializer, MessageSerializer}
-import scorex.core.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.settings.ScorexSettings
+import org.ergoplatform.network.message.MessageSerializer
+import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
+import org.ergoplatform.settings.ScorexSettings
 import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
@@ -146,7 +147,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   }
 
   def localInterfaceWriting: Receive = {
-    case msg: message.Message[_] =>
+    case msg: org.ergoplatform.network.message.Message[_] =>
       log.info("Send message " + msg.spec + " to " + connectionId)
       outMessagesCounter += 1
       connection ! Write(messageSerializer.serialize(msg), ReceivableMessages.Ack(outMessagesCounter))
@@ -164,7 +165,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 
   // operate in ACK mode until all buffered messages are transmitted
   def localInterfaceBuffering: Receive = {
-    case msg: message.Message[_] =>
+    case msg: org.ergoplatform.network.message.Message[_] =>
       outMessagesCounter += 1
       buffer(outMessagesCounter, messageSerializer.serialize(msg))
 

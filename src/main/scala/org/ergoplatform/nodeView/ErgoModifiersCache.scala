@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.{LRUCache, ModifiersCache}
-import scorex.core.validation.MalformedModifierError
+import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.ScorexLogging
 
 import scala.util.Failure

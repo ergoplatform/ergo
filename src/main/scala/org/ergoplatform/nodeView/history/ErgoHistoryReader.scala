@@ -1,18 +1,18 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.NodeViewComponent
+import org.ergoplatform.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, NonHeaderBlockSection}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.{EmptyHistoryHeight, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors._
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, HeadersProcessor}
 import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
-import scorex.core.NodeViewComponent
-import scorex.core.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.MalformedModifierError
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -247,8 +247,8 @@ trait ErgoHistoryReader
       syncInfo.lastHeaderIds.map(b => Header.modifierTypeId -> b)
     } else if (syncInfo.lastHeaderIds.isEmpty) {
       // if other node has no headers yet, send up to `size` headers from genesis
-      val heightTo = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
-      (ErgoHistory.GenesisHeight to heightTo).flatMap { height =>
+      val heightTo = Math.min(headersHeight, size + EmptyHistoryHeight)
+      (GenesisHeight to heightTo).flatMap { height =>
         bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
       }
     } else {
@@ -258,7 +258,7 @@ trait ErgoHistoryReader
         .find(m => isInBestChain(m))
         .orElse(if (ids.contains(PreGenesisHeader.id)) Some(PreGenesisHeader.id) else None)
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
-        val otherNodeHeight = heightOf(branchingPoint).getOrElse(ErgoHistory.GenesisHeight)
+        val otherNodeHeight = heightOf(branchingPoint).getOrElse(GenesisHeight)
         val heightTo = Math.min(headersHeight, otherNodeHeight + size - 1)
         (otherNodeHeight to heightTo).flatMap { height =>
           bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
@@ -274,8 +274,8 @@ trait ErgoHistoryReader
   def continuationIdsV2(syncV2: ErgoSyncInfoV2, size: Int): ModifierIds = {
     if (syncV2.lastHeaders.isEmpty) {
       // if other node has no headers yet, send up to `size` headers from genesis
-      val heightTo = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
-      (ErgoHistory.GenesisHeight to heightTo)
+      val heightTo = Math.min(headersHeight, size + EmptyHistoryHeight)
+      (GenesisHeight to heightTo)
         .flatMap(height => bestHeaderIdAtHeight(height))
         .map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
     } else {

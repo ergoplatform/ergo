@@ -5,10 +5,10 @@ import akka.pattern.StatusReply
 import org.ergoplatform.mining.CandidateGenerator.GenerateCandidate
 import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{FirstSecretResponse, GetFirstSecret, GetMiningPubKey, MiningPubKeyResponse}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.{FirstSecretResponse, GetFirstSecret, GetMiningPubKey, MiningPubKeyResponse}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FullBlockApplied
 import scorex.util.ScorexLogging
 import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
 

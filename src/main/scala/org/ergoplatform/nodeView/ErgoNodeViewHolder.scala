@@ -2,27 +2,25 @@ package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
-import org.ergoplatform.ErgoApp
-import org.ergoplatform.ErgoApp.CriticalSystemException
+import org.ergoplatform.{CriticalSystemException, ErgoApp}
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, TransactionsCarryingBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.wallet.utils.FileUtils
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, NetworkType}
-import scorex.core._
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, NetworkType, ScorexSettings}
+import org.ergoplatform.core._
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
-import scorex.core.consensus.ProgressInfo
-import scorex.core.settings.ScorexSettings
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.RecoverableModifierError
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
@@ -127,7 +125,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def extractTransactions(mod: BlockSection): Seq[ErgoTransaction] = mod match {
-    case tcm: TransactionsCarryingPersistentNodeViewModifier => tcm.transactions
+    case tcm: TransactionsCarryingBlockSection => tcm.transactions
     case _ => Seq.empty
   }
 
@@ -618,7 +616,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val recoveredStateTry = firstExtensionOpt
       .fold[Try[ErgoStateContext]](Failure(new Exception("Could not find extension to recover from"))
-      )(ext => ErgoStateContext.recover(settings.chainSettings.genesisStateDigest, ext, lastHeaders)(settings))
+      )(ext => ErgoStateContext.recover(settings.chainSettings.genesisStateDigest, ext, lastHeaders)(settings.chainSettings))
       .flatMap { ctx =>
         val recoverVersion = idToVersion(lastHeaders.last.id)
         val recoverRoot = bestFullBlock.header.stateRoot
@@ -736,8 +734,6 @@ object ErgoNodeViewHolder {
       * validity and then sending via this message to update the mempool
       */
     case class RecheckedTransactions(unconfirmedTxs: Iterable[UnconfirmedTransaction])
-
-    case class LocallyGeneratedModifier(pmod: BlockSection)
 
     case class EliminateTransactions(ids: Seq[ModifierId])
 

@@ -4,9 +4,9 @@ import akka.actor.{ActorRef, Cancellable}
 import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.modifiers.NetworkObjectTypeId
+import org.ergoplatform.testkit.generators.ObjectGenerators
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.network.ModifiersStatus.Received
-import scorex.testkit.generators.ObjectGenerators
 import scorex.util.ModifierId
 
 class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {

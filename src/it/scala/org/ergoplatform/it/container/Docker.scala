@@ -5,7 +5,6 @@ import java.net.InetAddress
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.{Collections, Properties, UUID, List => JList, Map => JMap}
-
 import cats.implicits._
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
@@ -21,7 +20,7 @@ import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
 import org.asynchttpclient.Dsl.{config, _}
 import org.ergoplatform.settings.NetworkType.{DevNet, MainNet, TestNet}
-import org.ergoplatform.settings.{ErgoSettings, NetworkType}
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, NetworkType}
 import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
@@ -176,7 +175,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .withFallback(ConfigFactory.defaultApplication())
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
-    ErgoSettings.fromConfig(actualConfig)
+    ErgoSettingsReader.fromConfig(actualConfig)
   }
 
   private def enrichNodeConfig(networkType: NetworkType,

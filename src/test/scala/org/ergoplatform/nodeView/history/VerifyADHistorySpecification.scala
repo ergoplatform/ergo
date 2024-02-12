@@ -1,16 +1,16 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.testkit.utils.NoShrink
 import org.ergoplatform.utils.HistoryTestHelpers
-import scorex.core.consensus.ProgressInfo
-import scorex.core.consensus.ModifierSemanticValidity.{Absent, Invalid, Unknown, Valid}
-import scorex.testkit.utils.NoShrink
-
+import org.ergoplatform.consensus.ModifierSemanticValidity._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
@@ -19,7 +19,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
   type PM = BlockSection
 
   private def genHistory(blocksNum: Int = 0,
-                         minFullHeight: Option[Int] = Some(ErgoHistory.GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
+                         minFullHeight: Option[Int] = Some(GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
     val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
     minFullHeight.foreach { h =>
       inHistory.writeMinimalFullBlockHeight(h)

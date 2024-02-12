@@ -9,10 +9,9 @@ import org.ergoplatform.mining.CandidateGenerator.Candidate
 import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WeakAutolykosSolution}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import scala.concurrent.Future
@@ -23,7 +22,7 @@ case class MiningApiRoute(miner: ActorRef,
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(ergoSettings).encoder
+  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(ergoSettings.chainSettings).encoder
 
   override val route: Route = pathPrefix("mining") {
     candidateR ~

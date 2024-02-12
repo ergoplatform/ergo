@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
-import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoLikeTransactionSerializer, Input}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoLikeTransactionSerializer, Input, SubBlockAlgos}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.http.api.ApiCodecs
@@ -67,6 +67,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   override val serializedId: Array[Byte] = Algos.hash(messageToSign)
 
   override lazy val id: ModifierId = bytesToId(serializedId)
+
+  lazy val weakId = id.take(SubBlockAlgos.weakTransactionIdLength)
 
   /**
     * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction).

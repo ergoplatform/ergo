@@ -1,14 +1,15 @@
-package org.ergoplatform.modifiers.history.header
+package org.ergoplatform
 
-import org.ergoplatform.modifiers.history.header.SubBlockAlgos.SubBlockInfo
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scorex.core.{NodeViewModifier, bytesToId, idToBytes}
-import scorex.core.network.message.Message.MessageCode
-import scorex.core.network.message.MessageSpecV1
-import scorex.core.serialization.ErgoSerializer
-import scorex.util.serialization.{Reader, Writer}
+import org.ergoplatform.SubBlockAlgos.SubBlockInfo
+import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.network.message.MessageConstants.MessageCode
+import org.ergoplatform.network.message.MessageSpecV1
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
+import org.ergoplatform.serialization.ErgoSerializer
+import org.ergoplatform.settings.Constants
 import scorex.util.Extensions._
-import scorex.util.ModifierId
+import scorex.util.serialization.{Reader, Writer}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.collection.mutable
 
@@ -63,14 +64,14 @@ object SubBlockAlgos {
       override def serialize(sbi: SubBlockInfo, w: Writer): Unit = {
         w.put(sbi.version)
         HeaderSerializer.serialize(sbi.subBlock, w)
-        w.putBytes(sbi.prevSubBlockId)
+        w.putOption(sbi.prevSubBlockId){case (w, id) => w.putBytes(id)}
       }
 
       override def parse(r: Reader): SubBlockInfo = {
         val version = r.getByte()
         if (version == initialMessageVersion) {
           val subBlock = HeaderSerializer.parse(r)
-          val prevSubBlockId = r.getBytes(32)
+          val prevSubBlockId = r.getOption(r.getBytes(Constants.ModifierIdSize))
           new SubBlockInfo(version, subBlock, prevSubBlockId)
         } else {
           throw new Exception("Unsupported sub-block message version")
@@ -105,7 +106,7 @@ object SubBlockAlgos {
     */
   object GetDataSpec extends MessageSpecV1[ModifierId] {
 
-    import scorex.util.{idToBytes, bytesToId}
+    import scorex.util.{bytesToId, idToBytes}
 
     override val messageCode: MessageCode = 91: Byte
     override val messageName: String = "GetData"
@@ -115,7 +116,7 @@ object SubBlockAlgos {
     }
 
     override def parse(r: Reader): ModifierId = {
-      bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
+      bytesToId(r.getBytes(Constants.ModifierIdSize))
     }
   }
 
@@ -175,52 +176,57 @@ object structures {
     */
   def processSubBlock(sbi: SubBlockInfo): (Seq[ModifierId], Seq[ModifierId]) = {
     val sbHeader = sbi.subBlock
-    val prevSbId = bytesToId(sbi.prevSubBlockId)
+    val prevSbIdOpt = sbi.prevSubBlockId.map(bytesToId)
     val sbHeight = sbHeader.height
 
     def emptyResult: (Seq[ModifierId], Seq[ModifierId]) = Seq.empty -> Seq.empty
 
-    if (sbHeader.id == prevSbId) {
-      ??? // todo: malicious prev throw error
-    }
+    prevSbIdOpt match {
+      case None => ??? // todo: link to prev block
 
-    if (sbHeight < lastBlock.height + 1) {
-      // just ignore as we have better block already
-      emptyResult
-    } else if (sbHeight == lastBlock.height + 1) {
-      if (sbHeader.parentId == lastBlock.id) {
-        val subBlockId = sbHeader.id
-        if (subBlocks.contains(subBlockId)) {
-          // we got sub-block we already have
-          // todo: check if previous sub-block and transactions are downloaded
+      case Some(prevSbId) =>
+        if (sbHeader.id == prevSbId) {
+          ??? // todo: malicious prev throw error
+        }
+
+        if (sbHeight < lastBlock.height + 1) {
+          // just ignore as we have better block already
           emptyResult
-        } else {
-          subBlocks += subBlockId -> sbHeader
-          if (subBlocks.contains(prevSbId)) {
-            val prevSb = subBlocks(prevSbId)
-            subBlockLinks.put(subBlockId, prevSbId)
-            if(prevSb.transactionsRoot != sbHeader.transactionsRoot) {
-              (Seq.empty, Seq(sbHeader.id))
+        } else if (sbHeight == lastBlock.height + 1) {
+          if (sbHeader.parentId == lastBlock.id) {
+            val subBlockId = sbHeader.id
+            if (subBlocks.contains(subBlockId)) {
+              // we got sub-block we already have
+              // todo: check if previous sub-block and transactions are downloaded
+              emptyResult
             } else {
-              emptyResult // no new transactions
+              subBlocks += subBlockId -> sbHeader
+              if (subBlocks.contains(prevSbId)) {
+                val prevSb = subBlocks(prevSbId)
+                subBlockLinks.put(subBlockId, prevSbId)
+                if (prevSb.transactionsRoot != sbHeader.transactionsRoot) {
+                  (Seq.empty, Seq(sbHeader.id))
+                } else {
+                  emptyResult // no new transactions
+                }
+              } else {
+                //todo: download prev sub block id
+                (Seq(prevSbId), Seq(sbHeader.id))
+              }
+              // todo: download sub block related txs
             }
           } else {
-            //todo: download prev sub block id
-            (Seq(prevSbId), Seq(sbHeader.id))
+            // todo: we got orphaned block's sub block, do nothing for now, but we need to check the block is downloaded
+            emptyResult
           }
-          // todo: download sub block related txs
+        } else {
+          // just ignoring sub block coming from future for now
+          emptyResult
         }
-      } else {
-        // todo: we got orphaned block's sub block, do nothing for now, but we need to check the block is downloaded
-        emptyResult
-      }
-    } else {
-      // just ignoring sub block coming from future for now
-      emptyResult
     }
   }
 
-  def processBlock(header: Header) = {
+  def processBlock(header: Header): Unit = {
     if (header.height > lastBlock.height) {
       lastBlock = header
       subBlocks.clear()

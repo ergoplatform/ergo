@@ -1,12 +1,12 @@
 package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
-import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoLikeTransactionSerializer, Input}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoLikeTransactionSerializer, Input, SubBlockAlgos}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.history.header.{Header, SubBlockAlgos}
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
 import org.ergoplatform.modifiers.transaction.Signable
 import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}

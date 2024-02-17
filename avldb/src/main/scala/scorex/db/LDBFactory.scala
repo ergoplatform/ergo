@@ -40,8 +40,6 @@ object LDBFactory extends ScorexLogging {
       lock.writeLock().lock()
       try {
         map.remove(path)
-        impl.syncWal()
-        impl.cancelAllBackgroundWork(true)
         impl.close()
       } finally {
         lock.writeLock().unlock()

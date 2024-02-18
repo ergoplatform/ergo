@@ -32,8 +32,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     1000000, 100, adProofsSuffixLength = 112 * 1024, extraIndex = false)
 
   def createDB(): Unit = {
-    val dir: File = createTempDir()
-    dir.mkdirs()
+    val dir: File = createTempDir
 
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, test.initSettings.chainSettings,
       nodeSettings, test.initSettings.scorexSettings, test.initSettings.walletSettings, test.initSettings.cacheSettings)

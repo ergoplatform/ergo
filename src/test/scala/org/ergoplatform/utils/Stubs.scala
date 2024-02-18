@@ -32,7 +32,7 @@ import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.utils.TestFileUtils
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
@@ -47,7 +47,7 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with TestFileUtils {
+trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with FileUtils {
 
   implicit val system: ActorSystem
 
@@ -56,15 +56,15 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val history: HT = applyChain(generateHistory(), chain)
 
   val digestState: DigestState = {
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir(), None, parameters, settings)).map { wus =>
-      DigestState.create(Some(wus.version), Some(wus.rootDigest), createTempDir(), settings)
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
+      DigestState.create(Some(wus.version), Some(wus.rootDigest), createTempDir, settings)
     }
   }.sample.value
 
   val utxoSettings: ErgoSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Utxo))
 
   val utxoState: WrappedUtxoState =
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir(), None, parameters, utxoSettings)).sample.value
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, utxoSettings)).sample.value
 
   lazy val wallet = new WalletStub
 
@@ -377,7 +377,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val walletSettings: WalletSettings = null
     val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)
 
-    val dir = createTempDir()
+    val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
       nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 

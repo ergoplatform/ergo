@@ -2,11 +2,11 @@ package org.ergoplatform.db
 
 import akka.util.ByteString
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.wallet.utils.TestFileUtils
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.db.LDBFactory.RegisteredDB
 import scorex.db.{LDBFactory, LDBKVStore, LDBVersionedStore}
 
-trait DBSpec extends TestFileUtils {
+trait DBSpec extends FileUtils {
 
   implicit class ValueOps(x: Option[Array[Byte]]) {
     def toBs: Option[ByteString] = x.map(ByteString.apply)
@@ -21,7 +21,7 @@ trait DBSpec extends TestFileUtils {
   protected def byteString32(s: String): Array[Byte] = Algos.hash(byteString(s))
 
   protected def withDb[T](body: RegisteredDB => T): T = {
-    val db = LDBFactory.open(createTempDir())
+    val db = LDBFactory.open(createTempDir)
     try body(db) finally db.close()
   }
 
@@ -31,7 +31,7 @@ trait DBSpec extends TestFileUtils {
     withDb { db: RegisteredDB => body(new LDBKVStore(db)) }
 
   protected def withVersionedStore[T](keepVersions: Int)(body: LDBVersionedStore => T): T = {
-    val db = new LDBVersionedStore(createTempDir(), keepVersions)
+    val db = new LDBVersionedStore(createTempDir, keepVersions)
     try body(db) finally db.close()
   }
 

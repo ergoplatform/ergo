@@ -8,6 +8,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.nodeView.state.StateType.Digest
+import org.ergoplatform.wallet.utils.FileUtils
 import org.ergoplatform.ErgoApp
 import scorex.util.ScorexLogging
 import org.ergoplatform.settings.ErgoSettings.{configPath, scorexConfigPath}
@@ -21,19 +22,19 @@ import scala.util.Try
 object ErgoSettingsReader extends ScorexLogging
   with PowSchemeReaders
   with NodeConfigurationReaders
-  with SettingsReaders {
+  with SettingsReaders
+  with FileUtils {
 
-  def read(args: Args = Args.empty)(implicit tmp: Int => File): ErgoSettings = {
+  def read(args: Args = Args.empty): ErgoSettings = {
     fromConfig(readConfig(args), args.networkTypeOpt)
   }
 
-  def fromConfig(config: Config, desiredNetworkTypeOpt: Option[NetworkType] = None)(implicit tmp: Int => File): ErgoSettings = {
-    val directory = if(System.getProperty("env") == "test") {
-      val dir = tmp(0)
-      dir.mkdirs()
-      dir.getAbsolutePath
-    } else
-      config.as[String](s"$configPath.directory")
+  def fromConfig(config: Config, desiredNetworkTypeOpt: Option[NetworkType] = None): ErgoSettings = {
+    val directory =
+      if(System.getProperty("env") == "test")
+        createTempDir.getAbsolutePath
+      else
+        config.as[String](s"$configPath.directory")
     val networkTypeName = config.as[String](s"$configPath.networkType")
     val networkType = NetworkType.fromString(networkTypeName)
       .getOrElse(throw new Error(s"Unknown `networkType = $networkTypeName`"))

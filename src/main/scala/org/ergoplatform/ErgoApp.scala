@@ -35,7 +35,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   log.info(s"Running with args: $args")
 
-  private val ergoSettings: ErgoSettings = ErgoSettingsReader.read(args)(null)
+  private val ergoSettings: ErgoSettings = ErgoSettingsReader.read(args)
 
   require(
     ergoSettings.scorexSettings.restApi.apiKeyHash.isDefined,

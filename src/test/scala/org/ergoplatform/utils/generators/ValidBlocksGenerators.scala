@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import org.ergoplatform.testkit.TestkitHelpers
 import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
-import org.ergoplatform.wallet.utils.TestFileUtils
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalatest.matchers.should.Matchers
 import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.avltree.batch.Remove
@@ -24,17 +24,17 @@ import scala.collection.mutable
 import scala.util.{Failure, Random, Success}
 
 trait ValidBlocksGenerators
-  extends TestkitHelpers with TestFileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
+  extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
   def createUtxoState(settings: ErgoSettings): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir(), settings)
+    ErgoState.generateGenesisUtxoState(createTempDir, settings)
   }
 
   def createUtxoState(bh: BoxHolder, parameters: Parameters): UtxoState =
-    UtxoState.fromBoxHolder(bh, None, createTempDir(), settings, parameters)
+    UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
 
   def createDigestState(version: VersionTag, digest: ADDigest): DigestState =
-    DigestState.create(Some(version), Some(digest), createTempDir(), settings)
+    DigestState.create(Some(version), Some(digest), createTempDir, settings)
 
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new RandomWrapper)

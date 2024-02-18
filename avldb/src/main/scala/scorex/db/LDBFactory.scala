@@ -27,8 +27,14 @@ object LDBFactory extends ScorexLogging {
    * return existed instance instead of creating new one.
    */
   case class RegisteredDB(impl: RocksDB, path: File) {
-    def get(key: Array[Byte]): Array[Byte] = impl.get(key)
-    def get(options: ReadOptions, key: Array[Byte]): Array[Byte] = impl.get(options, key)
+    def get(key: Array[Byte]): Array[Byte] = {
+      log.warn(s"Read key from DB at $path")
+      impl.get(key)
+    }
+    def get(options: ReadOptions, key: Array[Byte]): Array[Byte] = {
+      log.warn(s"Read key with options from DB at $path")
+      impl.get(options, key)
+    }
     def contains(key: Array[Byte]): Boolean = impl.keyExists(key)
     def iterator: RocksIterator = impl.newIterator()
     def iterator(options: ReadOptions): RocksIterator = impl.newIterator(options)
@@ -40,8 +46,11 @@ object LDBFactory extends ScorexLogging {
       lock.writeLock().lock()
       try {
         map.remove(path)
-        impl.close()
+        impl.closeE()
+      } catch {
+        case e: Throwable => log.warn(s"Error closing DB at $path: $e")
       } finally {
+        log.warn(s"Closed DB at $path")
         lock.writeLock().unlock()
       }
     }

@@ -8,15 +8,12 @@ import org.ergoplatform.modifiers.history.header.Header.Version
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.Algos
-import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.merkle.MerkleTree
+import scorex.crypto.authds.{ADDigest, LeafData}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.Try
-
-/**
-  */
-// todo: txs digest?
 
 /**
   * @param ergoHeader           - mainchain header
@@ -70,6 +67,11 @@ object SidechainHeader {
   def generate(ergoHeader: Header,
                mainChainTx: ErgoTransaction,
                sidechainTxs: IndexedSeq[ErgoTransaction]): SidechainBlock = {
+
+    val txIds: Seq[Array[Byte]] = sidechainTxs.map(_.serializedId)
+    val witnessIds: Seq[Array[Byte]] = sidechainTxs.map(tx => tx.witnessSerializedId)
+    val txsDigest: MerkleTree[Digest32] = Algos.merkleTree(LeafData @@ (txIds ++ witnessIds))
+
     ???
   }
 

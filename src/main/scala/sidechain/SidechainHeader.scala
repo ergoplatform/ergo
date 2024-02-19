@@ -13,16 +13,17 @@ import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.Try
+
 /**
   */
 // todo: txs digest?
 
 /**
-  * @param ergoHeader
-  * @param sidechainDigest - digest of AVL tree authenticating height -> sidechain header before this header
-  * @param sideChainDataTxProof
-  * @param sidechainTx
-  * @param sidechainStateDigest
+  * @param ergoHeader           - mainchain header
+  * @param sidechainDigest      - digest of AVL tree authenticating height -> sidechain header before this header
+  * @param sideChainDataTxProof -
+  * @param sidechainTx          - mainchain tx containing sidechain data
+  * @param sidechainStateDigest - digest of sidechain's UTXO set
   */
 case class SidechainHeader(ergoHeader: Header,
                            sidechainHeight: Int,
@@ -48,6 +49,7 @@ case class SidechainBlock(header: SidechainHeader, transactions: IndexedSeq[Ergo
 
 trait SidechainDatabase {
   def currentHeight: Int
+
   def sidechainUtxoSetsAtHeight(height: Int): Array[ADDigest]
 }
 
@@ -71,8 +73,22 @@ object SidechainHeader {
     ???
   }
 
-  private def checkSidechainData(sidechainDataBox: ErgoBox, db: SidechainDatabase): Boolean = {
-    val res = Try {
+  trait SidechainDataValidationResult
+
+  case object Ahead extends SidechainDataValidationResult
+
+  case object Behind extends SidechainDataValidationResult
+
+  case object Fork extends SidechainDataValidationResult
+
+  case class UnknownBlockCommitted(chainDigest: Array[Byte],
+                                   stateDigest: Array[Byte]) extends SidechainDataValidationResult
+
+  case class SidechainDataValidationError() extends SidechainDataValidationResult
+
+  private def checkSidechainData(sidechainDataBox: ErgoBox,
+                                 db: SidechainDatabase): SidechainDataValidationResult = {
+    Try {
       // REGISTERS
       //  R4: (Long)         h       - Height of the sidechain.
       //  R5: (Coll[Byte])  T_h     - Digest of state changes (transactions) done at h.
@@ -82,22 +98,23 @@ object SidechainHeader {
 
       val regs = sidechainDataBox.additionalRegisters
       val h = regs(R4).value.asInstanceOf[Int]
-      val tH = regs(R5)
-      val uH = regs(R6).value.asInstanceOf[Array[Byte]]
-      val cH = regs(R7)
-      val lastUpdateHeight = regs(R8)
+      val txsDigest = regs(R5).value.asInstanceOf[Array[Byte]]
+      val stateDigest = regs(R6).value.asInstanceOf[Array[Byte]]
+      val chainDigest = regs(R7).value.asInstanceOf[Array[Byte]]
+      val lastUpdateHeight = regs(R8).asInstanceOf[Int]
 
       val knownStateIds = db.sidechainUtxoSetsAtHeight(h)
 
-      if (knownStateIds.find(_.sameElements(uH)).isDefined) {
-
+      /**
+        * We check if we mainchain is committing to known sidechain block.
+        * If so, we check if this block ahead, behind or in fork.
+        */
+      if (knownStateIds.exists(_.sameElements(stateDigest))) {
+        ???
       } else {
-
+        UnknownBlockCommitted(chainDigest, stateDigest)
       }
-
-      ???
-    }
-    res.isSuccess
+    }.getOrElse(SidechainDataValidationError())
   }
 
   /**
@@ -106,11 +123,11 @@ object SidechainHeader {
   def verify(sh: SidechainHeader, db: SidechainDatabase): Boolean = {
     val txProof = sh.sideChainDataTxProof
     val sidechainDataBox = sh.sidechainTx.outputs.head
-    MainnetPoWVerifier.validate(sh.ergoHeader).isSuccess &&  // check pow todo: lower diff
-      txProof.valid(sh.ergoHeader.transactionsRoot) &&       // check sidechain tx membership
-      txProof.txId == sh.sidechainTx.id &&                   // check provided sidechain is correct
-      sidechainDataBox.tokens.contains(SideChainNFT) &&      // check that first output has sidechain data MFT
-      checkSidechainData(sidechainDataBox, db)
+    MainnetPoWVerifier.validate(sh.ergoHeader).isSuccess && // check pow todo: lower diff
+      txProof.valid(sh.ergoHeader.transactionsRoot) && // check sidechain tx membership
+      txProof.txId == sh.sidechainTx.id && // check provided sidechain is correct
+      sidechainDataBox.tokens.contains(SideChainNFT) && // check that first output has sidechain data MFT
+      checkSidechainData(sidechainDataBox, db).isInstanceOf[Ahead.type] // check sidechain data committed in the main-chain
     // todo: check sidechain data
     // todo: enforce linearity
     ???

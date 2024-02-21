@@ -1,6 +1,5 @@
 package sidechain
 
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{R4, R5, R6, R7, R8}
 import org.ergoplatform.mining.MainnetPoWVerifier
 import org.ergoplatform.modifiers.history.header.Header
@@ -30,6 +29,8 @@ case class SidechainHeader(ergoHeader: Header,
                            sidechainStateDigest: Array[Byte] // 33 bytes!
                           ) {
 
+  lazy val sidechainDataBox = sidechainTx.outputs.head
+
   val sidechainTxId: Array[Byte] = sidechainTx.serializedId
 
   val ergoHeaderId: Array[Version] = ergoHeader.serializedId
@@ -45,9 +46,16 @@ case class SidechainHeader(ergoHeader: Header,
 case class SidechainBlock(header: SidechainHeader, transactions: IndexedSeq[ErgoTransaction])
 
 trait SidechainDatabase {
-  def currentHeight: Int
+  def currentSidechainHeight(): Int
 
   def sidechainUtxoSetsAtHeight(height: Int): Array[ADDigest]
+
+  def updateMainchainCommitment(sidechainHeader: SidechainHeader)
+
+  def currentMainchainCommitment(): SidechainHeader
+
+  def isInSameSidechain(sh1: SidechainHeader, sh2: SidechainHeader): Boolean
+
 }
 
 /**
@@ -88,9 +96,11 @@ object SidechainHeader {
 
   case class SidechainDataValidationError() extends SidechainDataValidationResult
 
-  private def checkSidechainData(sidechainDataBox: ErgoBox,
+  private def checkSidechainData(sidechainHeader: SidechainHeader,
                                  db: SidechainDatabase): SidechainDataValidationResult = {
     Try {
+      val sidechainDataBox = sidechainHeader.sidechainDataBox
+
       // REGISTERS
       //  R4: (Long)         h       - Height of the sidechain.
       //  R5: (Coll[Byte])  T_h     - Digest of state changes (transactions) done at h.
@@ -102,21 +112,31 @@ object SidechainHeader {
       val h = regs(R4).value.asInstanceOf[Int]
       val txsDigest = regs(R5).value.asInstanceOf[Array[Byte]]
       val stateDigest = regs(R6).value.asInstanceOf[Array[Byte]]
-      val chainDigest = regs(R7).value.asInstanceOf[Array[Byte]]
-      val lastUpdateHeight = regs(R8).asInstanceOf[Int]
+      val chainDigest = regs(R7).value.asInstanceOf[Array[Byte]] // todo: check correctness
+      val lastUpdateHeight = regs(R8).asInstanceOf[Int] // todo: check against current mainchain height
 
       val knownStateIds = db.sidechainUtxoSetsAtHeight(h)
+
+      val currentCmt = db.currentMainchainCommitment()
 
       /**
         * We check if we mainchain is committing to known sidechain block.
         * If so, we check if this block ahead, behind or in fork.
         */
       if (knownStateIds.exists(_.sameElements(stateDigest))) {
-        ???
+        val sameChain = db.isInSameSidechain(currentCmt, sidechainHeader)
+
+        if (sameChain && sidechainHeader.sidechainHeight > currentCmt.sidechainHeight) {
+          Ahead
+        } else if (sameChain && sidechainHeader.sidechainHeight < currentCmt.sidechainHeight) {
+          Behind
+        } else {
+          Fork
+        }
       } else {
         UnknownBlockCommitted(chainDigest, stateDigest)
       }
-    }.getOrElse(SidechainDataValidationError())
+    }.getOrElse(SidechainDataValidationError()) // todo: pass error
   }
 
   /**
@@ -124,12 +144,12 @@ object SidechainHeader {
     */
   def verify(sh: SidechainHeader, db: SidechainDatabase): Boolean = {
     val txProof = sh.sideChainDataTxProof
-    val sidechainDataBox = sh.sidechainTx.outputs.head
+
     MainnetPoWVerifier.validate(sh.ergoHeader).isSuccess && // check pow todo: lower diff
       txProof.valid(sh.ergoHeader.transactionsRoot) && // check sidechain tx membership
       txProof.txId == sh.sidechainTx.id && // check provided sidechain is correct
-      sidechainDataBox.tokens.contains(SideChainNFT) && // check that first output has sidechain data MFT
-      checkSidechainData(sidechainDataBox, db).isInstanceOf[Ahead.type] // check sidechain data committed in the main-chain
+      sh.sidechainDataBox.tokens.contains(SideChainNFT) && // check that first output has sidechain data MFT
+      checkSidechainData(sh, db).isInstanceOf[Ahead.type] // check sidechain data committed in the main-chain
     // todo: check sidechain data
     // todo: enforce linearity
     ???

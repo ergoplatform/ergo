@@ -1,12 +1,16 @@
 package sidechain
 
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{R4, R5, R6, R7, R8}
 import org.ergoplatform.mining.MainnetPoWVerifier
+import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.header.Header.Version
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.utils.ScorexEncoder
+import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationSettings, ValidationState}
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.authds.{ADDigest, LeafData}
 import scorex.crypto.hash.Digest32
@@ -17,7 +21,7 @@ import scala.util.Try
 /**
   * @param ergoHeader           - mainchain header
   * @param sidechainDigest      - digest of AVL tree authenticating height -> sidechain header before this header
-  * @param sideChainDataTxProof -
+  * @param sideChainDataTxProof - proof of inclusion for transaction carrying sidechain data
   * @param sidechainTx          - mainchain tx containing sidechain data
   * @param sidechainStateDigest - digest of sidechain's UTXO set
   */
@@ -29,7 +33,7 @@ case class SidechainHeader(ergoHeader: Header,
                            sidechainStateDigest: Array[Byte] // 33 bytes!
                           ) {
 
-  lazy val sidechainDataBox = sidechainTx.outputs.head
+  lazy val sidechainDataBox: ErgoBox = sidechainTx.outputs.head
 
   val sidechainTxId: Array[Byte] = sidechainTx.serializedId
 
@@ -50,7 +54,7 @@ trait SidechainDatabase {
 
   def sidechainUtxoSetsAtHeight(height: Int): Array[ADDigest]
 
-  def updateMainchainCommitment(sidechainHeader: SidechainHeader)
+  def updateMainchainCommitment(sidechainHeader: SidechainHeader): Unit
 
   def currentMainchainCommitment(): SidechainHeader
 
@@ -70,6 +74,8 @@ trait SidechainDatabase {
 
 object SidechainHeader {
 
+  val SidechainHeaderModifierTypeId: NetworkObjectTypeId.Value = NetworkObjectTypeId.Value @@ 64.toByte
+
   val SideChainNFT: ModifierId = ModifierId @@ ""
 
   def generate(ergoHeader: Header,
@@ -82,6 +88,8 @@ object SidechainHeader {
 
     ???
   }
+
+  trait ProcessingCommand
 
   trait SidechainDataValidationResult
 
@@ -139,23 +147,39 @@ object SidechainHeader {
     }.getOrElse(SidechainDataValidationError()) // todo: pass error
   }
 
+
+  object SidechainValidationSettings extends ValidationSettings {
+    override val isFailFast: Boolean = true
+
+    // todo: move out of ValidationSettings
+    override def getError(id: Short, invalidMod: InvalidModifier): ValidationResult.Invalid = ???
+
+    // todo: move out of ValidationSettings
+    override def isActive(id: Short): Boolean = ???
+  }
+
   /**
     * Function for sidechain validator to verify sidechain header
     */
-  def verify(sh: SidechainHeader, db: SidechainDatabase): Boolean = {
+  def verify(sh: SidechainHeader, db: SidechainDatabase): ValidationResult[ProcessingCommand] = {
     val txProof = sh.sideChainDataTxProof
 
-    MainnetPoWVerifier.validate(sh.ergoHeader).isSuccess && // check pow todo: lower diff
-      txProof.valid(sh.ergoHeader.transactionsRoot) && // check sidechain tx membership
-      txProof.txId == sh.sidechainTx.id && // check provided sidechain is correct
-      sh.sidechainDataBox.tokens.contains(SideChainNFT) && // check that first output has sidechain data MFT
-      checkSidechainData(sh, db).isInstanceOf[Ahead.type] // check sidechain data committed in the main-chain
-    // todo: check sidechain data
+    val vs = ValidationState(ModifierValidator.success, SidechainValidationSettings)(ScorexEncoder.default)
+
+    val validateBeforeSidechainData =
+      vs.validateNoFailure(1.toShort, MainnetPoWVerifier.validate(sh.ergoHeader), NetworkObjectTypeId.Value @@ 64.toByte) // todo: lower diff
+        .validate(2, txProof.valid(sh.ergoHeader.transactionsRoot), InvalidModifier("" , sh.id, SidechainHeaderModifierTypeId)) // check sidechain tx membership
+        .validate(3, txProof.txId == sh.sidechainTx.id, InvalidModifier("" , sh.id, SidechainHeaderModifierTypeId)) // check provided sidechain is correct
+        .validate(4, sh.sidechainDataBox.tokens.contains(SideChainNFT), InvalidModifier("" , sh.id, SidechainHeaderModifierTypeId))// check that first output has sidechain data MFT
+
+    // todo: fix
+    validateBeforeSidechainData.validate(5, checkSidechainData(sh, db).isInstanceOf[Ahead.type], InvalidModifier("" , sh.id, SidechainHeaderModifierTypeId)) // check sidechain data committed in the main-chain
+
     // todo: enforce linearity
     ???
   }
 
-  def verify(sb: SidechainBlock, db: SidechainDatabase): Boolean = {
+  def verify(sb: SidechainBlock, db: SidechainDatabase): ValidationResult[ProcessingCommand] = {
     verify(sb.header, db)
     // todo: verify transactions
   }

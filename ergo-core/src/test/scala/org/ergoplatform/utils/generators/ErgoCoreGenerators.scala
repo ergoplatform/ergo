@@ -88,10 +88,36 @@ object ErgoCoreGenerators {
       scorex.util.Random.randomBytes
     }
 
+  /**
+   * Main KV generator: contains special handling for key.head == 0
+   */
   def extensionKvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
     key <- genSecureBoundedBytes(keySize, keySize)
     value <- if (key.head == 0) genSecureBoundedBytes(4, 4) else genSecureBoundedBytes(valuesSize, valuesSize)
   } yield (key, value)
+
+  /**
+   * Random KV generator: all random key/values
+   */
+  def extensionKvGenImvValue(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
+    key <- genSecureBoundedBytes(keySize, keySize)
+    value <- genSecureBoundedBytes(valuesSize, valuesSize)
+  } yield (key, value)
+
+  /**
+   * Special KV generator: does not generate key.head == 1, because improperly packed interlink
+   * would be generated, leading to failure.
+   */
+  def extensionKvGenValidMKV(keySize: Int, valueSize: Int): Gen[(Array[Byte], Array[Byte])] = {
+    def keyGenHeadNotOne: Gen[Array[Byte]] = genSecureBoundedBytes(keySize, keySize).flatMap { key =>
+      if (key.headOption.contains(1.toByte)) keyGenHeadNotOne else Gen.const(key)
+    }
+
+    for {
+      key <- keyGenHeadNotOne
+      value <- genSecureBoundedBytes(valueSize, valueSize)
+    } yield (key, value)
+  }
 
   lazy val extensionGen: Gen[Extension] = for {
     headerId <- modifierIdGen

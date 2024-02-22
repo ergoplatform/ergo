@@ -67,7 +67,7 @@ class ErgoStateContextSpec extends ErgoCorePropertyTest {
     sc.appendFullBlock(fbWithFields(imvKey +: oldFields)) shouldBe 'failure
 
     // validation of field value sizes
-    val imvValue = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize + 1).sample.get
+    val imvValue = extensionKvGenImvValue(Extension.FieldKeySize, Extension.FieldValueMaxSize + 1).sample.get
     sc.appendFullBlock(fbWithFields(imvValue +: oldFields)) shouldBe 'failure
 
     // validation of incorrect interlinks
@@ -76,8 +76,8 @@ class ErgoStateContextSpec extends ErgoCorePropertyTest {
     ).fields
     sc.appendFullBlock(fbWithFields(invalidInterlinks ++ oldFields)) shouldBe 'failure
 
+    val validMKV = extensionKvGenValidMKV(Extension.FieldKeySize, Extension.FieldValueMaxSize).sample.get
     // validation of key duplicates in fields
-    val validMKV = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize).sample.get
     sc.appendFullBlock(fbWithFields(Seq(validMKV, validMKV) ++ oldFields)) shouldBe 'failure
 
     // valid application of correct extension

@@ -66,8 +66,17 @@ class ErgoStateContextSpec extends ErgoCorePropertyTest {
     val imvKey = extensionKvGen(Extension.FieldKeySize - 1, Extension.FieldValueMaxSize).sample.get
     sc.appendFullBlock(fbWithFields(imvKey +: oldFields)) shouldBe 'failure
 
+    // https://github.com/ergoplatform/ergo/issues/2114
+    // this fails sporadically, when `(imvValue._1.head == 0)`, because less value bytes will be generated
+    // by extensionKvGen(). Workaround is to just generate again while `(imvValue._1.head == 0)`
+    // TODO: document, and possibly rewrite/replace extensionKvGen after the above issues are clarified/solved
+    //       https://github.com/ergoplatform/ergo/issues/2118
+
     // validation of field value sizes
-    val imvValue = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize + 1).sample.get
+    var imvValue = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize + 1).sample.get
+    while (imvValue._1.head == 0) {
+        imvValue = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize + 1).sample.get
+    }
     sc.appendFullBlock(fbWithFields(imvValue +: oldFields)) shouldBe 'failure
 
     // validation of incorrect interlinks
@@ -76,8 +85,17 @@ class ErgoStateContextSpec extends ErgoCorePropertyTest {
     ).fields
     sc.appendFullBlock(fbWithFields(invalidInterlinks ++ oldFields)) shouldBe 'failure
 
+    // https://github.com/ergoplatform/ergo/issues/2114
+    // if validMKV._1.head is 1, appendFullBlock within "valid application of correct extension" will fail,
+    // because with "key.head == 1", improperly packed interlink would be generated.
+    // As a workaround, just generate new values until (validMKV._1.head != 1)
+    // TODO: investigate and provide a full fix (followup issue)
+    //       https://github.com/ergoplatform/ergo/issues/2117
+    var validMKV = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize).sample.get
+    while (validMKV._1.head == 1) {
+      validMKV = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize).sample.get
+    }
     // validation of key duplicates in fields
-    val validMKV = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize).sample.get
     sc.appendFullBlock(fbWithFields(Seq(validMKV, validMKV) ++ oldFields)) shouldBe 'failure
 
     // valid application of correct extension

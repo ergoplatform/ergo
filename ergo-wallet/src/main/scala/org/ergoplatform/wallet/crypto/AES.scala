@@ -51,12 +51,10 @@ object AES {
     val cipher = Cipher.getInstance(CipherAlgoInstance)
     cipher.init(Cipher.DECRYPT_MODE, keySpec, paramsSpec)
 
-    Try(cipher.doFinal(authTag ++ ciphertext)).fold ({
+    Try(cipher.doFinal(authTag ++ ciphertext)).recoverWith ({
       case _: AEADBadTagException  => Failure(new Throwable("Bad wallet password"))
       case e: Throwable            => Failure(e)
-    },
-      s => Success(s)
-    )
+    })
   }
 
   private def deriveEncryptionKeySpec(pass: Array[Char], salt: Array[Byte])

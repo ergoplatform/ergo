@@ -4,28 +4,26 @@ import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.HistoryTestHelpers
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
-import scorex.core.PersistentNodeViewModifier
 import scorex.core.network.ModifiersStatus.{Received, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.message._
-import scorex.core.network.peer.PeerInfo
+import org.ergoplatform.network.message._
+import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
-import scorex.core.serialization.ScorexSerializer
-import scorex.core.utils.NetworkTimeProvider
-import scorex.testkit.utils.AkkaFixture
+import org.ergoplatform.serialization.ErgoSerializer
+import org.ergoplatform.testkit.utils.AkkaFixture
 
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
@@ -54,13 +52,12 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
-  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
+  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings)
 
   class SynchronizerMock(networkControllerRef: ActorRef,
                          viewHolderRef: ActorRef,
                          syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                          settings: ErgoSettings,
-                         timeProvider: NetworkTimeProvider,
                          syncTracker: ErgoSyncTracker,
                          deliveryTracker: DeliveryTracker)
                         (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
@@ -68,20 +65,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     viewHolderRef,
     syncInfoSpec,
     settings,
-    timeProvider,
     syncTracker,
-    deliveryTracker)(ec) {
-
-    protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
-      mod match {
-        case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) =>
-          fb.toSeq.foreach(s => broadcastModifierInv(s))
-        case h: Header if h.isNew(timeProvider, 1.hour) =>
-          broadcastModifierInv(h)
-        case _ =>
-      }
-    }
-  }
+    deliveryTracker)(ec)
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(2.seconds, 100.millis)
   val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
@@ -124,19 +109,18 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   }
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
-  (ActorRef, ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM], DeliveryTracker) = {
+  (ActorRef, ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, ErgoSerializer[PM], DeliveryTracker) = {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val h = localHistoryGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = localStateGen.sample.get
-    val settings = ErgoSettings.read()
+    val settings = ErgoSettingsReader.read()
     val pool = ErgoMemPool.empty(settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
-    val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
-    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
     // each test should always start with empty history
@@ -149,7 +133,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         nodeViewHolderMockRef,
         ErgoSyncInfoMessageSpec,
         settings,
-        tp,
         syncTracker,
         deliveryTracker)
     ))
@@ -157,17 +140,16 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
 
-    val peerInfo = PeerInfo(defaultPeerSpec, timeProvider.time())
+    val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
-      lastMessage = 0,
       Some(peerInfo)
     )
     synchronizerMockRef ! ChangedHistory(history)
     synchronizerMockRef ! ChangedMempool(pool)
-    val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
+    val serializer: ErgoSerializer[PM] = HeaderSerializer.asInstanceOf[ErgoSerializer[PM]]
     (synchronizerMockRef, nodeViewHolderMockRef, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, eventListener, serializer, deliveryTracker)
   }
 
@@ -180,7 +162,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
-    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
     // each test should always start with empty history
@@ -193,17 +175,15 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         nodeViewHolderMockRef,
         ErgoSyncInfoMessageSpec,
         settings,
-        timeProvider,
         syncTracker,
         deliveryTracker)
     ))
 
-    val peerInfo = PeerInfo(defaultPeerSpec, timeProvider.time())
+    val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val peer: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
-      lastMessage = 0,
       Some(peerInfo)
     )
   }
@@ -254,7 +234,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
 
       // we generate and apply existing base chain
-      val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -290,7 +270,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       }
       eventually {
         // test whether applied header was actually persisted to history
-        val hist = ErgoHistory.readOrGenerate(settings, timeProvider)
+        val hist = ErgoHistory.readOrGenerate(settings)(null)
         hist.bestHeaderIdOpt.get shouldBe appliedHeader.id
       }
     }
@@ -313,7 +293,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // we generate fork of two headers, starting from the parent of the best header
       // so the depth of the rollback is 1, and the fork bypasses the best chain by 1 header
-      val hhistory = ErgoHistory.readOrGenerate(settings, timeProvider)
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
       val newHeaders = genHeaderChain(2, hhistory, diffBitsOpt = None, useRealTs = false).headers
       val newHistory = newHeaders.foldLeft(hhistory) { case (hist, header) => hist.append(header).get._1 }
       val parentOpt = newHistory.lastHeaders(2).headOption
@@ -354,7 +334,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       deliveryTracker.reset()
 
-      val hist = ErgoHistory.readOrGenerate(settings, timeProvider)
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
       // generate smaller fork that is going to be reverted after applying a bigger fork
       val smallFork = genChain(4, hist)
 

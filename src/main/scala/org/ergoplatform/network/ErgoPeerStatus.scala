@@ -1,11 +1,9 @@
 package org.ergoplatform.network
 
 import io.circe.{Encoder, Json}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.app.Version
-import scorex.core.consensus.PeerChainStatus
+import org.ergoplatform.consensus.PeerChainStatus
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import scorex.core.network.ConnectedPeer
-import scorex.core.utils.TimeProvider.Time
 
 /**
   * Container for status of another peer
@@ -21,7 +19,7 @@ case class ErgoPeerStatus(peer: ConnectedPeer,
                           height: Height,
                           lastSyncSentTime: Option[Time],
                           lastSyncGetTime: Option[Time]) {
-  val mode: Option[ModePeerFeature] = ErgoPeerStatus.mode(peer)
+  val mode: Option[ModePeerFeature] = peer.mode
 
   def version: Option[Version] = peer.peerInfo.map(_.peerSpec.protocolVersion)
 }
@@ -29,13 +27,6 @@ case class ErgoPeerStatus(peer: ConnectedPeer,
 object ErgoPeerStatus {
 
   import io.circe.syntax._
-
-  /**
-    * Helper method to get operating mode of the peer
-    */
-  def mode(peer: ConnectedPeer): Option[ModePeerFeature] = {
-    peer.peerInfo.flatMap(_.peerSpec.features.collectFirst[ModePeerFeature]({ case mf: ModePeerFeature => mf}))
-  }
 
   implicit val jsonEncoder: Encoder[ErgoPeerStatus] = { status: ErgoPeerStatus =>
     implicit val mfEnc: Encoder[ModePeerFeature] = ModePeerFeature.jsonEncoder

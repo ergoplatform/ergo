@@ -1,21 +1,23 @@
 // this values should be in sync with root (i.e. ../build.sbt)
 val scala211 = "2.11.12"
-val scala212 = "2.12.10"
+val scala212 = "2.12.18"
+val scala213 = "2.13.12"
 
-val circeVersion = "0.13.0"
-val circeVersion211 = "0.10.0"
+val deps211 = Seq(
+  "io.circe" %% "circe-core" % "0.10.0",
+  "io.circe" %% "circe-generic" % "0.10.0",
+  "io.circe" %% "circe-parser" % "0.10.0")
+val deps212 = Seq(
+  "io.circe" %% "circe-core" % "0.13.0",
+  "io.circe" %% "circe-generic" % "0.13.0",
+  "io.circe" %% "circe-parser" % "0.13.0")
 
 libraryDependencies ++= Seq(
-  "org.scodec" %% "scodec-bits" % "1.1.6",
-
-  "io.circe" %% "circe-core" % (if (scalaVersion.value == scala211) circeVersion211 else circeVersion),
-  "io.circe" %% "circe-generic" % (if (scalaVersion.value == scala211) circeVersion211 else circeVersion),
-  "io.circe" %% "circe-parser" % (if (scalaVersion.value == scala211) circeVersion211 else circeVersion),
-
+  "org.scodec" %% "scodec-bits" % "1.1.34",
   "org.scalatest" %% "scalatest" % "3.1.1" % "test",
   "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
-  "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test
-)
+  "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
+) ++ (if (scalaVersion.value == scala211) deps211 else deps212)
 
 publishMavenStyle in ThisBuild := true
 

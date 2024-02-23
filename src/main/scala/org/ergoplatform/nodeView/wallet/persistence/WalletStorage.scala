@@ -1,18 +1,18 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import com.google.common.primitives.{Ints, Shorts}
+import org.ergoplatform.P2PKAddress
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
-import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
-import org.ergoplatform.P2PKAddress
-import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
+import scorex.crypto.hash.Blake2b256
 import scorex.db.{LDBFactory, LDBKVStore}
+import scorex.util.ScorexLogging
+import sigmastate.serialization.SigmaSerializer
 
 import java.io.File
-import scorex.util.ScorexLogging
-
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -29,6 +29,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
 
   import WalletStorage._
 
+  private var cachedStateContext: Option[ErgoStateContext] = None
+
   //todo: used now only for importing pre-3.3.0 wallet database, remove after while
   def readPaths(): Seq[DerivationPath] = store
     .get(SecretPathsKey)
@@ -38,7 +40,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
       val qty = Ints.fromByteArray(r.take(4))
       (0 until qty).foldLeft((Seq.empty[DerivationPath], r.drop(4))) { case ((acc, bytes), _) =>
         val length = Ints.fromByteArray(bytes.take(4))
-        val pathTry = DerivationPathSerializer.parseBytesTry(bytes.slice(4, 4 + length))
+        val r = SigmaSerializer.startReader(bytes.slice(4, 4 + length))
+        val pathTry = DerivationPathSerializer.parseTry(r)
         val newAcc = pathTry.map(acc :+ _).getOrElse(acc)
         val bytesTail = bytes.drop(4 + length)
         newAcc -> bytesTail
@@ -48,19 +51,15 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   /**
     * Remove pre-3.3.0 derivation paths
     */
-  def removePaths(): Try[Unit] = store.remove(Seq(SecretPathsKey))
+  def removePaths(): Try[Unit] = store.remove(Array(SecretPathsKey))
 
   /**
     * Store wallet-related public key in the database
     *
-    * @param publicKeys - public key to store
+    * @param publicKey - public key to store
     */
-  def addPublicKeys(publicKeys: ExtendedPublicKey*): Try[Unit] = {
-    store.insert {
-      publicKeys.map { publicKey =>
-        pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)
-      }
-    }
+  def addPublicKey(publicKey: ExtendedPublicKey): Try[Unit] = {
+    store.insert(pubKeyPrefixKey(publicKey), ExtendedPublicKeySerializer.toBytes(publicKey))
   }
 
   /**
@@ -69,8 +68,9 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   def getPublicKey(path: DerivationPath): Option[ExtendedPublicKey] = {
     store
       .get(pubKeyPrefixKey(path))
-      .flatMap{bytes =>
-        ExtendedPublicKeySerializer.parseBytesTry(bytes) match {
+      .flatMap { bytes =>
+        val r = SigmaSerializer.startReader(bytes)
+        ExtendedPublicKeySerializer.parseTry(r) match {
           case Success(key) =>
             Some(key)
           case Failure(t) =>
@@ -90,25 +90,33 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     */
   def readAllKeys(): Seq[ExtendedPublicKey] = {
     store.getRange(FirstPublicKeyId, LastPublicKeyId).map { case (_, v) =>
-      ExtendedPublicKeySerializer.parseBytes(v)
+      ExtendedPublicKeySerializer.fromBytes(v)
     }
   }
+
+  def getStateContext(parameters: Parameters): ErgoStateContext = cachedStateContext.getOrElse(readStateContext(parameters))
 
   /**
     * Write state context into the database
     * @param ctx - state context
     */
-  def updateStateContext(ctx: ErgoStateContext): Try[Unit] = store
-    .insert(Seq(StateContextKey -> ctx.bytes))
+  def updateStateContext(ctx: ErgoStateContext): Try[Unit] = {
+    cachedStateContext = Some(ctx)
+    store.insert(StateContextKey, ctx.bytes)
+  }
 
   /**
     * Read state context from the database
     * @return state context read
     */
-  def readStateContext(parameters: Parameters): ErgoStateContext = store
-    .get(StateContextKey)
-    .flatMap(r => ErgoStateContextSerializer(settings).parseBytesTry(r).toOption)
-    .getOrElse(ErgoStateContext.empty(settings, parameters))
+  def readStateContext(parameters: Parameters): ErgoStateContext = {
+    cachedStateContext = Some(store
+      .get(StateContextKey)
+      .flatMap(r => ErgoStateContextSerializer(settings.chainSettings).parseBytesTry(r).toOption)
+      .getOrElse(ErgoStateContext.empty(settings.chainSettings, parameters))
+    )
+    cachedStateContext.get
+  }
 
   /**
     * Update address used by the wallet for change outputs
@@ -116,7 +124,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     */
   def updateChangeAddress(address: P2PKAddress): Try[Unit] = {
     val bytes = settings.chainSettings.addressEncoder.toString(address).getBytes(Constants.StringEncoding)
-    store.insert(Seq(ChangeAddressKey -> bytes))
+    store.insert(ChangeAddressKey, bytes)
   }
 
   /**
@@ -139,10 +147,10 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   def addScan(scanReq: ScanRequest): Try[Scan] = {
     val id = ScanId @@ (lastUsedScanId + 1).toShort
     scanReq.toScan(id).flatMap { app =>
-      store.insert(Seq(
-        scanPrefixKey(id) -> ScanSerializer.toBytes(app),
-        lastUsedScanIdKey -> Shorts.toByteArray(id)
-      )).map(_ => app)
+      store.insert(
+        Array(scanPrefixKey(id), lastUsedScanIdKey),
+        Array(ScanSerializer.toBytes(app), Shorts.toByteArray(id))
+      ).map(_ => app)
     }
   }
 
@@ -151,7 +159,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @param id scan identifier
     */
   def removeScan(id: Short): Try[Unit] =
-    store.remove(Seq(scanPrefixKey(id)))
+    store.remove(Array(scanPrefixKey(id)))
 
   /**
     * Get scan by its identifier

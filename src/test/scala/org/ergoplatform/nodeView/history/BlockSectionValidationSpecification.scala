@@ -1,12 +1,13 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.NonHeaderBlockSection
+import org.ergoplatform.consensus.ModifierSemanticValidity
+import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.utils.HistoryTestHelpers
-import scorex.core.consensus.ModifierSemanticValidity
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -72,17 +73,17 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
 
     // should not be able to apply when blocks at this height are already pruned
     history.applicableTry(section) shouldBe 'success
-    history.pruningProcessor.minimalFullBlockHeightVar = history.bestHeaderOpt.get.height + 1
-    history.pruningProcessor.isHeadersChainSyncedVar = true
+    history.writeMinimalFullBlockHeight(history.bestHeaderOpt.get.height + 1)
+    history.isHeadersChainSyncedVar = true
     history.applicableTry(section) shouldBe 'failure
-    history.pruningProcessor.minimalFullBlockHeightVar = ErgoHistory.GenesisHeight
+    history.writeMinimalFullBlockHeight(GenesisHeight)
 
     // should not be able to apply if corresponding header is marked as invalid
     history.applicableTry(section) shouldBe 'success
-    history.historyStorage.insert(Seq(history.validityKey(header.id) -> Array(0.toByte)), Seq.empty).get
+    history.historyStorage.insert(Array(history.validityKey(header.id) -> Array(0.toByte)), Array.empty[BlockSection]).get
     history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Invalid
     history.applicableTry(section) shouldBe 'failure
-    history.historyStorage.insert(Seq(history.validityKey(header.id) -> Array(1.toByte)), Seq.empty).get
+    history.historyStorage.insert(Array(history.validityKey(header.id) -> Array(1.toByte)), Array.empty[BlockSection]).get
 
     // should not be able to apply if already in history
     history.applicableTry(section) shouldBe 'success

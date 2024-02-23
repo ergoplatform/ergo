@@ -1,14 +1,14 @@
 package org.ergoplatform.wallet.secrets
 
-import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index}
 import org.ergoplatform.wallet.interface4j.SecretString
+import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.scalatest.Assertion
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.encode.Base58
-import org.ergoplatform.P2PKAddress
-import org.ergoplatform.ErgoAddressEncoder
 
 class ExtendedSecretKeySpec
   extends AnyPropSpec

@@ -6,15 +6,14 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransacti
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
-import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils._
 import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Failure, Success, Try}
 
 
 /**
@@ -32,7 +31,6 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                                   (implicit settings: ErgoSettings)
   extends ErgoMemPoolReader with ScorexLogging {
 
-  import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
 
   /**
@@ -88,49 +86,66 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
   /**
     * Method to put a transaction into the memory pool. Validation of the transactions against
-    * the state is done in NodeVieHolder. This put() method can check whether a transaction is valid
+    * the state is done in NodeViewHolder. This put() method can check whether a transaction is valid
     * @param unconfirmedTx
     * @return Success(updatedPool), if transaction successfully added to the pool, Failure(_) otherwise
     */
-  def put(unconfirmedTx: UnconfirmedTransaction): Try[ErgoMemPool] = put(Seq(unconfirmedTx))
-
-  def put(unconfirmedTxs: Iterable[UnconfirmedTransaction]): Try[ErgoMemPool] = Try {
-    putWithoutCheck(unconfirmedTxs.filterNot(unconfirmedTx => pool.contains(unconfirmedTx.transaction.id)))
-  }
-
-  def putWithoutCheck(tx: UnconfirmedTransaction): ErgoMemPool = {
-    val updatedPool = pool.put(tx, feeFactor(tx))
+  def put(unconfirmedTx: UnconfirmedTransaction): ErgoMemPool = {
+    val updatedPool = pool.put(unconfirmedTx, feeFactor(unconfirmedTx))
     new ErgoMemPool(updatedPool, stats, sortingOption)
   }
 
-  def putWithoutCheck(txs: Iterable[UnconfirmedTransaction]): ErgoMemPool = {
-    val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx, feeFactor(tx)) }
-    new ErgoMemPool(updatedPool, stats, sortingOption)
+  def put(txs: TraversableOnce[UnconfirmedTransaction]): ErgoMemPool = {
+    txs.foldLeft(this) { case (acc, tx) => acc.put(tx) }
   }
 
-  def remove(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
-    log.debug(s"Removing transaction ${unconfirmedTransaction.id} from the mempool")
-    val tx = unconfirmedTransaction.transaction
+  private def updateStatsOnRemoval(tx: ErgoTransaction): MemPoolStatistics = {
     val wtx = pool.transactionsRegistry.get(tx.id)
-    val updStats = wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
-      .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
-    new ErgoMemPool(pool.remove(unconfirmedTransaction), updStats, sortingOption)
+    wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
+       .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
   }
 
-  def filter(condition: UnconfirmedTransaction => Boolean): ErgoMemPool = {
-    new ErgoMemPool(pool.filter(condition), stats, sortingOption)
+  /**
+    * Remove transaction from the pool
+    */
+  def remove(tx: ErgoTransaction): ErgoMemPool = {
+    log.debug(s"Removing transaction ${tx.id} from the mempool")
+    new ErgoMemPool(pool.remove(tx), updateStatsOnRemoval(tx), sortingOption)
   }
 
-  def filter(txs: Seq[UnconfirmedTransaction]): ErgoMemPool = filter(t => !txs.exists(_.transaction.id == t.transaction.id))
+  def remove(txs: TraversableOnce[ErgoTransaction]): ErgoMemPool = {
+    txs.foldLeft(this) { case (acc, tx) => acc.remove(tx) }
+  }
 
   /**
     * Invalidate transaction and delete it from pool
     *
-    * @param unconfirmedTransaction - Transaction to invalidate
+    * @param unconfirmedTx - Transaction to invalidate
     */
-  def invalidate(unconfirmedTransaction: UnconfirmedTransaction): ErgoMemPool = {
-    new ErgoMemPool(pool.invalidate(unconfirmedTransaction), stats, sortingOption)
+  def invalidate(unconfirmedTx: UnconfirmedTransaction): ErgoMemPool = {
+    log.debug(s"Invalidating mempool transaction ${unconfirmedTx.id}")
+    new ErgoMemPool(pool.invalidate(unconfirmedTx), updateStatsOnRemoval(unconfirmedTx.transaction), sortingOption)
   }
+
+  def invalidate(unconfirmedTransactionId: ModifierId): ErgoMemPool = {
+    pool.get(unconfirmedTransactionId) match {
+      case Some(utx) => invalidate(utx)
+      case None =>
+        log.warn(s"pool.get failed for $unconfirmedTransactionId")
+        pool.orderedTransactions.valuesIterator.find(_.id == unconfirmedTransactionId) match {
+          case Some(utx) =>
+            invalidate(utx)
+          case None =>
+            log.warn(s"Can't invalidate transaction $unconfirmedTransactionId as it is not in the pool")
+            this
+        }
+    }
+  }
+
+  /**
+    * Check if transaction was invalidated earlier
+    */
+  def isInvalidated(id: ModifierId): Boolean = pool.isInvalidated(id)
 
   /**
     * @return inputs spent by the mempool transactions
@@ -211,7 +226,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               // Allow proceeded transaction to spend outputs of pooled transactions.
               val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
-                utxoWithPool.validateWithCost(tx, Some(utxo.stateContext), costLimit, None) match {
+                val validationContext = utxo.stateContext.simplifiedUpcoming()
+                utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
                   case Success(cost) =>
                     acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
                   case Failure(ex) =>
@@ -221,25 +237,15 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                 val exc = new Exception("not all utxos in place yet")
                 this -> new ProcessingOutcome.Declined(exc, validationStartTime)
               }
-            case validator: TransactionValidation =>
-              // transaction validation currently works only for UtxoState, so this branch currently
-              // will not be triggered probably
-              validator.validateWithCost(tx, costLimit) match {
-                case Success(cost) =>
-                  acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
-                case Failure(ex) =>
-                  this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
-              }
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
               // peers though, so such transactions can come from the local wallet only.
               acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime)
           }
         } else {
-          val contains = this.contains(tx.id)
-          val msg = if(contains) {
+          val msg = if (this.contains(tx.id)) {
             s"Pool can not accept transaction ${tx.id}, it is already in the mempool"
-          } else if(pool.size == settings.nodeSettings.mempoolCapacity) {
+          } else if (pool.size == settings.nodeSettings.mempoolCapacity) {
             s"Pool can not accept transaction ${tx.id}, the mempool is full"
           } else {
             s"Pool can not accept transaction ${tx.id}"
@@ -317,111 +323,12 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 }
 
 object ErgoMemPool extends ScorexLogging {
-
   /**
-   * Hierarchy of sorting strategies for mempool transactions
+   * Create empty mempool
+   *
+   * @param settings - node settings (to get mempool settings from)
+   * @return empty mempool
    */
-  sealed trait SortingOption
-
-  object SortingOption {
-    /**
-      * Sort transactions by fee paid for transaction size, so fee/byte
-      */
-    case object FeePerByte extends SortingOption
-
-    /**
-      * Sort transactions by fee paid for transaction contracts validation cost, so fee/execution unit
-      */
-    case object FeePerCycle extends SortingOption
-
-    /**
-      * @return randomly chosen mempool sorting strategy
-      */
-    def random(): SortingOption = {
-      if (Random.nextBoolean()) {
-        FeePerByte
-      } else {
-        FeePerCycle
-      }
-    }
-  }
-
-  /**
-    * Root of possible mempool transaction validation result family
-    */
-  sealed trait ProcessingOutcome {
-    /**
-      * Time when transaction validation was started
-      */
-    protected val validationStartTime: Long
-
-    /**
-      * We assume that validation ends when this processing result class is constructed
-      */
-    private val validationEndTime: Long = System.currentTimeMillis()
-
-    /**
-      * 5.0 JIT costing was designed in a way that 1000 cost units are roughly corresponding to 1 ms of 1 CPU core
-      * on commodity hardware (of 2021). So if we do not know the exact cost of transaction, we can estimate it by
-      * tracking validation time and then getting estimated validation cost by multiplying the time (in ms) by 1000
-      */
-    val costPerMs = 1000
-
-    /**
-      * Estimated validation cost, see comment for `costPerMs`
-      */
-    def cost: Int = {
-      val timeDiff = validationEndTime - validationStartTime
-      if (timeDiff == 0) {
-        costPerMs
-      } else if (timeDiff > 1000000) {
-        Int.MaxValue // shouldn't be here, so this branch is mostly to have safe .toInt below
-      } else {
-        (timeDiff * costPerMs).toInt
-      }
-    }
-  }
-
-  object ProcessingOutcome {
-
-    /**
-      * Object signalling that a transaction is accepted to the memory pool
-      */
-    class Accepted(val tx: UnconfirmedTransaction,
-                   override protected val validationStartTime: Long) extends ProcessingOutcome {
-      override val cost: Int = tx.lastCost.getOrElse(super.cost)
-    }
-
-    /**
-      * Class signalling that a valid transaction was rejected as it is double-spending inputs of mempool transactions
-      * and has no bigger weight (fee/byte) than them on average.
-      *
-      * @param winnerTxIds - identifiers of transactions won in replace-by-fee auction
-      */
-    class DoubleSpendingLoser(val winnerTxIds: Set[ModifierId],
-                              override protected val validationStartTime: Long) extends ProcessingOutcome
-
-    /**
-      * Class signalling that a transaction declined from being accepted into the memory pool
-      */
-    class Declined(val e: Throwable,
-                   override protected val validationStartTime: Long) extends ProcessingOutcome
-
-
-    /**
-      * Class signalling that a transaction turned out to be invalid when checked in the mempool
-      */
-    class Invalidated(val e: Throwable,
-                      override protected val validationStartTime: Long) extends ProcessingOutcome
-
-  }
-
-  /**
-    * Create empty mempool
-    *
-    * @param settings - node settings (to get mempool settings from)
-    * @return empty mempool
-    */
   def empty(settings: ErgoSettings): ErgoMemPool = {
     val sortingOption = settings.nodeSettings.mempoolSorting
     sortingOption match {
@@ -434,5 +341,4 @@ object ErgoMemPool extends ScorexLogging {
       sortingOption
     )(settings)
   }
-
 }

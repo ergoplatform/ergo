@@ -4,11 +4,12 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorSystem, DeathPactException, OneForOneStrategy, Props}
 import akka.pattern.ask
 import akka.util.Timeout
-import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
-import scorex.core.network.message.{GetPeersSpec, Message, MessageSpec, PeersSpec}
-import scorex.core.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.peer.PeerManager.ReceivableMessages.{AddPeerIfEmpty, SeenPeers}
-import scorex.core.settings.NetworkSettings
+import org.ergoplatform.network.PeerSpec
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
+import org.ergoplatform.network.message.{GetPeersSpec, Message, MessageSpec, PeersSpec}
+import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{AddPeerIfEmpty, SeenPeers}
+import org.ergoplatform.settings.NetworkSettings
 import scorex.util.ScorexLogging
 import shapeless.syntax.typeable._
 
@@ -50,8 +51,6 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
   override def preStart: Unit = {
     super.preStart()
 
-    networkControllerRef ! RegisterMessageSpecs(Seq(GetPeersSpec, peersSpec), self)
-
     val msg = Message[Unit](GetPeersSpec, Right(Unit), None)
     val stn = SendToNetwork(msg, SendToRandom)
     context.system.scheduler.scheduleWithFixedDelay(2.seconds, settings.getPeersInterval, networkControllerRef, stn)
@@ -87,7 +86,15 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
   private def gossipPeers(remote: ConnectedPeer): Unit = {
     implicit val timeout: Timeout = Timeout(settings.syncTimeout.getOrElse(5.seconds))
 
-    (peerManager ? SeenPeers(settings.maxPeerSpecObjects))
+    // we send less peer that can be accepted, starting from 5.0.8
+    val maxToSend = settings.maxPeerSpecObjects
+    val peersToSend = if (maxToSend >= 16) {
+      maxToSend / 8
+    } else {
+      maxToSend
+    }
+
+    (peerManager ? SeenPeers(peersToSend))
       .mapTo[Seq[PeerInfo]]
       .foreach { peers =>
         val msg = Message(peersSpec, Right(peers.map(_.peerSpec)), None)

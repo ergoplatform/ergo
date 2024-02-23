@@ -6,14 +6,15 @@ import akka.util.Timeout
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import scorex.core.validation.MalformedModifierError
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.ModifierId
 
 import scala.concurrent.duration._
@@ -96,7 +97,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
   def makeNextBlock(utxoState: UtxoState,
                     txs: Seq[ErgoTransaction])
                    (implicit ctx: Ctx): ErgoFullBlock = {
-    val time = timeProvider.time()
+    val time = System.currentTimeMillis()
     val parent = getHistory.bestFullBlockOpt
     validFullBlock(parent, utxoState, txs, Some(time))
   }
@@ -132,7 +133,7 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 
   def getPoolSize(implicit ctx: Ctx): Int = getCurrentView.pool.size
 
-  def getRootHash(implicit ctx: Ctx): String = Algos.encode(getCurrentState.rootHash)
+  def getRootHash(implicit ctx: Ctx): String = Algos.encode(getCurrentState.rootDigest)
 
   def getBestFullBlockOpt(implicit ctx: Ctx): Option[ErgoFullBlock] = getHistory.bestFullBlockOpt
 

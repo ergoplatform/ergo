@@ -1,12 +1,14 @@
 package org.ergoplatform.wallet.boxes
 
+import org.ergoplatform.sdk.wallet
+import org.ergoplatform.sdk.wallet.TokensMap
+import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.{Constants, TokensMap}
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
-import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
+import org.ergoplatform.{ErgoBox, ErgoBoxAssets, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
-import org.ergoplatform.ErgoBoxAssets
+import sigma.Extensions._
 
 /**
   * A box tracked by a wallet that contains Ergo box itself as well as
@@ -67,7 +69,7 @@ case class TrackedBox(creationTxId: ModifierId,
   def isSpent: Boolean = spendingHeightOpt.isDefined
 
   lazy val tokens: TokensMap = box.additionalTokens.toArray.map {
-    case (id, amt) => bytesToId(id) -> amt
+    case (id, amt) => id.toModifierId -> amt
   }.toMap
 
   override def equals(obj: Any): Boolean = obj match {
@@ -121,10 +123,10 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
   }
 
   override def parse(r: Reader): TrackedBox = {
-    val creationTxId = bytesToId(r.getBytes(Constants.ModifierIdLength))
+    val creationTxId = bytesToId(r.getBytes(wallet.Constants.ModifierIdLength))
     val creationOutIndex = r.getShort()
     val inclusionHeightOpt = r.getOption(r.getInt())
-    val spendingTxIdOpt = r.getOption(r.getBytes(Constants.ModifierIdLength)).map(bytesToId)
+    val spendingTxIdOpt = r.getOption(r.getBytes(wallet.Constants.ModifierIdLength)).map(bytesToId)
     val spendingHeightOpt = r.getOption(r.getInt())
 
     val appsCount = r.getShort()

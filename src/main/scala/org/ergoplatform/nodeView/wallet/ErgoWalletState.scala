@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
@@ -69,7 +69,7 @@ case class ErgoWalletState(
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them).
   // The state context is being updated by listening to state updates.
-  def stateContext: ErgoStateContext = storage.readStateContext(parameters)
+  def stateContext: ErgoStateContext = storage.getStateContext(parameters)
 
   /**
     * @return height of the last block scanned by the wallet

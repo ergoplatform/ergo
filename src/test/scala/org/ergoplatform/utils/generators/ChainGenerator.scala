@@ -7,12 +7,13 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandida
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, PoPowHeader}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import sigma.Colls
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -108,7 +109,7 @@ trait ChainGenerator extends ErgoTestConstants {
       EmptyDigest32,
       EmptyDigest32,
       tsOpt.getOrElse(prev.map(_.timestamp + control.desiredInterval.toMillis)
-        .getOrElse(if (useRealTs) timeProvider.time() else 0)),
+        .getOrElse(if (useRealTs) System.currentTimeMillis() else 0)),
       extensionHash,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
@@ -163,7 +164,7 @@ trait ChainGenerator extends ErgoTestConstants {
       EmptyStateRoot,
       emptyProofs,
       txs,
-      Math.max(timeProvider.time(), prev.map(_.header.timestamp + 1).getOrElse(timeProvider.time())),
+      Math.max(System.currentTimeMillis(), prev.map(_.header.timestamp + 1).getOrElse(System.currentTimeMillis())),
       validExtension,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber

@@ -2,25 +2,26 @@ package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
+import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
-import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
-
-import scala.concurrent.duration._
+import sigmastate.lang.SigmaCompiler
 import sigmastate.lang.Terms.ValueOps
 import sigmastate.serialization.ErgoTreeSerializer
+
+import scala.concurrent.duration._
 
 class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers with MempoolTestHelpers {
   implicit lazy val context: IRContext = new RuntimeIRContext
@@ -40,21 +41,22 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val testProbe = new TestProbe(actorSystem)
     actorSystem.eventStream.subscribe(testProbe.ref, newTx)
 
-    val (us, bh) = createUtxoState(parameters)
+    val (us, bh) = createUtxoState(settingsToTest)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
-      WrappedUtxoState(us, bh, stateConstants, parameters).applyModifier(genesis) { mod =>
+      WrappedUtxoState(us, bh, settingsToTest, parameters).applyModifier(genesis) { mod =>
         nodeViewHolderRef ! mod
       } .get
 
     applyBlock(genesis) shouldBe 'success
-    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
+    getRootHash shouldBe Algos.encode(wusAfterGenesis.rootDigest)
 
     val boxes = ErgoState.newBoxes(genesis.transactions).find(_.ergoTree == Constants.TrueLeaf)
     boxes.nonEmpty shouldBe true
 
-    val script = s"{sigmaProp(HEIGHT == ${genesis.height})}"
-    val prop = ErgoScriptPredef.compileWithCosting(emptyEnv, script, ErgoAddressEncoder.MainnetNetworkPrefix)
+    val script = s"{sigmaProp(HEIGHT == ${genesis.height} + 1)}"
+    val compiler = new SigmaCompiler(ErgoAddressEncoder.MainnetNetworkPrefix)
+    val prop = compiler.compile(emptyEnv, script).buildTree
     val tree = ErgoTree.fromProposition(prop.asSigmaProp)
 
     val bs = ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(tree)
@@ -84,17 +86,16 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     applyBlock(block) shouldBe 'success
 
-    getPoolSize shouldBe 1 // first tx removed from pool during node view update
-
-    scorex.core.utils.untilTimeout(cleanupDuration * 4, 100.millis) {
-      getPoolSize shouldBe 0 // another tx invalidated by `MempoolAuditor`
+    org.ergoplatform.utils.untilTimeout(cleanupDuration * 4, 100.millis) {
+      // first tx removed from pool during node view update
+      // another tx invalidated by `MempoolAuditor`
+      getPoolSize shouldBe 0
     }
-
   }
 
   it should "rebroadcast transactions correctly" in {
 
-    val (us0, bh0) = createUtxoState(parameters)
+    val (us0, bh0) = createUtxoState(settingsToTest)
     val (txs0, bh1) = validTransactionsFromBoxHolder(bh0)
     val b1 = validFullBlock(None, us0, txs0)
 

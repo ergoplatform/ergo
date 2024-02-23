@@ -12,7 +12,7 @@ import org.ergoplatform.it.util.RichEither
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestEncoder, RequestsHolder, RequestsHolderEncoder}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoWalletServiceImpl}
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
@@ -20,6 +20,7 @@ import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.scalatest.wordspec.AsyncWordSpec
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
+import sigma.Colls
 import sigmastate.Values.{ErgoTree, TrueLeaf}
 
 import scala.concurrent.ExecutionContext
@@ -28,7 +29,7 @@ class WalletSpec extends AsyncWordSpec with IntegrationSuite with WalletTestOps 
 
   override implicit def executionContext: ExecutionContext = ErgoTestHelpers.defaultExecutionContext
 
-  val ergoSettings: ErgoSettings = ErgoSettings.read(
+  val ergoSettings: ErgoSettings = ErgoSettingsReader.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
 
   private val nodeConfig: Config = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs.head)
@@ -79,8 +80,8 @@ class WalletSpec extends AsyncWordSpec with IntegrationSuite with WalletTestOps 
 
     val encodedBox = Base16.encode(ErgoBoxSerializer.toBytes(input))
 
-    val paymentRequest = PaymentRequest(P2PKAddress(pk), 50000000, Seq.empty, Map.empty)
-    val requestsHolder = RequestsHolder(Seq(paymentRequest), feeOpt = Some(100000L), Seq(encodedBox), dataInputsRaw = Seq.empty, minerRewardDelay = 720)
+    val paymentRequest = PaymentRequest(P2PKAddress(pk)(addressEncoder), 50000000, Seq.empty, Map.empty)
+    val requestsHolder = RequestsHolder(Seq(paymentRequest), feeOpt = Some(100000L), Seq(encodedBox), dataInputsRaw = Seq.empty, minerRewardDelay = 720)(addressEncoder)
 
     node.waitForStartup.flatMap { node: Node =>
       for {

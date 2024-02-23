@@ -1,9 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
 import com.google.common.hash.{BloomFilter, Funnels}
-import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef, P2PKAddress}
+import org.ergoplatform.sdk.wallet.secrets.ExtendedPublicKey
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.wallet.secrets.ExtendedPublicKey
+import org.ergoplatform.{ErgoAddressEncoder, ErgoTreePredef, P2PKAddress}
 import sigmastate.Values
 import sigmastate.eval._
 
@@ -49,7 +49,7 @@ object WalletCache {
   def miningScripts(trackedPubKeys: Seq[ExtendedPublicKey],
                     settings: ErgoSettings): Seq[Values.ErgoTree] = {
     trackedPubKeys.map { pk =>
-      ErgoScriptPredef.rewardOutputScript(settings.miningRewardDelay, pk.key)
+      ErgoTreePredef.rewardOutputScript(settings.miningRewardDelay, pk.key)
     }
   }
 

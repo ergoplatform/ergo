@@ -17,7 +17,6 @@ class LDBVersionedStoreSpecification extends AnyPropSpec
 
   override protected val KL = 32
   override protected val VL = 8
-  override protected val LL = 32
 
   val storeTest: LDBVersionedStore => Unit = { store =>
     var version = store.lastVersionID

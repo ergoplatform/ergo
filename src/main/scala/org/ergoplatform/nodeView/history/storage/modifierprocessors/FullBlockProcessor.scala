@@ -1,17 +1,17 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.Algos
-import scorex.core.consensus.ProgressInfo
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -59,8 +59,8 @@ trait FullBlockProcessor extends HeadersProcessor {
       nonBestBlock
 
   private def isValidFirstFullBlock(header: Header): Boolean = {
-    pruningProcessor.isHeadersChainSynced &&
-      header.height == pruningProcessor.minimalFullBlockHeight &&
+    isHeadersChainSynced &&
+      header.height == minimalFullBlockHeight &&
       bestFullBlockIdOpt.isEmpty
   }
 
@@ -106,7 +106,7 @@ trait FullBlockProcessor extends HeadersProcessor {
         if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
         if (nodeSettings.isFullBlocksPruned) {
-          val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
+          val lastKept = updateBestFullBlock(fullBlock.header)
           val bestHeight: Int = newBestBlockHeader.height
           val diff = bestHeight - prevBest.header.height
           pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
@@ -135,7 +135,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       }
       //Orphaned block or full chain is not initialized yet
       logStatus(Seq(), Seq(), params.fullBlock, None)
-      historyStorage.insert(Seq.empty, Seq(params.newModRow)).map { _ =>
+      historyStorage.insert(Array.empty[(ByteArrayWrapper, Array[Byte])], Array(params.newModRow)).map { _ =>
         ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
       }
   }
@@ -223,24 +223,24 @@ trait FullBlockProcessor extends HeadersProcessor {
         s"New best block is ${toApply.last.header.encodedId} " +
         s"with height ${toApply.last.header.height} " +
         s"updates block ${prevBest.map(_.encodedId).getOrElse("None")} " +
-        s"with height ${ErgoHistory.heightOf(prevBest.map(_.header))}"
+        s"with height ${ErgoHistoryUtils.heightOf(prevBest.map(_.header))}"
     }
     log.info(s"Full block ${appliedBlock.encodedId} appended, " +
       s"going to apply ${toApply.length}$toRemoveStr modifiers. $newStatusStr")
   }
 
   private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = {
-    val toRemove: Seq[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
+    val toRemove: Array[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
       .flatMap(id => typedModifierById[Header](id))
-      .flatMap(_.sectionIds.map(_._2))
-    historyStorage.remove(mutable.WrappedArray.empty, toRemove)
+      .flatMap(_.sectionIds.map(_._2)).toArray
+    historyStorage.remove(Array.empty, toRemove)
   }
 
   private def updateStorage(newModRow: BlockSection,
                             bestFullHeaderId: ModifierId,
                             additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])]): Try[Unit] = {
-    val indicesToInsert = Seq(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
-    historyStorage.insert(indicesToInsert, Seq(newModRow)).flatMap { _ =>
+    val indicesToInsert = Array(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
+    historyStorage.insert(indicesToInsert, Array(newModRow)).flatMap { _ =>
       if (headersHeight >= fullBlockHeight)
         Success(())
       else
@@ -286,6 +286,6 @@ object FullBlockProcessor {
   def emptyCache: IncompleteFullChainCache = IncompleteFullChainCache(TreeMap.empty(ord))
 
   def chainStatusKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("main_chain".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("main_chain".getBytes(CharsetName) ++ idToBytes(id)))
 
 }

@@ -5,20 +5,19 @@ import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedHistory, ChangedMempool}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedHistory, ChangedMempool}
 import org.ergoplatform.network.ErgoSyncTracker
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.ErgoSettingsReader
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
-import scorex.core.network.peer.PeerInfo
-import scorex.core.serialization.ScorexSerializer
-import scorex.core.utils.NetworkTimeProvider
+import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.serialization.ErgoSerializer
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -51,20 +50,19 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
   }
 
   override def nodeViewSynchronizer(implicit system: ActorSystem):
-  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM]) = {
+  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ErgoSerializer[PM]) = {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
-    val settings = ErgoSettings.read()
+    val settings = ErgoSettingsReader.read()
     val pool = ErgoMemPool.empty(settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
-    val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")
     val vhProbe = TestProbe("ViewHolderProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
-    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
     val ref = system.actorOf(Props(
       new SyncronizerMock(
@@ -72,7 +70,6 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
         vhProbe.ref,
         ErgoSyncInfoMessageSpec,
         settings,
-        tp,
         syncTracker,
         deliveryTracker)
     ))
@@ -81,17 +78,16 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val tx = validErgoTransactionGenTemplate(minAssets = 0, maxAssets = 0).sample.get._2
 
 
-    val peerInfo = PeerInfo(defaultPeerSpec, timeProvider.time())
+    val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis(), None, 0L)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
-      lastMessage = 0,
       Some(peerInfo)
     )
     ref ! ChangedHistory(h)
     ref ! ChangedMempool(pool)
-    val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
+    val serializer: ErgoSerializer[PM] = HeaderSerializer.asInstanceOf[ErgoSerializer[PM]]
     (ref, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener, serializer)
   }
 

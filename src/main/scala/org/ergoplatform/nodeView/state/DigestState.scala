@@ -1,21 +1,20 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
-import scorex.core._
-import scorex.core.utils.ScorexEncoding
+import org.ergoplatform.core._
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 
@@ -26,17 +25,15 @@ import scala.util.{Failure, Success, Try}
   * See https://eprint.iacr.org/2016/994 for details on this mode.
   */
 class DigestState protected(override val version: VersionTag,
-                            override val rootHash: ADDigest,
+                            override val rootDigest: ADDigest,
                             override val store: LDBVersionedStore,
-                            ergoSettings: ErgoSettings)
+                            override val ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
     with ScorexLogging
     with ScorexEncoding {
 
   store.lastVersionID
     .foreach(id => require(version == bytesToVersion(id), "version should always be equal to store.lastVersionID"))
-
-  override val constants: StateConstants = StateConstants(ergoSettings)
 
   private lazy val nodeSettings = ergoSettings.nodeSettings
 
@@ -48,7 +45,7 @@ class DigestState protected(override val version: VersionTag,
     val knownBoxesTry =
       ErgoState.stateChanges(transactions).map { stateChanges =>
         val boxesFromProofs: Seq[ErgoBox] =
-          proofs.verify(stateChanges, rootHash, expectedHash).get.map(v => ErgoBoxSerializer.parseBytes(v))
+          proofs.verify(stateChanges, rootDigest, expectedHash).get.map(v => ErgoBoxSerializer.parseBytes(v))
         (transactions.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
       }
 
@@ -59,7 +56,7 @@ class DigestState protected(override val version: VersionTag,
         .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
       }
 
-    ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
+    ErgoState.execTransactions(transactions, currentStateContext, nodeSettings)(checkBoxExistence)
       .toTry
       .map(_ => ())
   }
@@ -91,7 +88,7 @@ class DigestState protected(override val version: VersionTag,
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
     log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
-    val versionBytes = scorex.core.versionToBytes(version)
+    val versionBytes = org.ergoplatform.core.versionToBytes(version)
     Try(store.rollbackTo(versionBytes)).map { _ =>
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(versionBytes).get
@@ -107,7 +104,7 @@ class DigestState protected(override val version: VersionTag,
   private def processFullBlock: ModifierProcessing[DigestState] = {
     case fb: ErgoFullBlock if nodeSettings.verifyTransactions =>
       log.info(s"Got new full block ${fb.encodedId} at height ${fb.header.height} with root " +
-        s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootHash)}")
+        s"${Algos.encode(fb.header.stateRoot)}. Our root is ${Algos.encode(rootDigest)}")
       validate(fb)
         .flatMap { _ =>
           val version: VersionTag = idToVersion(fb.header.id)
@@ -147,7 +144,7 @@ class DigestState protected(override val version: VersionTag,
 
     val toUpdate = DigestState.metadata(newVersion, newRootHash, newStateContext)
 
-    store.update(scorex.core.versionToBytes(newVersion), Seq.empty, toUpdate).map { _ =>
+    store.update(org.ergoplatform.core.versionToBytes(newVersion), Seq.empty, toUpdate).map { _ =>
       new DigestState(newVersion, newRootHash, store, ergoSettings)
     }
   }
@@ -163,53 +160,55 @@ object DigestState extends ScorexLogging with ScorexEncoding {
               rootHash: ADDigest,
               stateContext: ErgoStateContext,
               dir: File,
-              constants: StateConstants,
-              parameters: Parameters): Try[DigestState] = {
-    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
+              settings: ErgoSettings): Try[DigestState] = {
+    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
-    store.update(scorex.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
-      new DigestState(version, rootHash, store, constants.settings)
+    store.update(org.ergoplatform.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
+      new DigestState(version, rootHash, store, settings)
     }
   }
 
+  /**
+    * Read digest state from disk, or generate it from genesis data if nothing on the disk
+    */
   def create(versionOpt: Option[VersionTag],
              rootHashOpt: Option[ADDigest],
              dir: File,
-             constants: StateConstants): DigestState = {
-    val store = new LDBVersionedStore(dir, initialKeepVersions = constants.keepVersions)
+             settings: ErgoSettings): DigestState = {
+    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     Try {
-      val context = ErgoStateReader.storageStateContext(store, constants)
+      val context = ErgoStateReader.storageStateContext(store, settings)
       (versionOpt, rootHashOpt) match {
         case (Some(version), Some(rootHash)) =>
           val state = if (store.lastVersionID.map(w => bytesToVersion(w)).contains(version)) {
-            new DigestState(version, rootHash, store, constants.settings)
+            new DigestState(version, rootHash, store, settings)
           } else {
             val inVersion = store.lastVersionID.map(w => bytesToVersion(w)).getOrElse(version)
-            new DigestState(inVersion, rootHash, store, constants.settings)
+            new DigestState(inVersion, rootHash, store, settings)
               .update(version, rootHash, context).get //sync store
           }
           state.ensuring(bytesToVersion(store.lastVersionID.get) == version)
         case (None, None) if store.lastVersionID.isEmpty =>
-          ErgoState.generateGenesisDigestState(dir, constants.settings)
+          ErgoState.generateGenesisDigestState(dir, settings)
         case _ =>
           val version = store.lastVersionID.get
           val rootHash = store.get(version).get
-          new DigestState(bytesToVersion(version), ADDigest @@ rootHash, store, constants.settings)
+          new DigestState(bytesToVersion(version), ADDigest @@ rootHash, store, settings)
       }
     } match {
       case Success(state) => state
       case Failure(e) =>
         store.close()
         log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
-        ErgoState.generateGenesisDigestState(dir, constants.settings)
+        ErgoState.generateGenesisDigestState(dir, settings)
     }
   }
 
   protected def metadata(newVersion: VersionTag,
                          newRootHash: ADDigest,
                          newStateContext: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = Seq(
-    scorex.core.versionToBytes(newVersion) -> newRootHash,
+    org.ergoplatform.core.versionToBytes(newVersion) -> newRootHash,
     ErgoStateReader.ContextKey -> newStateContext.bytes
   )
 

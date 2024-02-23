@@ -1,124 +1,104 @@
 # Ergo
 
-This repository contains the reference implementation of the
-Ergo Platform protocol, which is an alternative to
-the [Bitcoin protocol](https://bitcoin.org/bitcoin.pdf).
+Welcome to the official repository for the [Ergo Platform](https://ergoplatform.org/). This repository contains the reference client, also known as the node, for Ergo. Ergo is a cryptocurrency protocol that has been designed to offer a secure environment for peer-to-peer transactions. It supports programmable scarce money (Ergo) and a wide range of financial tools.
 
-Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
+The reference client is primarily written in Scala. While certain components of the protocol are implemented in other languages (for instance, [sigma-rust](https://github.com/ergoplatform/sigma-rust) is a Rust-based implementation of the ErgoScript cryptocurrency scripting language), the reference client provides the most complete and comprehensive implementation of the Ergo protocol.
 
-## Differences from Bitcoin
+## Key Features of Ergo
 
-* Powerful contracts in the multi-stage extended UTXO model (see [ErgoScript whitepaper](https://ergoplatform.org/docs/ErgoScript.pdf)) 
-* Memory-hard Proof-of-Work function [Autolykos2](https://docs.ergoplatform.com/ErgoPow.pdf)
-* Support for stateless clients (asymmetric, based on [https://eprint.iacr.org/2016/994](https://eprint.iacr.org/2016/994)),
-[NiPoPoWs](https://eprint.iacr.org/2017/963.pdf), hybrid modes
-* [Alternative transactional language](https://github.com/ScorexFoundation/sigmastate-interpreter), which is more powerful that Bitcoin Script but also safe against
-heavy validation attacks
-* Alternative fee model with [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf )
+Ergo, while sharing some commonalities with Bitcoin as a UTXO Proof-of-Work cryptocurrency, stands out due to its unique design and features. It has been built from the ground up, introducing several innovative elements:
+
+* **ErgoScript**: A powerful contract language in the multi-stage extended UTXO model. More details can be found in the [ErgoScript whitepaper](https://ergoplatform.org/docs/ErgoScript.pdf).
+* **Autolykos2**: A memory-hard Proof-of-Work function, providing enhanced security. Learn more about it [here](https://docs.ergoplatform.com/ErgoPow.pdf).
+* Support for Stateless Clients: Ergo supports asymmetric stateless clients, based on [this paper](https://eprint.iacr.org/2016/994), and includes features like NiPoPoWs and hybrid modes.
+* **Advanced Transactional Language**: Ergo introduces an [alternative transactional language](https://github.com/ScorexFoundation/sigmastate-interpreter) that is more powerful than Bitcoin Script and is designed to be safe against heavy validation attacks.
+* **Innovative Fee Model**: Ergo implements an alternative fee model with a [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf ) (also known as demurrage).
 
 ## Specifications
 
-A [White Paper](https://ergoplatform.org/docs/whitepaper.pdf) with a brief description is available. A Yellow Paper with detailed specification is underway and will be available shortly. At the moment, there are [drafts of the Yellow Paper](https://github.com/ergoplatform/ergo/tree/master/papers/yellow) available,
-and currently the reference implementation code should be considered as the specification.
+* [white paper](https://ergoplatform.org/docs/whitepaper.pdf) - a brief description of the protocol
+* [ErgoScript white paper](https://ergoplatform.org/docs/ErgoScript.pdf) - describes ErgoScript, a Cryptocurrency Scripting Language Supporting Noninteractive Zero-Knowledge Proofs used in Ergo
 
-## Installation
+More papers can be found at [docs.ergoplatform.com/documents](https://docs.ergoplatform.com/documents/).
 
-You can check our [Setup A Full Node](https://github.com/ergoplatform/ergo/wiki/Set-up-a-full-node) wiki page to learn how to manually setup and configure a node.
+## Security Assumptions
 
-Alternatively you can run the prepared [ergo-installer.sh](ergo-installer.sh) script. With this script you'll have the latest Ergo node installed without any hassle (only availalbe for Linux distributions):
+The Ergo client operates under certain assumptions about its environment:
 
-    curl -s https://raw.githubusercontent.com/ergoplatform/ergo/master/ergo-installer.sh | sh -s -- --api-key=<YOUR_API_KEY>
+* The execution environment is trusted. Although the seed is stored in an encrypted file, and the client's wallet attempts to purge the secret key from memory as soon as it is no longer needed, the client does not have defenses against side-channel attacks, memory scans, etc.
+* Clocks are expected to be synchronized to a reasonable degree. If a block's timestamp is more than 20 minutes into the future, the block will be temporarily rejected. The client does not utilize NTP or other time synchronization protocols.
 
-## Build from source
+## Building and Running the Node and UI
 
-In order to build the Ergo node from sources you need JDK (>= 1.8) and SBT to be 
-[installed](https://docs.scala-lang.org/getting-started/sbt-track/getting-started-with-scala-and-sbt-on-the-command-line.html) on your machine.
+For instructions on how to build and run the node and UI, refer to the [official documentation](https://docs.ergoplatform.com/node/install/). 
 
-In order to simply get a single jar run: `sbt assembly` - assembly would appear in `target/scala-2.12/` directory.
- 
-If you want to create a package for a specific platform with launching scripts the one of the following 
-packager commands could be chosen (depending on desired system type you want to build for):
- - `universal:packageBin` - Generates a universal zip file
- - `universal:packageZipTarball` - Generates a universal tgz file
- - `debian:packageBin` - Generates a deb
- - `docker:publishLocal` - Builds a Docker image using the local Docker server
- - `rpm:packageBin` - Generates an rpm
- - `universal:packageOsxDmg` - Generates a DMG file with the same contents as the universal zip/tgz.
- - `windows:packageBin` - Generates an MSI
- 
- The final build command should look like: `sbt <packager_command>`, example: `sbt universal:packageBin`.
- A resulted package could be found in the `target/scala-2.12/<platform_type>` directory.
+By default, the node processes all blocks from the genesis block. However, there are other options available that may be more suitable for hardware with limited resources.
 
-## Running the node
+* **Bootstrapping with a UTXO set snapshot:** This works similarly to Ethereum's snap-sync. The node first downloads a UTXO set snapshot from a secure point in the past, then downloads blocks following the UTXO set snapshot and applies them to the set. For more details and security proofs, refer to the ["Multi-mode cryptocurrency systems" paper](https://eprint.iacr.org/2018/129.pdf). To enable this feature add the following to your configuration file: 
+```
 
-The node can be started in a couple different ways:
- 
- - In case you only have a jar: `java -jar /path/to/ergo-<version>.jar --<networkId> -c /path/to/local.conf`
- - Using start script from sbt-native-packager: `sh /path/to/bin/ergo  --<networkId> -c /path/to/local.conf`
- 
-Available `networkId` options: `mainnet`, `testnet`, `devnet`.
+ergo {
+  ...
+  node.utxoBootstrap = true
+  ...
+}
+```
 
-## UI
+* The UTXO set snapshot bootstrapping can be further optimized by combining it with NiPoPoW (Non-Interactive Proofs of Proof-of-Work). This method allows for syncing the headers-chain in logarithmic time, as opposed to the linear time required by the standard SPV sync for headers. For more details, refer to the [NiPoPoW paper](https://eprint.iacr.org/2017/963.pdf).
+```
 
-Node UI (graphical interface) could be accessed at `<node_ip>:<api_port>/panel` in your browser.
+ergo{
+  ...
+  node.nipopow.nipopowBootstrap = true
+  node.utxo.utxoBootstrap = true
+  ...
+}
+```
 
-<img src="https://github.com/ergoplatform/static-data/raw/master/img/node_ui.png" align="right" />
+* The stateless mode provides full-node security without the need to hold the entire UTXO set. This is achieved through the methods detailed in the ["Improving Authenticated Dynamic Dictionaries, with Applications to Cryptocurrencies" paper](https://eprint.iacr.org/2016/994.pdf). In this mode, it's possible to download and validate an arbitrary-sized suffix of the blockchain. Here's an example of how to configure this mode:
 
-## Docker Quick Start
+```
+ergo {
+   ...
+   node.stateType = "digest"
+   node.blocksToKeep = 2160 # store and process last three days only
+   node.nipopow.nipopowBootstrap = true   # compatible with NiPoPoWs 
+   ...
+}
+```
 
-Ergo has officially supported Docker package. To run last Ergo version in mainnet as a console application with logs printed to console:
 
-    sudo docker run --rm -p 9030:9030 -p 127.0.0.1:9053:9053 -v /path/on/host/to/ergo/data:/home/ergo/.ergo ergoplatform/ergo --mainnet
+For more detailed information on different modes of node operation, please visit [docs.ergoplatform.com/node/modes](https://docs.ergoplatform.com/node/modes).
 
-This will connect to Ergo mainnet with default config and open port `9030` globally and `9053` locally on the host system. All data will be stored in your host directory `/path/on/host/to/ergo/data`.
+## Testing Procedures
 
-To run specific Ergo version `<VERSION>` as a service with custom config `/path/on/host/system/to/myergo.conf`:
+Ergo utilizes three types of tests: 
 
-    sudo docker run -d \
-        -p 9030:9030 \
-        -p 127.0.0.1:9053:9053 \
-        -v /path/on/host/to/ergo/data:/home/ergo/.ergo \
-        -v /path/on/host/system/to/myergo.conf:/etc/myergo.conf \
-        -e MAX_HEAP=3G \
-        ergoplatform/ergo:<VERSION> --<networkId> -c /etc/myergo.conf
+1) Unit and property tests: These can be run using the `sbt test` command.
+2) Integration tests: These tests require Docker to be installed. Run them with the `sudo sbt it:test` command.
+3) Bootstrapping tests: These tests are time-consuming as they verify that the node is syncing with the main network in various modes. Docker is also required for these tests. Run them with the `sudo sbt it2:test` command.
 
-Available versions can be found on [Ergo Docker image page](https://hub.docker.com/r/ergoplatform/ergo/tags), for example, `v4.0.105`.
+## Setting up the Project in an IDE
 
-This will connect to the Ergo mainnet or testnet following your configuration passed in `myergo.conf` and network flag `--<networkId>`. Every default config value would be overwritten with corresponding value in `myergo.conf`. `MAX_HEAP` variable can be used to control how much memory can the node consume.
+You can use either [IntelliJ IDEA](https://www.jetbrains.com/idea/) (Community or Ultimate edition) or [VSCode](https://code.visualstudio.com/) with the [Metals](https://scalameta.org/metals/) extension. 
 
-This command also would store your data in `/path/on/host/to/ergo/data` on host system, and open ports `9030` (node communication) globally and `9053` (REST API) locally on host system. The `/path/on/host/to/ergo/data` directory must has `777` permissions or has owner/group numeric id equal to `9052` to be writable by container, as `ergo` user inside Docker image (please refer to [Dockerfile](Dockerfile)).
+Ensure that the project can be built with sbt before opening it in an IDE. You may need to resolve any dependency errors first.
 
-Ergo node works normally behind NAT, so you can keep closed your `9030` port, hence other nodes could not discover and connect to yours one, only your node could initiate connections.
+To open the project in IntelliJ IDEA, select File / Open and navigate to the project folder. This will initiate the Project Import Wizard, which uses the SBT configuration (build.sbt file) to generate the project configuration files for IDEA. You can view the project configuration in the `File / Project Structure...` dialog. If the import is successful, you should be able to compile the project in the IDE. 
 
-It is also a good practice to keep closed REST API port `9053`, and connect to your node from inside another container in the same Docker network (this case not covered by this short quick start manual).
+## Modules
 
-## Testing
+This repository has modular structure, so only parts which are needed for an application could be used:
 
-There are three kinds of tests: 
+* [avldb](avldb/README.md) - implementation of authenticated AVL+ tree used in Ergo, with persistence
+* [ergo-core](ergo-core/README.md) - functionality needed for an SPV client (P2P messages, block section stuctures, PoW, NiPoPoW)
+* ergo-wallet - Java and Scala functionalities to sign and verify transactions
 
-1) Unit and property tests, run them with `sbt test` command.
-2) Integration tests, they require for Docker to be installed, then run `sudo sbt it:test`.
-3) Bootstrapping tests, very slow as they are checking that the node is indeed catching up with the main network in 
-different regimes, they require for Docker too, run as `sudo sbt it2:test`.
+## Contributing to Ergo
 
-## Open project in IDE
+Ergo is an open-source project and we welcome contributions from developers and testers! Join the discussion over [Ergo Discord](https://discord.gg/kj7s7nb) in #development channel, or Telegram: https://t.me/ErgoDevelopers. Please also check out our [Contributing documentation](https://docs.ergoplatform.com/contribute/).
 
-Your can use [IntelliJ IDEA](https://www.jetbrains.com/idea/) (Community or Ultimate edition) or 
-[VSCode](https://code.visualstudio.com/) + [Metals](https://scalameta.org/metals/).
-Before opening the project in IDE make sure it can be built with sbt. 
-You may need to fix dependency resolution errors first.
+## Frequently Asked Questions
 
-After that you can open the project folder in Idea (File / Open)
-which will run Project Import Wizard. The wizard will use SBT configuration
-(build.sbt file) to generate Idea's project configuration files.
-You can open `File / Project Structure...` dialog to see project configuration.
-If everything is successful you can compile the project in IDE. 
-
-## Contributions
-
-Ergo is open-source and open movement, always in need for testers and developers! Please feel free
-to discuss development in [Ergo Discord](https://discord.gg/kj7s7nb), #development channel. 
-
-## FAQ
-[Frequently Asked Questions](FAQ.md)
+For common queries, please refer to our [Frequently Asked Questions](FAQ.md) page.
 

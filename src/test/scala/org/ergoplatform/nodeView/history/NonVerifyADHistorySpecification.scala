@@ -1,16 +1,16 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.consensus.{Equal, Fork, Older, Younger}
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.history.HeaderChain
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.crypto.hash.Digest32
-import scorex.core.consensus.{Older, Younger, Fork, Equal}
 
 import scala.util.Random
 
@@ -22,21 +22,12 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
 
-  ignore("Should apply UTXOSnapshotChunks") {
-    forAll(randomUTXOSnapshotChunkGen) { snapshot: UTXOSnapshotChunk =>
-      popowHistory.applicable(snapshot) shouldBe true
-      val processInfo = popowHistory.append(snapshot).get._2
-      processInfo.toApply shouldEqual Some(snapshot)
-      popowHistory.applicable(snapshot) shouldBe false
-    }
-  }
-
   property("Should calculate difficulty correctly") {
     val epochLength = 3
     val useLastEpochs = 3
 
     val initDiff = BigInt(2)
-    val initDiffBits = RequiredDifficulty.encodeCompactBits(initDiff)
+    val initDiffBits = DifficultySerializer.encodeCompactBits(initDiff)
 
     var history = generateHistory(
       verifyTransactions = false,
@@ -278,7 +269,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
 
     chain.headers.foreach { header =>
-      val inHeight = history.heightOf(header.parentId).getOrElse(ErgoHistory.EmptyHistoryHeight)
+      val inHeight = history.heightOf(header.parentId).getOrElse(EmptyHistoryHeight)
 
       history.contains(header) shouldBe false
       history.applicable(header) shouldBe true

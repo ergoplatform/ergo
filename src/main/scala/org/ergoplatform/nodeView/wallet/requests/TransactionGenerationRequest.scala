@@ -8,13 +8,13 @@ import org.ergoplatform.settings.ErgoSettings
 
 trait TransactionGenerationRequest
 
-class TransactionRequestEncoder(settings: ErgoSettings) extends Encoder[TransactionGenerationRequest] with ApiCodecs {
+class TransactionRequestEncoder(ergoSettings: ErgoSettings) extends Encoder[TransactionGenerationRequest] with ApiCodecs {
 
-  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).encoder
+  implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(ergoSettings.chainSettings).encoder
 
   def apply(request: TransactionGenerationRequest): Json = request match {
-    case pr: PaymentRequest => new PaymentRequestEncoder(settings)(pr)
-    case ar: AssetIssueRequest => new AssetIssueRequestEncoder(settings)(ar)
+    case pr: PaymentRequest => new PaymentRequestEncoder(ergoSettings)(pr)
+    case ar: AssetIssueRequest => new AssetIssueRequestEncoder(ergoSettings)(ar)
     case br: BurnTokensRequest => new BurnTokensRequestEncoder()(br)
     case other => throw new Exception(s"Unknown TransactionRequest type: $other")
   }

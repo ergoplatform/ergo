@@ -1,11 +1,8 @@
 package org.ergoplatform.network
 
 import java.nio.ByteBuffer
-
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.app.Version
-import scorex.core.network.message.HandshakeSerializer
 import scorex.util.encode.Base16
 
 class HandshakeSpecification extends ErgoPropertyTest with DecodingUtils {

@@ -1,12 +1,12 @@
 package org.ergoplatform.mining
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.testkit.utils.NoShrink
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
-import scorex.testkit.utils.NoShrink
 import scorex.util.encode.Base16
 
 class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
@@ -16,7 +16,7 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
     forAll(invalidHeaderGen,
             Gen.choose(100, 120),
             Gen.choose[Byte](1, 2)) { (inHeader, difficulty, ver) =>
-      val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
+      val nBits = DifficultySerializer.encodeCompactBits(difficulty)
       val h = inHeader.copy(nBits = nBits, version = ver)
       val sk = randomSecret()
       val x = randomSecret()

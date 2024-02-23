@@ -7,22 +7,21 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.http.api.{ApiCodecs, TransactionsApiRoute}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, RESTApiSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scorex.core.settings.RESTApiSettings
-import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import sigmastate.SType
 import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
+import sigma.Extensions._
 
 import java.net.InetSocketAddress
 import scala.concurrent.duration._
@@ -44,7 +43,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   val dataInput = DataInput(input.boxId)
 
   val absentModifierId = "0000000000000000000000000000000000000000000000000000000000000000"
-  val tokens = List[(TokenId, Long)](Digest32 @@ inputBox.id -> 10)
+  val tokens = List[(TokenId, Long)](inputBox.id.toTokenId -> 10)
   val registers =
     Map(
       ErgoBox.R4 -> ByteArrayConstant("name".getBytes("UTF-8")),
@@ -60,7 +59,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
 
   val chainedRoute: Route = {
     //constructing memory pool and node view  with the transaction tx included
-    val mp2 = memPool.put(UnconfirmedTransaction(tx, None)).get
+    val mp2 = memPool.put(UnconfirmedTransaction(tx, None))
     class UtxoReadersStub2 extends Actor {
       def receive: PartialFunction[Any, Unit] = {
         case GetReaders => sender() ! Readers(history, utxoState, mp2, wallet)
@@ -229,7 +228,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   }
 
   it should "return unconfirmed output by tokenId from mempool" in {
-    val searchedToken = Base16.encode(tokens.head._1)
+    val searchedToken = tokens.head._1.toHex
     Get(prefix + s"/unconfirmed/outputs/byTokenId/$searchedToken") ~> chainedRoute ~> check {
       status shouldBe StatusCodes.OK
       val actualOutputIds = responseAs[List[Json]].map(_.hcursor.downField("boxId").as[String].right.get)
@@ -243,7 +242,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
       Map(
         ErgoBox.R4 -> ByteArrayConstant("name".getBytes("UTF-8")),
         ErgoBox.R5 -> ByteArrayConstant("4".getBytes("UTF-8")),
-      ).asJson
+      ).asInstanceOf[AdditionalRegisters].asJson
 
     Post(prefix + s"/unconfirmed/outputs/byRegisters", searchedRegs) ~> chainedRoute ~> check {
       status shouldBe StatusCodes.OK
@@ -271,7 +270,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
         ErgoBox.R4 -> ByteArrayConstant("name".getBytes("UTF-8")),
         ErgoBox.R5 -> ByteArrayConstant("4".getBytes("UTF-8")),
         ErgoBox.R6 -> ByteArrayConstant("description".getBytes("UTF-8")),
-      ).asJson
+      ).asInstanceOf[AdditionalRegisters].asJson
 
     Post(prefix + s"/unconfirmed/outputs/byRegisters", searchedRegs) ~> chainedRoute ~> check {
       status shouldBe StatusCodes.OK

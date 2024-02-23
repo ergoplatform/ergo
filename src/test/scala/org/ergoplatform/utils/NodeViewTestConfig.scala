@@ -2,7 +2,7 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, NipopowSettings}
 
 
 case class NodeViewTestConfig(stateType: StateType,
@@ -10,7 +10,7 @@ case class NodeViewTestConfig(stateType: StateType,
                               popowBootstrap: Boolean) {
 
   def toSettings: ErgoSettings = {
-    val defaultSettings = ErgoSettings.read()
+    val defaultSettings = ErgoSettingsReader.read()
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
         powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n)
@@ -18,7 +18,7 @@ case class NodeViewTestConfig(stateType: StateType,
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = stateType,
         verifyTransactions = verifyTransactions,
-        poPoWBootstrap = popowBootstrap
+        nipopowSettings = NipopowSettings(popowBootstrap, 1)
       )
     )
   }

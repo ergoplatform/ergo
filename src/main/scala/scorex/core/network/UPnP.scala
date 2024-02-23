@@ -1,9 +1,8 @@
 package scorex.core.network
 
 import java.net.{InetAddress, InetSocketAddress}
-
 import org.bitlet.weupnp.{GatewayDevice, GatewayDiscover, PortMappingEntry}
-import scorex.core.settings.NetworkSettings
+import org.ergoplatform.settings.NetworkSettings
 import scorex.util.ScorexLogging
 
 import scala.collection.JavaConverters._

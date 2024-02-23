@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet.scanning
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.scanning.ScanWalletInteraction.ScanWalletInteraction
 import org.ergoplatform.wallet.Constants.ScanId
-import scorex.core.serialization.ScorexSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
 import scala.util.{Failure, Success, Try}
@@ -34,7 +34,7 @@ object Scan {
 
 }
 
-object ScanSerializer extends ScorexSerializer[Scan] {
+object ScanSerializer extends ErgoSerializer[Scan] {
 
   private val trueNeg: Byte = -1
   private val falseNeg: Byte = -2

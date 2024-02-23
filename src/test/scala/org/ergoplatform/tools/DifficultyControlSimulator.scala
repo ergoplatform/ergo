@@ -1,9 +1,9 @@
 package org.ergoplatform.tools
 
-import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, RequiredDifficulty}
+import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, DifficultySerializer}
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
+import org.ergoplatform.settings.ErgoSettingsReader
 import org.ergoplatform.utils.generators.ErgoGenerators
 
 import scala.annotation.tailrec
@@ -70,7 +70,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
         val timeDiff = simulateTimeDiff()
         val newHeader = lastHeader.copy(timestamp = lastHeader.timestamp + timeDiff,
           height = curHeight + 1,
-          nBits = RequiredDifficulty.encodeCompactBits(requiredDifficulty))
+          nBits = DifficultySerializer.encodeCompactBits(requiredDifficulty))
         curChain(newHeader.height) = newHeader
 
         genchain(curHeight + 1)
@@ -86,7 +86,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   def printTestnetData(): Unit = {
     val baseHeader = defaultHeaderGen.sample.get
-    val chainSettings = ErgoSettings.read().chainSettings.copy(epochLength = 1)
+    val chainSettings = ErgoSettingsReader.read().chainSettings.copy(epochLength = 1)
     val difficultyControl = new DifficultyAdjustment(chainSettings)
 
     val headers = Source.fromResource("difficulty.csv").getLines().toSeq.tail.map { line =>
@@ -94,7 +94,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
       baseHeader.copy(
         height = l(0).toInt,
         timestamp = l(1).toLong,
-        nBits = RequiredDifficulty.encodeCompactBits(BigInt(l(2)))
+        nBits = DifficultySerializer.encodeCompactBits(BigInt(l(2)))
       )
     }
     printEpochs(headers, difficultyControl)
@@ -138,7 +138,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   private def requiredDifficultyAfter(parent: Header, blockchain: mutable.Map[Int, Header]): Difficulty = {
     val parentHeight = parent.height
-    val heights = difficultyControl.previousHeadersRequiredForRecalculation(parentHeight + 1, epochLength)
+    val heights = difficultyControl.previousHeightsRequiredForRecalculation(parentHeight + 1, epochLength)
       .ensuring(_.last == parentHeight)
     if (heights.lengthCompare(1) == 0) {
       difficultyControl.calculate(Seq(parent), epochLength)

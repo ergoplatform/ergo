@@ -3,29 +3,28 @@ package org.ergoplatform.utils.generators
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionSigningRequest}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction}
+import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils.{BoxUtils, RandomLike, RandomWrapper}
-import org.ergoplatform.wallet.Constants.{MaxAssetsPerBox, ScanId}
-import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
-import org.ergoplatform.UnsignedInput
-import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.utils.Generators
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
-import org.scalacheck.{Arbitrary, Gen}
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import org.ergoplatform._
+import org.ergoplatform.wallet.Constants.ScanId
+import org.scalacheck.Gen
+import scorex.crypto.hash.Blake2b256
 import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
@@ -36,7 +35,7 @@ import scala.util.Random
 
 trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
 
-  protected implicit val ergoAddressEncoder: ErgoAddressEncoder =
+  protected implicit val addressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue / 2)
@@ -62,7 +61,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[ErgoTree]): Gen[ErgoBox] = {
-    ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = ErgoHistory.EmptyHistoryHeight)
+    ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = EmptyHistoryHeight)
   }
 
   def unspendableErgoBoxGen(minValue: Long = parameters.minValuePerByte * 200,
@@ -130,7 +129,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
     val assetsMap: mutable.Map[ByteArrayWrapper, Long] =
       mutable.Map(boxesToSpend.flatMap(_.additionalTokens.toArray).map { case (bs, amt) =>
-        ByteArrayWrapper(bs) -> amt
+        ByteArrayWrapper(bs.toArray) -> amt
       }: _*)
 
     //randomly creating a new asset
@@ -196,7 +195,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     }
 
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
-      val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
+      val normalizedTokens = tokens.toSeq.map(t => t._1.data.toTokenId -> t._2)
       testBox(amt, outputsProposition, 0, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
@@ -224,7 +223,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {
     val tokensDistribution = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
     (1 to tokensCount).foreach { i =>
-      val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)) -> (Random.nextInt(Int.MaxValue).toLong + 100)
+      val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)).toTokenId -> (Random.nextInt(Int.MaxValue).toLong + 100)
       val idx = i % tokensDistribution.size
       val s = tokensDistribution(idx)
       tokensDistribution(idx) = s :+ (id -> amt)
@@ -277,6 +276,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   lazy val validErgoTransactionWithAssetsGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] =
     validErgoTransactionGenTemplate(minAssets = 1)
 
+  def boxesHolderGenOfSize(numBoxes:Int): Gen[BoxHolder] = Gen.listOfN(numBoxes, ergoBoxGenForTokens(Seq(), trueLeafGen))
+    .map(l => BoxHolder(l))
+
   lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, ergoBoxGenForTokens(Seq(), trueLeafGen))
     .map(l => BoxHolder(l))
 
@@ -291,11 +293,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     txs <- Gen.listOfN(txQty, invalidErgoTransactionGen(prop))
   } yield BlockTransactions(headerId, Header.InitialVersion, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
     if ((acc :+ tx).map(_.size).sum < (Parameters.MaxBlockSizeDefault - 150)) acc :+ tx else acc))
-
-  lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
-    index: Short <- Arbitrary.arbitrary[Short]
-    stateElements: Seq[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
-  } yield UTXOSnapshotChunk(stateElements, index)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- defaultHeaderGen
@@ -327,13 +324,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   } yield {
     blocks match {
       case _ :: _ =>
-        val sc = new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+        val sc = new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty)(settings.chainSettings)
         blocks.foldLeft(sc -> 1) { case ((c, h), b) =>
           val block = b.copy(header = b.header.copy(height = h, votes = votes(h - 1)))
           c.appendFullBlock(block).get -> (h + 1)
         }._1
       case _ =>
-        ErgoStateContext.empty(stateRoot, settings, parameters)
+        ErgoStateContext.empty(stateRoot, settings.chainSettings, parameters)
     }
   }
 

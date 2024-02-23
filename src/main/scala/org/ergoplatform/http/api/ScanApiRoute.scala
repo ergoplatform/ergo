@@ -5,15 +5,17 @@ import akka.http.scaladsl.server.Route
 import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.ApiError.BadRequest
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 
 import scala.util.{Failure, Success}
 import ScanEntities._
+import org.ergoplatform.ErgoBox.R1
+import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.wallet.Constants.ScanId
+import sigmastate.Values.ByteArrayConstant
+import sigmastate.serialization.ErgoTreeSerializer
 
 /**
   * This class contains methods to register / deregister and list external scans, and also to serve them.
@@ -40,7 +42,8 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       unspentR ~
       spentR ~
       stopTrackingR ~
-      addBoxR
+      addBoxR ~
+      p2sRuleR
   }
 
   def registerR: Route = (path("register") & post & entity(as[ScanRequest])) { request =>
@@ -62,19 +65,21 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) {
-    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight) =>
+    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight, limit, offset) =>
       val scanId = ScanId @@ scanIdInt.toShort
       val considerUnconfirmed = minConfNum == -1
-      withWallet(_.scanUnspentBoxes(scanId, considerUnconfirmed).map {
-        _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
+      withWallet(_.scanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight).map {
+        _.filter(boxConfirmationFilter(_, minConfNum, maxConfNum))
+        .slice(offset, offset + limit)
       })
   }
 
   def spentR: Route = (path("spentBoxes" / IntNumber) & get & boxParams) {
-    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight) =>
+    (scanIdInt, minConfNum, maxConfNum, minHeight, maxHeight, limit, offset) =>
       val scanId = ScanId @@ scanIdInt.toShort
       withWallet(_.scanSpentBoxes(scanId).map {
-        _.filter(boxFilterPredicate(_, minConfNum, maxConfNum, minHeight, maxHeight))
+        _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
+        .slice(offset, offset + limit)
       })
   }
 
@@ -91,4 +96,25 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       case Success(_) => ApiResponse(scanIdsBox.box.id)
     }
   }
+
+  /**
+    * API method to get tracking rule corresponding to p2s address
+    */
+  def p2sRuleR: Route = (path("p2sRule") & post & entity(as[String])) { p2sRaw =>
+    val p2s = fromJsonOrPlain(p2sRaw)
+    addressEncoder.fromString(p2s) match {
+      case Success(p2sAddr) =>
+        val script = p2sAddr.script
+        val scriptBytes = ByteArrayConstant(ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(script))
+        val trackingRule = EqualsScanningPredicate(R1, scriptBytes)
+        val request = ScanRequest(p2s, trackingRule, Some(ScanWalletInteraction.Off), Some(true))
+        withWalletOp(_.addScan(request).map(_.response)) {
+          case Failure(e) => BadRequest(s"Bad request $request. ${Option(e.getMessage).getOrElse(e.toString)}")
+          case Success(app) => ApiResponse(ScanIdWrapper(app.scanId))
+        }
+      case Failure(e) => BadRequest(s"Can't parse $p2s. ${Option(e.getMessage).getOrElse(e.toString)}")
+    }
+  }
 }
+
+

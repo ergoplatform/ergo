@@ -1,11 +1,13 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 
+import scala.collection.compat.immutable.ArraySeq
+import scala.collection.immutable.TreeSet
 import scala.collection.mutable
 
 /**
@@ -25,7 +27,7 @@ case class OffChainRegistry(height: Int,
   /**
     * Off-chain index considering on-chain balances.
     */
-  val digest: WalletDigest = {
+  lazy val digest: WalletDigest = {
     val offChainBalances = offChainBoxes.map(Balance.apply)
     val balance = offChainBalances.map(_.value).sum + onChainBalances.map(_.value).sum
     val tokensBalance = (offChainBalances ++ onChainBalances)
@@ -75,9 +77,9 @@ case class OffChainRegistry(height: Int,
     */
   def updateOnBlock(newHeight: Int,
                     allCertainBoxes: Seq[TrackedBox],
-                    onChainIds: Seq[EncodedBoxId]): OffChainRegistry = {
+                    onChainIds: TreeSet[EncodedBoxId]): OffChainRegistry = {
     val updatedOnChainBalances = allCertainBoxes.map(Balance.apply)
-    val cleanedOffChainBoxes = offChainBoxes.filterNot(b => onChainIds.contains(b.boxId))
+    val cleanedOffChainBoxes = offChainBoxes.filterNot(b => onChainIds.contains(EncodedBoxId @@@ b.boxId))
     this.copy(
       height = newHeight,
       offChainBoxes = cleanedOffChainBoxes,
@@ -90,12 +92,12 @@ case class OffChainRegistry(height: Int,
 object OffChainRegistry {
 
   def empty: OffChainRegistry =
-    OffChainRegistry(ErgoHistory.EmptyHistoryHeight, Seq.empty, Seq.empty)
+    OffChainRegistry(EmptyHistoryHeight, ArraySeq.empty, ArraySeq.empty)
 
   def init(walletRegistry: WalletRegistry):OffChainRegistry = {
     val unspent = walletRegistry.unspentBoxes(PaymentsScanId)
     val h = walletRegistry.fetchDigest().height
-    OffChainRegistry(h, Seq.empty, unspent.map(Balance.apply))
+    OffChainRegistry(h, ArraySeq.empty, unspent.map(Balance.apply))
   }
 
 }

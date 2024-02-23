@@ -6,23 +6,21 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
+import org.ergoplatform.sdk.wallet.secrets.PrimitiveSecretKey
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils._
 import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
-import scorex.util.encode.Base16
-import sigmastate.eval._
-import sigmastate.eval.Extensions._
-
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import org.ergoplatform.wallet.secrets.PrimitiveSecretKey
+import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
-import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
+import scorex.util.encode.Base16
+import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigmastate.eval.Extensions._
+import sigmastate.eval._
 import sigmastate.{CAND, CTHRESHOLD}
-import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import scala.concurrent.duration._
 
@@ -59,7 +57,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           log.info(s"Payment request $req")
           val tx = await(wallet.generateTransaction(req)).get
           log.info(s"Generated transaction $tx")
-          val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+          val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)(settings.chainSettings)
           val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
           tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
           val block = makeNextBlock(getUtxoState, Seq(tx))
@@ -114,7 +112,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           startDigest,
           parameters,
           validationSettingsNoIl,
-          VotingData.empty)
+          VotingData.empty)(settings.chainSettings)
         val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
         tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
       }
@@ -242,7 +240,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
   property("whitelist set, preserve tokens from auto-burn") {
     val inputs = {
       val x = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
-      Seq(encodedTokenId(Digest32 @@ x.head.boxId))
+      Seq(encodedTokenId(x.head.boxId.toTokenId))
     }
 
     implicit val ww: WalletFixture = new WalletFixture(settings
@@ -373,7 +371,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
             startDigest,
             parameters,
             validationSettingsNoIl,
-            VotingData.empty)
+            VotingData.empty)(settings.chainSettings)
           val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
           tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
 
@@ -390,7 +388,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
         log.info(s"Payment requests 2 $req2")
         val tx2 = await(wallet.generateTransaction(req2)).get
         log.info(s"Generated transaction $tx2")
-        val context2 = new ErgoStateContext(Seq(block.header), Some(block.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+        val context2 = new ErgoStateContext(Seq(block.header), Some(block.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)(settings.chainSettings)
         val knownBoxes = tx.outputs ++ genesisTx.outputs
         val boxesToSpend2 = tx2.inputs.map(i => knownBoxes.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
         tx2.statefulValidity(boxesToSpend2, emptyDataBoxes, context2) shouldBe 'success

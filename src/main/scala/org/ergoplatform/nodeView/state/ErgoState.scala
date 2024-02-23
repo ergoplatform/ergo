@@ -10,21 +10,21 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters, NodeConfigurationSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.validation.ValidationResult.Valid
-import scorex.core.validation.{ModifierValidator, ValidationResult}
-import scorex.core.{VersionTag, idToVersion}
+import org.ergoplatform.validation.ValidationResult.Valid
+import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
+import org.ergoplatform.core.{VersionTag, idToVersion}
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.AtLeast
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
 import spire.syntax.all.cfor
 
@@ -64,6 +64,14 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
     */
   def getReader: ErgoStateReader = this
 
+  /**
+    * Close database where state-related data lives
+    */
+  def closeStorage(): Unit = {
+    log.warn("Closing state's store.")
+    store.close()
+  }
+
 }
 
 object ErgoState extends ScorexLogging {
@@ -95,7 +103,8 @@ object ErgoState extends ScorexLogging {
     * @return Result of transactions execution with total cost inside
     */
   def execTransactions(transactions: Seq[ErgoTransaction],
-                       currentStateContext: ErgoStateContext)
+                       currentStateContext: ErgoStateContext,
+                       nodeSettings: NodeConfigurationSettings)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
@@ -122,7 +131,7 @@ object ErgoState extends ScorexLogging {
       }
     }
 
-    val checkpointHeight = currentStateContext.ergoSettings.nodeSettings.checkpoint.map(_.height).getOrElse(0)
+    val checkpointHeight = nodeSettings.checkpoint.map(_.height).getOrElse(0)
     if (currentStateContext.currentHeight <= checkpointHeight) {
       Valid(0L)
     } else {
@@ -198,7 +207,7 @@ object ErgoState extends ScorexLogging {
                         additionalRegisters: AdditionalRegisters = Map.empty): ErgoBox = {
     import sigmastate.eval._
 
-    val creationHeight: Int = ErgoHistory.EmptyHistoryHeight
+    val creationHeight: Int = EmptyHistoryHeight
 
     val transactionId: ModifierId = ErgoBox.allZerosModifierId
     val boxIndex: Short = 0: Short
@@ -222,7 +231,7 @@ object ErgoState extends ScorexLogging {
     val protection = AtLeast(IntConstant(2), pks)
     val protectionBytes = ValueSerializer.serialize(protection)
     val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
-    val prop = ErgoScriptPredef.foundationScript(settings.monetary)
+    val prop = ErgoTreePredef.foundationScript(settings.monetary)
     createGenesisBox(value, prop, Seq.empty, Map(R4 -> ByteArrayConstant(protectionBytes)))
   }
 
@@ -247,44 +256,53 @@ object ErgoState extends ScorexLogging {
   }
 
   /**
-    * All boxes of genesis state.
-    * Emission box is always the first.
+    * Genesis state boxes generator.
+    * Genesis state is corresponding to the state before the very first block processed.
+    * For Ergo mainnet, contains emission contract box, proof-of-no--premine box, and treasury contract box
     */
   def genesisBoxes(chainSettings: ChainSettings): Seq[ErgoBox] = {
     Seq(genesisEmissionBox(chainSettings), noPremineBox(chainSettings), genesisFoundersBox(chainSettings))
   }
 
-  def generateGenesisUtxoState(stateDir: File,
-                               constants: StateConstants): (UtxoState, BoxHolder) = {
+  /**
+    * Generate genesis full (UTXO-set) state by inserting genesis boxes into empty UTXO set.
+    * Assign `genesisStateDigest` from config as its version.
+    */
+  def generateGenesisUtxoState(stateDir: File, settings: ErgoSettings): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
-    val boxes = genesisBoxes(constants.settings.chainSettings)
+    val boxes = genesisBoxes(settings.chainSettings)
     val bh = BoxHolder(boxes)
 
-    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants, LaunchParameters).ensuring(us => {
-      log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      java.util.Arrays.equals(us.rootHash, constants.settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
+    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, settings, LaunchParameters).ensuring(us => {
+      log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootDigest)}")
+      java.util.Arrays.equals(us.rootDigest, settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 
+  /**
+    * Generate genesis digest state similarly to `generateGenesisUtxoState`, but without really storing boxes
+    */
   def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
-    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest),
-      stateDir, StateConstants(settings))
+    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest), stateDir, settings)
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
   lazy val genesisStateVersion: VersionTag = idToVersion(Header.GenesisParentId)
 
-  def readOrGenerate(settings: ErgoSettings,
-                     constants: StateConstants): ErgoState[_] = {
+  /**
+    * Read from disk or generate genesis UTXO-set or digest based state
+    * @param settings - config used to find state database or extract genesis boxes data
+    */
+  def readOrGenerate(settings: ErgoSettings): ErgoState[_] = {
     val dir = stateDir(settings)
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
-      case StateType.Digest => DigestState.create(None, None, dir, constants)
-      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
-      case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
+      case StateType.Digest => DigestState.create(None, None, dir, settings)
+      case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, settings)
+      case _ => ErgoState.generateGenesisUtxoState(dir, settings)._1
     }
   }
 

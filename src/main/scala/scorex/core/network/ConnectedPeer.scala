@@ -2,19 +2,18 @@ package scorex.core.network
 
 import akka.actor.ActorRef
 import io.circe.{Encoder, Json}
-import scorex.core.network.peer.PeerInfo
+import org.ergoplatform.network.ModePeerFeature
+import org.ergoplatform.network.peer.PeerInfo
 
 /**
   * Peer connected to our node
   *
   * @param connectionId - connection address
   * @param handlerRef   - reference to PeerConnectionHandler that is responsible for communication with this peer
-  * @param lastMessage  - timestamp of last received message
   * @param peerInfo     - information about this peer. May be None if peer is connected, but is not handshaked yet
   */
 case class ConnectedPeer(connectionId: ConnectionId,
                          handlerRef: ActorRef,
-                         var lastMessage: Long,
                          peerInfo: Option[PeerInfo]) {
 
   override def hashCode(): Int = connectionId.remoteAddress.hashCode()
@@ -27,6 +26,13 @@ case class ConnectedPeer(connectionId: ConnectionId,
   override def toString: String = s"ConnectedPeer(connection: $connectionId , " +
                                     s"remote version: ${peerInfo.map(_.peerSpec.protocolVersion)})"
 
+  /**
+    * Helper method to get operating mode of the peer
+    */
+  lazy val mode: Option[ModePeerFeature] = {
+    peerInfo.flatMap(_.peerSpec.features.collectFirst[ModePeerFeature]({ case mf: ModePeerFeature => mf }))
+  }
+
 }
 
 object ConnectedPeer {
@@ -37,7 +43,7 @@ object ConnectedPeer {
     val optionalFields =
       List(
         peer.peerInfo.map(_.peerSpec.protocolVersion.toString).map("version" -> _.asJson),
-        Option(peer.lastMessage).filter(_ != 0L).map("lastMessage" -> _.asJson)
+        peer.peerInfo.map(_.lastStoredActivityTime).filter(_ != 0L).map("lastMessage" -> _.asJson),
       ).flatten
     val fields = addressField :: optionalFields
     Json.obj(fields:_*)

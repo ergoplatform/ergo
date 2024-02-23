@@ -3,13 +3,13 @@ package org.ergoplatform.nodeView.viewholder
 import akka.actor.ActorRef
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
-import org.ergoplatform.settings.{ErgoSettings, VotingSettings}
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, VotingSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import scorex.testkit.utils.NoShrink
+import org.ergoplatform.testkit.utils.NoShrink
 
 import scala.concurrent.duration._
 
@@ -20,7 +20,7 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
   private val BlockInterval = 2.minutes
 
   def prunedSettings(blocksToKeep: Int): ErgoSettings = {
-    val defaultSettings = ErgoSettings.read()
+    val defaultSettings = ErgoSettingsReader.read()
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
         powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n),
@@ -30,7 +30,6 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = StateType.Digest,
         verifyTransactions = true,
-        poPoWBootstrap = false,
         blocksToKeep = blocksToKeep
       )
     )
@@ -48,8 +47,8 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
   private def testCode(fixture: NodeViewFixture, toSkip: Int, totalBlocks: Int = 20) = {
     import fixture._
 
-    val (us, bh) = createUtxoState(stateConstants, parameters)
-    val wus = WrappedUtxoState(us, bh, stateConstants, parameters)
+    val (us, bh) = createUtxoState(fixture.settings)
+    val wus = WrappedUtxoState(us, bh, fixture.settings, parameters)
 
     val fullChain = genFullChain(wus, totalBlocks, nodeViewHolderRef)
 

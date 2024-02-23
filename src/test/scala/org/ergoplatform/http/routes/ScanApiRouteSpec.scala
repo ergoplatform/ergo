@@ -1,17 +1,17 @@
 package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
+import akka.http.scaladsl.server.{Route, ValidationRejection}
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.http.api.{ApiCodecs, ScanApiRoute}
-import org.ergoplatform.nodeView.wallet.scanning.{ContainsScanningPredicate, Scan, ScanJsonCodecs, ScanRequest, ScanWalletInteraction}
-import org.ergoplatform.utils.Stubs
 import io.circe.syntax._
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.http.api.ScanEntities.{ScanIdBoxId, ScanIdWrapper}
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.http.api.{ApiCodecs, ScanApiRoute}
+import org.ergoplatform.nodeView.wallet.scanning._
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
+import org.ergoplatform.utils.Stubs
 import org.ergoplatform.wallet.Constants.ScanId
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -19,8 +19,8 @@ import scorex.crypto.authds.ADKey
 import scorex.utils.Random
 import sigmastate.Values.ByteArrayConstant
 
-import scala.util.Try
 import scala.concurrent.duration._
+import scala.util.Try
 
 class ScanApiRouteSpec extends AnyFlatSpec
   with Matchers
@@ -36,7 +36,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
   val prefix = "/scan"
 
-  val ergoSettings: ErgoSettings = ErgoSettings.read(
+  val ergoSettings: ErgoSettings = ErgoSettingsReader.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = ScanApiRoute(utxoReadersRef, ergoSettings).route
 
@@ -241,11 +241,34 @@ class ScanApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "fail when maxInclusionHeight is specified and we consider unconfirmed" in {
+    val minConfirmations = -1
+    val maxInclusionHeight = 50
+
+    val suffix = s"/unspentBoxes/101?minConfirmations=$minConfirmations&maxInclusionHeight=$maxInclusionHeight"
+
+    Get(prefix + suffix) ~> route ~> check {
+      rejection shouldEqual ValidationRejection("maxInclusionHeight cannot be specified when we consider unconfirmed")
+    }
+  }
+
   it should "stop tracking a box" in {
     val scanIdBoxId = ScanIdBoxId(ScanId @@ (51: Short), ADKey @@ Random.randomBytes(32))
 
     Post(prefix + "/stopTracking", scanIdBoxId.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "generate scan for p2s rule" in {
+    Post(prefix + "/p2sRule", "Ms7smJmdbakqfwNo") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val res = responseAs[Json]
+      res.hcursor.downField("scanId").as[Int].toOption.isDefined shouldBe true
+    }
+
+    Post(prefix + "/p2sRule", "s7smJmdbakqfwNo") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

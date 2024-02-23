@@ -10,16 +10,15 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoSyncTracker
-import scorex.core.utils.NetworkTimeProvider
-import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
-import scorex.core.network.peer.PeersStatus
+import org.ergoplatform.network.peer.PeersStatus
 
 import java.net.URL
 import scala.concurrent.ExecutionContextExecutor
@@ -31,8 +30,7 @@ import scala.concurrent.duration._
 class ErgoStatsCollector(readersHolder: ActorRef,
                          networkController: ActorRef,
                          syncTracker: ErgoSyncTracker,
-                         settings: ErgoSettings,
-                         timeProvider: NetworkTimeProvider)
+                         settings: ErgoSettings)
   extends Actor with ScorexLogging {
 
   override def preStart(): Unit = {
@@ -46,8 +44,6 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
   }
-
-  private def networkTime(): Time = timeProvider.time()
 
   private var nodeInfo = NodeInfo(
     settings.scorexSettings.network.nodeName,
@@ -64,12 +60,13 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None,
     None,
     None,
-    launchTime = networkTime(),
-    lastIncomingMessageTime = networkTime(),
+    launchTime = System.currentTimeMillis(),
+    lastIncomingMessageTime = System.currentTimeMillis(),
     None,
     LaunchParameters,
     eip27Supported = true,
-    settings.scorexSettings.restApi.publicUrl)
+    settings.scorexSettings.restApi.publicUrl,
+    settings.nodeSettings.extraIndex)
 
   override def receive: Receive =
     onConnectedPeers orElse
@@ -90,8 +87,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         bestHeaderOpt = h.bestHeaderOpt,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id)),
-        genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption,
-        stateRoot = Some(Algos.encode(s.rootHash)),
+        genesisBlockIdOpt = h.headerIdsAtHeight(GenesisHeight).headOption,
+        stateRoot = Some(Algos.encode(s.rootDigest)),
         stateVersion = Some(s.version),
         parameters = s.stateContext.currentParameters
       )
@@ -116,7 +113,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     case ChangedHistory(h: ErgoHistory@unchecked) if h.isInstanceOf[ErgoHistory] =>
 
       if (nodeInfo.genesisBlockIdOpt.isEmpty) {
-        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(ErgoHistory.GenesisHeight).headOption)
+        nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(GenesisHeight).headOption)
       }
 
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
@@ -169,14 +166,16 @@ object ErgoStatsCollector {
     * @param isMining - whether the node is mining
     * @param bestHeaderOpt - best header ID
     * @param headersScore - cumulative difficulty of best headers-chain
-    * @param bestFullBlockOpt - best full-block id (header id of such block)
+    * @param bestFullBlockOpt - Best full-block known to the node. Can be None if state is empty (no full block is applied since node launch)
     * @param fullBlocksScore - cumulative difficulty of best full blocks chain
+    * @param maxPeerHeight - maximum block height of connected peers
     * @param launchTime - when the node was launched (in Java time format, basically, UNIX time * 1000)
     * @param lastIncomingMessageTime - when the node received last p2p message (in Java time)
     * @param genesisBlockIdOpt - header id of genesis block
     * @param parameters - array with network parameters at the moment
     * @param eip27Supported - whether EIP-27 locked in
-    * @param restApiUrl publicly accessible url of node which exposes restApi in firewall
+    * @param restApiUrl - publicly accessible url of node which exposes restApi in firewall
+    * @param extraIndex - whether the node has additional indexing enabled
     */
   case class NodeInfo(nodeName: String,
                       appVersion: String,
@@ -191,13 +190,14 @@ object ErgoStatsCollector {
                       headersScore: Option[BigInt],
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       fullBlocksScore: Option[BigInt],
-                      maxPeerHeight : Option[Int], // Maximum block height of connected peers
+                      maxPeerHeight : Option[Int],
                       launchTime: Long,
                       lastIncomingMessageTime: Long,
                       genesisBlockIdOpt: Option[String],
                       parameters: Parameters,
                       eip27Supported: Boolean,
-                      restApiUrl: Option[URL])
+                      restApiUrl: Option[URL],
+                      extraIndex: Boolean)
 
   object NodeInfo extends ApiCodecs {
     implicit val paramsEncoder: Encoder[Parameters] = org.ergoplatform.settings.ParametersSerializer.jsonEncoder
@@ -223,6 +223,7 @@ object ErgoStatsCollector {
         "stateType" -> ni.stateType.stateTypeName.asJson,
         "stateVersion" -> ni.stateVersion.asJson,
         "isMining" -> ni.isMining.asJson,
+        "isExplorer" -> ni.extraIndex.asJson,
         "peersCount" -> ni.peersCount.asJson,
         "launchTime" -> ni.launchTime.asJson,
         "lastSeenMessageTime" -> ni.lastIncomingMessageTime.asJson,
@@ -238,19 +239,17 @@ object ErgoStatsCollector {
 
 object ErgoStatsCollectorRef {
 
-  def props(readersHolder: ActorRef,
+  private def props(readersHolder: ActorRef,
             networkController: ActorRef,
             syncTracker : ErgoSyncTracker,
-            settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider): Props =
-    Props(new ErgoStatsCollector(readersHolder, networkController, syncTracker, settings, timeProvider))
+            settings: ErgoSettings): Props =
+    Props(new ErgoStatsCollector(readersHolder, networkController, syncTracker, settings))
 
 
   def apply(readersHolder: ActorRef,
             networkController: ActorRef,
             syncTracker : ErgoSyncTracker,
-            settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(readersHolder, networkController, syncTracker, settings, timeProvider))
+            settings: ErgoSettings)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(readersHolder, networkController, syncTracker, settings))
 
 }

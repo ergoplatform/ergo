@@ -1,16 +1,16 @@
 package org.ergoplatform.wallet.interpreter
 
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
-import scorex.crypto.authds.ADDigest
+import org.ergoplatform.sdk.BlockchainParameters
+import org.ergoplatform.sdk.wallet.protocol.context.BlockchainStateContext
 import scorex.util.encode.Base16
-import sigmastate.eval.{CGroupElement, CPreHeader, Colls}
-import sigmastate.interpreter.CryptoConstants
-import special.collection.Coll
-import special.sigma.{Header, PreHeader}
+import sigmastate.crypto.CryptoConstants
+import sigmastate.eval.Extensions.ArrayOps
+import sigmastate.eval.{CGroupElement, CPreHeader}
+import sigma.{Coll, Colls, Header, PreHeader}
 
 trait InterpreterSpecCommon {
 
-  protected val parameters = new ErgoLikeParameters {
+  protected val parameters = new BlockchainParameters {
 
     override def storageFeeFactor: Int = 1250000
 
@@ -35,13 +35,14 @@ trait InterpreterSpecCommon {
     override def blockVersion: Byte = 1
   }
 
-  protected val stateContext = new ErgoLikeStateContext {
+  protected val stateContext = new BlockchainStateContext {
 
     override def sigmaLastHeaders: Coll[Header] = Colls.emptyColl
 
-    override def previousStateDigest: ADDigest = Base16.decode("a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302")
-      .map(ADDigest @@ _)
-      .getOrElse(throw new Error(s"Failed to parse genesisStateDigest"))
+    override def previousStateDigest: Coll[Byte] =
+      Base16.decode("a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302")
+        .getOrElse(throw new Error(s"Failed to parse genesisStateDigest"))
+        .toColl
 
     override def sigmaPreHeader: PreHeader = CPreHeader(
       version = 0,

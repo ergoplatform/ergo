@@ -2,7 +2,8 @@ package org.ergoplatform.http.api
 
 import io.circe.{Decoder, HCursor}
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.{ErgoBox, JsonCodecs}
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.sdk.JsonCodecs
 import org.ergoplatform.wallet.Constants.ScanId
 
 /**

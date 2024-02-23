@@ -6,7 +6,6 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.core.utils._
 
 trait MempoolFilterPerformanceTest
   extends AnyPropSpec
@@ -34,31 +33,11 @@ trait MempoolFilterPerformanceTest
     var m: ErgoMemPool = memPool
     (0 until 1000) foreach { _ =>
       forAll(transactionGenerator) { tx: ErgoTransaction =>
-        m = m.put(UnconfirmedTransaction(tx, None)).get
+        m = m.put(UnconfirmedTransaction(tx, None))
       }
     }
     m.size should be > 1000
     initializedMempool = Some(m)
-  }
-
-  property("Mempool filter of non-existing transaction should be fast") {
-    @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    val m = initializedMempool.get
-    forAll(transactionGenerator) { tx: ErgoTransaction =>
-      val (time, _) = profile(m.filter(Seq(UnconfirmedTransaction(tx, None))))
-      assert(time < thresholdSecs)
-    }
-  }
-
-  property("Mempool filter of existing transaction should be fast") {
-    @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    var m = initializedMempool.get
-    forAll(transactionGenerator) { tx: ErgoTransaction =>
-      val unconfirmedTx = UnconfirmedTransaction(tx, None)
-      m = m.put(unconfirmedTx).get
-      val (time, _) = profile(m.filter(Seq(unconfirmedTx)))
-      assert(time < thresholdSecs)
-    }
   }
 
 }

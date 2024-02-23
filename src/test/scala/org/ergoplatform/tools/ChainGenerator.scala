@@ -1,7 +1,7 @@
 package org.ergoplatform.tools
 
 import org.ergoplatform._
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
@@ -9,14 +9,14 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.ergoplatform.wallet.boxes.{BoxSelector, ReplaceCompactCollectBoxSelector}
 import scorex.util.ModifierId
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import java.io.File
 import scala.annotation.tailrec
@@ -32,7 +32,7 @@ import scala.util.Try
 object ChainGenerator extends App with ErgoTestHelpers {
 
   val realNetworkSetting = {
-    val initSettings = ErgoSettings.read(Args(None, Some(NetworkType.TestNet)))
+    val initSettings = ErgoSettingsReader.read(Args(None, Some(NetworkType.TestNet)))
     initSettings.copy(chainSettings = initSettings.chainSettings.copy(genesisId = None))
   }
 
@@ -44,14 +44,14 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val prover = defaultProver
   val minerPk = prover.hdKeys.head.publicImage
   val selfAddressScript = P2PKAddress(minerPk).script
-  val minerProp = ErgoScriptPredef.rewardOutputScript(RewardDelay, minerPk)
+  val minerProp = ErgoTreePredef.rewardOutputScript(RewardDelay, minerPk)
 
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
   val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2, None)
 
-  val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
+  val startTime = args.headOption.map(_.toLong).getOrElse(System.currentTimeMillis() - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/data") else new File(args(1))
   val txsSize: Int = if (args.length < 3) 100 * 1024 else args(2).toInt
 
@@ -59,10 +59,10 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
   val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
-    -1, poPoWBootstrap = false, minimalSuffix, mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
+    -1, UtxoSettings(false, 0, 2), NipopowSettings(false, 1), mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
     internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
     200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
-    1000000, 100, adProofsSuffixLength = 112*1024)
+    1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false)
   val ms = settings.chainSettings.monetary.copy(
     minerRewardDelay = RewardDelay
   )
@@ -76,9 +76,9 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val votingEpochLength = votingSettings.votingLength
   val protocolVersion = fullHistorySettings.chainSettings.protocolVersion
 
-  val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+  val history = ErgoHistory.readOrGenerate(fullHistorySettings)(context = null)
   HistoryTestHelpers.allowToApplyOldBlocks(history)
-  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(fullHistorySettings))
+  val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, fullHistorySettings)
   log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
   val chain = loop(state, None, None, Seq())
@@ -93,8 +93,8 @@ object ChainGenerator extends App with ErgoTestHelpers {
                    last: Option[Header],
                    acc: Seq[ModifierId]): Seq[ModifierId] = {
     val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
-    if (time < timeProvider.time) {
-      val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
+    if (time < System.currentTimeMillis()) {
+      val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(GenesisHeight),
         initBox, state.stateContext)
 
       val candidate = genCandidate(prover.hdPubKeys.head.key, last, time, txs, state)
@@ -157,7 +157,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
     val stateContext = state.stateContext
     val nBits: Long = lastHeaderOpt
       .map(parent => history.requiredDifficultyAfter(parent))
-      .map(d => RequiredDifficulty.encodeCompactBits(d))
+      .map(d => DifficultySerializer.encodeCompactBits(d))
       .getOrElse(settings.chainSettings.initialNBits)
 
     val interlinks = lastHeaderOpt

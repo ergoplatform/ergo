@@ -5,22 +5,21 @@ import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
+import org.ergoplatform._
+import org.ergoplatform.http.api.ApiError.BadRequest
+import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
-import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform._
-import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
-import scorex.core.api.http.ApiError.BadRequest
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
-import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
-import sigmastate.lang.SigmaCompiler
+import sigmastate.crypto.DLogProtocol.ProveDlog
+import sigmastate.eval.CompiletimeIRContext
 import sigmastate.interpreter.Interpreter
+import sigmastate.lang.{CompilerResult, SigmaCompiler}
 import sigmastate.serialization.ValueSerializer
 
 import scala.concurrent.Future
@@ -29,7 +28,7 @@ import scala.util.{Failure, Success, Try}
 
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs with ApiRequestsCodecs {
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
@@ -39,8 +38,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   override val route: Route = pathPrefix("script") {
     toStrictEntity(10.seconds) {
-      // p2shAddressR ~
-      p2sAddressR ~
+      p2shAddressR ~
+        p2sAddressR ~
         addressToTreeR ~
         addressToBytesR ~
         executeWithContextR
@@ -64,12 +63,12 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     import sigmastate.Values._
     val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
     Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
-      case script: Value[SSigmaProp.type@unchecked] if script.tpe == SSigmaProp =>
+      case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
         Success(script)
-      case script: Value[SBoolean.type@unchecked] if script.tpe == SBoolean =>
+      case CompilerResult(_, _, _, script: Value[SBoolean.type@unchecked]) if script.tpe == SBoolean =>
         Success(script.toSigmaProp)
       case other =>
-        Failure(new Exception(s"Source compilation result is of type ${other.tpe}, but `SBoolean` expected"))
+        Failure(new Exception(s"Source compilation result is of type ${other.buildTree.tpe}, but `SBoolean` expected"))
     }
   }
 
@@ -86,7 +85,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
-  //todo: temporarily switched off due to https://github.com/ergoplatform/ergo/issues/936
   def p2shAddressR: Route = (path("p2shAddress") & post & source) { source =>
     withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
       compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(
@@ -101,7 +99,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       compileSource(req.script, req.env).fold(
         e => BadRequest(e.getMessage),
         tree => {
-          implicit val irc: IRContext = new RuntimeIRContext()
           val interpreter: ErgoLikeInterpreter = new ErgoLikeInterpreter()
           val res = Try(interpreter.fullReduction(tree, req.ctx.asInstanceOf[interpreter.CTX], Interpreter.emptyEnv))
           res.fold(

@@ -1,17 +1,17 @@
 package org.ergoplatform.network
 
+import org.ergoplatform.consensus.{Older, Younger}
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.consensus.{Older, Younger}
 import scorex.core.network.{ConnectedPeer, ConnectionId, Incoming}
-import scorex.core.network.peer.PeerInfo
+import org.ergoplatform.network.peer.PeerInfo
 
 class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
   property("getters test") {
     val time = 10L
-    val peerInfo = PeerInfo(defaultPeerSpec, time, Some(Incoming))
+    val peerInfo = PeerInfo(defaultPeerSpec, time, Some(Incoming), 5L)
     val cid = ConnectionId(inetAddr1, inetAddr2, Incoming)
-    val connectedPeer = ConnectedPeer(cid, handlerRef = null, lastMessage = 5L, Some(peerInfo))
-    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network, timeProvider)
+    val connectedPeer = ConnectedPeer(cid, handlerRef = null, Some(peerInfo))
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
 
     val height = 1000
     // add peer to sync
@@ -22,7 +22,6 @@ class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
     syncTracker.updateStatus(connectedPeer, Older, Some(height+1))
     syncTracker.maxHeight() shouldBe Some(height + 1)
     syncTracker.getStatus(connectedPeer) shouldBe Some(Older)
-    syncTracker.fullInfo().head.height shouldBe height+1
 
     syncTracker.peersByStatus.apply(Older).head shouldBe connectedPeer
     // peer should not be synced yet

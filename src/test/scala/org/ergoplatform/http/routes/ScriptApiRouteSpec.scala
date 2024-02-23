@@ -5,8 +5,8 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
-import org.ergoplatform.Pay2SAddress
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.{Pay2SAddress, Pay2SHAddress}
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.Stubs
 import io.circe.syntax._
 import org.ergoplatform.http.api.ScriptApiRoute
@@ -14,8 +14,8 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
 import sigmastate.SByte
-import sigmastate.Values.{TrueLeaf, CollectionConstant, ErgoTree}
-import sigmastate.serialization.{ValueSerializer, ErgoTreeSerializer}
+import sigmastate.Values.{CollectionConstant, ErgoTree, TrueLeaf}
+import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
 
 
 class ScriptApiRouteSpec extends AnyFlatSpec
@@ -26,7 +26,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
 
   val prefix = "/script"
 
-  val ergoSettings: ErgoSettings = ErgoSettings.read(
+  val ergoSettings: ErgoSettings = ErgoSettingsReader.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = ScriptApiRoute(digestReadersRef, settings).route
 
@@ -56,7 +56,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       val cost = json.hcursor.downField("cost").as[Int].right.get
       value shouldEqual -45
       condition shouldEqual true
-      cost shouldEqual 50
+      cost shouldEqual 6
     }
     val json = io.circe.parser.parse(req)
     Post(prefix + suffix, json) ~> route ~> check(assertion(responseAs[Json]))
@@ -67,26 +67,24 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     val assertion = (json: Json) => {
       status shouldBe StatusCodes.OK
       val addressStr = json.hcursor.downField("address").as[String].right.get
-      ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
+      addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
     }
     Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
     Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
       check(assertion(responseAs[Json]))
   }
 
-  //todo: temporarily switched off due to https://github.com/ergoplatform/ergo/issues/936
-//  it should "generate valid P2SHAddress form source" in {
-//    val suffix = "/p2shAddress"
-//    val assertion = (json: Json) => {
-//      status shouldBe StatusCodes.OK
-//      val addressStr = json.hcursor.downField("address").as[String].right.get
-//      ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
-//    }
-//    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
-//    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
-//      check(assertion(responseAs[Json]))
-//  }
-
+  it should "generate valid P2SHAddress form source" in {
+    val suffix = "/p2shAddress"
+    val assertion = (json: Json) => {
+      status shouldBe StatusCodes.OK
+      val addressStr = json.hcursor.downField("address").as[String].right.get
+      addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
+    }
+    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
+      check(assertion(responseAs[Json]))
+  }
 
   it should "get through address <-> ergoTree round-trip" in {
     val suffix = "addressToTree"
@@ -97,21 +95,22 @@ class ScriptApiRouteSpec extends AnyFlatSpec
 
       val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(treeStr).get)
 
-      val addr = ergoAddressEncoder.fromProposition(tree).get
+      val addr = addressEncoder.fromProposition(tree).get
 
-      ergoAddressEncoder.toString(addr) shouldBe address
+      addressEncoder.toString(addr) shouldBe address
     }
 
     val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
     Get(s"$prefix/$suffix/$p2pk") ~> route ~> check(assertion(responseAs[Json], p2pk))
 
-    //todo: temporarily switched off due to https://github.com/ergoplatform/ergo/issues/936
-//    val p2sh = "8UmyuJuQ3FS9ts7j72fn3fKChXSGzbL9WC"
-//    Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
-
     val script = TrueLeaf
     val tree = ErgoTree.fromProposition(script)
-    val p2s = ergoAddressEncoder.toString(ergoAddressEncoder.fromProposition(tree).get)
+
+    val p2sh = Pay2SHAddress.apply(tree).toString()
+    p2sh shouldBe "rbcrmKEYduUvADj9Ts3dSVSG27h54pgrq5fPuwB"
+    Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
+
+    val p2s = addressEncoder.toString(addressEncoder.fromProposition(tree).get)
     p2s shouldBe "Ms7smJwLGbUAjuWQ"
     Get(s"$prefix/$suffix/$p2s") ~> route ~> check(assertion(responseAs[Json], p2s))
   }
@@ -130,21 +129,20 @@ class ScriptApiRouteSpec extends AnyFlatSpec
 
       val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bs)
 
-      val addr = ergoAddressEncoder.fromProposition(tree).get
+      val addr = addressEncoder.fromProposition(tree).get
 
-      ergoAddressEncoder.toString(addr) shouldBe address
+      addressEncoder.toString(addr) shouldBe address
     }
 
     val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
     Get(s"$prefix/$suffix/$p2pk") ~> route ~> check(assertion(responseAs[Json], p2pk))
 
-    //todo: temporarily switched off due to https://github.com/ergoplatform/ergo/issues/936
-    //    val p2sh = "8UmyuJuQ3FS9ts7j72fn3fKChXSGzbL9WC"
-    //    Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
+    val p2sh = "rbcrmKEYduUvADj9Ts3dSVSG27h54pgrq5fPuwB"
+    Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
 
     val script = TrueLeaf
     val tree = ErgoTree.fromProposition(script)
-    val p2s = ergoAddressEncoder.toString(ergoAddressEncoder.fromProposition(tree).get)
+    val p2s = addressEncoder.toString(addressEncoder.fromProposition(tree).get)
     p2s shouldBe "Ms7smJwLGbUAjuWQ"
     Get(s"$prefix/$suffix/$p2s") ~> route ~> check(assertion(responseAs[Json], p2s))
   }

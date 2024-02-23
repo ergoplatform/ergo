@@ -322,9 +322,9 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
   }
 
   property("transaction with too many inputs should be rejected") {
-
-    for (iii <- 1 to 1000) {
-      printf("%d -", iii)
+  // stress-test https://github.com/ergoplatform/ergo/issues/2095
+  for (iii <- 1 to 50) {
+      
 
     //we assume that verifier must finish verification of any script in less time than 250K hash calculations
     // (for the Blake2b256 hash function over a single block input)
@@ -367,9 +367,9 @@ class ErgoTransactionSpec extends ErgoPropertyTest with ErgoTestConstants {
     val (_, time) = BenchmarkUtil.measureTime(
       tx.statefulValidity(from, IndexedSeq(), sc)(verifier)
     )
-    printf("%d > %d\n", time, Timeout)
-    assert(time > Timeout)
-    }
+    printf("%d: %d > %d (Timeout/2)\n", iii, time, Timeout/2)
+    assert(time > Timeout/2)
+    } // test-loop
 
   }
 

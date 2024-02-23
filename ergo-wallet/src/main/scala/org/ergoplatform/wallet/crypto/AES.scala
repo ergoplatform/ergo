@@ -4,7 +4,7 @@ import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
 
 import javax.crypto.spec.{GCMParameterSpec, PBEKeySpec, SecretKeySpec}
 import javax.crypto.{AEADBadTagException, Cipher, SecretKeyFactory}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 object AES {
 

@@ -4,12 +4,12 @@ import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
-import org.ergoplatform.network.{Handshake, PeerSpec, Version}
+import org.ergoplatform.network.{Handshake, HandshakeSerializer, PeerSpec, Version}
 import org.ergoplatform.network.Version.Eip37ForkVersion
 import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
 import scorex.core.network.PeerConnectionHandler.ReceivableMessages
-import org.ergoplatform.network.message.{HandshakeSerializer, MessageSerializer}
+import org.ergoplatform.network.message.MessageSerializer
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import org.ergoplatform.settings.ScorexSettings
 import scorex.util.ScorexLogging

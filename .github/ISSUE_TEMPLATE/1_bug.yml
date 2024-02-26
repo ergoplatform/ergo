@@ -1,0 +1,23 @@
+name: Bug Report
+description: "Something does not work correctly."
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Provide steps to reproduce the bug, ideally cli instructions
+    validations:
+      required: false      
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Versions, OS, Architecture etc.
+    validations:
+      required: false
+

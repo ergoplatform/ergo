@@ -14,9 +14,8 @@ import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import sigma.Colls
-import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigma.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.Random
 

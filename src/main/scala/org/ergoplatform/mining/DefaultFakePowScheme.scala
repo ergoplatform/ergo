@@ -3,7 +3,7 @@ package org.ergoplatform.mining
 import org.ergoplatform.modifiers.history.header.Header
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import sigmastate.crypto.CryptoConstants.EcPointType
+import sigma.crypto.EcPointType
 
 import scala.util.{Random, Success, Try}
 

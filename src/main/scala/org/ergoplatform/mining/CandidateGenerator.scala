@@ -27,12 +27,10 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
-import sigmastate.ErgoBoxRType
-import sigmastate.crypto.DLogProtocol.ProveDlog
-import sigmastate.crypto.CryptoFacade
-import sigmastate.eval.Extensions._
-import sigmastate.eval._
-import sigmastate.interpreter.ProverResult
+import sigma.data.{Digest32Coll, ProveDlog}
+import sigma.crypto.CryptoFacade
+import sigma.eval.Extensions.EvalIterableOps
+import sigma.interpreter.ProverResult
 import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
@@ -745,8 +743,9 @@ object CandidateGenerator extends ScorexLogging {
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
       val feeAmount = feeBoxes.map(_.value).sum
-      val feeAssets =
-        feeBoxes.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
+      val feeAssets = feeBoxes
+        .flatMap(_.additionalTokens.toArray)
+        .toColl.take(MaxAssetsPerBox)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult.empty))
       val minerBox =
         new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())

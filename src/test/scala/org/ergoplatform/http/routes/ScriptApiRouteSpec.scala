@@ -13,10 +13,9 @@ import org.ergoplatform.http.api.ScriptApiRoute
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
-import sigmastate.SByte
-import sigmastate.Values.{CollectionConstant, ErgoTree, TrueLeaf}
-import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
-
+import sigma.ast.syntax.CollectionConstant
+import sigma.ast.{ErgoTree, SByte, TrueLeaf}
+import sigma.serialization.{ErgoTreeSerializer, ValueSerializer}
 
 class ScriptApiRouteSpec extends AnyFlatSpec
   with Matchers
@@ -103,7 +102,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
     Get(s"$prefix/$suffix/$p2pk") ~> route ~> check(assertion(responseAs[Json], p2pk))
 
-    val script = TrueLeaf
+    val script = TrueLeaf.toSigmaProp
     val tree = ErgoTree.fromProposition(script)
 
     val p2sh = Pay2SHAddress.apply(tree).toString()
@@ -125,7 +124,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
 
       val bac = ValueSerializer.deserialize(vbs).asInstanceOf[CollectionConstant[SByte.type]]
 
-      val bs = bac.value.toArray.map(_.byteValue())
+      val bs = bac.value.toArray.map(b => b.byteValue())
 
       val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bs)
 
@@ -140,7 +139,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     val p2sh = "rbcrmKEYduUvADj9Ts3dSVSG27h54pgrq5fPuwB"
     Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
 
-    val script = TrueLeaf
+    val script = TrueLeaf.toSigmaProp
     val tree = ErgoTree.fromProposition(script)
     val p2s = addressEncoder.toString(addressEncoder.fromProposition(tree).get)
     p2s shouldBe "Ms7smJwLGbUAjuWQ"

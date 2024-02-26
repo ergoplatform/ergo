@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, GenerateCommit
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import sigma.AnyValue
-import sigmastate.Values.SigmaBoolean
+import sigma.data.SigmaBoolean
 
 /**
   * JSON codecs for HTTP API requests related entities

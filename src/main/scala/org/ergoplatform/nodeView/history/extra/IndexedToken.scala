@@ -1,17 +1,17 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.{ByteColl, uniqueId}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.Values.CollectionConstant
-import sigmastate.SByte
+import scorex.util.{ModifierId, bytesToId}
 import sigma.Extensions._
+import sigma.ast.SByte
+import sigma.ast.syntax.CollectionConstant
 
 import scala.collection.mutable.ArrayBuffer
 

@@ -13,7 +13,8 @@ import org.ergoplatform.settings.RESTApiSettings
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
-import sigmastate.serialization.ErgoTreeSerializer
+import sigma.serialization.ErgoTreeSerializer
+import sigma.serialization.ErgoTreeSerializer
 
 import scala.concurrent.duration._
 

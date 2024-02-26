@@ -8,11 +8,10 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
 import scorex.util.encode.Base16
 import sigma.Colls
-import sigmastate.Values.{ErgoTree, ShortConstant}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.eval._
+import sigma.ast.{ErgoTree, ShortConstant}
+import sigma.interpreter.{ContextExtension, ProverResult}
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.serialization.ErgoTreeSerializer
+import sigma.serialization.ErgoTreeSerializer
 
 class ExpirationSpecification extends ErgoPropertyTest {
 

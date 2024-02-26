@@ -20,10 +20,11 @@ import org.ergoplatform.{DataInput, ErgoBox, ErgoTreePredef}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
-import sigmastate.Values.ErgoTree
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigma.ast.ErgoTree
+import sigma.crypto.EcPointType
+import sigma.data.ProveDlog
+import sigma.interpreter.{ContextExtension, ProverResult}
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.concurrent.duration._
 

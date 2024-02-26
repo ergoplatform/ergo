@@ -17,9 +17,10 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.eval.Extensions._
-import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
+import sigma.Extensions.ArrayOps
+import sigma.crypto.EcPointType
+import sigma.data.{CAvlTree, CBigInt, CGroupElement}
+import sigmastate.eval.CHeader
 
 import scala.annotation.nowarn
 import scala.concurrent.duration.FiniteDuration

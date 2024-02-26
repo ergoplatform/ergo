@@ -1,20 +1,27 @@
 package sidechain
 
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeContext}
 import org.ergoplatform.ErgoBox.{R4, R5, R6, R7, R8}
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.MainnetPoWVerifier
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.header.Header.Version
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
+import org.ergoplatform.sdk.BlockchainParameters
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ScorexEncoder
 import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationSettings, ValidationState}
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.authds.{ADDigest, LeafData}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
+import sigmastate.Values
+import sigmastate.Values.AvlTreeConstant
+import sigmastate.eval.CAvlTree
+import sigmastate.interpreter.Interpreter.ScriptEnv
 
 import scala.util.Try
 
@@ -182,6 +189,26 @@ object SidechainHeader {
   def verify(sb: SidechainBlock, db: SidechainDatabase): ValidationResult[ProcessingCommand] = {
     verify(sb.header, db)
     // todo: verify transactions
+  }
+
+}
+
+
+class SidechainInterpreter(params: BlockchainParameters) extends ErgoInterpreter(params) {
+  val UtxoStateVarId = 125.toByte
+
+  // storage rent turned off
+  override def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
+    false
+  }
+
+  override def verify(env: ScriptEnv,
+                      exp: Values.ErgoTree,
+                      context: ErgoLikeContext,
+                      proof: Array[Version],
+                      message: Array[Version]): Try[(Boolean, Long)] = {
+    val extendedCtx = context.withExtension(context.extension.add(UtxoStateVarId -> AvlTreeConstant(CAvlTree(context.lastBlockUtxoRoot))))
+    super.verify(env, exp, extendedCtx, proof, message)
   }
 
 }

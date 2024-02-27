@@ -14,8 +14,6 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandida
 import Extension.SystemParametersPrefix
 import org.ergoplatform.sdk.BlockchainParameters
 
-import scala.annotation.nowarn
-
 /**
   * System parameters which could be readjusted via collective miners decision.
   */
@@ -141,7 +139,6 @@ class Parameters(val height: Height,
   }
 
   //Update non-fork parameters
-  @nowarn
   def updateParams(parametersTable: Map[Byte, Int],
                    epochVotes: Seq[(Byte, Int)],
                    votingSettings: VotingSettings): Map[Byte, Int] = {

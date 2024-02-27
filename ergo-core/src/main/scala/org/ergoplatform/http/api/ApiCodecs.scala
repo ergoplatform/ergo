@@ -34,7 +34,6 @@ import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.utils.Helpers._
 
 import java.math.BigInteger
-import scala.annotation.nowarn
 import scala.util.{Failure, Success, Try}
 
 
@@ -186,7 +185,6 @@ trait ApiCodecs extends JsonCodecs {
     } yield ErgoTransaction(ergoLikeTx)
   })
 
-  @nowarn
   implicit val sigmaLeafEncoder: Encoder[SigmaLeaf] = Encoder.instance({
     leaf =>
       val op = leaf.opCode.toByte.asJson
@@ -196,7 +194,6 @@ trait ApiCodecs extends JsonCodecs {
       }
   })
 
-  @nowarn
   implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = Encoder.instance({
     sigma =>
       val op = sigma.opCode.toByte.asJson
@@ -272,7 +269,6 @@ trait ApiCodecs extends JsonCodecs {
     }
   }
 
-  @nowarn
   implicit val commitmentHintEncoder: Encoder[CommitmentHint] = Encoder.instance { ch =>
     val commonFields: Json = (ch match {
       case own: OwnCommitment =>
@@ -314,7 +310,6 @@ trait ApiCodecs extends JsonCodecs {
     }
   }
 
-  @nowarn
   implicit val proofEncoder: Encoder[SecretProven] = Encoder.instance { sp =>
     val proofType = sp match {
       case _: RealSecretProof => "proofReal"
@@ -389,7 +384,6 @@ trait ApiCodecs extends JsonCodecs {
     )
   }
 
-  @nowarn
   implicit val txHintsDecoder: Decoder[TransactionHintsBag] = Decoder.instance { cursor =>
     for {
       secretHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("secretHints"))

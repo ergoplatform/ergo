@@ -5,8 +5,6 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{bytesToId, idToBytes}
 
-import scala.annotation.nowarn
-
 object ExtensionSerializer extends ErgoSerializer[Extension] {
 
   override def serialize(obj: Extension, w: Writer): Unit = {
@@ -19,7 +17,6 @@ object ExtensionSerializer extends ErgoSerializer[Extension] {
     }
   }
 
-  @nowarn
   override def parse(r: Reader): Extension = {
     val startPosition = r.position
     val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))

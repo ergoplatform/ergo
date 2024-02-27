@@ -21,7 +21,6 @@ import sigmastate.crypto.CryptoConstants.EcPointType
 import sigmastate.eval.Extensions._
 import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
 
-import scala.annotation.nowarn
 import scala.concurrent.duration.FiniteDuration
 
 /**
@@ -75,7 +74,6 @@ case class Header(override val version: Header.Version,
   /**
     * Expected identifiers of the block sections corresponding to this header
     */
-  @nowarn
   lazy val sectionIds: Seq[(NetworkObjectTypeId.Value, ModifierId)] =
     Array(
       (ADProofs.modifierTypeId, ADProofsId),

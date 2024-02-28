@@ -2,6 +2,7 @@ package org.ergoplatform.it.container
 
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.{BeforeAndAfterAll, Suite}
 import scorex.util.ScorexLogging
 
@@ -9,12 +10,13 @@ import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 trait IntegrationSuite
-  extends  BeforeAndAfterAll
-  with IntegrationTestConstants
-  with ErgoTestHelpers
-  with ScalaFutures
-  with IntegrationPatience
-  with ScorexLogging { this: Suite =>
+  extends BeforeAndAfterAll
+    with IntegrationTestConstants
+    with ErgoTestHelpers
+    with ScalaFutures
+    with IntegrationPatience
+    with Matchers
+    with ScorexLogging { this: Suite =>
 
   implicit def executionContext: ExecutionContext = ErgoTestHelpers.defaultExecutionContext
 

@@ -130,13 +130,17 @@ trait NodeApi {
                interval: FiniteDuration = 1.second,
                statusCode: Int = HttpConstants.ResponseStatusCodes.OK_200): Future[Response] = {
     def executeRequest: Future[Response] = {
+//      log.info(s"Executing request '$request'")
       log.trace(s"Executing request '$request'")
       client.executeRequest(request, new AsyncCompletionHandler[Response] {
         override def onCompleted(response: Response): Response = {
           if (response.getStatusCode == statusCode) {
+//            log.info(s"Request: ${request.getUrl} \n Response: ${response.getResponseBody}")
             log.debug(s"Request: ${request.getUrl} \n Response: ${response.getResponseBody}")
             response
           } else {
+//            log.info(s"Request:  ${request.getUrl} \n Unexpected status code(${response.getStatusCode}): " +
+//              s"${response.getResponseBody}")
             log.debug(s"Request:  ${request.getUrl} \n Unexpected status code(${response.getStatusCode}): " +
               s"${response.getResponseBody}")
             throw UnexpectedStatusCodeException(request, response)
@@ -145,6 +149,7 @@ trait NodeApi {
       }).toCompletableFuture.toScala
         .recoverWith {
           case e@(_: IOException | _: TimeoutException) =>
+//            log.info(s"Failed to execute request '$request' with error: ${e.getMessage}")
             log.debug(s"Failed to execute request '$request' with error: ${e.getMessage}")
             timer.schedule(executeRequest, interval)
         }

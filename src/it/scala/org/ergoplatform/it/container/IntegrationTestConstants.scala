@@ -4,11 +4,10 @@ import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import org.ergoplatform.it.container.Docker.ExtraConfig
 import org.ergoplatform.settings.NetworkType
-import org.ergoplatform.utils.ErgoTestConstants
 
 import scala.collection.JavaConverters._
 
-trait IntegrationTestConstants extends ErgoTestConstants {
+trait IntegrationTestConstants {
 
   val walletAutoInitConfig: Config = ConfigFactory.parseString(
     s"""
@@ -121,4 +120,9 @@ trait IntegrationTestConstants extends ErgoTestConstants {
      """.stripMargin
   )
 
+  val localOnlyConfig: Config = ConfigFactory.parseString(
+    """
+      |scorex.network.localOnly = true
+    """.stripMargin
+  )
 }

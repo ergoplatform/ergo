@@ -9,11 +9,16 @@ import scala.concurrent.duration._
 
 class KnownNodesSpec extends AnyFlatSpec with IntegrationSuite {
 
-  val nodeConfigs: List[Config] = nodeSeedConfigs.take(3).map(nonGeneratingPeerConfig.withFallback)
+  val nodeConfigs: List[Config] = nodeSeedConfigs.take(3)
+    .map(conf => nonGeneratingPeerConfig
+      .withFallback(conf)
+      .withFallback(localOnlyConfig)
+    )
+
   val nodes: List[Node] = docker.startDevNetNodes(nodeConfigs, sequentialTopologyConfig).get
 
-  // todo: https://github.com/ergoplatform/ergo/issues/653
-  it should s"The third node knows first node" ignore {
+  // All nodes should propagate sequentially, so any node knows each other
+  it should s"The third node knows first node" in {
 
     val node03 = nodes.find(_.nodeName == "node03").value
     val targetPeersCount = nodes.length - 1 /* self */

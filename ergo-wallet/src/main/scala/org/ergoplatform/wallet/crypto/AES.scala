@@ -3,8 +3,8 @@ package org.ergoplatform.wallet.crypto
 import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
 
 import javax.crypto.spec.{GCMParameterSpec, PBEKeySpec, SecretKeySpec}
-import javax.crypto.{Cipher, SecretKeyFactory}
-import scala.util.Try
+import javax.crypto.{AEADBadTagException, Cipher, SecretKeyFactory}
+import scala.util.{Failure, Try}
 
 object AES {
 
@@ -51,7 +51,10 @@ object AES {
     val cipher = Cipher.getInstance(CipherAlgoInstance)
     cipher.init(Cipher.DECRYPT_MODE, keySpec, paramsSpec)
 
-    Try(cipher.doFinal(authTag ++ ciphertext))
+    Try(cipher.doFinal(authTag ++ ciphertext)).recoverWith ({
+      case _: AEADBadTagException  => Failure(new Throwable("Bad wallet password"))
+      case e: Throwable            => Failure(e)
+    })
   }
 
   private def deriveEncryptionKeySpec(pass: Array[Char], salt: Array[Byte])

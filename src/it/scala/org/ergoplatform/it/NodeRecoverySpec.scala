@@ -1,7 +1,6 @@
 package org.ergoplatform.it
 
 import java.io.File
-
 import akka.japi.Option.Some
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
@@ -10,6 +9,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.sys.process.Process
 
 class NodeRecoverySpec
   extends AnyFlatSpec
@@ -23,10 +23,14 @@ class NodeRecoverySpec
 
   val dir = new File(localVolume)
   dir.mkdirs()
+  List(localVolume).foreach(
+    x => log.info(Process(s"chmod -R 777 $x").!!)
+  )
 
   val offlineGeneratingPeer: Config = specialDataDirConfig(remoteVolume)
     .withFallback(offlineGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs.head)
+    .withFallback(localOnlyConfig)
 
   val node: Node = docker.startDevNetNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 

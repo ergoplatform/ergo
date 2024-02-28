@@ -52,7 +52,7 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.3.5",
 
   // test dependencies
-  "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
+  "org.scala-lang.modules" %% "scala-async" % "1.0.1" % "test",
   "org.scalactic" %% "scalactic" % "3.0.3" % "test",
   "org.scalatest" %% "scalatest" % "3.2.10" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
@@ -63,7 +63,10 @@ libraryDependencies ++= Seq(
 
   "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
-  "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"
+//  "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded",
+  "com.github.docker-java" % "docker-java-core" % "3.3.4" % Test,
+  "com.github.docker-java" % "docker-java-transport-httpclient5" % "3.3.4" % Test,
+
 )
 
 updateOptions := updateOptions.value.withLatestSnapshots(false)
@@ -163,10 +166,12 @@ inConfig(Linux)(
 )
 
 Defaults.itSettings
+//lazy val ItTest = config("it") extend (IntegrationTest, Test)
 configs(IntegrationTest extend Test)
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,
+  scalacOptions ++= Seq("-Xasync")
 ))
 
 dockerfile in docker := {
@@ -175,7 +180,7 @@ dockerfile in docker := {
   val configMainNet = (resourceDirectory in IntegrationTest).value / "mainnetTemplate.conf"
 
   new Dockerfile {
-    from("openjdk:9-jre-slim")
+    from("openjdk:11-jre-slim")
     label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
     add(Seq(configDevNet), "/opt/ergo")
@@ -280,6 +285,7 @@ configs(It2Test)
 inConfig(It2Test)(Defaults.testSettings ++ Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,
+  scalacOptions ++= Seq("-Xasync")
 ))
 
 lazy val ergo = (project in file("."))

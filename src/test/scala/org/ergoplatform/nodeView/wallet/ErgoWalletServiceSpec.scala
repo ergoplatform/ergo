@@ -22,7 +22,7 @@ import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
-import scorex.db.{LDBKVStore, LDBVersionedStore}
+import scorex.db.{RocksDBKVStore, RocksDBVersionedStore}
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
 import sigmastate.eval.Extensions.ArrayOps
@@ -50,7 +50,7 @@ class ErgoWalletServiceSpec
 
   override def afterAll(): Unit = try super.afterAll() finally x.stop()
 
-  private def initialState(store: LDBKVStore, versionedStore: LDBVersionedStore, mempool: Option[ErgoMemPoolReader] = None) = {
+  private def initialState(store: RocksDBKVStore, versionedStore: RocksDBVersionedStore, mempool: Option[ErgoMemPoolReader] = None) = {
     ErgoWalletState(
       new WalletStorage(store, settings),
       secretStorageOpt = Option.empty,

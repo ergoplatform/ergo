@@ -1,7 +1,7 @@
 package scorex.db
 
 import org.rocksdb.ReadOptions
-import scorex.db.LDBFactory.RegisteredDB
+import scorex.db.RocksDBFactory.RegisteredDB
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.collection.mutable

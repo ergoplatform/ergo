@@ -2,8 +2,8 @@ package scorex.db
 
 import org.rocksdb.{ReadOptions, WriteBatch, WriteOptions}
 import scorex.crypto.hash.Blake2b256
-import scorex.db.LDBFactory.RegisteredDB
-import scorex.db.LDBVersionedStore.SnapshotReadInterface
+import scorex.db.RocksDBFactory.RegisteredDB
+import scorex.db.RocksDBVersionedStore.SnapshotReadInterface
 import scorex.util.ScorexLogging
 
 import java.io.File
@@ -25,7 +25,7 @@ import scala.util.{Failure, Success, Try}
   * @param initialKeepVersions - number of versions to keep when the store is created. Can be changed after.
   *
   */
-class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
+class RocksDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   extends KVStoreReader with ScorexLogging {
 
   type VersionID = Array[Byte]
@@ -52,7 +52,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   private val writeOptions = new WriteOptions()
 
   private def createDB(dir: File, storeName: String): RegisteredDB =
-    LDBFactory.open(new File(dir, storeName))
+    RocksDBFactory.open(new File(dir, storeName))
 
   /** Set new keep versions threshold, remove not needed versions and return old value of keep versions */
   def setKeepVersions(newKeepVersions: Int): Int = {
@@ -432,7 +432,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
 
 }
 
-object LDBVersionedStore {
+object RocksDBVersionedStore {
 
   /**
     * Interface to read from versioned database snapshot which can be provided to clients in order to serve them with

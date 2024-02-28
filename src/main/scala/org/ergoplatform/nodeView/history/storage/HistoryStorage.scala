@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, Segment}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import org.ergoplatform.utils.ScorexEncoding
-import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
+import scorex.db.{ByteArrayWrapper, RocksDBFactory, RocksDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters.asScalaIteratorConverter
   * @param extraStore   - key-value store, where key is id of Index and value is it's bytes
   * @param config       - cache configs
   */
-class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStore: LDBKVStore, config: CacheSettings)
+class HistoryStorage private(indexStore: RocksDBKVStore, objectsStore: RocksDBKVStore, extraStore: RocksDBKVStore, config: CacheSettings)
   extends ScorexLogging
     with AutoCloseable
     with ScorexEncoding {
@@ -229,9 +229,9 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
 
 object HistoryStorage {
   def apply(ergoSettings: ErgoSettings): HistoryStorage = {
-    val indexStore = new LDBKVStore(LDBFactory.open(new File(s"${ergoSettings.directory}/history/index")))
-    val objectsStore = new LDBKVStore(LDBFactory.open(new File(s"${ergoSettings.directory}/history/objects")))
-    val extraStore = new LDBKVStore(LDBFactory.open(new File(s"${ergoSettings.directory}/history/extra")))
+    val indexStore = new RocksDBKVStore(RocksDBFactory.open(new File(s"${ergoSettings.directory}/history/index")))
+    val objectsStore = new RocksDBKVStore(RocksDBFactory.open(new File(s"${ergoSettings.directory}/history/objects")))
+    val extraStore = new RocksDBKVStore(RocksDBFactory.open(new File(s"${ergoSettings.directory}/history/extra")))
     new HistoryStorage(indexStore, objectsStore, extraStore, ergoSettings.cacheSettings)
   }
 }

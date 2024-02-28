@@ -15,7 +15,7 @@ import scala.collection.mutable
   * And ergo application (mostly tests) quite frequently doesn't not explicitly close
   * database and tries to reopen it.
   */
-object LDBFactory extends ScorexLogging {
+object RocksDBFactory extends ScorexLogging {
 
   RocksDB.loadLibrary()
 

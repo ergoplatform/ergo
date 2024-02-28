@@ -8,7 +8,7 @@ import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerial
 import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.crypto.hash.Blake2b256
-import scorex.db.{LDBFactory, LDBKVStore}
+import scorex.db.{RocksDBFactory, RocksDBKVStore}
 import scorex.util.ScorexLogging
 import sigmastate.serialization.SigmaSerializer
 
@@ -25,7 +25,7 @@ import scala.util.{Failure, Success, Try}
   * * ErgoStateContext (not version-agnostic, but state changes including rollbacks it is updated externally)
   * * external scans
   */
-final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends ScorexLogging {
+final class WalletStorage(store: RocksDBKVStore, settings: ErgoSettings) extends ScorexLogging {
 
   import WalletStorage._
 
@@ -245,7 +245,7 @@ object WalletStorage {
   def storageFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/storage")
 
   def readOrCreate(settings: ErgoSettings): WalletStorage = {
-    val db = new LDBKVStore(LDBFactory.open(storageFolder(settings)))
+    val db = new RocksDBKVStore(RocksDBFactory.open(storageFolder(settings)))
     new WalletStorage(db, settings)
   }
 

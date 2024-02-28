@@ -3,7 +3,7 @@ package org.ergoplatform.db
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 
-class LDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
+class RocksDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
 
   property("put/get/getAll/delete") {
     withStore { store =>

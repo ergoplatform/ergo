@@ -8,7 +8,7 @@ import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.crypto.authds.avltree.batch._
 import scorex.util.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.db.{ByteArrayWrapper, RocksDBVersionedStore}
 
 import scala.collection.immutable.SortedMap
 
@@ -20,10 +20,10 @@ object OOMTest extends App {
   protected implicit val hf = Blake2b256
 
   val dir: File = Files.createTempDirectory("oom-test").toFile
-  val store = new LDBVersionedStore(dir, initialKeepVersions = 200)
+  val store = new RocksDBVersionedStore(dir, initialKeepVersions = 200)
 
   val bestVersionKey = Blake2b256("best state version")
-  protected lazy val storage = new VersionedLDBAVLStorage(store)
+  protected lazy val storage = new VersionedRocksDBAVLStorage(store)
 
   val afterGenesisStateDigestHex: String = "78b130095239561ecf5449a7794c0615326d1fd007cc79dcc286e46e4beb1d3f01"
   val afterGenesisStateDigest: ADDigest = ADDigest @@ Base16.decode(afterGenesisStateDigestHex).get

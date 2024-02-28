@@ -1,7 +1,7 @@
 package scorex.db
 
 import org.rocksdb.{WriteBatch, WriteOptions}
-import scorex.db.LDBFactory.RegisteredDB
+import scorex.db.RocksDBFactory.RegisteredDB
 import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 
@@ -13,7 +13,7 @@ import scala.util.{Failure, Success, Try}
   *
   * Both keys and values are var-sized byte arrays.
   */
-class LDBKVStore(protected val db: RegisteredDB) extends KVStoreReader with ScorexLogging {
+class RocksDBKVStore(protected val db: RegisteredDB) extends KVStoreReader with ScorexLogging {
   /** Immutable empty array can be shared to avoid allocations. */
   private val emptyArrayOfByteArray = Array.empty[Array[Byte]]
 

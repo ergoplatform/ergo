@@ -11,7 +11,7 @@ import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.util.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.{LDBFactory, LDBKVStore, LDBVersionedStore}
+import scorex.db.{RocksDBFactory, RocksDBKVStore, RocksDBVersionedStore}
 import scorex.util.ByteArrayBuilder
 import scorex.util.serialization.VLQByteBufferWriter
 import scorex.utils.{Random => RandomBytes}
@@ -21,7 +21,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.{Success, Try}
 
-class VersionedLDBAVLStorageSpecification
+class VersionedRocksDBAVLStorageSpecification
   extends AnyPropSpec
     with ScalaCheckPropertyChecks
     with Matchers
@@ -204,7 +204,7 @@ class VersionedLDBAVLStorageSpecification
     noException should be thrownBy storage.rollbackVersions.foreach(v => prover.rollback(v).get)
   }
 
-  def testAddInfoSaving(createStore: Int => LDBVersionedStore): Assertion = {
+  def testAddInfoSaving(createStore: Int => RocksDBVersionedStore): Assertion = {
     val store = createStore(1000)
     val storage = createVersionedStorage(store)
     val prover = createPersistentProver(storage)
@@ -247,7 +247,7 @@ class VersionedLDBAVLStorageSpecification
     store.get(addInfo2._1) shouldBe None
   }
 
-  def removeFromLargerSetSingleRandomElementTest(createStore: Int => LDBVersionedStore): Unit = {
+  def removeFromLargerSetSingleRandomElementTest(createStore: Int => RocksDBVersionedStore): Unit = {
     val minSetSize = 10000
     val maxSetSize = 200000
 
@@ -349,8 +349,8 @@ class VersionedLDBAVLStorageSpecification
     val prover = createPersistentProver()
     blockchainWorkflowTest(prover)
 
-    val storage = prover.storage.asInstanceOf[VersionedLDBAVLStorage]
-    val store = new LDBKVStore(LDBFactory.open(getRandomTempDir))
+    val storage = prover.storage.asInstanceOf[VersionedRocksDBAVLStorage]
+    val store = new RocksDBKVStore(RocksDBFactory.open(getRandomTempDir))
 
     val rootNodeLabel = storage.dumpSnapshot(store, manifestDepth, prover.digest.dropRight(1)).get
     rootNodeLabel.sameElements(prover.digest.dropRight(1)) shouldBe true

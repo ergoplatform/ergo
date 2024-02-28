@@ -53,14 +53,14 @@ object FoundationBoxSigner extends App {
   val preSign: ACTION = 1
   val sign: ACTION = 2
 
-  val height = 1165000
+  val height = 1200000
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
   val action: ACTION = preSign
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = None
+  val commitmentStringOpt: Option[String] = Some("03b10715858ccfe84fdd695d2e128e212818b11ec85ccc6a15a09cd705b9924639")
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignatureStringOpt: Option[String] = None
 
@@ -119,7 +119,7 @@ object FoundationBoxSigner extends App {
 
   val addr = enc.fromString("9g1ReLmsbGevkTjfPGMdRMoFRdrAVskZVmSBpaEdVW2DfG4HDWm").get// "2BggBDgr9n9geTKjCJBCEWMReb2i7wcocw7fjVd3QyM7qFMtmVHyoFr78kChAxGekJxUTZru2aMjyZKcVoPfHX5d12RqNrnEAgzGqUCoJ2zkCiiUURror6NJ6HYyPxxUf5qj5FdQXqJ2zFv1a8U9Lieib59S8mxpE2oLAPt7P5cyngAa5sVEHHKeJrKkpp2yfQH3kshujjPCCc6qv2StJkmbzDTqAcxTpjcB9voMhi1tCybU4ikxSJEoAKmr5mppSfVAB5zSpREYstCVU").get
 
-  val withdrawalAmount = 5785 * EmissionRules.CoinsInOneErgo
+  val withdrawalAmount = 17000 * EmissionRules.CoinsInOneErgo
   val withdrawalOutputs = IndexedSeq(new ErgoBoxCandidate(withdrawalAmount, addr.script, height))
 
   val foundationOutput = new ErgoBoxCandidate(gfBox.value - withdrawalAmount - fee, gfBox.ergoTree, height,

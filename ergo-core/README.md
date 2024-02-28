@@ -72,7 +72,9 @@ val handshakeMessageSerialized = HandshakeSerializer.toBytes(handshakeMessage)
 Serialize the message and send it.
 If the message arrived successfully, start communicating with the peer node.
 
-All communication is wrapped with Message headers, format described [here](https://docs.ergoplatform.com/dev/p2p/network/#message-format).
+All communication is wrapped with message headers.
+Format described [here](https://docs.ergoplatform.com/dev/p2p/network/#message-format).
+[MessageBase](src/main/scala/org/ergoplatform/network/message/MessageBase.scala) interface to implement.
 
 ## Syncing with the node
 

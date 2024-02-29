@@ -61,7 +61,7 @@ jobs:
     name: Run node tests
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [macos-latest]
         scala: [2.12.18]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}

@@ -20,7 +20,7 @@ import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
-import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.db.{ByteArrayWrapper, RocksDBVersionedStore}
 import scorex.util.ModifierId
 
 import scala.util.{Failure, Success, Try}
@@ -35,7 +35,7 @@ import scala.util.{Failure, Success, Try}
   */
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
-                override val store: LDBVersionedStore,
+                override val store: RocksDBVersionedStore,
                 override protected val ergoSettings: ErgoSettings)
   extends ErgoState[UtxoState]
     with UtxoStateReader
@@ -284,12 +284,12 @@ object UtxoState {
     * @return UTXO set based state on top of existing database, or genesis state if the database is empty
     */
   def create(dir: File, settings: ErgoSettings): UtxoState = {
-    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
+    val store = new RocksDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
-      val storage = new VersionedLDBAVLStorage(store)
+      val storage = new VersionedRocksDBAVLStorage(store)
       PersistentBatchAVLProver.create(bp, storage).get
     }
     new UtxoState(persistentProver, version, store, settings)
@@ -309,10 +309,10 @@ object UtxoState {
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
+    val store = new RocksDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
 
     val defaultStateContext = ErgoStateContext.empty(settings.chainSettings, parameters)
-    val storage = new VersionedLDBAVLStorage(store)
+    val storage = new VersionedRocksDBAVLStorage(store)
     val persistentProver = PersistentBatchAVLProver.create(
       p,
       storage,

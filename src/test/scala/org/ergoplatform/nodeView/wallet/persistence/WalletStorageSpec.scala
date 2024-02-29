@@ -10,7 +10,7 @@ import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.db.LDBKVStore
+import scorex.db.RocksDBKVStore
 
 class WalletStorageSpec
   extends AnyFlatSpec
@@ -20,7 +20,7 @@ class WalletStorageSpec
     with DBSpec {
 
   it should "add and read derivation paths" in {
-    def addPath(store: LDBKVStore, storedPaths: Seq[DerivationPath], derivationPath: DerivationPath): Unit = {
+    def addPath(store: RocksDBKVStore, storedPaths: Seq[DerivationPath], derivationPath: DerivationPath): Unit = {
       val updatedPaths = (storedPaths :+ derivationPath).toSet
       val toInsert = Ints.toByteArray(updatedPaths.size) ++ updatedPaths
         .foldLeft(Array.empty[Byte]) { case (acc, path) =>

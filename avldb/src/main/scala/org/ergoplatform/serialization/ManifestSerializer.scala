@@ -2,14 +2,14 @@ package org.ergoplatform.serialization
 
 import scorex.crypto.authds.avltree.batch.Constants.DigestType
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, ProxyInternalNode}
-import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes, VersionedRocksDBAVLStorage}
 import scorex.util.serialization.{Reader, Writer}
 
 /**
   * Serializer of manifest, a tree which is cut at some `manifestDepth` from root
   */
 class ManifestSerializer(manifestDepth: Byte) extends ErgoSerializer[BatchAVLProverManifest[DigestType]] {
-  private val nodeSerializer = VersionedLDBAVLStorage.noStoreSerializer
+  private val nodeSerializer = VersionedRocksDBAVLStorage.noStoreSerializer
 
   /**
     * Serialize manifest provided as top subtree and height separately. Used in tests.

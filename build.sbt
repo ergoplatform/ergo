@@ -255,6 +255,7 @@ lazy val ergoCore = (project in file("ergo-core"))
     ),
     scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8")),
     scalacOptions in(Compile, compile) --= scalacOpts,
+    parallelExecution in Test := false,
   )
 
 lazy val ergoWallet = (project in file("ergo-wallet"))

@@ -22,6 +22,9 @@ class BlocksApiRouteSpec
   with FailFastCirceSupport
   with Stubs {
 
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+
   val prefix = "/blocks"
 
   val route: Route = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).route

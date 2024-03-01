@@ -1,9 +1,9 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
-import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.utils.generators.WalletGenerators
+import org.ergoplatform.utils.ErgoCorePropertyTest
 
-class ScanningPredicateSerializerSpecification extends ErgoPropertyTest with WalletGenerators {
+class ScanningPredicateSerializerSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
 
   property("complex or roundtrip") {
     forAll(scanningPredicateGen) { p =>

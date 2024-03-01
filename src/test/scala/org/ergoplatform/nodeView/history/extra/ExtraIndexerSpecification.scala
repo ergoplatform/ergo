@@ -1,20 +1,25 @@
 package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FullBlockApplied, Rollback}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.Index
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.SegmentSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
-import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.util.{ModifierId, bytesToId}
 import spire.implicits.cfor
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-class ExtraIndexerSpecification extends HistoryTestHelpers {
+class ExtraIndexerSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
 
+  implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
+  val initSettings: ErgoSettings = settings
   case class CreateDB()
 
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]

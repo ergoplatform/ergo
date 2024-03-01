@@ -14,6 +14,8 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.utils.ErgoNodeTestConstants.defaultTimeout
+import org.ergoplatform.utils.generators.ValidBlocksGenerators.validFullBlock
 import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.ModifierId
 

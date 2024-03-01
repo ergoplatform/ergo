@@ -3,12 +3,12 @@ package scorex.testkit.properties.mempool
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.testkit.TestkitHelpers
-import org.ergoplatform.testkit.generators.ArbitraryTransactionsCarryingModifierProducer
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.testkit.TestkitHelpers
+import scorex.testkit.generators.ArbitraryTransactionsCarryingModifierProducer
 import scorex.util.ScorexLogging
 
 trait MempoolRemovalTest extends AnyPropSpec

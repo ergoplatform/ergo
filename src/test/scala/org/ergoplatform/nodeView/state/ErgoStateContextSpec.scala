@@ -4,9 +4,12 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.settings.Parameters._
-import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.utils.ErgoCorePropertyTest
 
-class ErgoStateContextSpec extends HistoryTestHelpers {
+class ErgoStateContextSpec extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ChainGenerator._
 
   property("Header votes") {
     val fb = genChain(1).head

@@ -2,12 +2,14 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 
 import java.net.{InetSocketAddress, URL}
 import scala.concurrent.duration._
 
-class ErgoSettingsSpecification extends ErgoPropertyTest {
+class ErgoSettingsSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants.settings
+  val initSettings: ErgoSettings = settings
 
   private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
   private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize

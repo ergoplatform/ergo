@@ -6,15 +6,18 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.{EmptyBlockS
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{ScorexSettings, _}
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 
 import scala.concurrent.duration._
 
-trait HistoryTestHelpers extends ErgoPropertyTest {
+object HistoryTestHelpers extends FileUtils {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ChainGenerator._
 
-  override lazy val smallInt: Gen[Int] = Gen.choose(0, BlocksInChain)
+  lazy val smallInt: Gen[Int] = Gen.choose(0, BlocksInChain)
 
   val BlocksInChain = 10
   val BlocksToKeep: Int = BlocksInChain + 1
@@ -68,10 +71,6 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
 
     ErgoHistory.readOrGenerate(fullHistorySettings)(null)
   }
-
-}
-
-object HistoryTestHelpers {
 
   /**
     * Use reflection to set `minimalFullBlockHeightVar` to 0 to change regular synchronization rule, that we

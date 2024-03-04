@@ -15,6 +15,7 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.ergoplatform.wallet.boxes.{BoxSelector, ReplaceCompactCollectBoxSelector}
+import org.scalatest.matchers.should.Matchers
 import scorex.util.ModifierId
 import sigmastate.crypto.DLogProtocol.ProveDlog
 
@@ -29,7 +30,10 @@ import scala.util.Try
   * Generate blocks starting from start timestamp and until current time with expected block interval
   * between them, to ensure that difficulty does not change.
   */
-object ChainGenerator extends App with ErgoTestHelpers {
+object ChainGenerator extends App with ErgoTestHelpers with Matchers {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   val realNetworkSetting = {
     val initSettings = ErgoSettingsReader.read(Args(None, Some(NetworkType.TestNet)))

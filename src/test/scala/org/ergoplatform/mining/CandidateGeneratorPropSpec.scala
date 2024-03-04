@@ -4,14 +4,19 @@ import org.ergoplatform.ErgoTreePredef
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.MonetarySettings
-import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
+import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
 import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import scala.concurrent.duration._
 
-class CandidateGeneratorPropSpec extends ErgoPropertyTest {
+class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   val delta: Int = settings.chainSettings.monetary.minerRewardDelay
 

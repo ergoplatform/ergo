@@ -33,6 +33,9 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   with ApiCodecs
   with FailFastCirceSupport {
 
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+
   val prefix = "/transactions"
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)

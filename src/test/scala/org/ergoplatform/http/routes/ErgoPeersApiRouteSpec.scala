@@ -28,6 +28,8 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
   with ScalaCheckPropertyChecks
   with Stubs {
 
+  import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
+
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 

@@ -5,12 +5,14 @@ import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, idToBytes}
 
-class HistoryStorageSpec extends HistoryTestHelpers {
+class HistoryStorageSpec extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
   val db = HistoryStorage(settings)
 

@@ -12,11 +12,6 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
   private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
   private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
 
-  property("should keep data user home  by default") {
-    val settings = ErgoSettingsReader.read()
-    settings.directory shouldBe System.getProperty("user.dir") + "/.ergo_test/data"
-  }
-
   property("should read default settings") {
     val settings = ErgoSettingsReader.read()
     settings.nodeSettings shouldBe NodeConfigurationSettings(

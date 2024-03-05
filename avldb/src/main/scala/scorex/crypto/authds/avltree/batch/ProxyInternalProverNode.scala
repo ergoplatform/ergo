@@ -1,7 +1,7 @@
 package scorex.crypto.authds.avltree.batch
 
 import scorex.crypto.authds.{ADKey, Balance}
-import scorex.db.LDBVersionedStore
+import scorex.db.RocksDBVersionedStore
 import InternalNode.InternalNodePrefix
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, hashFn}
 
@@ -15,7 +15,7 @@ class ProxyInternalProverNode(protected var pk: ADKey,
                                            val leftLabel: ADKey,
                                            val rightLabel: ADKey,
                                            protected var pb: Balance = Balance @@ 0.toByte)
-                                          (store: LDBVersionedStore)
+                                          (store: RocksDBVersionedStore)
   extends InternalProverNode(k = pk, l = null, r = null, b = pb)(hashFn) {
 
   override protected def computeLabel: DigestType = {
@@ -24,14 +24,14 @@ class ProxyInternalProverNode(protected var pk: ADKey,
 
   override def left: ProverNodes[DigestType] = {
     if (l == null) {
-      l = VersionedLDBAVLStorage.fetch(leftLabel)(store)
+      l = VersionedRocksDBAVLStorage.fetch(leftLabel)(store)
     }
     l
   }
 
   override def right: ProverNodes[DigestType] = {
     if (r == null) {
-      r = VersionedLDBAVLStorage.fetch(rightLabel)(store)
+      r = VersionedRocksDBAVLStorage.fetch(rightLabel)(store)
     }
     r
   }

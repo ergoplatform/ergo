@@ -1,10 +1,11 @@
 package org.ergoplatform.network.peer
 
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, ObjectInputStream, ObjectOutputStream}
 import java.net.{InetAddress, InetSocketAddress}
 import org.ergoplatform.settings.ErgoSettings
-import scorex.db.LDBFactory
+import scorex.db.{RocksDBFactory, RocksDBKVStore}
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
@@ -15,7 +16,7 @@ import scala.util.{Failure, Success, Try}
   */
 final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
 
-  private val persistentStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
+  private val persistentStore = new RocksDBKVStore(RocksDBFactory.open(new File(s"${settings.directory}/peers")))
 
   private var peers =
     loadPeers match {

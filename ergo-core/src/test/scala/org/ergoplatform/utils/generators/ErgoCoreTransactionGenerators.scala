@@ -85,8 +85,8 @@ object ErgoCoreTransactionGenerators extends ScorexLogging {
     to: IndexedSeq[ErgoBoxCandidate] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen(prop)).map(_.toIndexedSeq))
   } yield ErgoTransaction(from, dataInputs, to)
 
-  def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {
-    val tokensDistribution = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
+  def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[mutable.IndexedSeq[Seq[(TokenId, Long)]]] = {
+    val tokensDistribution: mutable.IndexedSeq[Seq[(TokenId, Time)]] = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
     (1 to tokensCount).foreach { i =>
       val (id, amt) = Blake2b256(s"$i" + Random.nextString(5)).toTokenId -> (Random.nextInt(Int.MaxValue).toLong + 100)
       val idx = i % tokensDistribution.size

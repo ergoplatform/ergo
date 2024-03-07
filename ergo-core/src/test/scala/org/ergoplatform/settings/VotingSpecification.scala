@@ -7,6 +7,7 @@ import org.ergoplatform.settings.ValidationRules.rulesSpec
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.validation.{DisabledRule, ReplacedRule, ValidationRules => VR}
 import scorex.crypto.authds.ADDigest
+import sigmastate.utils.Helpers._
 
 import scala.util.Try
 

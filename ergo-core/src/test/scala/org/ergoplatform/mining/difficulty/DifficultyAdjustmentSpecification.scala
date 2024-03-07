@@ -13,7 +13,7 @@ class DifficultyAdjustmentSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
   val precision = 0.0001
-  val minDiff: BigInt = (BigDecimal(1) / precision).toBigInt()
+  val minDiff: BigInt = (BigDecimal(1) / precision).toBigInt
   val Epoch = 123
 
   val UseLastEpochs = 4

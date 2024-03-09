@@ -7,6 +7,7 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
+import cats.syntax.either._
 
 class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoCoreTestConstants._

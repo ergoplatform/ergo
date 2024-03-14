@@ -1390,6 +1390,13 @@ paths:
           schema:
             type: string
             default: desc
+        - in: query
+          name: exludeMempoolSpent
+          required: false
+          description: if true exclude spent inputs from mempool
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: unspent boxes associated with wanted address

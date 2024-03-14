@@ -7,13 +7,15 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
-import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 
-class BlockSectionValidationSpecification extends HistoryTestHelpers {
-  
+class BlockSectionValidationSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.HistoryTestHelpers._
+  import org.ergoplatform.utils.generators.ChainGenerator._
+
   private def changeProofByte(version: Header.Version, outcome: Symbol) = {
     val (history, block) = init(version)
     val bt = block.blockTransactions

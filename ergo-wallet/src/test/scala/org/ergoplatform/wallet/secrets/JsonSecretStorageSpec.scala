@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.secrets
 import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.settings.SecretStorageSettings
-import org.ergoplatform.wallet.utils.{FileUtils, Generators}
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Arbitrary
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -16,8 +16,8 @@ class JsonSecretStorageSpec
   extends AnyPropSpec
     with Matchers
     with ScalaCheckPropertyChecks
-    with Generators
     with FileUtils {
+  import org.ergoplatform.wallet.utils.WalletGenerators._
 
   property("initialization and unlock") {
     forAll(entropyGen, passwordGen, encryptionSettingsGen, Arbitrary.arbBool.arbitrary) { 

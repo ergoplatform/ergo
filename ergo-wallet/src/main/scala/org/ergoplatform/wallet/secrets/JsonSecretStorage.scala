@@ -73,7 +73,7 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
             }
           }
       }
-      . fold(Failure(_), Success(_))
+      .fold(Failure(_), Success(_))
       .flatten
   }
 

@@ -1391,7 +1391,7 @@ paths:
             type: string
             default: desc
         - in: query
-          name: exludeMempoolSpent
+          name: excludeMempoolSpent
           required: false
           description: if true exclude spent inputs from mempool
           schema:

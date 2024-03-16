@@ -63,7 +63,6 @@ libraryDependencies ++= Seq(
 
   "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
-//  "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded",
   "com.github.docker-java" % "docker-java-core" % "3.3.4" % Test,
   "com.github.docker-java" % "docker-java-transport-httpclient5" % "3.3.4" % Test,
 
@@ -166,7 +165,6 @@ inConfig(Linux)(
 )
 
 Defaults.itSettings
-//lazy val ItTest = config("it") extend (IntegrationTest, Test)
 configs(IntegrationTest extend Test)
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,

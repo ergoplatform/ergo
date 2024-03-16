@@ -9,7 +9,6 @@ import org.scalatest.flatspec.AnyFlatSpec
 import scala.async.Async
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.sys.process.Process
 
 class PrunedDigestNodeSync2Spec extends AnyFlatSpec with IntegrationSuite {
 
@@ -21,9 +20,6 @@ class PrunedDigestNodeSync2Spec extends AnyFlatSpec with IntegrationSuite {
 
   val dir = new File(localVolume)
   dir.mkdirs()
-  List(localVolume).foreach(
-    x => log.info(Process(s"chmod -R 777 $x").!!)
-  )
 
   val minerConfig: Config = nodeSeedConfigs.head
     .withFallback(internalMinerPollingIntervalConfig(1000))

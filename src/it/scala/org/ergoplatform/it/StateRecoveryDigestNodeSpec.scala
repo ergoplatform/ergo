@@ -10,7 +10,6 @@ import org.scalatest.flatspec.AnyFlatSpec
 import scala.async.Async
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.sys.process.Process
 
 class StateRecoveryDigestNodeSpec extends AnyFlatSpec with IntegrationSuite {
 
@@ -23,9 +22,6 @@ class StateRecoveryDigestNodeSpec extends AnyFlatSpec with IntegrationSuite {
 
   val dir = new File(minerLocalVolume)
   dir.mkdirs()
-  List(minerLocalVolume, followerLocalVolume).foreach(
-    x => log.info(Process(s"chmod -R 777 $x").!!)
-  )
 
   val minerConfig: Config = nodeSeedConfigs.head
     .withFallback(internalMinerPollingIntervalConfig(10000))

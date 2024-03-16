@@ -20,7 +20,9 @@ trait IntegrationSuite
 
   implicit def executionContext: ExecutionContext = ErgoTestHelpers.defaultExecutionContext
 
-  protected val localDataDir: String = s"/tmp/ergo-${Random.nextInt(Int.MaxValue)}"
+  val tempDir: String = System.getenv("TEMPDIR")
+
+  protected val localDataDir: String = s"$tempDir/ergo-${Random.nextInt(Int.MaxValue)}"
 
   protected val docker: Docker = new Docker(tag = getClass.getSimpleName, localDataVolumeOpt = Some(localDataDir))
 

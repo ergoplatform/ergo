@@ -136,6 +136,8 @@ jobs:
 
   test_it:
      name: Run it node tests
+     env:
+       TMPDIR=${{ runner.temp }}
      strategy:
        matrix:
          os: [ ubuntu-latest ]
@@ -146,6 +148,7 @@ jobs:
        - name: Checkout current branch (full)
          uses: actions/checkout@v2
          with:
+           path: it
            fetch-depth: 0
 
        - name: Setup Java and Scala
@@ -165,9 +168,7 @@ jobs:
              ~/Library/Caches/Coursier/v1
            key: ${{ runner.os }}-sbt-cache-v2-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
-       - name: Chown user
-         run: |
-          sudo chown -R $USER:$USER ${{ runner.temp }}
-
        - name: Runs it node tests
-         run: TMPDIR=${{ runner.temp }} sbt -Denv=test clean ++${{ matrix.scala }} it:test
+         with:
+           path: it
+         run: sbt -Denv=test clean ++${{ matrix.scala }} it:test

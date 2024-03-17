@@ -167,7 +167,7 @@ jobs:
 
        - name: Chown user
          run: |
-          sudo chown -R $USER:$USER $GITHUB_WORKSPACE
+          sudo chown -R $USER:$USER ${{ runner.temp }}
 
        - name: Runs it node tests
          run: TMPDIR=${{ runner.temp }} sbt -Denv=test clean ++${{ matrix.scala }} it:test

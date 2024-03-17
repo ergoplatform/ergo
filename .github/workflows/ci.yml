@@ -170,4 +170,4 @@ jobs:
          run: |
            cd it
            mkdir tmp
-           TMPDIR: $(pwd)/tmp sbt -Denv=test clean ++${{ matrix.scala }} it:test
+           TMPDIR=$(pwd)/tmp sbt -Denv=test clean ++${{ matrix.scala }} it:test

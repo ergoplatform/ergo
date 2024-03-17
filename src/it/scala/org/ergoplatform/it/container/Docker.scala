@@ -425,7 +425,7 @@ class Docker(
 
       localDataVolumeOpt.foreach { path =>
         val dataVolume = new File(path)
-        FileUtils.deleteDirectory(dataVolume)
+        FileUtils.forceDeleteOnExit(dataVolume)
       }
     }
   }

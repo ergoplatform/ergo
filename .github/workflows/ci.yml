@@ -137,7 +137,7 @@ jobs:
   test_it:
      name: Run it node tests
      env:
-       TMPDIR=${{ runner.temp }}
+       TMPDIR: ${{ runner.temp }}
      strategy:
        matrix:
          os: [ ubuntu-latest ]

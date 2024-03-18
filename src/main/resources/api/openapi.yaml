@@ -5316,39 +5316,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /script/p2shAddress:
-    post:
-      security:
-        - ApiKeyAuth: [api_key]
-      summary: Create P2SHAddress from Sigma source
-      operationId: scriptP2SHAddress
-      tags:
-        - script
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SourceHolder'
-      responses:
-        '200':
-          description: P2SH address derived from source
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AddressHolder'
-        '400':
-          description: Bad source
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
+#  /script/p2shAddress:
+#    post:
+#      security:
+#        - ApiKeyAuth: [api_key]
+#      summary: Create P2SHAddress from Sigma source
+#      operationId: scriptP2SHAddress
+#      tags:
+#        - script
+#      requestBody:
+#        required: true
+#        content:
+#          application/json:
+#            schema:
+#              $ref: '#/components/schemas/SourceHolder'
+#      responses:
+#        '200':
+#          description: P2SH address derived from source
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/AddressHolder'
+#        '400':
+#          description: Bad source
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/ApiError'
+#        default:
+#          description: Error
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/ApiError'
 
 
   /script/addressToTree/{address}:

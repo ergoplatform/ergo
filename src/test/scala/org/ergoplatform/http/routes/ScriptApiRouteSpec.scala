@@ -77,6 +77,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       check(assertion(responseAs[Json]))
   }
 
+  /*
   it should "generate valid P2SHAddress form source" in {
     val suffix = "/p2shAddress"
     val assertion = (json: Json) => {
@@ -87,7 +88,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
     Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
       check(assertion(responseAs[Json]))
-  }
+  } */
 
   it should "get through address <-> ergoTree round-trip" in {
     val suffix = "addressToTree"
@@ -109,9 +110,11 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     val script = TrueLeaf
     val tree = ErgoTree.fromProposition(script)
 
-    val p2sh = Pay2SHAddress.apply(tree).toString()
-    p2sh shouldBe "rbcrmKEYduUvADj9Ts3dSVSG27h54pgrq5fPuwB"
-    Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
+    /*
+      val p2sh = Pay2SHAddress.apply(tree).toString()
+      p2sh shouldBe "rbcrmKEYduUvADj9Ts3dSVSG27h54pgrq5fPuwB"
+      Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
+    */
 
     val p2s = addressEncoder.toString(addressEncoder.fromProposition(tree).get)
     p2s shouldBe "Ms7smJwLGbUAjuWQ"
@@ -140,8 +143,10 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
     Get(s"$prefix/$suffix/$p2pk") ~> route ~> check(assertion(responseAs[Json], p2pk))
 
-    val p2sh = "rbcrmKEYduUvADj9Ts3dSVSG27h54pgrq5fPuwB"
-    Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
+    /*
+      val p2sh = "rbcrmKEYduUvADj9Ts3dSVSG27h54pgrq5fPuwB"
+      Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
+    */
 
     val script = TrueLeaf
     val tree = ErgoTree.fromProposition(script)

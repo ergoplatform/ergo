@@ -7,6 +7,7 @@ import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.interface4j.SecretString
 
 object ConfigGenerator extends App with ErgoTestHelpers {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
 
   val seedStrength = 128
 

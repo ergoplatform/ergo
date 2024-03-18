@@ -3,7 +3,6 @@ package org.ergoplatform.wallet.mnemonic
 import java.text.Normalizer.Form.NFKD
 import java.text.Normalizer.normalize
 import org.ergoplatform.wallet.interface4j.SecretString
-import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.Assertion
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -15,8 +14,8 @@ import scala.util.Try
 class MnemonicSpec
   extends AnyFlatSpec
     with Matchers
-    with ScalaCheckPropertyChecks
-    with Generators {
+    with ScalaCheckPropertyChecks {
+  import org.ergoplatform.wallet.utils.WalletGenerators._
 
   it should "pass https://github.com/trezor/python-mnemonic/blob/master/vectors.json" in {
     val lang = "english"

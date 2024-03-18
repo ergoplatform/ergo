@@ -3,10 +3,12 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.popow.PoPowHeader
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.util.ModifierId
 
-class PopowProcessorSpecification extends HistoryTestHelpers {
+class PopowProcessorSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.HistoryTestHelpers._
+  import org.ergoplatform.utils.generators.ChainGenerator._
 
   private def genHistory(genesisIdOpt: Option[ModifierId], popowBootstrap: Boolean) =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = popowBootstrap, blocksToKeep = -1,

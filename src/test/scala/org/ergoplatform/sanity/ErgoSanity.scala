@@ -14,11 +14,11 @@ import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.testkit.generators.{ModifierProducerTemplateItem, SynInvalid, Valid}
-import org.ergoplatform.testkit.properties.HistoryTests
-import org.ergoplatform.testkit.properties.mempool.{MempoolRemovalTest, MempoolTransactionsTest}
-import org.ergoplatform.testkit.properties.state.StateApplicationTest
-import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
+import scorex.testkit.generators.{ModifierProducerTemplateItem, SynInvalid, Valid}
+import scorex.testkit.properties.HistoryTests
+import scorex.testkit.properties.mempool.{MempoolRemovalTest, MempoolTransactionsTest}
+import scorex.testkit.properties.state.StateApplicationTest
+import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.core.bytesToId
 import org.scalacheck.Gen
 import scorex.core.network.DeliveryTracker
@@ -33,9 +33,11 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
   with MempoolTransactionsTest
   with MempoolRemovalTest
   with HistoryTests
-  with ErgoTestHelpers
-  with HistoryTestHelpers {
-
+  with ErgoTestHelpers {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoNodeGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   override val memPool: MPool = ErgoMemPool.empty(settings)
 

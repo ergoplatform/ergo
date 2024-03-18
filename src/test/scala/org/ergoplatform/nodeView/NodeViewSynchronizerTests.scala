@@ -23,12 +23,11 @@ import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, S
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PenaltyType
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer}
-import org.ergoplatform.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
-import org.ergoplatform.testkit.utils.AkkaFixture
+import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
+import scorex.testkit.utils.AkkaFixture
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
-import org.ergoplatform.utils.generators.ChainGenerator
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -41,8 +40,9 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   with ScorexLogging
   with SyntacticallyTargetedModifierProducer
   with TotallyValidModifierProducer[ST]
-  with ChainGenerator
   with TestFileUtils {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ChainGenerator._
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 

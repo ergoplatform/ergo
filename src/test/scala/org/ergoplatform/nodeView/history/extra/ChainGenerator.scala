@@ -14,6 +14,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoState, UtxoStateReader}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform._
+import org.scalatest.matchers.should.Matchers
 import scorex.util.ModifierId
 import sigma.{Coll, Colls}
 import sigmastate.Values
@@ -27,7 +28,10 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Random, Try}
 
-object ChainGenerator extends ErgoTestHelpers {
+object ChainGenerator extends ErgoTestHelpers with Matchers {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   val pow: AutolykosPowScheme = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval: FiniteDuration = 2.minute

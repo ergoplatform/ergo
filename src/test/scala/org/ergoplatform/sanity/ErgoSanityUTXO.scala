@@ -13,15 +13,25 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettingsReader
-import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.serialization.ErgoSerializer
+import scorex.testkit.generators.{SemanticallyInvalidModifierProducer, SemanticallyValidModifierProducer}
 
 import scala.concurrent.ExecutionContextExecutor
 
-class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
+class ErgoSanityUTXO extends ErgoSanity[UTXO_ST]
+  with SemanticallyValidModifierProducer[UTXO_ST]
+  with SemanticallyInvalidModifierProducer[UTXO_ST] {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
+  import org.ergoplatform.utils.generators.CoreObjectGenerators._
+  import org.ergoplatform.utils.HistoryTestHelpers._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   override val historyGen: Gen[HT] =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)

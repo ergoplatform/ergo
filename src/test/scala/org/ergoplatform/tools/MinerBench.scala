@@ -12,6 +12,8 @@ import scorex.crypto.hash.{Blake2b256, Blake2b512, CryptographicHash, Digest}
 import scala.annotation.tailrec
 
 object MinerBench extends App with ErgoTestHelpers {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   validationBench()
   //  numericHashBench()

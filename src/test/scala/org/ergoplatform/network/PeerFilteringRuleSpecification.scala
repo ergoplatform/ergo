@@ -1,12 +1,11 @@
 package org.ergoplatform.network
 
 import akka.actor.ActorRef
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, ConnectionId}
 
-class PeerFilteringRuleSpecification extends ErgoPropertyTest {
-
+class PeerFilteringRuleSpecification extends ErgoCorePropertyTest {
   private def peerWithVersion(version: Version): ConnectedPeer = {
     val ref = ActorRef.noSender
     val peerSpec = PeerSpec("", version, "", None, Seq.empty)

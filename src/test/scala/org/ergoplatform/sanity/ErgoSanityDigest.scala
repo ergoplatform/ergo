@@ -18,10 +18,22 @@ import org.ergoplatform.core.idToBytes
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.serialization.ErgoSerializer
+import scorex.testkit.generators.{SemanticallyInvalidModifierProducer, SemanticallyValidModifierProducer}
 
 import scala.concurrent.ExecutionContextExecutor
 
-class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
+class ErgoSanityDigest extends ErgoSanity[DIGEST_ST]
+  with SemanticallyValidModifierProducer[DIGEST_ST]
+  with SemanticallyInvalidModifierProducer[DIGEST_ST]
+  {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
+  import org.ergoplatform.utils.generators.CoreObjectGenerators._
+  import org.ergoplatform.utils.HistoryTestHelpers._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   override val historyGen: Gen[HT] =
     generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)

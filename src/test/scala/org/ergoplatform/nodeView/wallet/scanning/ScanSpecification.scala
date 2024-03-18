@@ -1,10 +1,10 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import io.circe.Json
-import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.utils.generators.WalletGenerators
+import org.ergoplatform.utils.ErgoCorePropertyTest
 
-class ScanSpecification extends ErgoPropertyTest with WalletGenerators {
+class ScanSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
   import ScanJsonCodecs._
 
   property("external scan req json serialization roundtrip") {

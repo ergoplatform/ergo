@@ -11,8 +11,8 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.testkit.generators
-import org.ergoplatform.testkit.utils.AkkaFixture
+import scorex.testkit.generators
+import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
 
 import scala.concurrent.Await
@@ -26,8 +26,7 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
     with generators.SyntacticallyTargetedModifierProducer
     with generators.TotallyValidModifierProducer[ST]
     with generators.SemanticallyInvalidModifierProducer[ST]
-    with generators.CustomModifierProducer[ST]
-    with generators.ObjectGenerators {
+    with generators.CustomModifierProducer[ST] {
 
   def nodeViewHolder(implicit system: ActorSystem): (ActorRef, TestProbe, BlockSection, ST, ErgoHistory)
 

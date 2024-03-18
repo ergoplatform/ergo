@@ -12,6 +12,9 @@ val deps212 = Seq(
   "io.circe" %% "circe-generic" % "0.13.0",
   "io.circe" %% "circe-parser" % "0.13.0")
 
+publishMavenStyle := true
+publishArtifact in Test := false
+
 libraryDependencies ++= Seq() ++
   (if (scalaVersion.value == scala211) deps211 else deps212)
 

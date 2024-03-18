@@ -2,7 +2,6 @@ package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -20,8 +19,9 @@ class ErgoProvingInterpreterSpec
   extends AnyFlatSpec
     with ScalaCheckPropertyChecks
     with Matchers
-    with Generators
     with InterpreterSpecCommon {
+  import org.ergoplatform.wallet.utils.WalletGenerators._
+
 
   private def obtainSecretKey() = ExtendedSecretKey.deriveMasterKey(Random.randomBytes(32), usePre1627KeyDerivation = false)
 

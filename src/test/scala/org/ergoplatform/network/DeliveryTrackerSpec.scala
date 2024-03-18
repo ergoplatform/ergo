@@ -4,14 +4,15 @@ import akka.actor.{ActorRef, Cancellable}
 import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.modifiers.NetworkObjectTypeId
-import org.ergoplatform.testkit.generators.ObjectGenerators
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.util.ModifierId
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.ModifiersStatus._
 
 
-class DeliveryTrackerSpec extends ErgoPropertyTest with ObjectGenerators {
+class DeliveryTrackerSpec extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
 
   property("tracker should accept requested modifiers, turn them into received and clear them") {
     forAll(connectedPeerGen(ActorRef.noSender)) { peer =>

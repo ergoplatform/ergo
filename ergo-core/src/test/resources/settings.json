@@ -1,0 +1,8 @@
+{
+  "ergo": {
+    "node": {
+      "blocksToKeep": 12,
+      "mempoolSorting": "bySize"
+    }
+  }
+}

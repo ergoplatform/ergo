@@ -13,7 +13,6 @@ import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
 
 class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexerBase with FileUtils {
-
   override def receive: Receive = {
     case test.CreateDB() => createDB()
   }

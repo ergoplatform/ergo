@@ -4,9 +4,12 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.settings.Parameters._
-import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.utils.ErgoCorePropertyTest
 
-class ErgoStateContextSpec extends HistoryTestHelpers {
+class ErgoStateContextSpec extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ChainGenerator._
 
   property("Header votes") {
     val fb = genChain(1).head
@@ -64,7 +67,7 @@ class ErgoStateContextSpec extends HistoryTestHelpers {
     sc.appendFullBlock(fbWithFields(imvKey +: oldFields)) shouldBe 'failure
 
     // validation of field value sizes
-    val imvValue = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize + 1).sample.get
+    val imvValue = extensionKvGenImvValue(Extension.FieldKeySize, Extension.FieldValueMaxSize + 1).sample.get
     sc.appendFullBlock(fbWithFields(imvValue +: oldFields)) shouldBe 'failure
 
     // validation of incorrect interlinks
@@ -73,8 +76,8 @@ class ErgoStateContextSpec extends HistoryTestHelpers {
     ).fields
     sc.appendFullBlock(fbWithFields(invalidInterlinks ++ oldFields)) shouldBe 'failure
 
+    val validMKV = extensionKvGenValidMKV(Extension.FieldKeySize, Extension.FieldValueMaxSize).sample.get
     // validation of key duplicates in fields
-    val validMKV = extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize).sample.get
     sc.appendFullBlock(fbWithFields(Seq(validMKV, validMKV) ++ oldFields)) shouldBe 'failure
 
     // valid application of correct extension

@@ -1,12 +1,13 @@
 package org.ergoplatform.serialization
 
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.util.serialization.VLQByteStringWriter
 import scala.util.Try
 
-class ErgoBoxSerializerSpec extends ErgoPropertyTest {
+class ErgoBoxSerializerSpec extends ErgoCorePropertyTest {
+  import org.ergoplatform.wallet.utils.WalletGenerators._
 
   property("ErgoBox serialization") {
     forAll(ergoBoxGen) { b: ErgoBox =>

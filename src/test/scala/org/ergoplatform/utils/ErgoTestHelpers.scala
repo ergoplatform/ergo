@@ -1,7 +1,6 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.scalatest.{EitherValues, OptionValues}
 import org.ergoplatform.network.peer.PeerInfo
 import scorex.util.ScorexLogging
@@ -11,12 +10,11 @@ import java.util.concurrent.Executors
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 trait ErgoTestHelpers
-  extends ValidBlocksGenerators
-    with ScorexLogging
+  extends ScorexLogging
     with ScorexEncoding
     with OptionValues
     with EitherValues {
-
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
   def updateHeight(box: ErgoBoxCandidate, creationHeight: Int): ErgoBoxCandidate =

@@ -259,14 +259,9 @@ object SidechainHeader {
       .nextCheck(checkTxProof)
       .nextCheck(checkTxId)
       .nextCheck(checkSidechainNFT)
-      .nextCheck()
+      .nextCheck(checkSidechainData(sh, db))
 
-
-    // todo: fix
-    validateBeforeSidechainData
-      .validate(5, checkSidechainData(sh, db).isInstanceOf[Ahead.type], InvalidModifier("" , sh.id, SidechainHeaderModifierTypeId)) // check sidechain data committed in the main-chain
-
-    // todo: enforce linearity
+    // todo: additional checks to enforce linearity
     ???
   }
 
@@ -277,7 +272,8 @@ object SidechainHeader {
 
   def process(sb: SidechainBlock, db: SidechainDatabase): Unit = {
     verify(sb, db) match {
-      case Valid()
+      case ValidationResult.Valid(_) => ???
+      case ValidationResult.Invalid(_) => ???
     }
   }
 

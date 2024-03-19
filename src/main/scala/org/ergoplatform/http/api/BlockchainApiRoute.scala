@@ -242,20 +242,6 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     validateAndGetBoxesByAddress(address, offset, limit)
   }
 
-  private def getBoxesByAddressUnspent(addr: ErgoAddress, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Seq[IndexedErgoBox]] =
-    getHistoryWithMempool.map { case (history, mempool) =>
-    val addressUtxos = getAddress(addr)(history)
-      .getOrElse(IndexedErgoAddress(hashErgoTree(addr.script)))
-      .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed)
-    if (excludeMempoolSpent) {
-      // If excluding boxes spent in mempool, filter out those boxes
-      val spentBoxesIdsInMempool = mempool.spentInputs.toSet 
-      addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(box.id))
-    } else {
-      addressUtxos
-    }
-  }
-
   private def getBoxesByAddressUnspent(
   addr: ErgoAddress,
   offset: Int,

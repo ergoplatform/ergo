@@ -94,6 +94,8 @@ This repository has modular structure, so only parts which are needed for an app
 * [ergo-core](ergo-core/README.md) - functionality needed for an SPV client (P2P messages, block section stuctures, PoW, NiPoPoW)
 * ergo-wallet - Java and Scala functionalities to sign and verify transactions
 
+Using IntelliJ IDEA be sure to set Build Tools / sbt -> `sbt shell` / `use for` / builds, to avoid compilation errors
+
 ## Contributing to Ergo
 
 Ergo is an open-source project and we welcome contributions from developers and testers! Join the discussion over [Ergo Discord](https://discord.gg/kj7s7nb) in #development channel, or Telegram: https://t.me/ErgoDevelopers. Please also check out our [Contributing documentation](https://docs.ergoplatform.com/contribute/).

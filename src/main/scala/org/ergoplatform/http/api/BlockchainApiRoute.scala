@@ -256,6 +256,43 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
+  private def getBoxesByAddressUnspent(
+  addr: ErgoAddress,
+  offset: Int,
+  limit: Int,
+  sortDir: Direction,
+  unconfirmed: Boolean,
+  excludeMempoolSpent: Boolean
+): Future[Seq[IndexedErgoBox]] = {
+
+  def fetchAndFilter(limit: Int, accumulated: Seq[IndexedErgoBox] = Seq.empty): Future[Seq[IndexedErgoBox]] = {
+    getHistoryWithMempool.flatMap { case (history, mempool) =>
+      val addressUtxos = getAddress(addr)(history)
+        .getOrElse(IndexedErgoAddress(hashErgoTree(addr.script)))
+        .retrieveUtxos(history, mempool, offset + accumulated.length, limit, sortDir, unconfirmed)
+
+      val newUtxos = if (excludeMempoolSpent) {
+        val spentBoxesIdsInMempool = mempool.spentInputs.toSet
+        addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+      } else {
+        addressUtxos
+      }
+
+      val updatedAccumulated = accumulated ++ newUtxos
+      // If reached limit OR we have obtained the maximumm available UTXOS (returned amount < limit), return successful. 
+      if (updatedAccumulated.length >= originalLimit || addressUtxos.length < limit) {
+        Future.successful(updatedAccumulated.take(originalLimit)) // Just to ensure that no more than limit is taken
+      } else {
+        val maxLimit = 200; 
+        val newLimit = Math.min(limit * 2, maxLimit); // Prevents limit becoming too large
+        fetchAndFilter(newLimit, updatedAccumulated) 
+      }
+    }
+  }
+  val originalLimit = limit
+  fetchAndFilter(originalLimit)
+}
+
   private def validateAndGetBoxesByAddressUnspent(address: ErgoAddress,
                                                   offset: Int,
                                                   limit: Int,

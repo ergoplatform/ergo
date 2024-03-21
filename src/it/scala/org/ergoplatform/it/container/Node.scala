@@ -24,9 +24,9 @@ class Node(val settings: ErgoSettings, val nodeInfo: NodeInfo, override val clie
   def containerId: String = nodeInfo.containerId
   override val chainId: Char = 'I'
   override val networkNodeName: String = s"it-test-client-to-${nodeInfo.networkIpAddress}"
-  override val restAddress: String = "localhost"
+  override val restAddress: String = nodeInfo.apiIpAddress
   override val networkAddress: String = "localhost"
-  override val nodeRestPort: Int = nodeInfo.hostRestApiPort
+  override val nodeRestPort: Int = nodeInfo.containerApiPort
   override val networkPort: Int = nodeInfo.hostNetworkPort
   override val blockDelay: FiniteDuration = settings.chainSettings.blockInterval
 

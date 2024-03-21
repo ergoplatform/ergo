@@ -30,10 +30,12 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
   val dirs: Seq[File] = localVolumes.map(vol => new File(vol))
   dirs.foreach(_.mkdirs())
 
-  val minerConfig: Config = nodeSeedConfigs.head
-  val onlineMiningNodesConfig: List[Config] = nodeSeedConfigs.slice(1, nodesQty)
+  val nodeConfigs: List[Config] = nodeSeedConfigs.take(4).map(_.withFallback(localOnlyConfig))
+
+  val minerConfig: Config = nodeConfigs.head
+  val onlineMiningNodesConfig: List[Config] = nodeConfigs.slice(1, nodesQty)
     .map(_.withFallback(onlineGeneratingPeerConfig))
-  val offlineMiningNodesConfig: List[Config] = nodeSeedConfigs.slice(1, nodesQty)
+  val offlineMiningNodesConfig: List[Config] = nodeConfigs.slice(1, nodesQty)
 
   def localVolume(n: Int): String = s"$localDataDir/fork-resolution-spec/node-$n/data"
 
@@ -48,7 +50,7 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
     implicit val patienceConfig: PatienceConfig = PatienceConfig((nodeConfigs.size * 2).seconds, 3.second)
     blocking(Thread.sleep(nodeConfigs.size * 2000))
     eventually {
-      Await.result(Future.traverse(nodes.get)(_.waitForStartup), nodeConfigs.size.seconds)
+      Await.result(Future.traverse(nodes.get)(_.waitForStartup), 180.seconds)
     }
   }
 
@@ -59,6 +61,9 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
   // 4. Kill all nodes again and restart with `knownPeers` filled, wait another {syncLength} blocks;
   // 5. Check that nodes reached consensus on created forks;
   it should "Fork resolution after isolated mining" in {
+
+    log.info(minerConfig.toString)
+    onlineMiningNodesConfig.foreach(x => log.info(x.toString))
 
     val nodes: List[Node] = startNodesWithBinds(minerConfig +: onlineMiningNodesConfig)
 

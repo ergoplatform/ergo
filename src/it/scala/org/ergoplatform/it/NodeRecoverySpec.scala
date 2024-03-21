@@ -1,7 +1,6 @@
 package org.ergoplatform.it
 
 import java.io.File
-
 import akka.japi.Option.Some
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
@@ -27,6 +26,7 @@ class NodeRecoverySpec
   val offlineGeneratingPeer: Config = specialDataDirConfig(remoteVolume)
     .withFallback(offlineGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs.head)
+    .withFallback(localOnlyConfig)
 
   val node: Node = docker.startDevNetNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 

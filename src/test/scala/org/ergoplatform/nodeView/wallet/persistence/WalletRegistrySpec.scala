@@ -4,7 +4,6 @@ import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{ScanResults, SpentInputData}
-import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.core.VersionTag
 import org.scalacheck.Gen
@@ -20,8 +19,11 @@ class WalletRegistrySpec
   extends AnyFlatSpec
     with Matchers
     with DBSpec
-    with ScalaCheckPropertyChecks
-    with WalletGenerators {
+    with ScalaCheckPropertyChecks {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
+  import org.ergoplatform.utils.generators.CoreObjectGenerators._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
 
   implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 10)
 

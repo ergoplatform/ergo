@@ -5,16 +5,21 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.testkit.utils.NoShrink
-import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.utils.{ErgoCorePropertyTest, NoShrink}
 import org.ergoplatform.consensus.ModifierSemanticValidity._
+
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
+class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
+  import org.ergoplatform.utils.HistoryTestHelpers._
+  import org.ergoplatform.utils.generators.ChainGenerator._
+  import org.ergoplatform.utils.generators.CoreObjectGenerators.{smallInt, positiveLongGen}
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators.smallPositiveInt
+  import org.ergoplatform.tools.MinerBench._
 
   type PM = BlockSection
 

@@ -11,8 +11,15 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 
 import scala.collection.immutable.SortedMap
+import scala.math.Ordering.Implicits._
 
 object OOMTest extends App {
+
+  implicit val ordering: Ordering[Array[Byte]] =
+    new Ordering[Array[Byte]] {
+      override def compare(o1: Array[Byte], o2: Array[Byte]): Int =
+        implicitly[Ordering[Seq[Int]]].compare(o1.toSeq.map(_ & 0xFF), o2.toSeq.map(_ & 0xFF))
+    }
 
   type Box = (ADKey, ADValue)
 

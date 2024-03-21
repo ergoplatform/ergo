@@ -1,13 +1,15 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.Random
 
-class SnapshotsDbSpecification extends ErgoPropertyTest {
+class SnapshotsDbSpecification extends ErgoCorePropertyTest {
+    import org.ergoplatform.utils.generators.CoreObjectGenerators._
+    import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   def seededDatabase(manifestIds: Seq[ModifierId]): (SnapshotsInfo, SnapshotsDb) = {
     val m = manifestIds.map { mid =>

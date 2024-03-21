@@ -5,7 +5,6 @@ import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
 import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerializer}
-import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -15,9 +14,11 @@ import scorex.db.LDBKVStore
 class WalletStorageSpec
   extends AnyFlatSpec
     with Matchers
-    with WalletGenerators
     with ScalaCheckPropertyChecks
     with DBSpec {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
+  import org.ergoplatform.wallet.utils.WalletGenerators._
 
   it should "add and read derivation paths" in {
     def addPath(store: LDBKVStore, storedPaths: Seq[DerivationPath], derivationPath: DerivationPath): Unit = {

@@ -15,6 +15,7 @@ class NipopowApiRoutesSpec extends AnyFlatSpec
   with ScalatestRouteTest
   with FailFastCirceSupport
   with Stubs {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
 
   private val route: Route = NipopowApiRoute(nodeViewRef, utxoReadersRef, settings).route
 

@@ -1,7 +1,6 @@
 package org.ergoplatform.it
 
 import java.io.File
-
 import akka.japi.Option.Some
 import com.typesafe.config.Config
 import org.asynchttpclient.util.HttpConstants
@@ -26,13 +25,18 @@ class PrunedDigestNodeSyncSpec extends AnyFlatSpec with IntegrationSuite {
   val minerConfig: Config = nodeSeedConfigs.head
     .withFallback(internalMinerPollingIntervalConfig(10000))
     .withFallback(specialDataDirConfig(remoteVolume))
+    .withFallback(localOnlyConfig)
+
   val nodeForSyncingConfig: Config = minerConfig
     .withFallback(nonGeneratingPeerConfig)
+    .withFallback(localOnlyConfig)
+
   val digestConfig: Config = digestStatePeerConfig
     .withFallback(blockIntervalConfig(500))
     .withFallback(prunedHistoryConfig(blocksToKeep))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs(1))
+    .withFallback(localOnlyConfig)
 
   // Testing scenario:
   // 1. Start up mining node and let it mine chain of length ~ {approxTargetHeight};

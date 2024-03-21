@@ -31,6 +31,9 @@ class InfoApiRoutesSpec extends AnyFlatSpec
   with FailFastCirceSupport
   with Stubs {
 
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ChainGenerator._
+
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
   val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, networkControllerRef, null, settings)

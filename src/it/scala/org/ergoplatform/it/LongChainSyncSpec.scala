@@ -11,14 +11,19 @@ class LongChainSyncSpec extends AnyFlatSpec with IntegrationSuite {
 
   val chainLength = 300
 
-  val minerConfig: Config = shortInternalMinerPollingInterval.withFallback(nodeSeedConfigs.head)
-  val nonGeneratingConfig: Config = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1))
+  val minerConfig: Config = shortInternalMinerPollingInterval
+    .withFallback(nodeSeedConfigs.head)
+    .withFallback(localOnlyConfig)
+
+  val nonGeneratingConfig: Config =
+    nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1)).withFallback(localOnlyConfig)
 
   val miner: Node = docker.startDevNetNode(minerConfig).get
 
   it should s"Long chain ($chainLength blocks) synchronization" in {
 
-    val result: Future[Int] = miner.waitForHeight(chainLength)
+    val result: Future[Int] = miner
+      .waitForHeight(chainLength)
       .flatMap { _ =>
         val follower = docker.startDevNetNode(nonGeneratingConfig).get
         follower.waitForHeight(chainLength)
@@ -27,4 +32,3 @@ class LongChainSyncSpec extends AnyFlatSpec with IntegrationSuite {
     Await.result(result, 10.minutes)
   }
 }
-

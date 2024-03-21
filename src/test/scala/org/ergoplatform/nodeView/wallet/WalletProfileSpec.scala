@@ -1,10 +1,10 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 
 import scala.util.Try
 
-class WalletProfileSpec extends ErgoPropertyTest {
+class WalletProfileSpec extends ErgoCorePropertyTest {
   property("fromLabel getting profiles properly") {
     WalletProfile.fromLabel("user").outputsFilterSize shouldBe WalletProfile.User.outputsFilterSize
     WalletProfile.fromLabel("user").scriptsFilterSize shouldBe WalletProfile.User.scriptsFilterSize

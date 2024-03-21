@@ -1,11 +1,13 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Longs
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 
-class HeadersSpec extends ErgoPropertyTest {
+class HeadersSpec extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.generators.ChainGenerator._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
   val chain: HeaderChain = genHeaderChain(50, diffBitsOpt = None, useRealTs = false)
   val genesisId: ModifierId = chain.head.id

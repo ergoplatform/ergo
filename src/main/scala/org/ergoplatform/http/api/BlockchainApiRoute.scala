@@ -23,7 +23,6 @@ import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
 import spire.implicits.cfor
 
-import scala.annotation.tailrec
 import scala.concurrent.duration.{Duration, SECONDS}
 import scala.concurrent.{Await, Future}
 import scala.util.Success
@@ -252,7 +251,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   excludeMempoolSpent: Boolean
 ): Future[Seq[IndexedErgoBox]] = {
 
-  @tailrec
+  val originalLimit = limit
+
   def fetchAndFilter(limit: Int, accumulated: Seq[IndexedErgoBox] = Seq.empty): Future[Seq[IndexedErgoBox]] = {
     getHistoryWithMempool.flatMap { case (history, mempool) =>
       val addressUtxos = getAddress(addr)(history)
@@ -273,11 +273,11 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       } else {
         val maxLimit = 200; 
         val newLimit = Math.min(limit * 2, maxLimit); // Prevents limit becoming too large
-        fetchAndFilter(newLimit, updatedAccumulated) 
+        fetchAndFilter(newLimit, updatedAccumulated)
       }
     }
   }
-  val originalLimit = limit
+
   fetchAndFilter(originalLimit)
 }
 

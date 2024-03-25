@@ -26,7 +26,6 @@ import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.{ScorexSettings, _}
-import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interface4j.SecretString
@@ -36,7 +35,6 @@ import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
-import org.ergoplatform.network.PeerSpec
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.ByteArrayWrapper
@@ -47,7 +45,16 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with TestFileUtils {
+trait Stubs extends ErgoTestHelpers with TestFileUtils {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ChainGenerator._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.CoreObjectGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+  import org.ergoplatform.wallet.utils.WalletGenerators._
 
   implicit val system: ActorSystem
 
@@ -251,7 +258,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! ReadScansResponse(apps.values.toSeq)
 
       case GenerateTransaction(_, _, _, _) =>
-        val input = ErgoTransactionGenerators.inputGen.sample.value
+        val input = inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender() ! Success(tx)
 

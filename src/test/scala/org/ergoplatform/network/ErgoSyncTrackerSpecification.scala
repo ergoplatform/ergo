@@ -1,11 +1,14 @@
 package org.ergoplatform.network
 
 import org.ergoplatform.consensus.{Older, Younger}
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.core.network.{ConnectedPeer, ConnectionId, Incoming}
 import org.ergoplatform.network.peer.PeerInfo
 
-class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
+class ErgoSyncTrackerSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.tools.MinerBench._
+
   property("getters test") {
     val time = 10L
     val peerInfo = PeerInfo(defaultPeerSpec, time, Some(Incoming), 5L)

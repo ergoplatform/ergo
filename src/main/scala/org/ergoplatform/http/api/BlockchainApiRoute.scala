@@ -257,13 +257,13 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
         .getOrElse(IndexedErgoAddress(hashErgoTree(addr.script)))
         .retrieveUtxos(history, mempool, offset + accumulated.length, limit, sortDir, unconfirmed)
 
+      val spentBoxesIdsInMempool: Set[Array[Byte]] = mempool.spentInputs.map(idToBytes).toSet
       val newUtxos = if (excludeMempoolSpent) {
-        val spentBoxesIdsInMempool = mempool.spentInputs.toSet
-        addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+        addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(idToBytes(box.id)))
       } else {
         addressUtxos
-      }
-
+      }  
+      
       val updatedAccumulated = accumulated ++ newUtxos
       // If reached limit OR we have obtained the maximumm available UTXOS (returned amount < limit), return successful. 
       if (updatedAccumulated.length >= originalLimit || addressUtxos.length < limit) {

@@ -23,6 +23,7 @@ import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
 import spire.implicits.cfor
 
+import scala.annotation.tailrec
 import scala.concurrent.duration.{Duration, SECONDS}
 import scala.concurrent.{Await, Future}
 import scala.util.Success
@@ -251,15 +252,16 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   excludeMempoolSpent: Boolean
 ): Future[Seq[IndexedErgoBox]] = {
 
+  @tailrec
   def fetchAndFilter(limit: Int, accumulated: Seq[IndexedErgoBox] = Seq.empty): Future[Seq[IndexedErgoBox]] = {
     getHistoryWithMempool.flatMap { case (history, mempool) =>
       val addressUtxos = getAddress(addr)(history)
         .getOrElse(IndexedErgoAddress(hashErgoTree(addr.script)))
         .retrieveUtxos(history, mempool, offset + accumulated.length, limit, sortDir, unconfirmed)
 
-      val spentBoxesIdsInMempool: Set[Array[Byte]] = mempool.spentInputs.map(idToBytes).toSet
+      val spentBoxesIdsInMempool: Set[ModifierId] = mempool.spentInputs.map(bytesToId).toSet
       val newUtxos = if (excludeMempoolSpent) {
-        addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(idToBytes(box.id)))
+        addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(box.id))
       } else {
         addressUtxos
       }  

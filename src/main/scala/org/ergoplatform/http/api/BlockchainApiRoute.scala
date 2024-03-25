@@ -295,16 +295,19 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getBoxesByAddressUnspentR: Route =
-    (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir & unconfirmed) {
-      (address, offset, limit, dir, unconfirmed, excludeMempoolSpent) =>
+    (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) {
+      (address, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
+        val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
         validateAndGetBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed, excludeMempoolSpent)
     }
 
   private def getBoxesByAddressUnspentGetRoute: Route =
-    (pathPrefix("box" / "unspent" / "byAddress") & get & addressPass & paging & sortDir & unconfirmed) {
-      (address, offset, limit, dir, unconfirmed, excludeMempoolSpent) =>
+    (pathPrefix("box" / "unspent" / "byAddress") & get & addressPass & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) {
+      (address, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
+        val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
         validateAndGetBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed, excludeMempoolSpent)
     }
+
 
   private def getBoxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
     getHistory.map { history =>

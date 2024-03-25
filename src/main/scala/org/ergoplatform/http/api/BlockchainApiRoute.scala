@@ -257,13 +257,13 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
         .getOrElse(IndexedErgoAddress(hashErgoTree(addr.script)))
         .retrieveUtxos(history, mempool, offset + accumulated.length, limit, sortDir, unconfirmed)
 
+      val spentBoxesIdsInMempool: Set[Array[Byte]] = mempool.spentInputs.map(idToBytes).toSet
       val newUtxos = if (excludeMempoolSpent) {
-        val spentBoxesIdsInMempool = mempool.spentInputs.toSet
-        addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+        addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(idToBytes(box.id)))
       } else {
         addressUtxos
-      }
-
+      }  
+      
       val updatedAccumulated = accumulated ++ newUtxos
       // If reached limit OR we have obtained the maximumm available UTXOS (returned amount < limit), return successful. 
       if (updatedAccumulated.length >= originalLimit || addressUtxos.length < limit) {
@@ -295,16 +295,19 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getBoxesByAddressUnspentR: Route =
-    (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir & unconfirmed) {
-      (address, offset, limit, dir, unconfirmed, excludeMempoolSpent) =>
+    (post & pathPrefix("box" / "unspent" / "byAddress") & ergoAddress & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) {
+      (address, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
+        val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
         validateAndGetBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed, excludeMempoolSpent)
     }
 
   private def getBoxesByAddressUnspentGetRoute: Route =
-    (pathPrefix("box" / "unspent" / "byAddress") & get & addressPass & paging & sortDir & unconfirmed) {
-      (address, offset, limit, dir, unconfirmed, excludeMempoolSpent) =>
+    (pathPrefix("box" / "unspent" / "byAddress") & get & addressPass & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) {
+      (address, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
+        val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
         validateAndGetBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed, excludeMempoolSpent)
     }
+
 
   private def getBoxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
     getHistory.map { history =>

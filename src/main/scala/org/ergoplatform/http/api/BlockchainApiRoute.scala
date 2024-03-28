@@ -251,15 +251,17 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   excludeMempoolSpent: Boolean
 ): Future[Seq[IndexedErgoBox]] = {
 
+  val originalLimit = limit
+
   def fetchAndFilter(limit: Int, accumulated: Seq[IndexedErgoBox] = Seq.empty): Future[Seq[IndexedErgoBox]] = {
     getHistoryWithMempool.flatMap { case (history, mempool) =>
       val addressUtxos = getAddress(addr)(history)
         .getOrElse(IndexedErgoAddress(hashErgoTree(addr.script)))
         .retrieveUtxos(history, mempool, offset + accumulated.length, limit, sortDir, unconfirmed)
 
-      val spentBoxesIdsInMempool: Set[Array[Byte]] = mempool.spentInputs.map(idToBytes).toSet
+      val spentBoxesIdsInMempool: Set[ModifierId] = mempool.spentInputs.map(bytesToId).toSet
       val newUtxos = if (excludeMempoolSpent) {
-        addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(idToBytes(box.id)))
+        addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(box.id))
       } else {
         addressUtxos
       }  
@@ -271,11 +273,11 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       } else {
         val maxLimit = 200; 
         val newLimit = Math.min(limit * 2, maxLimit); // Prevents limit becoming too large
-        fetchAndFilter(newLimit, updatedAccumulated) 
+        fetchAndFilter(newLimit, updatedAccumulated)
       }
     }
   }
-  val originalLimit = limit
+
   fetchAndFilter(originalLimit)
 }
 

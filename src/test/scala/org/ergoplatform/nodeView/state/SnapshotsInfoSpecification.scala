@@ -1,8 +1,9 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 
-class SnapshotsInfoSpecification extends ErgoPropertyTest {
+class SnapshotsInfoSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
  property("makeEmpty / nonEmpty / withNewManifest") {
    val empty = SnapshotsInfo.empty

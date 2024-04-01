@@ -25,6 +25,9 @@ import sigmastate.interpreter.ProverResult
 import sigma.Extensions._
 
 trait WalletTestOps extends NodeViewBaseOps {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
   def newAssetIdStub: TokenId = Blake2b256.hash("new_asset").toTokenId
 

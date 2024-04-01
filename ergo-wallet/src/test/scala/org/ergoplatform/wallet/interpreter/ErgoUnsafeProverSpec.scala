@@ -2,7 +2,6 @@ package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -12,8 +11,9 @@ class ErgoUnsafeProverSpec
   extends AnyFlatSpec
     with ScalaCheckPropertyChecks
     with Matchers
-    with Generators
     with InterpreterSpecCommon {
+  import org.ergoplatform.wallet.utils.WalletGenerators._
+
 
   it should "produce the same proof as a fully-functional prover" in {
     val entropy = Random.randomBytes(32)

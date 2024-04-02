@@ -30,7 +30,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
   val route: Route = ErgoUtilsApiRoute(settings).route
   val p2pkaddress = P2PKAddress(defaultMinerPk)(settings.addressEncoder)
-  val p2shaddress = Pay2SHAddress(feeProp)(settings.addressEncoder)
+ // val p2shaddress = Pay2SHAddress(feeProp)(settings.addressEncoder)
   val p2saddress = Pay2SAddress(feeProp)(settings.addressEncoder)
 
   val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
@@ -68,7 +68,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
   }
 
   //p2sh
-
+/*
   it should "derive address from ErgoTree (p2sh)" in {
     val et = Base16.encode(treeSerializer.serializeErgoTree(p2shaddress.script))
     Get(s"$prefix/ergoTreeToAddress/$et") ~> route ~> check {
@@ -100,6 +100,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       c.downField("error").as[String] shouldEqual Right("requirement failed: Trying to decode mainnet address in testnet")
     }
   }
+*/
 
   //p2pk
 

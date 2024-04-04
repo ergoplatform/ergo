@@ -79,12 +79,10 @@ object DifficultySerializer extends ErgoSerializer[NBits] {
     * a 4 byte big endian length field, followed by the stated number of bytes representing
     * the number in big endian format (with a sign bit).
     */
-  @SuppressWarnings(Array("NullAssignment"))
   private def decodeMPI(mpi: Array[Byte]): BigInteger = {
-    var buf: Array[Byte] = null // scalastyle:ignore
 
     val length: Int = readUint32BE(mpi).toInt
-    buf = new Array[Byte](length)
+    val buf = new Array[Byte](length)
     System.arraycopy(mpi, 4, buf, 0, length)
 
     if (buf.length == 0) {

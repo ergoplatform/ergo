@@ -40,7 +40,7 @@ object DifficultySerializer extends ErgoSerializer[NBits] {
     if (size >= 1) bytes(4) = ((compact >> 16) & 0xFF).toByte
     if (size >= 2) bytes(5) = ((compact >> 8) & 0xFF).toByte
     if (size >= 3) bytes(6) = (compact & 0xFF).toByte
-    decodeMPI(bytes, hasLength = true)
+    decodeMPI(bytes)
   }
 
   /**
@@ -78,19 +78,15 @@ object DifficultySerializer extends ErgoSerializer[NBits] {
     * MPI encoded numbers are produced by the OpenSSL BN_bn2mpi function. They consist of
     * a 4 byte big endian length field, followed by the stated number of bytes representing
     * the number in big endian format (with a sign bit).
-    *
-    * @param hasLength can be set to false if the given array is missing the 4 byte length field
     */
   @SuppressWarnings(Array("NullAssignment"))
-  private def decodeMPI(mpi: Array[Byte], hasLength: Boolean): BigInteger = {
+  private def decodeMPI(mpi: Array[Byte]): BigInteger = {
     var buf: Array[Byte] = null // scalastyle:ignore
-    if (hasLength) {
-      val length: Int = readUint32BE(mpi).toInt
-      buf = new Array[Byte](length)
-      System.arraycopy(mpi, 4, buf, 0, length)
-    } else {
-      buf = mpi
-    }
+
+    val length: Int = readUint32BE(mpi).toInt
+    buf = new Array[Byte](length)
+    System.arraycopy(mpi, 4, buf, 0, length)
+
     if (buf.length == 0) {
       BigInteger.ZERO
     } else {

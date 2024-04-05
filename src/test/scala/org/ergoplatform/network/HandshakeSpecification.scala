@@ -3,7 +3,6 @@ package org.ergoplatform.network
 import java.nio.ByteBuffer
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.network.message.HandshakeSerializer
 import scorex.util.encode.Base16
 
 class HandshakeSpecification extends ErgoPropertyTest with DecodingUtils {

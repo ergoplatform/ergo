@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.wallet.utils.TestFileUtils
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -42,7 +42,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   with SyntacticallyTargetedModifierProducer
   with TotallyValidModifierProducer[ST]
   with ChainGenerator
-  with TestFileUtils {
+  with FileUtils {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 

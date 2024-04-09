@@ -8,7 +8,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.HistoryTestHelpers
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.serialization.{ManifestSerializer, SubtreeSerializer}
-import scorex.db.LDBVersionedStore
+import scorex.db.RocksDBVersionedStore
 import scorex.util.ModifierId
 
 import scala.util.Random
@@ -79,7 +79,7 @@ class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
     s shouldBe subtreeIdsEncoded
 
     val dir = createTempDir
-    val store = new LDBVersionedStore(dir, initialKeepVersions = 100)
+    val store = new RocksDBVersionedStore(dir, initialKeepVersions = 100)
     val restoredProver = utxoSetSnapshotProcessor.createPersistentProver(store, history, snapshotHeight, blockId).get
     bh.sortedBoxes.foreach { box =>
       restoredProver.unauthenticatedLookup(box.id).isDefined shouldBe true

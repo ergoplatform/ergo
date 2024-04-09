@@ -16,6 +16,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.utils.FileUtils
 import org.ergoplatform.{DataInput, ErgoBox, ErgoTreePredef}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -27,7 +28,7 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.concurrent.duration._
 
-trait ErgoTestConstants extends ScorexLogging {
+trait ErgoTestConstants extends ScorexLogging with FileUtils {
 
   implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128, 32 * 1024, "01")
   val validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial

@@ -35,7 +35,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTr
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
-import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
+import scorex.crypto.authds.avltree.batch.VersionedRocksDBAVLStorage.splitDigest
 
 import scala.annotation.tailrec
 import scala.collection.mutable

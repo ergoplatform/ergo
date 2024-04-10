@@ -14,8 +14,8 @@ import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
-import org.ergoplatform.utils.generators.ErgoTransactionGenerators
+import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
+import org.scalatest.OptionValues
 import scorex.crypto.authds.ADKey
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId}
@@ -30,8 +30,13 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
 
-
-class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
+class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   private val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
@@ -188,7 +193,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     var height: Int = GenesisHeight
     // generate chain of correct full blocks
     val chain = (0 until 10) map { _ =>
-      val header = defaultHeaderGen.sample.value
+      val header: Header = defaultHeaderGen.sample.value
       val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
       val txs = t._1
       bh = t._2

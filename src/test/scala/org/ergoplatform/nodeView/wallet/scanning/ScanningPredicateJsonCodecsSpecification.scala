@@ -2,15 +2,15 @@ package org.ergoplatform.nodeView.wallet.scanning
 
 import io.circe.parser._
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.utils.generators.WalletGenerators
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.util.encode.Base16
 import sigma.ast.ByteArrayConstant
 import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.language.implicitConversions
 
-class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with WalletGenerators {
+class ScanningPredicateJsonCodecsSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
 
   import ScanningPredicateJsonCodecs.{scanningPredicateDecoder, scanningPredicateEncoder}
 

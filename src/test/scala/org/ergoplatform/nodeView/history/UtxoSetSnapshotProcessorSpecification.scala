@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.serialization.{ManifestSerializer, SubtreeSerializer}
 import scorex.db.LDBVersionedStore
@@ -13,9 +13,15 @@ import scorex.util.ModifierId
 
 import scala.util.Random
 
-class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
+class UtxoSetSnapshotProcessorSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ChainGenerator._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
-  private val s = settings
+  val s = settings
 
   val epochLength = 20
 

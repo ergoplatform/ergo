@@ -12,8 +12,7 @@ import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanR
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform.utils.generators.ErgoTransactionGenerators
-import org.ergoplatform.utils.{ErgoPropertyTest, MempoolTestHelpers, WalletTestOps}
+import org.ergoplatform.utils.{ErgoCorePropertyTest, MempoolTestHelpers, WalletTestOps}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
@@ -32,13 +31,19 @@ import scala.collection.compat.immutable.ArraySeq
 import scala.util.Random
 
 class ErgoWalletServiceSpec
-  extends ErgoPropertyTest
+  extends ErgoCorePropertyTest
     with MempoolTestHelpers
     with WalletTestOps
     with ErgoWalletSupport
-    with ErgoTransactionGenerators
     with DBSpec
     with BeforeAndAfterAll {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
+  import org.ergoplatform.utils.generators.CoreObjectGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   override val ergoSettings: ErgoSettings = settings
 

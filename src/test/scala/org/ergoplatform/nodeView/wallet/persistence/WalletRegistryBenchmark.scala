@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletVars}
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
-import org.ergoplatform.utils.ErgoTestConstants
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
@@ -18,7 +17,9 @@ import sigma.interpreter.{ContextExtension, ProverResult}
 
 import scala.collection.compat.immutable.ArraySeq
 
-object WalletRegistryBenchmark extends App with ErgoTestConstants {
+object WalletRegistryBenchmark extends App {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 
   def createBox(value: Long,
                 ergoTree: ErgoTree,

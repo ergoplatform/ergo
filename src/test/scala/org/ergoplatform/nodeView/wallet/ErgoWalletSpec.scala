@@ -25,7 +25,12 @@ import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.concurrent.duration._
 
-class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually {
+class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventually {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.wallet.utils.WalletGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
 

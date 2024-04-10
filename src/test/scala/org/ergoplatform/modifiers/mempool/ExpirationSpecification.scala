@@ -2,7 +2,7 @@ package org.ergoplatform.modifiers.mempool
 
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
@@ -13,7 +13,11 @@ import sigma.interpreter.{ContextExtension, ProverResult}
 import sigmastate.helpers.TestingHelpers._
 import sigma.serialization.ErgoTreeSerializer
 
-class ExpirationSpecification extends ErgoPropertyTest {
+class ExpirationSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.NodeViewTestOps._
 
   type Height = Int
 

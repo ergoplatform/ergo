@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
+import org.ergoplatform.utils.{ErgoCorePropertyTest, WalletTestOps}
+import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
@@ -14,7 +16,10 @@ import sigma.ast.{ByteArrayConstant, ErgoTree, FalseLeaf, TrueLeaf}
 
 import scala.util.Random
 
-class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOps {
+class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTestOps {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.wallet.utils.WalletGenerators._
 
   private case class TrackedTransaction(tx: ErgoTransaction,
                                         payments: List[ErgoTree],

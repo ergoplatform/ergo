@@ -14,9 +14,13 @@ import sigma.ast.{ByteArrayConstant, ErgoTree, TrueLeaf}
 import sigma.interpreter.{ContextExtension, ProverResult}
 
 class ErgoMemPoolSpec extends AnyFlatSpec
-  with ErgoGenerators
   with ErgoTestHelpers
   with ScalaCheckPropertyChecks {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   it should "accept valid transaction" in {
     val (us, bh) = createUtxoState(settings)

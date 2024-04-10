@@ -20,6 +20,7 @@ case class IndexerState(indexedHeight: Int,
   def rollbackInProgress: Boolean = rollbackTo > 0
 
   def incrementIndexedHeight: IndexerState = copy(indexedHeight = indexedHeight + 1)
+  def decrementIndexedHeight: IndexerState = copy(indexedHeight = indexedHeight - 1)
 
   def incrementTxIndex: IndexerState = copy(globalTxIndex = globalTxIndex + 1)
   def incrementBoxIndex: IndexerState = copy(globalBoxIndex = globalBoxIndex + 1)

@@ -4,10 +4,8 @@ import org.ergoplatform.utils.{ErgoCorePropertyTest, WalletTestOps}
 import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
-import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}

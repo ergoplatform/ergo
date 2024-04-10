@@ -27,8 +27,8 @@ import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
-import org.ergoplatform.settings.{ScorexSettings, _}
+import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators
+import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.{augWalletTransactionForScanGen, augWalletTransactionGen, boxesHolderGen}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interface4j.SecretString
@@ -37,7 +37,6 @@ import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
-import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.ByteArrayWrapper
@@ -53,7 +52,6 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ChainGenerator._
-  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
@@ -67,7 +65,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
   val history: HT = applyChain(generateHistory(), chain)
 
   val digestState: DigestState = {
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
+    ErgoNodeTransactionGenerators.boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
       DigestState.create(Some(wus.version), Some(wus.rootDigest), createTempDir, settings)
     }
   }.sample.value

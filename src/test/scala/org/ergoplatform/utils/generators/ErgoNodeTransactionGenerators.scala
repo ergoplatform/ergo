@@ -1,5 +1,6 @@
 package org.ergoplatform.utils.generators
 
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext}
@@ -11,7 +12,9 @@ import org.ergoplatform.utils.{BoxUtils, RandomLike, RandomWrapper}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.EmptyHistoryHeight
 import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.wallet.utils.WalletGenerators.{additionalRegistersGen, additionalTokensGen, boxIdGen, ergoBoxGen, validValueGen}
 import org.scalacheck.Gen
 import scorex.db.ByteArrayWrapper
 import scorex.util.ScorexLogging
@@ -22,7 +25,6 @@ import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers._
 import sigma.eval.Extensions.EvalIterableOps
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
@@ -31,9 +33,6 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
-
-  protected implicit val addressEncoder: ErgoAddressEncoder =
-    ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue / 2)
 

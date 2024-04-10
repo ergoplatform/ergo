@@ -5,7 +5,6 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, So
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform.utils.generators.ErgoGenerators
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks

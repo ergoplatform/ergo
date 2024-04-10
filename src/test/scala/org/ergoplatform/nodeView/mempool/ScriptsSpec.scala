@@ -4,27 +4,25 @@ import org.ergoplatform.ErgoAddressEncoder.TestnetNetworkPrefix
 import org.ergoplatform.ErgoTreePredef.boxCreationHeight
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
-import org.ergoplatform.{ErgoBox, ErgoTreePredef}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.utils.FileUtils
-import org.ergoplatform.{ErgoBox, ErgoTreePredef, Height, Self}
+import org.ergoplatform.{ErgoBox, ErgoTreePredef}
 import scorex.crypto.authds.avltree.batch.Remove
 import sigma.ast.syntax.ValueOps
 import sigma.ast.{TransformingSigmaBuilder, _}
-import sigmastate._
 import sigma.crypto.CryptoConstants.dlogGroup
 import sigma.data.ProveDlog
+import sigmastate._
 import sigmastate.eval.{CompiletimeIRContext, IRContext}
 import sigmastate.lang.{CompilerSettings, SigmaCompiler}
 
 import scala.util.Try
 
 class ScriptsSpec extends ErgoCorePropertyTest with FileUtils {
-  import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
-  import org.ergoplatform.wallet.utils.WalletGenerators._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+  import org.ergoplatform.wallet.utils.WalletGenerators._
 
   val compiler = SigmaCompiler(
     CompilerSettings(TestnetNetworkPrefix, TransformingSigmaBuilder, lowerMethodCalls = true)

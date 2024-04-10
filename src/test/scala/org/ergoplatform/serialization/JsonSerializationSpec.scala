@@ -7,14 +7,9 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
-import org.ergoplatform.settings.{Algos, ErgoSettingsReader}
-import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.utils.generators.WalletGenerators
-import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.boxes.TrackedBox
-import org.scalatest.Inspectors
-import sigma.ast.{ErgoTree, EvaluatedValue, SType}
+import org.ergoplatform.settings.ErgoSettingsReader
+import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.scalatest.{EitherValues, Inspectors}
 
 import scala.util.Random
 

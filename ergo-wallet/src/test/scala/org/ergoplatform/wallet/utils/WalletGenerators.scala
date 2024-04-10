@@ -3,7 +3,6 @@ package org.ergoplatform.wallet.utils
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.sdk.wallet.secrets._
 import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
-import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.mnemonic.{Mnemonic, WordList}
@@ -16,10 +15,9 @@ import sigma.ast._
 import sigma.ast.syntax._
 import sigma.crypto.CryptoFacade.SecretKeyLength
 import sigma.data.ProveDlog
-import sigma.util.Extensions.SigmaBooleanOps
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.{SByte, SType}
+import sigma.eval.Extensions._
 
 object WalletGenerators {
 
@@ -177,7 +175,7 @@ object WalletGenerators {
     val dlog: Gen[ErgoTree] = Gen.const(
       ErgoTree.fromProposition(
 
-        secret.privateInput.publicImage.asInstanceOf[ProveDlog].toSigmaProp))
+        secret.privateInput.publicImage.asInstanceOf[ProveDlog].toSigmaPropValue))
 
     for {
       ins <- Gen.listOfN(2, ergoBoxGen(dlog))

@@ -11,10 +11,7 @@ import org.ergoplatform.network.ModePeerFeature
 import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
-import org.ergoplatform.testkit.generators.CoreGenerators
-import org.ergoplatform.utils.ErgoTestConstants
 import sigma.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
-import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}

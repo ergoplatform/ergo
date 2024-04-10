@@ -4,10 +4,9 @@ import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.ValidationRules.rulesSpec
-import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.validation.{ValidationRules => VR}
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import org.ergoplatform.validation.{DisabledRule, ReplacedRule, ValidationRules => VR}
+import org.ergoplatform.validation.{ValidationRules => VR}
 import scorex.crypto.authds.ADDigest
 import sigma.validation.{DisabledRule, ReplacedRule}
 import sigmastate.utils.Helpers._

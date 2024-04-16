@@ -13,7 +13,7 @@ import scala.annotation.tailrec
   * If yes, it returns the result mod q, otherwise make one more iteration using hash as an input.
   * This is done to ensure uniform distribution of the resulting numbers.
   */
-class NumericHash(val q: BigInt) extends ScorexLogging with ScorexEncoding {
+class ModQHash(val q: BigInt) extends ScorexLogging with ScorexEncoding {
   assert(q.bigInteger.bitLength() <= 256, "We use 256 bit hash here")
   // biggest number <= 2^256 that is divisible by q without remainder
   val validRange: BigInt = (BigInt(2).pow(256) / q) * q

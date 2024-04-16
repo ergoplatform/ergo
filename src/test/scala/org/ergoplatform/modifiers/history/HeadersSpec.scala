@@ -61,7 +61,7 @@ class HeadersSpec extends ErgoCorePropertyTest {
 
     require(HeaderSerializer.parseBytesTry(updByteWithoutPow ++ AutolykosSolutionSerializer.toBytes(ver, solution)).isSuccess)
 
-    // todo: but unparsed bytes are not stored in Header, so 
+    // todo: but unparsed bytes are not stored in Header, so roundtrip is broken
   }
 
 }

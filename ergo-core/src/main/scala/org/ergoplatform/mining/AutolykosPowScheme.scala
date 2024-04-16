@@ -97,25 +97,37 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Checks that `header` contains correct solution of the Autolykos PoW puzzle.
     */
   def validate(header: Header): Try[Unit] = Try {
-    val b = getB(header.nBits)
     if (header.version == 1) {
       // for version 1, we check equality of left and right sides of the equation
-      require(checkPoWForVersion1(header, b), "Incorrect points")
+      require(checkPoWForVersion1(header), "Incorrect points")
     } else {
-      // for version 2, we're calculating hit and compare it with target
-      val hit = hitForVersion2(header)
-      require(hit < b, "h(f) < b condition not met")
+      require(checkPoWForVersion2(header), "h(f) < b condition not met")
     }
+  }
+
+  /**
+    * Check PoW for Autolykos v2 header
+    *
+    * @param header - header to check PoW for
+    * @return whether PoW is valid or not
+    */
+  def checkPoWForVersion2(header: Header): Boolean = {
+    val b = getB(header.nBits)
+    // for version 2, we're calculating hit and compare it with target
+    val hit = hitForVersion2(header)
+    hit < b
   }
 
   /**
     * Check PoW for Autolykos v1 header
     *
     * @param header - header to check PoW for
-    * @param b - PoW target
     * @return whether PoW is valid or not
     */
-  def checkPoWForVersion1(header: Header, b: BigInt): Boolean = {
+  def checkPoWForVersion1(header: Header): Boolean = {
+
+    val b = getB(header.nBits) // PoW target
+
     val version = 1: Byte
 
     val msg = msgByHeader(header)
@@ -175,6 +187,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32, f2.underlying())
     val ha = hash(array)
     toBigInt(ha)
+  }
+
+  def hitForVersion2ForMessage(msg: Array[Byte], nonce: Array[Byte]): BigInt = {
+
   }
 
   /**
@@ -244,7 +260,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   //Proving-related code which is not critical for consensus below
 
   /**
-    * Find a nonce from `minNonce` to `maxNonce`, such that header with the specified fields will contain
+    * Autolykos solver suitable for CPU-mining in testnet and devnets.
+    *
+    * Finds a nonce from `minNonce` to `maxNonce`, such that header with the specified fields will contain
     * correct solution of the Autolykos PoW puzzle.
     */
   def prove(parentOpt: Option[Header],

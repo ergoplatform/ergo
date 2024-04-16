@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.{Ints, Longs}
-import org.ergoplatform.mining.{AutolykosPowScheme, q, randomSecret}
+import org.ergoplatform.mining.{AutolykosPowScheme, AutolykosSolutionSerializer, randomSecret}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -55,9 +55,13 @@ class HeadersSpec extends ErgoCorePropertyTest {
     val b = pow.getB(header.nBits)
     val hbs = Ints.toByteArray(header.height)
     val N = pow.calcN(header)
-    val newHeader = pow.checkNonces(ver, hbs, msg, sk, x, b, N, 0, 1000)
-      .map(s => header.copy(powSolution = s)).get
-    pow.validate(newHeader) shouldBe 'success
+    val solution = pow.checkNonces(ver, hbs, msg, sk, x, b, N, 0, 1000).get
+
+    require(pow.hitForVersion2ForMessage(msg, solution.n, hbs, N) < b)
+
+    require(HeaderSerializer.parseBytesTry(updByteWithoutPow ++ AutolykosSolutionSerializer.toBytes(ver, solution)).isSuccess)
+
+    // todo: but unparsed bytes are not stored in Header, so 
   }
 
 }

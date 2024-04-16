@@ -27,6 +27,10 @@ import scala.util.Try
   * Based on k-sum problem, so general idea is to find k numbers in a table of size N, such that
   * sum of numbers (or a hash of the sum) is less than target value.
   *
+  * There are two version of Autolykos PoW scheme, Autolykos v1 and v2. The main difference is that
+  * Autolykos v1 is (weakly) non-outsourceable, while v2 is outsourceable and also eliminates some vectors of
+  * optimizations a miner could follow.
+  *
   * See https://docs.ergoplatform.com/ErgoPow.pdf for details
   *
   * CPU Mining process is implemented in inefficient way and should not be used in real environment.
@@ -164,7 +168,6 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * @return PoW hit
     */
   def hitForVersion2(header: Header): BigInt = {
-    val version = 2: Byte
 
     val msg = msgByHeader(header)
     val nonce = header.powSolution.n
@@ -172,6 +175,25 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val h = Ints.toByteArray(header.height)  // used in AL v.2 only
 
     val N = calcN(header)
+
+    hitForVersion2ForMessage(msg, nonce, h, N)
+  }
+
+  /**
+    * Get a PoW hit for custom message (not necessarily a block header) with Autolykos v2.
+    *
+    * PoW then can can be checked as hit < b, where b is PoW target value
+    *
+    * @param msg - message to check PoW on
+    * @param nonce - PoW nonce
+    * @param h - for Ergo blockchain, this is height encoded as bytes. For other use-cases, could be
+    *            unique value on each call or constant (in the latter case more pre-computations
+    *            could be possible
+    * @param N - table size
+    * @return pow hit
+    */
+  def hitForVersion2ForMessage(msg: Array[Byte], nonce: Array[Byte], h: Array[Byte], N: Int): BigInt = {
+    val version = 2: Byte // autolykos protocol version, used in genElement only
 
     val prei8 = BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(msg, nonce)).takeRight(8))
     val i = BigIntegers.asUnsignedByteArray(4, prei8.mod(BigInt(N).underlying()))
@@ -187,10 +209,6 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32, f2.underlying())
     val ha = hash(array)
     toBigInt(ha)
-  }
-
-  def hitForVersion2ForMessage(msg: Array[Byte], nonce: Array[Byte]): BigInt = {
-
   }
 
   /**

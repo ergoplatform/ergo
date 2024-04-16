@@ -206,7 +206,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Get target `b` from encoded difficulty `nBits`
     */
-  private[mining] def getB(nBits: Long): BigInt = {
+  def getB(nBits: Long): BigInt = {
     q / DifficultySerializer.decodeCompactBits(nBits)
   }
 
@@ -327,7 +327,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
-  private[mining] def checkNonces(version: Header.Version,
+  def checkNonces(version: Header.Version,
                                   h: Array[Byte],
                                   m: Array[Byte],
                                   sk: BigInt,

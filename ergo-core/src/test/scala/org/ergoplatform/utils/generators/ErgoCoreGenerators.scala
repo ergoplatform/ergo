@@ -172,6 +172,7 @@ object ErgoCoreGenerators {
     extensionHash,
     powSolution,
     Array.fill(3)(0: Byte),
+    Array.emptyByteArray,
     None
   )
 

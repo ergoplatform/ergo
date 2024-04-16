@@ -53,8 +53,9 @@ case class Header(override val version: Header.Version,
                   override val extensionRoot: Digest32,
                   powSolution: AutolykosSolution,
                   override val votes: Array[Byte], //3 bytes
+                  override val unparsedBytes: Array[Byte],
                   override val sizeOpt: Option[Int] = None) extends HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-  nBits, height, extensionRoot, votes) with PreHeader with BlockSection {
+  nBits, height, extensionRoot, votes, unparsedBytes) with PreHeader with BlockSection {
 
   override def serializedId: Array[Header.Version] = Algos.hash(bytes)
 
@@ -180,7 +181,8 @@ object Header extends ApiCodecs {
       "size" -> h.size.asJson,
       "extensionId" -> Algos.encode(h.extensionId).asJson,
       "transactionsId" -> Algos.encode(h.transactionsId).asJson,
-      "adProofsId" -> Algos.encode(h.ADProofsId).asJson
+      "adProofsId" -> Algos.encode(h.ADProofsId).asJson,
+      "unparsedBytes" -> Algos.encode(h.unparsedBytes).asJson
     ).asJson
   }
 
@@ -197,8 +199,10 @@ object Header extends ApiCodecs {
       version <- c.downField("version").as[Byte]
       votes <- c.downField("votes").as[String]
       solutions <- c.downField("powSolutions").as[AutolykosSolution]
+      unparsedBytes <- c.downField("unparsedBytes").as[Option[Array[Byte]]]
     } yield Header(version, parentId, adProofsRoot, stateRoot,
-      transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get)
+      transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get,
+      unparsedBytes.getOrElse(Array.emptyByteArray))
   }
 
 }

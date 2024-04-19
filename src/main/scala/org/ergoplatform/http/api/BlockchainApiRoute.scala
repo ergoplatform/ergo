@@ -255,24 +255,18 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   def fetchAndFilter(limit: Int, accumulated: Seq[IndexedErgoBox] = Seq.empty): Future[Seq[IndexedErgoBox]] = {
     getHistoryWithMempool.flatMap { case (history, mempool) =>
+      val spentBoxesIdsInMempool = if (excludeMempoolSpent) mempool.spentInputs.map(bytesToId).toSet else Set.empty[ModifierId]
+
       val addressUtxos = getAddress(addr)(history)
         .getOrElse(IndexedErgoAddress(hashErgoTree(addr.script)))
-        .retrieveUtxos(history, mempool, offset + accumulated.length, limit, sortDir, unconfirmed)
+        .retrieveUtxos(history, mempool, offset + accumulated.length, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
 
-      val spentBoxesIdsInMempool: Set[ModifierId] = mempool.spentInputs.map(bytesToId).toSet
-      val newUtxos = if (excludeMempoolSpent) {
-        addressUtxos.filterNot(box => spentBoxesIdsInMempool.contains(box.id))
-      } else {
-        addressUtxos
-      }  
-      
-      val updatedAccumulated = accumulated ++ newUtxos
-      // If reached limit OR we have obtained the maximumm available UTXOS (returned amount < limit), return successful. 
+      val updatedAccumulated = accumulated ++ addressUtxos
       if (updatedAccumulated.length >= originalLimit || addressUtxos.length < limit) {
-        Future.successful(updatedAccumulated.take(originalLimit)) // Just to ensure that no more than limit is taken
+        Future.successful(updatedAccumulated.take(originalLimit))
       } else {
-        val maxLimit = 200; 
-        val newLimit = Math.min(limit * 2, maxLimit); // Prevents limit becoming too large
+        val maxLimit = 200
+        val newLimit = Math.min(limit * 2, maxLimit)
         fetchAndFilter(newLimit, updatedAccumulated)
       }
     }

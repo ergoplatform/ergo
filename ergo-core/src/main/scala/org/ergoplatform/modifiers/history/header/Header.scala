@@ -138,6 +138,11 @@ object Header extends ApiCodecs {
     */
   val Interpreter50Version: Byte = 3
 
+  /**
+    * Block version after the 6.0 soft-fork
+    * 6.0 interpreter (EIP-50)
+    */
+  val Interpreter60Version: Byte = 4
 
   def toSigma(header: Header): sigma.Header =
     CHeader(

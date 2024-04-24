@@ -59,7 +59,8 @@ object HeaderSerializer extends ErgoSerializer[Header] {
     // If this byte > 0, we read new fields but do nothing, as semantics of the fields is not known.
     val unparsedBytes = if (version > Header.InitialVersion) {
       val newFieldsSize = r.getUByte()
-      if (newFieldsSize > 0) {  // todo: check protocol version?
+      if (newFieldsSize > 0 && version > Header.Interpreter60Version) {
+        // new bytes could be added only for block version >= 5
         r.getBytes(newFieldsSize)
       } else {
         Array.emptyByteArray

@@ -40,6 +40,7 @@ import scala.concurrent.duration.FiniteDuration
   * @param extensionRoot - Merkle tree digest of the extension section of the block
   * @param powSolution - solution for the proof-of-work puzzle
   * @param votes - votes for changing system parameters
+  * @param unparsedBytes - bytes of fields added in future versions of the protocol and not parseable
   * @param sizeOpt - optionally, size of the header (to avoid serialization on calling .length)
   */
 case class Header(override val version: Header.Version,
@@ -139,6 +140,11 @@ object Header extends ApiCodecs {
     */
   val Interpreter50Version: Byte = 3
 
+  /**
+    * Block version after the 6.0 soft-fork
+    * 6.0 interpreter (EIP-50)
+    */
+  val Interpreter60Version: Byte = 4
 
   def toSigma(header: Header): sigma.Header =
     CHeader(

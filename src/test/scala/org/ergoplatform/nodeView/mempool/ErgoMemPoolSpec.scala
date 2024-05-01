@@ -1,15 +1,16 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.{ErgoBoxCandidate, Input}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{SortingOption, ProcessingOutcome}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import sigmastate.Values.{ByteArrayConstant, TrueLeaf}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigma.ast.ErgoTree.ZeroHeader
+import sigma.ast.{ByteArrayConstant, ErgoTree, TrueLeaf}
+import sigma.interpreter.{ContextExtension, ProverResult}
 
 class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoTestHelpers
@@ -101,8 +102,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         val wus = WrappedUtxoState(us, bh, settings, extendedParameters).applyModifier(genesis)(_ => ()).get
 
         val feeProp = settings.chainSettings.monetary.feeProposition
+        val trueTree = ErgoTree.withSegregation(ZeroHeader, TrueLeaf.toSigmaProp)
         val inputBox = wus.takeBoxes(100).collectFirst{
-          case box if box.ergoTree == TrueLeaf.toSigmaProp.treeWithSegregation => box
+          case box if box.ergoTree == trueTree => box
         }.get
         val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
 

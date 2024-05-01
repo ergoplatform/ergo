@@ -17,7 +17,7 @@ import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.ergoplatform.wallet.boxes.{BoxSelector, ReplaceCompactCollectBoxSelector}
 import org.scalatest.matchers.should.Matchers
 import scorex.util.ModifierId
-import sigmastate.crypto.DLogProtocol.ProveDlog
+import sigma.data.ProveDlog
 
 import java.io.File
 import scala.annotation.tailrec

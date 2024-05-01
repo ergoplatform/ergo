@@ -13,10 +13,10 @@ import org.ergoplatform._
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ScorexLogging
-import sigmastate.Values.ErgoTree
-import sigmastate.crypto.DLogProtocol.ProveDlog
+import sigma.ast.ErgoTree
+import sigma.data.ProveDlog
+import sigma.eval.Extensions._
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -48,7 +48,7 @@ object ErgoCoreTransactionGenerators extends ScorexLogging {
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
     value <- validValueGen
-  } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
+  } yield new ErgoBoxCandidate(value, ErgoTree.fromSigmaBoolean(prop), h, tokens.toColl, ar)
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = ergoBoxGen(propGen = trueLeafGen)
 

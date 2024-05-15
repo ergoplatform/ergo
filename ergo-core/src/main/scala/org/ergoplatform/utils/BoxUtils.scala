@@ -5,8 +5,7 @@ import org.ergoplatform.settings.{Algos, Parameters}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import scorex.util.ModifierId
 import sigma.{Coll, Colls}
-import sigmastate.Values.ErgoTree
-import sigmastate.eval._
+import sigma.ast.ErgoTree
 
 object BoxUtils {
 

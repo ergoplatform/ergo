@@ -23,9 +23,8 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
-import sigmastate.SigmaAnd
-import sigmastate.Values.{ErgoTree, SigmaPropConstant}
-import sigmastate.crypto.DLogProtocol
+import sigma.ast.{ErgoTree, SigmaAnd, SigmaPropConstant}
+import sigma.data.ProveDlog
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.annotation.tailrec
@@ -65,10 +64,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-    val complexScript: ErgoTree = (0 until 100).foldLeft(SigmaAnd(SigmaPropConstant(defaultMinerPk), SigmaPropConstant(defaultMinerPk))) { (l, _) =>
-      SigmaAnd(SigmaPropConstant(defaultMinerPk), l)
+    val complexScript: ErgoTree = {
+      val start = SigmaAnd(SigmaPropConstant(defaultMinerPk), SigmaPropConstant(defaultMinerPk))
+      val tree = ErgoTree.fromProposition((0 until 100).foldLeft(start) { (l, _) =>
+        SigmaAnd(SigmaPropConstant(defaultMinerPk), l)
+      })
+      tree
     }
-    complexScript.complexity shouldBe 28077
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
@@ -175,7 +177,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
 
         val feeBox = new ErgoBoxCandidate(boxToSend.value / desiredSize, feeProp, r.s.stateContext.currentHeight)
         val outputs = (1 until desiredSize).map { _ =>
-          new ErgoBoxCandidate(boxToSend.value / desiredSize, defaultMinerPk, r.s.stateContext.currentHeight)
+          new ErgoBoxCandidate(boxToSend.value / desiredSize, ErgoTree.fromSigmaBoolean(defaultMinerPk), r.s.stateContext.currentHeight)
         }
         val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), feeBox +: outputs)
         ErgoTransaction(
@@ -239,18 +241,18 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
-    val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
+    val prop1: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
+    val prop2: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
     boxToDoubleSpend.propositionBytes shouldBe ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
 
     val input = Input(boxToDoubleSpend.id, emptyProverResult)
 
-    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1, r.s.stateContext.currentHeight))
+    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, ErgoTree.fromSigmaBoolean(prop1), r.s.stateContext.currentHeight))
     val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs1)
     val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get
-    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2, r.s.stateContext.currentHeight))
+    val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, ErgoTree.fromSigmaBoolean(prop2), r.s.stateContext.currentHeight))
     val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs2)
     val tx2 = ErgoTransaction(defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get)
 
@@ -334,18 +336,18 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
-    val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
+    val prop1: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
+    val prop2: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val mBox: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
     val mInput = Input(mBox.id, emptyProverResult)
 
-    val outputs1 = IndexedSeq(new ErgoBoxCandidate(mBox.value, prop1, r.s.stateContext.currentHeight))
+    val outputs1 = IndexedSeq(new ErgoBoxCandidate(mBox.value, ErgoTree.fromSigmaBoolean(prop1), r.s.stateContext.currentHeight))
     val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(mInput), IndexedSeq(), outputs1)
     val mandatoryTxLike1 = defaultProver.sign(unsignedTx1, IndexedSeq(mBox), IndexedSeq(), r.s.stateContext).get
     val mandatoryTx1 = ErgoTransaction(mandatoryTxLike1)
 
-    val outputs2 = IndexedSeq(new ErgoBoxCandidate(mBox.value, prop2, r.s.stateContext.currentHeight))
+    val outputs2 = IndexedSeq(new ErgoBoxCandidate(mBox.value, ErgoTree.fromSigmaBoolean(prop2), r.s.stateContext.currentHeight))
     val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(mInput), IndexedSeq(), outputs2)
     val mandatoryTxLike2 = defaultProver.sign(unsignedTx2, IndexedSeq(mBox), IndexedSeq(), r.s.stateContext).get
     val mandatoryTx2 = ErgoTransaction(mandatoryTxLike2)

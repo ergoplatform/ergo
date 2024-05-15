@@ -20,11 +20,9 @@ import org.ergoplatform.wallet.protocol.context.InputContext
 import org.scalacheck.Gen
 import sigma.util.BenchmarkUtil
 import scorex.crypto.hash.Blake2b256
-import scorex.util.encode.Base16
-import sigma.Colls
-import sigmastate.AND
+import sigma.ast.ErgoTree.ZeroHeader
+import sigma.ast.{AND, ErgoTree, TrueLeaf}
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.Values.TrueLeaf
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.{Random, Try}
@@ -449,7 +447,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
 
      forAll(smallPositiveInt) { inputsNum =>
 
-       val nonTrivialTrueGen = Gen.const(AND(Seq(TrueLeaf, TrueLeaf)).toSigmaProp.treeWithSegregation)
+       val nonTrivialTrueGen = Gen.const(ErgoTree.withSegregation(ZeroHeader, AND(Seq(TrueLeaf, TrueLeaf)).toSigmaProp))
        val gen = validErgoTransactionGenTemplate(0, 0, inputsNum, nonTrivialTrueGen)
        val (from, tx) = gen.sample.get
        tx.statelessValidity().isSuccess shouldBe true

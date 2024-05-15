@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history.header
 
-import cats.syntax.either._
+import cats.syntax.either._  // needed for Scala 2.11
 import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}

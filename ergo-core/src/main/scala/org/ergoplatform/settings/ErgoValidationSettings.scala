@@ -12,9 +12,7 @@ import sigma.validation.SigmaValidationSettings
 import scala.util.Try
 
 /**
-  * Ergo configuration of validation.
-  *
-  * Specifies the strategy to be used (fail-fast) and validation rules with their statuses.
+  * Container for validation rules along with their statuses.
   * Contains delta from the initial validation rules `updateFromInitial` as well as calculated current rules,
   * that might also be computed by applying `updateFromInitial` to `ErgoValidationSettings.initial`
   *
@@ -29,6 +27,9 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
 
   override type M = ErgoValidationSettings
 
+  /**
+    * In regards with consensus rules, it is worth to fail fast to avoid spam issues.
+    */
   override val isFailFast: Boolean = true
 
   override def getError(id: Short, invalidMod: InvalidModifier): ValidationResult.Invalid = {

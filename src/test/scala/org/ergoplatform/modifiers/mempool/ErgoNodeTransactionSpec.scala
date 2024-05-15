@@ -5,21 +5,27 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.eval.Extensions._
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
+import org.ergoplatform.validation.ValidationRules.CheckAndGetMethod
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.scalacheck.Gen
 import sigma.util.BenchmarkUtil
 import scorex.crypto.hash.Blake2b256
+import scorex.util.encode.Base16
+import sigma.Colls
 import sigma.ast.ErgoTree.ZeroHeader
 import sigma.ast.{AND, ErgoTree, TrueLeaf}
+import sigma.interpreter.{ContextExtension, ProverResult}
+import sigma.serialization.ErgoTreeSerializer.DefaultSerializer
+import sigma.validation.ReplacedRule
 import sigmastate.helpers.TestingHelpers._
 
 import scala.util.{Random, Try}
@@ -478,4 +484,45 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
        txCost shouldBe (accInitCost + initialCost + inputCost(tx, from) * inputsNum)
      }
    }
+
+  /**
+    * In this test we check how current version of the node (block protocol v3, at the moment of writing this test) will
+    * execute a script which contains a method added in next version of the protocol (namely, BigInt.nbits), which
+    * is unknown to the node.
+    *
+    * As shown in the test, rule #1110 (CheckAndGetMethod) should be replaced for new methods to be passed by the node
+    * not recognizing it.
+    */
+  property("Soft-forked execution of Ergoscript containing unknown methods") {
+
+    val activatedVersion = 3.toByte
+    val params = new Parameters(0, LaunchParameters.parametersTable.updated(123, activatedVersion + 1), ErgoValidationSettingsUpdate.empty)
+
+    // for next version, rule 1011 should be replaced , otherwise transaction validation will fail
+    // in this test, the rule is replaced with self, but for real activation this choice should be revised
+    val ruleId = CheckAndGetMethod.id
+    val updVs = ErgoValidationSettings.initial.updated(ErgoValidationSettingsUpdate(Seq(), Seq(ruleId -> ReplacedRule(ruleId))))
+
+    val stateContext = emptyStateContext.copy(currentParameters = params, validationSettings = updVs)(chainSettings)
+    stateContext.blockVersion shouldBe activatedVersion + 1
+
+    // the following ergo tree contains SBigInt.nbits method which is not supported by this client (as of 5.x version)
+    // ergo tree version is 3, less value (e.g. version = 2 which gives 1a130206022edf0580fcf622d193db060873007301)
+    // also works
+    val ergoTree = DefaultSerializer.deserializeErgoTree(Base16.decode("1b130206022edf0580fcf622d193db060873007301").get)
+
+    ergoTree.root.isLeft shouldBe true // unparsed
+
+    val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
+      Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+      0, 0)
+    val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+
+    val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
+
+    val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
+
+    utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver).isSuccess shouldBe true
+  }
+
 }

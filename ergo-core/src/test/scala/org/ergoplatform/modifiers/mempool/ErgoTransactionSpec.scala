@@ -105,7 +105,6 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
     txTry.toEither.left.get.isInstanceOf[NegativeArraySizeException] shouldBe true
   }
 
-
   property("context extension with neg and pos ids") {
     val negId: Byte = -20
 

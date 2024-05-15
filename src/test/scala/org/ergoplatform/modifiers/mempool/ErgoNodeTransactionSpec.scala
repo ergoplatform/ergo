@@ -511,6 +511,8 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
     // also works
     val ergoTree = DefaultSerializer.deserializeErgoTree(Base16.decode("1b130206022edf0580fcf622d193db060873007301").get)
 
+    ergoTree.root.isLeft shouldBe true // unparsed
+
     val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
       Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
       0, 0)

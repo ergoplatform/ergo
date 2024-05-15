@@ -486,7 +486,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
 
   /**
     * In this test we check how current version of the node (block protocol v3, at the moment of writing this test) will
-    * execute a script which contains a method added in next version of the protocol (namely, BIgInt.nbits), which
+    * execute a script which contains a method added in next version of the protocol (namely, BigInt.nbits), which
     * is unknown to the node.
     *
     * As shown in the test, rule #1110 (CheckAndGetMethod) should be replaced for new methods to be passed by the node

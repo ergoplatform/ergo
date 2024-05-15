@@ -12,7 +12,6 @@ import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
-import org.ergoplatform.validation.ReplacedRule
 import org.ergoplatform.validation.ValidationRules.CheckAndGetMethod
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
@@ -20,10 +19,14 @@ import org.ergoplatform.wallet.protocol.context.InputContext
 import org.scalacheck.Gen
 import sigma.util.BenchmarkUtil
 import scorex.crypto.hash.Blake2b256
+import scorex.util.encode.Base16
+import sigma.Colls
 import sigma.ast.ErgoTree.ZeroHeader
 import sigma.ast.{AND, ErgoTree, TrueLeaf}
+import sigma.interpreter.{ContextExtension, ProverResult}
+import sigma.serialization.ErgoTreeSerializer.DefaultSerializer
+import sigma.validation.ReplacedRule
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.{Random, Try}
 
@@ -491,7 +494,6 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
     * not recognizing it.
     */
   property("Soft-forked execution of Ergoscript containing unknown methods") {
-    import sigmastate.serialization.ErgoTreeSerializer.DefaultSerializer
 
     val activatedVersion = 3.toByte
     val params = new Parameters(0, LaunchParameters.parametersTable.updated(123, activatedVersion + 1), ErgoValidationSettingsUpdate.empty)

@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history.header
 
-import cats.syntax.either._
+import cats.syntax.either._  // needed for Scala 2.11
 import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
@@ -17,9 +17,10 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.eval.Extensions._
-import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
+import sigma.Extensions.ArrayOps
+import sigma.crypto.EcPointType
+import sigma.data.{CAvlTree, CBigInt, CGroupElement}
+import sigmastate.eval.CHeader
 
 import scala.annotation.nowarn
 import scala.concurrent.duration.FiniteDuration

@@ -106,7 +106,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   }
 
   /**
-    * Remove transaction from the pool
+    * Remove transaction from the pool along with its double-spends
     */
   def removeTxAndDoubleSpends(tx: ErgoTransaction): ErgoMemPool = {
     def removeTx(mp: ErgoMemPool, tx: ErgoTransaction): ErgoMemPool = {
@@ -126,9 +126,12 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     }
   }
 
+  /**
+    * Remove provided transactions and their doublespends from the pool
+    */
   def removeWithDoubleSpends(txs: TraversableOnce[ErgoTransaction]): ErgoMemPool = {
     txs.foldLeft(this) { case (memPool, tx) =>
-      if (memPool.contains(tx.id)) {
+      if (memPool.contains(tx.id)) { // tx could be removed earlier in this loop as double-spend of another tx
         memPool.removeTxAndDoubleSpends(tx)
       } else {
         memPool

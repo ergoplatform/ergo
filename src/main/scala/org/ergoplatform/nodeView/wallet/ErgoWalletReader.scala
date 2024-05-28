@@ -29,7 +29,7 @@ trait ErgoWalletReader extends NodeViewComponent {
 
   val walletActor: ActorRef
 
-  private implicit val timeout: Timeout = Timeout(60, TimeUnit.SECONDS)
+  protected implicit val timeout: Timeout = Timeout(60, TimeUnit.SECONDS)
 
   /** Returns the Future generated mnemonic phrase.
     * @param pass   storage encription password

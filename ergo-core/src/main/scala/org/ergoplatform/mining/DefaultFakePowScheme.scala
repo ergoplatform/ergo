@@ -33,7 +33,7 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
     val d: BigInt = q / (height + 10)
     val s = AutolykosSolution(pk, w, n, d)
     Some(Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, s, votes))
+      nBits, height, extensionHash, s, votes, Array.emptyByteArray))
   }
 
   override def realDifficulty(header: Header): PrivateKey = header.requiredDifficulty

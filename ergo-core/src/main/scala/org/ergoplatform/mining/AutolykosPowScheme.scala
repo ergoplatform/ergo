@@ -299,7 +299,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val (parentId, height) = AutolykosPowScheme.derivedHeaderFields(parentOpt)
 
     val h = HeaderWithoutPow(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, votes)
+      nBits, height, extensionHash, votes, Array.emptyByteArray)
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()

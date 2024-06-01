@@ -902,7 +902,8 @@ object CandidateGenerator extends ScorexLogging {
       candidate.nBits,
       height,
       extensionRoot,
-      candidate.votes
+      candidate.votes,
+      Array.emptyByteArray
     )
   }
 

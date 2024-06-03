@@ -167,7 +167,7 @@ object IndexedToken {
     * so they are checked with Try-catches.
     *
     * @param iEb - box to use
-    * @param tokenIndex - token index to check in [[ErgoBox.additionalTokens]]
+    * @param tokenIndex - token index to check in box' `additionalTokens`
     * @return token index
     */
   def fromBox(iEb: IndexedErgoBox, tokenIndex: Int): IndexedToken = {

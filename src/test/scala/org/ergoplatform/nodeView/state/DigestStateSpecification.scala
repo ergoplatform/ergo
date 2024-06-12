@@ -6,10 +6,11 @@ import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.core._
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.crypto.authds.ADDigest
 import sigma.interpreter.ProverResult
 
-class DigestStateSpecification extends ErgoCorePropertyTest {
+class DigestStateSpecification extends ErgoCorePropertyTest with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._

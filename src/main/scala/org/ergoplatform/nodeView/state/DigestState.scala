@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.db.{ByteArrayWrapper, RocksDBVersionedStore}
 import org.ergoplatform.core._
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.utils.ScorexEncoding
@@ -26,7 +26,7 @@ import scala.util.{Failure, Success, Try}
   */
 class DigestState protected(override val version: VersionTag,
                             override val rootDigest: ADDigest,
-                            override val store: LDBVersionedStore,
+                            override val store: RocksDBVersionedStore,
                             override val ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
     with ScorexLogging
@@ -154,14 +154,14 @@ class DigestState protected(override val version: VersionTag,
 object DigestState extends ScorexLogging with ScorexEncoding {
 
   /**
-    * Creates [[DigestState]] from existing [[ErgoStateContext]] corresponding to some `version` and `rootHash`.
+    * Creates [[DigestState]] with provided `ErgoStateContext` instance corresponding to some version` and `rootHash`.
     */
   def recover(version: VersionTag,
               rootHash: ADDigest,
               stateContext: ErgoStateContext,
               dir: File,
               settings: ErgoSettings): Try[DigestState] = {
-    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
+    val store = new RocksDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(org.ergoplatform.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
@@ -176,7 +176,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              rootHashOpt: Option[ADDigest],
              dir: File,
              settings: ErgoSettings): DigestState = {
-    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
+    val store = new RocksDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     Try {
       val context = ErgoStateReader.storageStateContext(store, settings)
       (versionOpt, rootHashOpt) match {

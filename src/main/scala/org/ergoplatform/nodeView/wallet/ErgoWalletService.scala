@@ -22,7 +22,7 @@ import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.ModifierId
-import sigmastate.Values.SigmaBoolean
+import sigma.data.SigmaBoolean
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigma.Extensions.CollBytesOps
 

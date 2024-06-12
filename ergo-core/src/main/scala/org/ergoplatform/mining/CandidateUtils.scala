@@ -29,7 +29,8 @@ object CandidateUtils {
       candidate.nBits,
       height,
       extensionRoot,
-      candidate.votes
+      candidate.votes,
+      Array.emptyByteArray
     )
   }
 }

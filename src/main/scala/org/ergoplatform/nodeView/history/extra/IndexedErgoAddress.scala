@@ -8,7 +8,7 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.Values.ErgoTree
+import sigma.ast.ErgoTree
 
 import scala.collection.mutable.ArrayBuffer
 

@@ -1,9 +1,9 @@
 package scorex.db
 
+import org.rocksdb.ReadOptions
+import scorex.db.RocksDBFactory.RegisteredDB
+
 import java.util.concurrent.locks.ReentrantReadWriteLock
-
-import org.iq80.leveldb.{DB, ReadOptions}
-
 import scala.collection.mutable
 
 /**
@@ -15,7 +15,7 @@ trait KVStoreReader extends AutoCloseable {
   type K = Array[Byte]
   type V = Array[Byte]
 
-  protected val db: DB
+  protected val db: RegisteredDB
 
   protected val lock = new ReentrantReadWriteLock()
 
@@ -33,29 +33,17 @@ trait KVStoreReader extends AutoCloseable {
     }
   }
 
-
   /**
-    * Iterate through the database to read elements according to a filter function.
-    * @param cond - the filter function
-    * @return iterator over elements satisfying the filter function
-    */
-  def getWithFilter(cond: (K, V) => Boolean): Iterator[(K, V)] = {
-    val ro = new ReadOptions()
-    ro.snapshot(db.getSnapshot)
-    val iter = db.iterator(ro)
+   * Query if database contains key
+   * @param key - key
+   * @return true if key exists, false otherwise
+   */
+  def contains(key: K): Boolean = {
+    lock.readLock().lock()
     try {
-      iter.seekToFirst()
-      val bf = mutable.ArrayBuffer.empty[(K, V)]
-      while (iter.hasNext) {
-        val next = iter.next()
-        val key = next.getKey
-        val value = next.getValue
-        if (cond(key, value)) bf += (key -> value)
-      }
-      bf.toIterator
+      db.contains(key)
     } finally {
-      iter.close()
-      ro.snapshot().close()
+      lock.readLock().unlock()
     }
   }
 
@@ -63,7 +51,24 @@ trait KVStoreReader extends AutoCloseable {
     * Read all the database elements.
     * @return iterator over database contents
     */
-  def getAll: Iterator[(K, V)] = getWithFilter((_, _) => true)
+  def getAll: Iterator[(K, V)] = {
+    val ro = new ReadOptions()
+    ro.setSnapshot(db.getSnapshot)
+    val iter = db.iterator(ro)
+    try {
+      iter.seekToFirst()
+      val bf = mutable.ArrayBuffer.empty[(K, V)]
+      while (iter.isValid) {
+        bf += (iter.key() -> iter.value())
+        iter.next()
+      }
+      bf.toIterator
+    } finally {
+      iter.close()
+      db.releaseSnapshot(ro.snapshot())
+      ro.close()
+    }
+  }
 
   /** Returns value associated with the key, or default value from user
     */
@@ -97,23 +102,24 @@ trait KVStoreReader extends AutoCloseable {
     */
   def getRange(start: K, end: K, limit: Int = Int.MaxValue): Array[(K, V)] = {
     val ro = new ReadOptions()
-    ro.snapshot(db.getSnapshot)
+    ro.setSnapshot(db.getSnapshot)
     val iter = db.iterator(ro)
     try {
       iter.seek(start)
       val bf = mutable.ArrayBuffer.empty[(K, V)]
       var elemCounter = 0
-      while (iter.hasNext && elemCounter < limit) {
-        val next = iter.next()
-        if(ByteArrayUtils.compare(next.getKey, end) <= 0) {
+      while (iter.isValid && elemCounter < limit) {
+        if(ByteArrayUtils.compare(iter.key(), end) <= 0) {
           elemCounter += 1
-          bf += (next.getKey -> next.getValue)
+          bf += (iter.key() -> iter.value())
         } else elemCounter = limit // break
+        iter.next()
       }
       bf.toArray[(K,V)]
     } finally {
       iter.close()
-      ro.snapshot().close()
+      db.releaseSnapshot(ro.snapshot())
+      ro.close()
     }
   }
 

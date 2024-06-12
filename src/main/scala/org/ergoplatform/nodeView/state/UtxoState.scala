@@ -20,7 +20,7 @@ import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
-import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.db.{ByteArrayWrapper, RocksDBVersionedStore}
 import scorex.util.ModifierId
 
 import scala.util.{Failure, Success, Try}
@@ -35,7 +35,7 @@ import scala.util.{Failure, Success, Try}
   */
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
-                override val store: LDBVersionedStore,
+                override val store: RocksDBVersionedStore,
                 override protected val ergoSettings: ErgoSettings)
   extends ErgoState[UtxoState]
     with UtxoStateReader
@@ -159,19 +159,19 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
               log.error("Calculated proofHash is not equal to the declared one, doing another attempt")
 
-              /**
-                * Proof generated was different from one announced.
-                *
-                * In most cases, announced proof is okay, and as proof is already checked, problem in some
-                * extra bytes added to the proof.
-                *
-                * Could be related to https://github.com/ergoplatform/ergo/issues/1614
-                *
-                * So the problem could appear on mining nodes only, and caused by
-                * proofsForTransactions() wasting the tree unexpectedly.
-                *
-                * We are trying to generate proof again now.
-                */
+              /*
+               * Proof generated was different from one announced.
+               *
+               * In most cases, announced proof is okay, and as proof is already checked, problem in some
+               * extra bytes added to the proof.
+               *
+               * Could be related to https://github.com/ergoplatform/ergo/issues/1614
+               *
+               * So the problem could appear on mining nodes only, and caused by
+               * proofsForTransactions() wasting the tree unexpectedly.
+               *
+               * We are trying to generate proof again now.
+               */
 
               persistentProver.rollback(inRoot)
                 .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
@@ -284,12 +284,12 @@ object UtxoState {
     * @return UTXO set based state on top of existing database, or genesis state if the database is empty
     */
   def create(dir: File, settings: ErgoSettings): UtxoState = {
-    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
+    val store = new RocksDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
-      val storage = new VersionedLDBAVLStorage(store)
+      val storage = new VersionedRocksDBAVLStorage(store)
       PersistentBatchAVLProver.create(bp, storage).get
     }
     new UtxoState(persistentProver, version, store, settings)
@@ -309,10 +309,10 @@ object UtxoState {
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
+    val store = new RocksDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
 
     val defaultStateContext = ErgoStateContext.empty(settings.chainSettings, parameters)
-    val storage = new VersionedLDBAVLStorage(store)
+    val storage = new VersionedRocksDBAVLStorage(store)
     val persistentProver = PersistentBatchAVLProver.create(
       p,
       storage,

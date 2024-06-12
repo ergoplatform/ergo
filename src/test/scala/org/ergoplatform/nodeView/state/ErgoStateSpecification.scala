@@ -9,16 +9,17 @@ import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalacheck.Gen
 import org.ergoplatform.core.bytesToVersion
+import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.boxesHolderGen
 import org.ergoplatform.validation.ValidationResult.Valid
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.db.ByteArrayWrapper
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}
 
-class ErgoStateSpecification extends ErgoCorePropertyTest {
+class ErgoStateSpecification extends ErgoCorePropertyTest with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
-  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 

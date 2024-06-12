@@ -4,7 +4,7 @@ import com.google.common.hash.{BloomFilter, Funnels}
 import org.ergoplatform.sdk.wallet.secrets.ExtendedPublicKey
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddressEncoder, ErgoTreePredef, P2PKAddress}
-import sigmastate.Values
+import sigma.ast.ErgoTree
 import sigmastate.eval._
 
 import scala.util.Try
@@ -20,7 +20,7 @@ final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   // Mining rewards are being tracked only if mining = true in config
-  private val miningScripts: Seq[Values.ErgoTree] = {
+  private val miningScripts: Seq[ErgoTree] = {
     if (settings.nodeSettings.mining) {
       WalletCache.miningScripts(trackedPubKeys, settings)
     } else {
@@ -47,7 +47,7 @@ final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
 object WalletCache {
 
   def miningScripts(trackedPubKeys: Seq[ExtendedPublicKey],
-                    settings: ErgoSettings): Seq[Values.ErgoTree] = {
+                    settings: ErgoSettings): Seq[ErgoTree] = {
     trackedPubKeys.map { pk =>
       ErgoTreePredef.rewardOutputScript(settings.miningRewardDelay, pk.key)
     }

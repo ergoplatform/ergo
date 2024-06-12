@@ -1,7 +1,6 @@
 package org.ergoplatform.it
 
 import java.io.File
-
 import akka.japi.Option.Some
 import com.typesafe.config.Config
 import org.apache.commons.io.FileUtils
@@ -27,11 +26,14 @@ class StateRecoveryDigestNodeSpec extends AnyFlatSpec with IntegrationSuite {
   val minerConfig: Config = nodeSeedConfigs.head
     .withFallback(internalMinerPollingIntervalConfig(10000))
     .withFallback(specialDataDirConfig(remoteVolume))
+    .withFallback(localOnlyConfig)
+
   val followerConfig: Config = digestStatePeerConfig
     .withFallback(blockIntervalConfig(10000))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs(1))
     .withFallback(specialDataDirConfig(remoteVolume))
+    .withFallback(localOnlyConfig)
 
   //  Testing scenario:
   // 1. Start up one node and let it mine {approxMinerTargetHeight} blocks;

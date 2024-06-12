@@ -8,15 +8,16 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, VotingSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
-import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
-import org.ergoplatform.testkit.utils.NoShrink
-
+import org.ergoplatform.utils.{ErgoCorePropertyTest, NoShrink, NodeViewTestOps}
 import scala.concurrent.duration._
 
 /**
   * Test how node view holder is working in pruned mode
   */
-class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
+class PrunedNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps with NoShrink {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+
   private val BlockInterval = 2.minutes
 
   def prunedSettings(blocksToKeep: Int): ErgoSettings = {

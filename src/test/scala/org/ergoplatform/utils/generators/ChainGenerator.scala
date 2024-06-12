@@ -10,17 +10,17 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
+import org.ergoplatform.utils.BoxUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import sigma.Colls
-import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigma.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.Random
 
-trait ChainGenerator extends ErgoTestConstants {
+object ChainGenerator {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
 
   private def emptyProofs = SerializedAdProof @@ scorex.utils.Random.randomBytes(Random.nextInt(5000))
 
@@ -104,7 +104,7 @@ trait ChainGenerator extends ErgoTestConstants {
     powScheme.prove(
       prev,
       Header.InitialVersion,
-      diffBitsOpt.getOrElse(settings.chainSettings.initialNBits),
+      diffBitsOpt.getOrElse(chainSettings.initialNBits),
       EmptyStateRoot,
       EmptyDigest32,
       EmptyDigest32,
@@ -124,15 +124,15 @@ trait ChainGenerator extends ErgoTestConstants {
   def genChain(height: Int,
                history: ErgoHistory,
                blockVersion: Header.Version = Header.InitialVersion,
-               nBits: Long = settings.chainSettings.initialNBits,
+               nBits: Long = chainSettings.initialNBits,
                extension: ExtensionCandidate = defaultExtension): Seq[ErgoFullBlock] = {
     val prefix = history.bestFullBlockOpt
     blockStream(prefix, blockVersion, nBits, extension).take(height + prefix.size)
   }
 
-  protected def blockStream(prefix: Option[ErgoFullBlock],
+  def blockStream(prefix: Option[ErgoFullBlock],
                             blockVersion: Header.Version = Header.InitialVersion,
-                            nBits: Long = settings.chainSettings.initialNBits,
+                            nBits: Long = chainSettings.initialNBits,
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
@@ -153,7 +153,7 @@ trait ChainGenerator extends ErgoTestConstants {
                 txs: Seq[ErgoTransaction],
                 extension: ExtensionCandidate,
                 blockVersion: Header.Version = Header.InitialVersion,
-                nBits: Long = settings.chainSettings.initialNBits): ErgoFullBlock = {
+                nBits: Long = chainSettings.initialNBits): ErgoFullBlock = {
     val interlinks = prev.toSeq.flatMap(x =>
       nipopowAlgos.updateInterlinks(x.header, NipopowAlgos.unpackInterlinks(x.extension.fields).get))
     val validExtension = extension ++ nipopowAlgos.interlinksToExtension(interlinks)

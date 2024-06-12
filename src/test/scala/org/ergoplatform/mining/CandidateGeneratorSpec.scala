@@ -19,12 +19,16 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
-import sigmastate.crypto.DLogProtocol
+import sigma.ast.ErgoTree
+import sigma.data.ProveDlog
+import org.scalatest.matchers.should.Matchers
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.concurrent.duration._
 
-class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
+class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers with Eventually {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
 
   implicit private val timeout: Timeout = defaultTimeout
 
@@ -197,7 +201,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     }
 
     // build new transaction that uses miner's reward as input
-    val prop: DLogProtocol.ProveDlog =
+    val prop: ProveDlog =
       DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
     val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
     val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
@@ -207,7 +211,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val input = Input(rewardBox.id, emptyProverResult)
 
     val outputs = IndexedSeq(
-      new ErgoBoxCandidate(rewardBox.value, prop, readers.s.stateContext.currentHeight)
+      new ErgoBoxCandidate(rewardBox.value, ErgoTree.fromSigmaBoolean(prop), readers.s.stateContext.currentHeight)
     )
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
 

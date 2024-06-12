@@ -22,10 +22,10 @@ import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.AtLeast
-import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
-import sigmastate.crypto.DLogProtocol.ProveDlog
-import sigmastate.serialization.ValueSerializer
+import sigma.Colls
+import sigma.ast._
+import sigma.data.ProveDlog
+import sigma.serialization.ValueSerializer
 import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
@@ -205,15 +205,13 @@ object ErgoState extends ScorexLogging {
                         ergoTree: ErgoTree,
                         additionalTokens: Seq[(TokenId, Long)] = Seq.empty,
                         additionalRegisters: AdditionalRegisters = Map.empty): ErgoBox = {
-    import sigmastate.eval._
-
     val creationHeight: Int = EmptyHistoryHeight
 
     val transactionId: ModifierId = ErgoBox.allZerosModifierId
     val boxIndex: Short = 0: Short
 
     new ErgoBox(value, ergoTree,
-      CostingSigmaDslBuilder.Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
+      Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
       additionalRegisters,
       transactionId, boxIndex, creationHeight)
   }

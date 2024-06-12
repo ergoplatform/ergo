@@ -12,7 +12,6 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
-import org.ergoplatform.utils.HistoryTestHelpers
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
@@ -23,13 +22,27 @@ import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import org.ergoplatform.serialization.ErgoSerializer
-import org.ergoplatform.testkit.utils.AkkaFixture
+import org.scalatest.propspec.AnyPropSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.testkit.utils.AkkaFixture
 
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.language.postfixOps
 
-class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matchers with FileUtils with Eventually {
+class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
+  with Matchers
+  with ScalaCheckPropertyChecks
+  with FileUtils
+  with Eventually {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+  import org.ergoplatform.utils.generators.ChainGenerator._
+  import org.ergoplatform.utils.HistoryTestHelpers._
 
   // ToDo: factor this out of here and NVHTests?
   private def withFixture(testCode: SynchronizerFixture => Any): Unit = {

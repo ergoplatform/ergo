@@ -2,19 +2,22 @@ package org.ergoplatform.modifiers.mempool
 
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
 import scorex.util.encode.Base16
 import sigma.Colls
-import sigmastate.Values.{ErgoTree, ShortConstant}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.eval._
+import sigma.ast.{ErgoTree, ShortConstant}
+import sigma.interpreter.{ContextExtension, ProverResult}
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.serialization.ErgoTreeSerializer
+import sigma.serialization.ErgoTreeSerializer
 
-class ExpirationSpecification extends ErgoPropertyTest {
+class ExpirationSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.NodeViewTestOps._
 
   type Height = Int
 

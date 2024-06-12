@@ -1,21 +1,25 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.{ErgoBoxCandidate, Input}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{SortingOption, ProcessingOutcome}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform.utils.generators.ErgoGenerators
+import org.ergoplatform.utils.{ErgoTestHelpers, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import sigmastate.Values.{ByteArrayConstant, TrueLeaf}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigma.ast.ErgoTree.ZeroHeader
+import sigma.ast.{ByteArrayConstant, ErgoTree, TrueLeaf}
+import sigma.interpreter.{ContextExtension, ProverResult}
 
 class ErgoMemPoolSpec extends AnyFlatSpec
-  with ErgoGenerators
   with ErgoTestHelpers
   with ScalaCheckPropertyChecks {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   it should "accept valid transaction" in {
     val (us, bh) = createUtxoState(settings)
@@ -98,8 +102,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         val wus = WrappedUtxoState(us, bh, settings, extendedParameters).applyModifier(genesis)(_ => ()).get
 
         val feeProp = settings.chainSettings.monetary.feeProposition
+        val trueTree = ErgoTree.withSegregation(ZeroHeader, TrueLeaf.toSigmaProp)
         val inputBox = wus.takeBoxes(100).collectFirst{
-          case box if box.ergoTree == TrueLeaf.toSigmaProp.treeWithSegregation => box
+          case box if box.ergoTree == trueTree => box
         }.get
         val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
 
@@ -294,9 +299,39 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
     pool.size shouldBe (family_depth + 1) * txs.size
     allTxs.foreach { tx =>
-      pool = pool.remove(tx.transaction)
+      pool = pool.removeTxAndDoubleSpends(tx.transaction)
     }
     pool.size shouldBe 0
+  }
+
+  it should "correctly remove doublespents of a transaction from pool" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings, parameters).applyModifier(genesis)(_ => ()).get
+    val boxes = wus.takeBoxes(4)
+
+    val limit = 10000
+
+    val tx1 = validTransactionsFromBoxes(limit, boxes.take(1), new RandomWrapper)
+                ._1.map(tx => UnconfirmedTransaction(tx, None)).head
+
+    val tx2 = validTransactionsFromBoxes(limit, boxes.takeRight(2), new RandomWrapper)
+      ._1.map(tx => UnconfirmedTransaction(tx, None)).head
+
+    val tx3 = validTransactionsFromBoxes(limit, boxes.take(1), new RandomWrapper)
+      ._1.map(tx => UnconfirmedTransaction(tx, None)).head
+
+    tx1.transaction.inputs.head.boxId shouldBe tx3.transaction.inputs.head.boxId
+
+    var pool = ErgoMemPool.empty(settings)
+    Seq(tx2, tx3).foreach { tx =>
+      pool = pool.put(tx)
+    }
+
+    pool = pool.removeTxAndDoubleSpends(tx1.transaction)
+    pool.contains(tx1.transaction) shouldBe false
+    pool.contains(tx2.transaction) shouldBe true
+    pool.contains(tx3.transaction) shouldBe false
   }
 
   it should "return results take / getAll / getAllPrioritized sorted by priority" in {
@@ -373,7 +408,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.stats.snapTakenTxns shouldBe MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis()).snapTakenTxns
 
     allTxs.foreach { tx =>
-      pool = pool.remove(tx.transaction)
+      pool = pool.removeTxAndDoubleSpends(tx.transaction)
     }
     pool.size shouldBe 0
     pool.stats.takenTxns shouldBe (family_depth + 1) * txs.size

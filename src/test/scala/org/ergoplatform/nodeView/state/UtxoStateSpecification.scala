@@ -14,23 +14,29 @@ import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
-import org.ergoplatform.utils.generators.ErgoTransactionGenerators
+import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.boxesHolderGen
+import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
+import org.scalatest.OptionValues
 import scorex.crypto.authds.ADKey
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.encode.Base16
-import sigmastate.Values.ByteArrayConstant
-import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.interpreter.ProverResult
+import sigma.ast.{ByteArrayConstant, ErgoTree}
+import sigma.data.ProveDlog
+import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigma.interpreter.ProverResult
 import sigmastate.helpers.TestingHelpers._
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
 
-
-class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
+class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   private val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
@@ -46,7 +52,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
       val remaining = emission.remainingFoundationRewardAtHeight(height)
       val newFoundersBox = testBox(remaining, foundersBox.ergoTree, height, Seq(), Map(R4 -> foundersBox.additionalRegisters(R4)))
-      val rewardBox = testBox(foundersBox.value - remaining, defaultProver.hdKeys.last.publicImage, height)
+      val rewardBox = testBox(foundersBox.value - remaining, ErgoTree.fromSigmaBoolean(defaultProver.hdKeys.last.publicImage), height)
       val newBoxes = IndexedSeq(newFoundersBox, rewardBox)
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
@@ -90,7 +96,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
       val newBoxes = IndexedSeq(
         testBox(remaining, foundersBox.ergoTree, height, Seq(), foundersBox.additionalRegisters),
-        testBox(foundersBox.value - remaining, rewardPk, height, Seq())
+        testBox(foundersBox.value - remaining, ErgoTree.fromSigmaBoolean(rewardPk), height, Seq())
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
@@ -187,7 +193,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     var height: Int = GenesisHeight
     // generate chain of correct full blocks
     val chain = (0 until 10) map { _ =>
-      val header = defaultHeaderGen.sample.value
+      val header: Header = defaultHeaderGen.sample.value
       val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
       val txs = t._1
       bh = t._2

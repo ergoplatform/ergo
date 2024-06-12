@@ -4,13 +4,12 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, Scan, ScanWalletInteraction}
 import org.ergoplatform.utils.WalletTestOps
-import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.Constants
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import sigmastate.Values.ByteArrayConstant
+import sigma.ast.ByteArrayConstant
 
 import scala.collection.immutable.TreeSet
 import scala.util.Random
@@ -20,8 +19,8 @@ class OffChainRegistrySpec
   extends AnyFlatSpec
     with Matchers
     with ScalaCheckPropertyChecks
-    with WalletGenerators
     with WalletTestOps {
+  import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 5, sizeRange = 10)
 

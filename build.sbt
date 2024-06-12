@@ -37,7 +37,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "5.0.13"
+val sigmaStateVersion = "5.0.14"
 val ficusVersion = "1.4.7"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -52,7 +52,7 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.3.5",
 
   // test dependencies
-  "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
+  "org.scala-lang.modules" %% "scala-async" % "1.0.1" % "test",
   "org.scalactic" %% "scalactic" % "3.0.3" % "test",
   "org.scalatest" %% "scalatest" % "3.2.10" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
@@ -63,7 +63,9 @@ libraryDependencies ++= Seq(
 
   "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
-  "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"
+  "com.github.docker-java" % "docker-java-core" % "3.3.4" % Test,
+  "com.github.docker-java" % "docker-java-transport-httpclient5" % "3.3.4" % Test,
+
 )
 
 updateOptions := updateOptions.value.withLatestSnapshots(false)
@@ -167,6 +169,7 @@ configs(IntegrationTest extend Test)
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,
+  scalacOptions ++= Seq("-Xasync")
 ))
 
 dockerfile in docker := {
@@ -175,7 +178,7 @@ dockerfile in docker := {
   val configMainNet = (resourceDirectory in IntegrationTest).value / "mainnetTemplate.conf"
 
   new Dockerfile {
-    from("openjdk:9-jre-slim")
+    from("openjdk:11-jre-slim")
     label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
     add(Seq(configDevNet), "/opt/ergo")
@@ -255,6 +258,7 @@ lazy val ergoCore = (project in file("ergo-core"))
     ),
     scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8")),
     scalacOptions in(Compile, compile) --= scalacOpts,
+    parallelExecution in Test := false,
   )
 
 lazy val ergoWallet = (project in file("ergo-wallet"))
@@ -279,6 +283,7 @@ configs(It2Test)
 inConfig(It2Test)(Defaults.testSettings ++ Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,
+  scalacOptions ++= Seq("-Xasync")
 ))
 
 lazy val ergo = (project in file("."))

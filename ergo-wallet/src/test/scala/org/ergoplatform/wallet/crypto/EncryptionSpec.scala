@@ -1,14 +1,13 @@
 package org.ergoplatform.wallet.crypto
 
 import org.ergoplatform.wallet.crypto
-import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 
 class EncryptionSpec
   extends AnyPropSpec
-    with Matchers
-    with Generators {
+    with Matchers {
+  import org.ergoplatform.wallet.utils.WalletGenerators._
 
   property("AES encryption/decryption") {
     (0 to 100).foreach { _ =>

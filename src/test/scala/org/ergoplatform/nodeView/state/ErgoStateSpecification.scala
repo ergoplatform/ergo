@@ -5,17 +5,22 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.{Args, ErgoSettingsReader}
-import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
+import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalacheck.Gen
 import org.ergoplatform.core.bytesToVersion
+import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.boxesHolderGen
 import org.ergoplatform.validation.ValidationResult.Valid
 import scorex.db.ByteArrayWrapper
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}
 
-class ErgoStateSpecification extends ErgoPropertyTest {
+class ErgoStateSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   property("applyModifier() - double spending") {
     forAll(boxesHolderGen, Gen.choose(1: Byte, 2: Byte)) { case (bh, version) =>

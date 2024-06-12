@@ -17,14 +17,17 @@ import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import sigma.Colls
-import sigmastate.Values.ErgoTree
-import sigmastate.crypto.DLogProtocol.ProveDlog
+import sigma.ast.ErgoTree
+import sigma.data.ProveDlog
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
-import sigmastate.interpreter.ProverResult
+import sigma.interpreter.ProverResult
 import sigma.Extensions._
+import sigma.eval.Extensions.EvalIterableOps
 
 trait WalletTestOps extends NodeViewBaseOps {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
   def newAssetIdStub: TokenId = Blake2b256.hash("new_asset").toTokenId
 

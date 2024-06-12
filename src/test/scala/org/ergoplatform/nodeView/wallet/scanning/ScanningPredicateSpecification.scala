@@ -2,18 +2,20 @@ package org.ergoplatform.nodeView.wallet.scanning
 
 import io.circe.parser._
 import org.ergoplatform.ErgoBox.R1
-import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.utils.generators.ErgoTransactionGenerators
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import org.ergoplatform.{ErgoTreePredef, P2PKAddress}
-import sigmastate.Values.ByteArrayConstant
+import sigma.ast.{ByteArrayConstant, ErgoTree}
 import sigmastate.eval.Extensions.ArrayByteOps
 import sigmastate.helpers.TestingHelpers._
 
 import scala.language.implicitConversions
 import scala.util.Random
 
-class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
+class ScanningPredicateSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.wallet.utils.WalletGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   val testDelay = 720 // to construct mining rewards scripts
 
@@ -95,10 +97,10 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
   property("containsAsset") {
     forAll(proveDlogGen) { pk =>
       forAll(assetGen) { case (tokenId, amt) =>
-        val box = testBox(value = 1, pk, creationHeight = 0, additionalTokens = Seq(tokenId -> amt))
+        val box = testBox(value = 1, ErgoTree.fromSigmaBoolean(pk), creationHeight = 0, additionalTokens = Seq(tokenId -> amt))
         ContainsAssetPredicate(tokenId).filter(box) shouldBe true
 
-        val emptyBox = testBox(value = 1, pk, creationHeight = 0)
+        val emptyBox = testBox(value = 1, ErgoTree.fromSigmaBoolean(pk), creationHeight = 0)
         ContainsAssetPredicate(tokenId).filter(emptyBox) shouldBe false
 
         ContainsAssetPredicate(mutateRandomByte(tokenId.toArray).toTokenId).filter(box) shouldBe false

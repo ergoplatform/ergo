@@ -13,7 +13,8 @@ import org.ergoplatform.settings.RESTApiSettings
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
-import sigmastate.serialization.ErgoTreeSerializer
+import sigma.serialization.ErgoTreeSerializer
+import sigma.serialization.ErgoTreeSerializer
 
 import scala.concurrent.duration._
 
@@ -22,14 +23,16 @@ class UtilsApiRouteSpec extends AnyFlatSpec
   with ScalatestRouteTest
   with FailFastCirceSupport
   with Stubs {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
 
   val prefix = "/utils"
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
   val route: Route = ErgoUtilsApiRoute(settings).route
-  val p2pkaddress = P2PKAddress(defaultMinerPk)
-  val p2shaddress = Pay2SHAddress(feeProp)
-  val p2saddress = Pay2SAddress(feeProp)
+  val p2pkaddress = P2PKAddress(defaultMinerPk)(settings.addressEncoder)
+  val p2shaddress = Pay2SHAddress(feeProp)(settings.addressEncoder)
+  val p2saddress = Pay2SAddress(feeProp)(settings.addressEncoder)
 
   val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
 

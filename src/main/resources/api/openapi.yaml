@@ -6636,7 +6636,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-
+  /blockchain/tokens:
+    post:
+      summary: Retrieve minting information about a list of tokens
+      operationId: getTokensByIds
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                description: Token ID
+      responses:
+        '200':
+          description: Array of tokens with the provided IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexedToken'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /blockchain/balance:
     post:
       summary: Retrieve confirmed and unconfirmed balance of an address

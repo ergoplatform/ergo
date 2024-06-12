@@ -244,7 +244,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param mempool     - mempool to use, if unconfirmed is true
    * @param offset      - items to skip from the start
    * @param limit       - items to retrieve
-   * @param sortDir     - whether to start retreival from newest box ([[DESC]]) or oldest box ([[ASC]])
+   * @param sortDir     - whether to start retrieval from newest box (DESC) or oldest box (ASC)
    * @param unconfirmed - whether to include unconfirmed boxes
    * @return array of unspent boxes
    */
@@ -288,7 +288,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
   }
 
   /**
-   * Logic for [[Segment.rollback]]
+   * Logic for `Segment.rollback`
    *
    * @param txTarget  - remove transaction numbers above this number
    * @param boxTarget - remove box numbers above this number

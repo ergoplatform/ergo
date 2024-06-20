@@ -3,21 +3,23 @@ package org.ergoplatform.nodeView.history.storage
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, idToBytes}
 
-class HistoryStorageSpec extends HistoryTestHelpers {
+class HistoryStorageSpec extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
   val db = HistoryStorage(settings)
 
   property("Write Read Remove") {
     val headers: Array[Header] = Gen.listOfN(20, defaultHeaderGen).sample.get.toArray
     val modifiers: Array[ADProofs] = Gen.listOfN(20, randomADProofsGen).sample.get.toArray
-    def validityKey(id: ModifierId) = ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+    def validityKey(id: ModifierId) = ByteArrayWrapper(Algos.hash("validity".getBytes(CharsetName) ++ idToBytes(id)))
     val indexes = headers.flatMap(h => Array(validityKey(h.id) -> Array(1.toByte)))
     db.insert(indexes, (headers ++ modifiers).asInstanceOf[Array[BlockSection]]) shouldBe 'success
 

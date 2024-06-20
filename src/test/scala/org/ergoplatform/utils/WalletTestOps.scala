@@ -5,7 +5,7 @@ import org.ergoplatform._
 import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.IdUtils._
@@ -16,14 +16,18 @@ import org.ergoplatform.utils.fixtures.WalletFixture
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
+import sigma.Colls
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
-import special.collection.Extensions._
+import sigma.Extensions._
 
 trait WalletTestOps extends NodeViewBaseOps {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
   def newAssetIdStub: TokenId = Blake2b256.hash("new_asset").toTokenId
 
@@ -69,7 +73,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   def getUtxoState(implicit ctx: Ctx): UtxoState = getCurrentState.asInstanceOf[UtxoState]
 
   def getHeightOf(state: ErgoState[_])(implicit ctx: Ctx): Option[Int] =
-    getHistory.heightOf(scorex.core.versionToId(state.version))
+    getHistory.heightOf(org.ergoplatform.core.versionToId(state.version))
 
   def makeGenesisBlock(script: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty)
                       (implicit ctx: Ctx): ErgoFullBlock = {
@@ -85,7 +89,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     }
 
     CandidateGenerator.collectRewards(Some(genesisEmissionBox),
-      ErgoHistory.EmptyHistoryHeight,
+      EmptyHistoryHeight,
       Seq.empty,
       publicKey,
       emptyStateContext,
@@ -96,7 +100,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     val inputs = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
     val assets: Seq[(TokenId, Long)] = replaceNewAssetStub(assetsIn, inputs)
     CandidateGenerator.collectRewards(Some(genesisEmissionBox),
-      ErgoHistory.EmptyHistoryHeight,
+      EmptyHistoryHeight,
       Seq.empty,
       publicKey,
       emptyStateContext,

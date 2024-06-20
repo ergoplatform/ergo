@@ -1,16 +1,16 @@
 package org.ergoplatform.network
 
 
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
-import org.ergoplatform.nodeView.history.ErgoHistory.{Height, Time}
-import scorex.core.consensus.{Fork, Older, PeerChainStatus, Unknown}
+import org.ergoplatform.consensus.{Fork, Older, PeerChainStatus, Unknown}
+import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.settings.NetworkSettings
 import scorex.core.network.ConnectedPeer
-import scorex.core.settings.NetworkSettings
 import scorex.util.ScorexLogging
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scorex.core.utils.MapPimpMutable
+import org.ergoplatform.utils.MapPimpMutable
 
 /**
   * Data structures and methods to keep status of peers, find ones with expired status to send sync message etc
@@ -86,7 +86,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
     val seniorsBefore = numOfSeniors()
     statuses.adjust(peer){
       case None =>
-        ErgoPeerStatus(peer, status, height.getOrElse(ErgoHistory.EmptyHistoryHeight), None, None)
+        ErgoPeerStatus(peer, status, height.getOrElse(EmptyHistoryHeight), None, None)
       case Some(existingPeer) =>
         existingPeer.copy(status = status, height = height.getOrElse(existingPeer.height))
     }

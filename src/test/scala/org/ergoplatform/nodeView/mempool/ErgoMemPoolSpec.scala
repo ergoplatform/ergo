@@ -1,22 +1,24 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.{ErgoBoxCandidate, Input}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{SortingOption, ProcessingOutcome}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform.utils.generators.ErgoGenerators
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import sigmastate.Values.{ByteArrayConstant, TrueLeaf}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 class ErgoMemPoolSpec extends AnyFlatSpec
-  with ErgoGenerators
   with ErgoTestHelpers
   with ScalaCheckPropertyChecks {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   it should "accept valid transaction" in {
     val (us, bh) = createUtxoState(settings)
@@ -72,7 +74,8 @@ class ErgoMemPoolSpec extends AnyFlatSpec
 
     var poolCost = ErgoMemPool.empty(sortByCostSettings)
     poolCost = poolCost.process(UnconfirmedTransaction(tx, None), wus)._1
-    val cost = wus.validateWithCost(tx, Int.MaxValue).get
+    val validationContext = wus.stateContext.simplifiedUpcoming()
+    val cost = wus.validateWithCost(tx, validationContext, Int.MaxValue, None).get
     poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, cost).weight
   }
 

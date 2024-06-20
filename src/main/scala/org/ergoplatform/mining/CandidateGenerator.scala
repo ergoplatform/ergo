@@ -12,11 +12,12 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
+import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
@@ -26,13 +27,13 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
-import sigmastate.SType.ErgoBoxRType
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.ErgoBoxRType
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.crypto.CryptoFacade
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
-import special.collection.Coll
+import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -567,7 +568,7 @@ object CandidateGenerator extends ScorexLogging {
           )
           val ext = deriveWorkMessage(candidate)
           log.info(
-            s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
+            s"Got candidate block at height ${ErgoHistoryUtils.heightOf(candidate.parentOpt) + 1}" +
             s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
           )
           Success(
@@ -656,7 +657,7 @@ object CandidateGenerator extends ScorexLogging {
     stateContext: ErgoStateContext,
     assets: Coll[(TokenId, Long)] = Colls.emptyColl
   ): Seq[ErgoTransaction] = {
-    val chainSettings = stateContext.ergoSettings.chainSettings
+    val chainSettings = stateContext.chainSettings
     val propositionBytes = chainSettings.monetary.feePropositionBytes
     val emission = chainSettings.emissionRules
 
@@ -819,7 +820,7 @@ object CandidateGenerator extends ScorexLogging {
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
               tx,
-              Some(upcomingContext),
+              upcomingContext,
               maxBlockCost,
               Some(verifier)
             ) match {

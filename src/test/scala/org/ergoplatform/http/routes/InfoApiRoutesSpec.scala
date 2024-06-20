@@ -16,8 +16,8 @@ import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.ChangedHistory
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ChangedHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -30,6 +30,9 @@ class InfoApiRoutesSpec extends AnyFlatSpec
   with ScalatestRouteTest
   with FailFastCirceSupport
   with Stubs {
+
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ChainGenerator._
 
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)

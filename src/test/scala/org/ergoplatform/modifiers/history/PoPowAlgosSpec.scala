@@ -2,15 +2,15 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.generators.ChainGenerator
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.util.ModifierId
-import org.ergoplatform.utils.HistoryTestHelpers
 
-class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers with ChainGenerator {
+class PoPowAlgosSpec extends AnyPropSpec with Matchers {
+  import org.ergoplatform.utils.generators.ChainGenerator._
+  import org.ergoplatform.utils.generators.CoreObjectGenerators._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
 
   private val poPowParams = PoPowParams(30, 30, continuous = false)
   private val ChainLength = 10
@@ -94,6 +94,16 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     }
   }
 
+  property("lowestCommonAncestor - the same") {
+    val sizes = Seq(10, 100, 1000)
+    sizes.foreach { size =>
+      val chain0 = genChain(size)
+      val chain1 = chain0.map(b => b.copy(header = b.header.copy(sizeOpt = Some(b.header.size))))
+
+      nipopowAlgos.lowestCommonAncestor(chain0.map(_.header), chain1.map(_.header)) shouldBe Some(chain0.last.header)
+    }
+  }
+
   property("bestArg - always equal for equal proofs") {
     val chain0 = genChain(100).map(b => PoPowHeader.fromBlock(b).get)
     val proof0 = nipopowAlgos.prove(chain0)(poPowParams).get
@@ -116,47 +126,6 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     proof0.prefix.size > proof1.prefix.size shouldBe true
 
     nipopowAlgos.bestArg(proof0.prefix.map(_.header))(m) > nipopowAlgos.bestArg(proof1.prefix.map(_.header))(m) shouldBe true
-  }
-
-  property("proof(chain) is equivalent to proof(histReader)") {
-    val poPowParams = PoPowParams(m = 5, k = 6, continuous = false)
-    val blocksChain = genChain(3000)
-    val pchain = blocksChain.map(b => PoPowHeader.fromBlock(b).get)
-    val proof0 = nipopowAlgos.prove(pchain)(poPowParams).get
-
-    val h = generateHistory(true, StateType.Digest, false,
-      10000, 10000, 10, None)
-    val hr = applyChain(h, blocksChain)
-    val proof1 = nipopowAlgos.prove(hr)(poPowParams).get
-
-    proof0.suffixHead.id shouldBe proof1.suffixHead.id
-    proof0.suffixTail.map(_.id) shouldBe proof1.suffixTail.map(_.id)
-
-    proof0.prefix.map(_.id).length shouldBe proof1.prefix.map(_.id).length
-    proof0.prefix.map(_.id).toList shouldBe proof1.prefix.map(_.id).toList
-  }
-
-  property("proof(histReader) for a header in the past") {
-    val poPowParams = PoPowParams(5, 6, continuous = false)
-    val blocksChain = genChain(300)
-
-    val at = 200
-
-    val h = generateHistory(true, StateType.Digest, false,
-      10000, 10000, 10, None)
-    val hr = applyChain(h, blocksChain.take(at))
-    val proof0 = nipopowAlgos.prove(hr, None)(poPowParams).get
-
-    val id = proof0.suffixHead.header.id
-
-    val hrf = applyChain(hr, blocksChain.drop(at))
-    val proof1 = nipopowAlgos.prove(hrf, Some(id))(poPowParams).get
-
-    proof0.suffixHead.id shouldBe proof1.suffixHead.id
-    proof0.suffixTail.map(_.id) shouldBe proof1.suffixTail.map(_.id)
-
-    proof0.prefix.map(_.id).length shouldBe proof1.prefix.map(_.id).length
-    proof0.prefix.map(_.id).sorted.toList shouldBe proof1.prefix.map(_.id).sorted.toList
   }
 
   property("isBetterThan - marginally longer chain should be better") {

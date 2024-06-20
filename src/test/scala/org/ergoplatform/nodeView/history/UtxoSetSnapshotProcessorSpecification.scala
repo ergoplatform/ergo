@@ -1,25 +1,32 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import org.ergoplatform.utils.HistoryTestHelpers
-import scorex.core.VersionTag
-import scorex.core.serialization.{ManifestSerializer, SubtreeSerializer}
+import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.core.VersionTag
+import org.ergoplatform.serialization.{ManifestSerializer, SubtreeSerializer}
 import scorex.db.LDBVersionedStore
 import scorex.util.ModifierId
 
 import scala.util.Random
 
-class UtxoSetSnapshotProcessorSpecification extends HistoryTestHelpers {
+class UtxoSetSnapshotProcessorSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ChainGenerator._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
-  private val s = settings
+  val s = settings
 
   val epochLength = 20
 
   val utxoSetSnapshotProcessor = new UtxoSetSnapshotProcessor {
-    var minimalFullBlockHeightVar = ErgoHistory.GenesisHeight
+    var minimalFullBlockHeightVar = GenesisHeight
     override protected val settings: ErgoSettings = s.copy(chainSettings =
       s.chainSettings.copy(voting = s.chainSettings.voting.copy(votingLength = epochLength)))
     override protected val historyStorage: HistoryStorage = HistoryStorage(settings)

@@ -1,14 +1,14 @@
 package scorex.testkit.properties
 
+import org.ergoplatform.consensus.ModifierSemanticValidity.Valid
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.history.ErgoHistory
+import scorex.testkit.TestkitHelpers
+import scorex.testkit.generators.SyntacticallyTargetedModifierProducer
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.core.consensus.ModifierSemanticValidity.Valid
-import scorex.testkit.TestkitHelpers
-import scorex.testkit.generators.SyntacticallyTargetedModifierProducer
 import scorex.util.ScorexLogging
 
 

@@ -9,19 +9,19 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.modifiers.transaction.TooHighCostError
+import org.ergoplatform.core.idToVersion
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
-import org.ergoplatform.utils.generators.ErgoTransactionGenerators
-import scorex.core._
-import scorex.core.transaction.state.TransactionValidation.TooHighCostError
+import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
+import org.scalatest.OptionValues
 import scorex.crypto.authds.ADKey
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.ProverResult
 import sigmastate.helpers.TestingHelpers._
 
@@ -29,8 +29,13 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
 
-
-class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
+class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   private val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
@@ -51,7 +56,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
       val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
-      us.validateWithCost(tx, None, txCostLimit, None).get should be <= 100000
+      us.validateWithCost(tx, us.stateContext.simplifiedUpcoming(), txCostLimit, None).get should be <= 100000
       val block1 = validFullBlock(Some(lastBlock), us, Seq(ErgoTransaction(tx)))
       us = us.applyModifier(block1, None)(_ => ()).get
       foundersBox = tx.outputs.head
@@ -62,7 +67,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
   property("Founders should be able to spend genesis founders box") {
     var (us, bh) = createUtxoState(settings)
     val foundersBox = genesisBoxes.last
-    var height: Int = ErgoHistory.GenesisHeight
+    var height: Int = GenesisHeight
 
     val settingsPks = settings.chainSettings.foundersPubkeys
       .map(str => groupElemFromBytes(Base16.decode(str).get))
@@ -94,17 +99,18 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
-      val validationRes1 = us.validateWithCost(tx, 100000)
+      val validationContext = us.stateContext.simplifiedUpcoming()
+      val validationRes1 = us.validateWithCost(tx, validationContext, 100000, None)
       validationRes1 shouldBe 'success
       val txCost = validationRes1.get
 
-      val validationRes2 = us.validateWithCost(tx, txCost - 1)
+      val validationRes2 = us.validateWithCost(tx, validationContext, txCost - 1, None)
       validationRes2 shouldBe 'failure
       validationRes2.toEither.left.get.isInstanceOf[TooHighCostError] shouldBe true
 
-      us.validateWithCost(tx, txCost + 1) shouldBe 'success
+      us.validateWithCost(tx, validationContext, txCost + 1, None) shouldBe 'success
 
-      us.validateWithCost(tx, txCost) shouldBe 'success
+      us.validateWithCost(tx, validationContext, txCost, None) shouldBe 'success
 
       height = height + 1
     }
@@ -159,7 +165,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
   property("proofsForTransactions") {
     var (us: UtxoState, bh) = createUtxoState(settings)
-    var height: Int = ErgoHistory.GenesisHeight
+    var height: Int = GenesisHeight
     forAll(defaultHeaderGen) { header =>
       val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
       val txs = t._1
@@ -183,10 +189,10 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     var bh = BoxHolder(Seq(genesisEmissionBox))
     var us = createUtxoState(bh, parameters)
 
-    var height: Int = ErgoHistory.GenesisHeight
+    var height: Int = GenesisHeight
     // generate chain of correct full blocks
     val chain = (0 until 10) map { _ =>
-      val header = defaultHeaderGen.sample.value
+      val header: Header = defaultHeaderGen.sample.value
       val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
       val txs = t._1
       bh = t._2

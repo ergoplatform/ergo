@@ -1,12 +1,13 @@
 package org.ergoplatform.network
 
-import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.network.peer.PeerInfo
-import scorex.core.network.peer.PeerManager.ReceivableMessages.SeenPeers
+import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.SeenPeers
 
 import java.net.{InetAddress, InetSocketAddress}
 
-class ActivePeerFilteringSpecification extends ErgoPropertyTest {
+class ActivePeerFilteringSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants.defaultPeerSpec
 
   private val filter: SeenPeers = SeenPeers(5)
 

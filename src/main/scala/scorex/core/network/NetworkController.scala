@@ -6,16 +6,15 @@ import akka.io.Tcp._
 import akka.io.{IO, Tcp}
 import akka.pattern.ask
 import akka.util.Timeout
-import scorex.core.app.{ScorexContext, Version}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{DisconnectedPeer, HandshakedPeer}
-import org.ergoplatform.network.ModePeerFeature
-import org.ergoplatform.nodeView.history.ErgoHistory
+import scorex.core.app.ScorexContext
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DisconnectedPeer, HandshakedPeer}
+import org.ergoplatform.network.{ModePeerFeature, Version}
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.network.message.Message.MessageCode
-import scorex.core.network.message.Message
-import scorex.core.network.peer.PeerManager.ReceivableMessages._
-import scorex.core.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
-import org.ergoplatform.nodeView.history.ErgoHistory.Time
+import org.ergoplatform.network.message.MessageConstants.MessageCode
+import org.ergoplatform.network.message.Message
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages._
+import org.ergoplatform.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Time
 import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 
@@ -69,7 +68,7 @@ class NetworkController(ergoSettings: ErgoSettings,
     * Storing timestamp of a last message got via p2p network.
     * Used to check whether connectivity is lost.
     */
-  private var lastIncomingMessageTime: ErgoHistory.Time = 0L
+  private var lastIncomingMessageTime: Time = 0L
   private val activityDelta: Long = 60 * 1000 // 1 min
 
   //check own declared address for validity
@@ -116,25 +115,25 @@ class NetworkController(ergoSettings: ErgoSettings,
   private def time(): Time = System.currentTimeMillis()
 
   private def businessLogic: Receive = {
-    //a message coming in from another peer
+    // a message coming in from another peer
     case msg@Message(spec, _, Some(remote)) =>
       messageHandlers.get(spec.messageCode) match {
         case Some(handler) => handler ! msg // forward the message to the appropriate handler for processing
         case None => log.error(s"No handlers found for message $remote: " + spec.messageCode)
       }
 
-      // Update last seen message timestamps, global and peer's, with the message timestamp
+      // Update last seen message timestamps with the message timestamp
       val remoteAddress = remote.connectionId.remoteAddress
       connections.get(remoteAddress) match {
         case Some(cp) =>
           val now = time()
           lastIncomingMessageTime = now
-          cp.lastMessage = now
-          // Update peer's last activity time every X minutes inside PeerInfo
-          cp.peerInfo.foreach { x =>
-            if ((now - x.lastStoredActivityTime) > activityDelta) {
-              val peerInfo = x.copy(lastStoredActivityTime = now)
-              peerManagerRef ! AddOrUpdatePeer(peerInfo)
+          // Update peer's last activity time every ${activityDelta} minutes inside PeerInfo
+          cp.peerInfo.foreach { peerInfo =>
+            if ((now - peerInfo.lastStoredActivityTime) > activityDelta) {
+              val peerInfoUpdated = peerInfo.copy(lastStoredActivityTime = now)
+              connections += remoteAddress -> cp.copy(peerInfo = Some(peerInfoUpdated))
+              peerManagerRef ! AddOrUpdatePeer(peerInfoUpdated)
             }
           }
 
@@ -297,13 +296,15 @@ class NetworkController(ergoSettings: ErgoSettings,
       () => {
         // Drop connections with peers if they seem to be inactive
         val now = time()
-        connections.values.foreach { cp =>
-          val lastSeen = cp.lastMessage
-          val timeout = networkSettings.inactiveConnectionDeadline.toMillis
-          val delta = now - lastSeen
-          if (delta > timeout) {
-            log.info(s"Dropping connection with ${cp.peerInfo}, last seen ${delta / 1000.0} seconds ago")
-            cp.handlerRef ! CloseConnection
+        connections.values.foreach { cp => 
+          cp.peerInfo.foreach { peerInfo =>
+            val lastSeen = peerInfo.lastStoredActivityTime
+            val timeout = networkSettings.inactiveConnectionDeadline.toMillis
+            val delta = now - lastSeen
+            if (delta > timeout && lastSeen > 0) {
+              log.info(s"Dropping connection with ${peerInfo}, last seen ${delta / 1000.0} seconds ago")
+              cp.handlerRef ! CloseConnection
+            }
           }
         }
       }
@@ -400,7 +401,7 @@ class NetworkController(ergoSettings: ErgoSettings,
 
     val handler = context.actorOf(handlerProps) // launch connection handler
     context.watch(handler)
-    val connectedPeer = ConnectedPeer(connectionId, handler, time(), None)
+    val connectedPeer = ConnectedPeer(connectionId, handler, None)
     connections += connectionId.remoteAddress -> connectedPeer
     unconfirmedConnections -= connectionId.remoteAddress
   }
@@ -424,9 +425,10 @@ class NetworkController(ergoSettings: ErgoSettings,
         peerManagerRef ! RemovePeer(peerAddress)
         connections -= connectedPeer.connectionId.remoteAddress
       } else {
-        peerManagerRef ! AddOrUpdatePeer(peerInfo)
+        val newPeerInfo = peerInfo.copy(lastStoredActivityTime = time())
+        peerManagerRef ! AddOrUpdatePeer(newPeerInfo)
 
-        val updatedConnectedPeer = connectedPeer.copy(peerInfo = Some(peerInfo))
+        val updatedConnectedPeer = connectedPeer.copy(peerInfo = Some(newPeerInfo))
         connections += remoteAddress -> updatedConnectedPeer
         context.system.eventStream.publish(HandshakedPeer(updatedConnectedPeer))
       }

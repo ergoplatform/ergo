@@ -2,9 +2,8 @@ package org.ergoplatform.tools
 
 import org.ergoplatform.mining.difficulty.{DifficultyAdjustment, DifficultySerializer}
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.generators.ErgoGenerators
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
+import org.ergoplatform.settings.ErgoSettingsReader
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -16,7 +15,9 @@ import scala.util.Random
   * Object that allows to simulate blockchain with the specified difficulty control function and estimate deviation
   * of block interval from the desired one
   */
-object DifficultyControlSimulator extends App with ErgoGenerators {
+object DifficultyControlSimulator extends App {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
   val baseHeader = defaultHeaderGen.sample.get
   //  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
@@ -86,7 +87,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   def printTestnetData(): Unit = {
     val baseHeader = defaultHeaderGen.sample.get
-    val chainSettings = ErgoSettings.read().chainSettings.copy(epochLength = 1)
+    val chainSettings = ErgoSettingsReader.read().chainSettings.copy(epochLength = 1)
     val difficultyControl = new DifficultyAdjustment(chainSettings)
 
     val headers = Source.fromResource("difficulty.csv").getLines().toSeq.tail.map { line =>

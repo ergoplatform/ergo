@@ -1,17 +1,16 @@
 package org.ergoplatform.nodeView.state.wrapped
 
 import java.io.File
-
 import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.{BlockSection, TransactionsCarryingBlockSection}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag, idToVersion}
+import org.ergoplatform.core.{VersionTag, idToVersion}
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
@@ -41,7 +40,7 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
     super.applyModifier(mod, estimatedTip)(generate) match {
       case Success(us) =>
         mod match {
-          case ct: TransactionsCarryingPersistentNodeViewModifier =>
+          case ct: TransactionsCarryingBlockSection =>
             // You can not get block with transactions not being of ErgoTransaction type so no type checks here.
 
             val changes = ErgoState.stateChanges(ct.transactions).get

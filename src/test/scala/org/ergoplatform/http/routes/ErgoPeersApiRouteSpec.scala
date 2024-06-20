@@ -14,8 +14,8 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
-import scorex.core.network.peer.PeerManager.ReceivableMessages.GetAllPeers
-import scorex.core.settings.RESTApiSettings
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.GetAllPeers
+import org.ergoplatform.settings.RESTApiSettings
 
 import java.net.InetSocketAddress
 import scala.concurrent.Future
@@ -27,6 +27,8 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
   with FailFastCirceSupport
   with ScalaCheckPropertyChecks
   with Stubs {
+
+  import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
 
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)

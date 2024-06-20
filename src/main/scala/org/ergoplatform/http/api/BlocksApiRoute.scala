@@ -7,14 +7,13 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.{NonHeaderBlockSection, ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.settings.{Algos, ErgoSettings}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import scorex.core.api.http.ApiError.BadRequest
+import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
+import org.ergoplatform.http.api.ApiError.BadRequest
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.core.api.http.ApiResponse
-import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
@@ -38,13 +37,12 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getChainSliceR ~
       getBlockIdsAtHeightR ~
       getBlockHeaderByHeaderIdR ~
+      getFullBlockByHeaderIdsR ~
       getBlockTransactionsByHeaderIdR ~
       getProofForTxR ~
       getFullBlockByHeaderIdR ~
       getModifierByIdR
   }
-
-  private val maxHeadersInOneQuery = ergoSettings.chainSettings.epochLength * 2
 
   private def getHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
@@ -67,6 +65,11 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] =
     getHistory.map { history =>
       history.typedModifierById[Header](headerId).flatMap(history.getFullBlock)
+    }
+
+  private def getFullBlockByHeaderIds(headerIds: Seq[ModifierId]): Future[Seq[ErgoFullBlock]] =
+    getHistory.map { history =>
+      headerIds.flatMap(headerId => history.typedModifierById[Header](headerId).flatMap(history.getFullBlock))
     }
 
   private def getModifierById(modifierId: ModifierId): Future[Option[BlockSection]] =
@@ -100,7 +103,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       val headers = maxHeaderOpt
         .toIndexedSeq
         .flatMap { maxHeader =>
-          history.headerChainBack(maxHeadersInOneQuery, maxHeader, _.height <= fromHeight + 1).headers
+          history.headerChainBack(MaxHeaders, maxHeader, _.height <= fromHeight + 1).headers
         }
       headers.toList.asJson
     }
@@ -175,6 +178,10 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   def getFullBlockByHeaderIdR: Route = (modifierId & get) { id =>
     ApiResponse(getFullBlockByHeaderId(id))
+  }
+
+  def getFullBlockByHeaderIdsR: Route = (post & path("headerIds") & modifierIds) { ids =>
+    ApiResponse(getFullBlockByHeaderIds(ids))
   }
 
 }

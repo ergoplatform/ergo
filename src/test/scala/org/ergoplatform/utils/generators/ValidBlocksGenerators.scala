@@ -13,18 +13,22 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
-import scorex.core.VersionTag
+import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.avltree.batch.Remove
 import scorex.crypto.authds.ADDigest
 import scorex.db.ByteArrayWrapper
 import scorex.testkit.TestkitHelpers
+import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.{Failure, Random, Success}
 
-trait ValidBlocksGenerators
-  extends TestkitHelpers with TestFileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
+object ValidBlocksGenerators
+  extends TestkitHelpers with TestFileUtils with Matchers with ScorexLogging {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
 
   def createUtxoState(settings: ErgoSettings): (UtxoState, BoxHolder) = {
     ErgoState.generateGenesisUtxoState(createTempDir, settings)
@@ -39,14 +43,14 @@ trait ValidBlocksGenerators
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new RandomWrapper)
 
-  protected def validTransactionsFromBoxes(sizeLimit: Int,
+  def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
                                            rnd: RandomLike): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     validTransactionsFromBoxes(sizeLimit, stateBoxesIn, Seq(), rnd)
   }
 
   /** @param sizeLimit maximum transactions size in bytes */
-  protected def validTransactionsFromBoxes(sizeLimit: Int,
+  def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
                                            dataBoxesIn: Seq[ErgoBox],
                                            rnd: RandomLike): (Seq[ErgoTransaction], Seq[ErgoBox]) = {

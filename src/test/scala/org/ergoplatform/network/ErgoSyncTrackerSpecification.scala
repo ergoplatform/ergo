@@ -1,16 +1,19 @@
 package org.ergoplatform.network
 
-import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.consensus.{Older, Younger}
+import org.ergoplatform.consensus.{Older, Younger}
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.core.network.{ConnectedPeer, ConnectionId, Incoming}
-import scorex.core.network.peer.PeerInfo
+import org.ergoplatform.network.peer.PeerInfo
 
-class ErgoSyncTrackerSpecification extends ErgoPropertyTest {
+class ErgoSyncTrackerSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.tools.MinerBench._
+
   property("getters test") {
     val time = 10L
-    val peerInfo = PeerInfo(defaultPeerSpec, time, Some(Incoming))
+    val peerInfo = PeerInfo(defaultPeerSpec, time, Some(Incoming), 5L)
     val cid = ConnectionId(inetAddr1, inetAddr2, Incoming)
-    val connectedPeer = ConnectedPeer(cid, handlerRef = null, lastMessage = 5L, Some(peerInfo))
+    val connectedPeer = ConnectedPeer(cid, handlerRef = null, Some(peerInfo))
     val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
 
     val height = 1000

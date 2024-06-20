@@ -1,7 +1,6 @@
 package org.ergoplatform.http.routes
 
 import java.net.InetSocketAddress
-
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -10,9 +9,9 @@ import io.circe.Json
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{P2PKAddress, Pay2SAddress, Pay2SHAddress}
 import org.ergoplatform.http.api.ErgoUtilsApiRoute
+import org.ergoplatform.settings.RESTApiSettings
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.serialization.ErgoTreeSerializer
 
@@ -23,14 +22,16 @@ class UtilsApiRouteSpec extends AnyFlatSpec
   with ScalatestRouteTest
   with FailFastCirceSupport
   with Stubs {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
 
   val prefix = "/utils"
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
   val route: Route = ErgoUtilsApiRoute(settings).route
-  val p2pkaddress = P2PKAddress(defaultMinerPk)
-  val p2shaddress = Pay2SHAddress(feeProp)
-  val p2saddress = Pay2SAddress(feeProp)
+  val p2pkaddress = P2PKAddress(defaultMinerPk)(settings.addressEncoder)
+  val p2shaddress = Pay2SHAddress(feeProp)(settings.addressEncoder)
+  val p2saddress = Pay2SAddress(feeProp)(settings.addressEncoder)
 
   val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
 

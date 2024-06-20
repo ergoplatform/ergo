@@ -2,16 +2,19 @@ package org.ergoplatform.nodeView
 
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.{ErgoPropertyTest, HistoryTestHelpers}
+import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.scalatest.OptionValues
 import scorex.crypto.hash.Blake2b256
 import scorex.util.{ModifierId, bytesToId}
 
 import scala.annotation.tailrec
 
-class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistoryTestHelpers {
-
+class ErgoModifiersCacheSpec extends ErgoCorePropertyTest with OptionValues {
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.HistoryTestHelpers._
+  import org.ergoplatform.utils.generators.ChainGenerator._
   private def genKey(i: Int): ModifierId = bytesToId(Blake2b256(s"$i"))
 
   private def genCachePair(i: Int): (ModifierId, Header) = {
@@ -64,7 +67,7 @@ class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistoryTestHelpers {
     val c1 = modifiersCache.popCandidate(history0).value
     c1.isInstanceOf[Header] shouldBe true
     val h1 = c1.asInstanceOf[Header]
-    h1.height shouldBe ErgoHistory.GenesisHeight
+    h1.height shouldBe GenesisHeight
 
     val history1 = history0.append(c1).get._1
 

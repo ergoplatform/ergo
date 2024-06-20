@@ -3,24 +3,25 @@ package org.ergoplatform.nodeView.viewholder
 import akka.actor.ActorRef
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
-import org.ergoplatform.settings.{ErgoSettings, VotingSettings}
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, VotingSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
-import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
-import scorex.testkit.utils.NoShrink
-
+import org.ergoplatform.utils.{ErgoCorePropertyTest, NoShrink, NodeViewTestOps}
 import scala.concurrent.duration._
 
 /**
   * Test how node view holder is working in pruned mode
   */
-class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
+class PrunedNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps with NoShrink {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+
   private val BlockInterval = 2.minutes
 
   def prunedSettings(blocksToKeep: Int): ErgoSettings = {
-    val defaultSettings = ErgoSettings.read()
+    val defaultSettings = ErgoSettingsReader.read()
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
         powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n),

@@ -6,26 +6,25 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
-import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
 import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
-import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.boxes.{BoxSelector, ErgoBoxSerializer, TrackedBox}
+import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 import org.ergoplatform.wallet.utils.FileUtils
-import scorex.util.encode.Base16
-import scorex.util.{ModifierId}
+import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
-import sigmastate.basics.DLogProtocol.DLogProverInput
-import special.collection.Extensions.CollBytesOps
+import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigma.Extensions.CollBytesOps
 
 import java.io.FileNotFoundException
 import scala.collection.compat.immutable.ArraySeq
@@ -677,17 +676,5 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       .sign(tx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext, hints)
       .map(ErgoTransaction.apply)
   }
-
-}
-
-object ErgoWalletService {
-  /**
-    * Result of "deriveNextKey" operation
-    */
-  case class DeriveNextKeyResult(result: Try[(DerivationPath, P2PKAddress, ExtendedSecretKey)])
-
-  // A helper which is deserializing Base16-encoded boxes to ErgoBox instances
-  def stringsToBoxes(strings: Seq[String]): Seq[ErgoBox] =
-    strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get)
 
 }

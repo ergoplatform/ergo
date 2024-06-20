@@ -4,12 +4,13 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -24,6 +25,11 @@ import sigmastate.serialization.ErgoTreeSerializer
 import scala.concurrent.duration._
 
 class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers with MempoolTestHelpers {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+
   implicit lazy val context: IRContext = new RuntimeIRContext
 
   val cleanupDuration: FiniteDuration = 200.millis
@@ -54,7 +60,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val boxes = ErgoState.newBoxes(genesis.transactions).find(_.ergoTree == Constants.TrueLeaf)
     boxes.nonEmpty shouldBe true
 
-    val script = s"{sigmaProp(HEIGHT == ${genesis.height})}"
+    val script = s"{sigmaProp(HEIGHT == ${genesis.height} + 1)}"
     val compiler = new SigmaCompiler(ErgoAddressEncoder.MainnetNetworkPrefix)
     val prop = compiler.compile(emptyEnv, script).buildTree
     val tree = ErgoTree.fromProposition(prop.asSigmaProp)
@@ -86,7 +92,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     applyBlock(block) shouldBe 'success
 
-    scorex.core.utils.untilTimeout(cleanupDuration * 4, 100.millis) {
+    org.ergoplatform.utils.untilTimeout(cleanupDuration * 4, 100.millis) {
       // first tx removed from pool during node view update
       // another tx invalidated by `MempoolAuditor`
       getPoolSize shouldBe 0

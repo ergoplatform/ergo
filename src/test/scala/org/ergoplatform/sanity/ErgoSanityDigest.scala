@@ -5,23 +5,35 @@ import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.HeaderSerializer
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedHistory, ChangedMempool}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedHistory, ChangedMempool}
 import org.ergoplatform.network.ErgoSyncTracker
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.ErgoSettingsReader
 import org.scalacheck.Gen
-import scorex.core.idToBytes
+import org.ergoplatform.core.idToBytes
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
-import scorex.core.network.peer.PeerInfo
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.serialization.ErgoSerializer
+import scorex.testkit.generators.{SemanticallyInvalidModifierProducer, SemanticallyValidModifierProducer}
 
 import scala.concurrent.ExecutionContextExecutor
 
-class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
+class ErgoSanityDigest extends ErgoSanity[DIGEST_ST]
+  with SemanticallyValidModifierProducer[DIGEST_ST]
+  with SemanticallyInvalidModifierProducer[DIGEST_ST]
+  {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
+  import org.ergoplatform.utils.generators.CoreObjectGenerators._
+  import org.ergoplatform.utils.HistoryTestHelpers._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   override val historyGen: Gen[HT] =
     generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
@@ -58,7 +70,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
-    val settings = ErgoSettings.read()
+    val settings = ErgoSettingsReader.read()
     val pool = ErgoMemPool.empty(settings)
     val v = h.bestFullBlockIdOpt.orElse(h.bestHeaderIdOpt)
     v.foreach(id => s.store.update(idToBytes(id), Seq(), Seq()).get)
@@ -84,13 +96,12 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val tx = validErgoTransactionGenTemplate(minAssets = 0, maxAssets = 0).sample.get._2
 
 
-    val peerInfo = PeerInfo(defaultPeerSpec, Long.MaxValue)
+    val peerInfo = PeerInfo(defaultPeerSpec, Long.MaxValue, None, 0L)
 
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
-      lastMessage = 0,
       Some(peerInfo)
     )
     ref ! ChangedHistory(h)

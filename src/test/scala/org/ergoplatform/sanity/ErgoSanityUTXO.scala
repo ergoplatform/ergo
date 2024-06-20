@@ -5,23 +5,33 @@ import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedHistory, ChangedMempool}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedHistory, ChangedMempool}
 import org.ergoplatform.network.ErgoSyncTracker
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.settings.ErgoSettingsReader
 import org.scalacheck.Gen
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
-import scorex.core.network.peer.PeerInfo
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.serialization.ErgoSerializer
+import scorex.testkit.generators.{SemanticallyInvalidModifierProducer, SemanticallyValidModifierProducer}
 
 import scala.concurrent.ExecutionContextExecutor
 
-class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
+class ErgoSanityUTXO extends ErgoSanity[UTXO_ST]
+  with SemanticallyValidModifierProducer[UTXO_ST]
+  with SemanticallyInvalidModifierProducer[UTXO_ST] {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
+  import org.ergoplatform.utils.generators.CoreObjectGenerators._
+  import org.ergoplatform.utils.HistoryTestHelpers._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   override val historyGen: Gen[HT] =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
@@ -55,7 +65,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
-    val settings = ErgoSettings.read()
+    val settings = ErgoSettingsReader.read()
     val pool = ErgoMemPool.empty(settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
@@ -78,12 +88,11 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val tx = validErgoTransactionGenTemplate(minAssets = 0, maxAssets = 0).sample.get._2
 
 
-    val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
+    val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis(), None, 0L)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
-      lastMessage = 0,
       Some(peerInfo)
     )
     ref ! ChangedHistory(h)

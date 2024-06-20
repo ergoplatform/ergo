@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.14"
+  version: "5.0.21"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -243,60 +243,42 @@ components:
                 description: Name of the token, if any
 
     IndexedErgoBox:
-      type: object
-      description: Box indexed with extra information
-      required:
-        - box
-        - confirmationsNum
-        - address
-        - creationTransaction
-        - spendingTransaction
-        - spendingHeight
-        - inclusionHeight
-        - spent
-        - globalIndex
-      properties:
-        box:
-          $ref: '#/components/schemas/ErgoTransactionOutput'
-        confirmationsNum:
-          description: Number of confirmations, if the box is included into the blockchain
-          type: integer
-          format: int32
-          minimum: 0
-          example: 147
-          nullable: true
-        address:
-          $ref: '#/components/schemas/ErgoAddress'
-        creationTransaction:
-          description: Transaction which created the box
-          $ref: '#/components/schemas/ModifierId'
-        spendingTransaction:
-          description: Transaction which created the box
-          nullable: true
-          $ref: '#/components/schemas/ModifierId'
-        spendingHeight:
-          description: The height the box was spent at
-          type: integer
-          format: int32
-          minimum: 0
-          example: 147
-          nullable: true
-        inclusionHeight:
-          description: The height the transaction containing the box was included in a block at
-          type: integer
-          format: int32
-          minimum: 0
-          example: 147
-        spent:
-          description: A flag signalling whether the box was spent
-          type: boolean
-          example: false
-        globalIndex:
-          description: Global index of the output in the blockchain
-          type: integer
-          format: int64
-          minimum: 0
-          example: 83927
+      allOf:
+        - $ref: '#/components/schemas/ErgoTransactionOutput'
+        - type: object
+          description: Box indexed with extra information
+          required:
+            - address
+            - spentTransactionId
+            - spendingHeight
+            - inclusionHeight
+            - globalIndex
+          properties:
+            address:
+              $ref: '#/components/schemas/ErgoAddress'
+            spentTransactionId:
+              description: Transaction which spent the box
+              nullable: true
+              $ref: '#/components/schemas/ModifierId'
+            spendingHeight:
+              description: The height the box was spent at
+              type: integer
+              format: int32
+              minimum: 0
+              example: 147
+              nullable: true
+            inclusionHeight:
+              description: The height the transaction containing the box was included in a block at
+              type: integer
+              format: int32
+              minimum: 0
+              example: 147
+            globalIndex:
+              description: Global index of the output in the blockchain
+              type: integer
+              format: int64
+              minimum: 0
+              example: 83927
 
     IndexedToken:
       type: object
@@ -2721,6 +2703,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blocks/headerIds:
+    post:
+      summary: Get full blocks by given header ids
+      operationId: getFullBlockByIds
+      tags:
+        - blocks
+      requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+      responses:
+        '200':
+          description: Full blocks corresponding to ids provided
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FullBlock'
+        '404':
+          description: No block exist for every id provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /blocks/{headerId}/header:
     get:
       summary: Get the block header info by a given header id
@@ -4461,6 +4479,25 @@ paths:
           type: integer
           format: int32
           default: -1
+      - in: query
+        name: limit
+        required: false
+        description: amount of elements to retrieve
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 500
+          maximum: 2500
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -4552,6 +4589,25 @@ paths:
           type: integer
           format: int32
           default: -1
+      - in: query
+        name: limit
+        required: false
+        description: amount of elements to retrieve
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 500
+          maximum: 2500
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -5106,6 +5162,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /utxo/withPool/byIds:
+    post:
+      summary: Get boxes for ids provided, from UTXO or the mempool.
+      operationId: getBoxWithPoolByIds
+      tags:
+        - utxo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: Box object
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
+        '404':
+          description: No any box exists for every id provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /utxo/withPool/byIdBinary/{boxId}:
     get:
       summary: Get serialized box in Base16 encoding by an identifier, considering also the mempool.
@@ -5240,7 +5332,7 @@ paths:
               $ref: '#/components/schemas/SourceHolder'
       responses:
         '200':
-          description: Ergo address derived from source
+          description: P2SH address derived from source
           content:
             application/json:
               schema:
@@ -5475,6 +5567,25 @@ paths:
           type: integer
           format: int32
           default: -1
+      - in: query
+        name: limit
+        required: false
+        description: amount of elements to retrieve
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 500
+          maximum: 2500
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -5542,6 +5653,25 @@ paths:
           type: integer
           format: int32
           default: -1
+      - in: query
+        name: limit
+        required: false
+        description: amount of elements to retrieve
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 500
+          maximum: 2500
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -5594,6 +5724,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScanIdBoxId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/p2sRule:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create and register a scan to track P2S address provided
+      operationId: scriptP2SRule
+      tags:
+        - scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+                type: string
+                example: '4MQyML64GnzMxZgm'
+      responses:
+        '200':
+          description: Id of custom scan generated and registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanId'
+        '400':
+          description: Bad source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
@@ -6019,6 +6184,130 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blockchain/box/byTokenId/{tokenId}:
+    get:
+      summary: Retrieve boxes by an associated token id
+      operationId: getBoxesByTokenId
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: tokenId
+          required: true
+          description: id of the token
+          schema:
+            $ref: '#/components/schemas/ModifierId'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: boxes associated with wanted token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of boxes
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoBox'
+                  total:
+                    type: integer
+                    description: Total number of retreived boxes
+        '404':
+          description: No boxes found for wanted token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/unspent/byTokenId/{tokenId}:
+    get:
+      summary: Retrieve unspent boxes by an associated token id
+      operationId: getBoxesByTokenIdUnspent
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: tokenId
+          required: true
+          description: id of the token
+          schema:
+            $ref: '#/components/schemas/ModifierId'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: unspent boxes associated with wanted token
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of boxes
+                items:
+                  $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No unspent boxes found for wanted token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /blockchain/box/byAddress:
     post:
       summary: Retrieve boxes by their associated address
@@ -6117,6 +6406,13 @@ paths:
           schema:
             type: string
             default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: unspent boxes associated with wanted address
@@ -6272,6 +6568,13 @@ paths:
           schema:
             type: string
             default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: unspent boxes with wanted ergotree

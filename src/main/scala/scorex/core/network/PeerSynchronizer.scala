@@ -4,11 +4,12 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorSystem, DeathPactException, OneForOneStrategy, Props}
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.network.PeerSpec
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
-import scorex.core.network.message.{GetPeersSpec, Message, MessageSpec, PeersSpec}
-import scorex.core.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.peer.PeerManager.ReceivableMessages.{AddPeerIfEmpty, SeenPeers}
-import scorex.core.settings.NetworkSettings
+import org.ergoplatform.network.message.{GetPeersSpec, Message, MessageSpec, PeersSpec}
+import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{AddPeerIfEmpty, SeenPeers}
+import org.ergoplatform.settings.NetworkSettings
 import scorex.util.ScorexLogging
 import shapeless.syntax.typeable._
 

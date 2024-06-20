@@ -2,10 +2,12 @@ package org.ergoplatform.nodeView
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
+import org.ergoplatform.consensus.SyncInfo
+import org.ergoplatform.core.BytesSerializable
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -16,18 +18,16 @@ import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-import scorex.core.consensus.SyncInfo
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
-import scorex.core.network.message._
-import scorex.core.network.peer.PenaltyType
-import scorex.core.serialization.{BytesSerializable, ErgoSerializer, ManifestSerializer}
-import scorex.crypto.hash.Digest32
+import org.ergoplatform.network.message._
+import org.ergoplatform.network.peer.PenaltyType
+import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer}
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
+import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
-import org.ergoplatform.utils.generators.ChainGenerator
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -40,8 +40,9 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   with ScorexLogging
   with SyntacticallyTargetedModifierProducer
   with TotallyValidModifierProducer[ST]
-  with ChainGenerator
   with TestFileUtils {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ChainGenerator._
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 

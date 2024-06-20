@@ -9,7 +9,7 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.http.api.EmissionApiRoute
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.settings.{ErgoSettings, ReemissionSettings}
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, ReemissionSettings}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -24,7 +24,7 @@ class EmissionApiRouteSpec extends AnyFlatSpec
 
   implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
 
-  val ergoSettings: ErgoSettings = ErgoSettings.read()
+  val ergoSettings: ErgoSettings = ErgoSettingsReader.read()
   val coinEmission: EmissionRules = ergoSettings.chainSettings.emissionRules
 
   val reemissionSettings: ReemissionSettings = ergoSettings.chainSettings.reemission

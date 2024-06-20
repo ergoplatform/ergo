@@ -4,9 +4,9 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, IndexedErgoAddress}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, Segment}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
-import scorex.core.utils.ScorexEncoding
+import org.ergoplatform.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
@@ -94,8 +94,8 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
       ExtraIndexSerializer.parseBytesTry(bytes) match {
         case Success(pm) =>
           log.trace(s"Cache miss for existing index $id")
-          if(pm.isInstanceOf[IndexedErgoAddress]){
-            extraCache.put(pm.id, pm) // only cache addresses
+          if(pm.isInstanceOf[Segment[_]]){
+            extraCache.put(pm.id, pm) // cache all segment type objects
           }
           Some(pm)
         case Failure(_) =>
@@ -151,10 +151,9 @@ class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, e
   def insertExtra(indexesToInsert: Array[(Array[Byte], Array[Byte])],
                   objectsToInsert: Array[ExtraIndex]): Unit = {
     extraStore.insert(
-      objectsToInsert.map(mod => (mod.serializedId)),
+      objectsToInsert.map(mod => mod.serializedId),
       objectsToInsert.map(mod => ExtraIndexSerializer.toBytes(mod))
     )
-    cfor(0)(_ < objectsToInsert.length, _ + 1) { i => val ei = objectsToInsert(i); extraCache.put(ei.id, ei)}
     cfor(0)(_ < indexesToInsert.length, _ + 1) { i => extraStore.insert(indexesToInsert(i)._1, indexesToInsert(i)._2)}
   }
 

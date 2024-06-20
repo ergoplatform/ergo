@@ -1,23 +1,21 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.ErgoApp.CriticalSystemException
+import org.ergoplatform.CriticalSystemException
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight, Height}
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import scorex.core.consensus.ProgressInfo
-import scorex.core.consensus.ModifierSemanticValidity
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
+import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayWrapper
 import scorex.util._
 import scorex.util.encode.Base16
@@ -63,15 +61,15 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
-  // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
+  // todo for performance reasons we may just use key like s"score$id" but this will require to resync the blockchain
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("score".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("score".getBytes(CharsetName) ++ idToBytes(id)))
 
   protected def headerHeightKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("height".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("height".getBytes(CharsetName) ++ idToBytes(id)))
 
   protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("validity".getBytes(CharsetName) ++ idToBytes(id)))
 
   override def writeMinimalFullBlockHeight(height: Height): Unit = {
     historyStorage.insert(
@@ -80,7 +78,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   }
 
   override def readMinimalFullBlockHeight(): Height = {
-    historyStorage.getIndex(MinFullBlockHeightKey).map(Ints.fromByteArray).getOrElse(ErgoHistory.GenesisHeight)
+    historyStorage.getIndex(MinFullBlockHeightKey).map(Ints.fromByteArray).getOrElse(GenesisHeight)
   }
 
   def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(bytesToId)
@@ -93,12 +91,12 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   /**
     * @return height of best header
     */
-  def headersHeight: Height = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  def headersHeight: Height = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(EmptyHistoryHeight)
 
   /**
     * @return height of best header with all block sections
     */
-  def fullBlockHeight: Height = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  def fullBlockHeight: Height = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(EmptyHistoryHeight)
 
   /**
     * @param id - id of ErgoPersistentModifier
@@ -386,7 +384,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
 
     private def validationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
 
-    private def time(): ErgoHistory.Time = System.currentTimeMillis()
+    private def time(): Time = System.currentTimeMillis()
 
     def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {

@@ -4,8 +4,8 @@ import java.nio.ByteBuffer
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.network.message.{InvData, Message, MessageSerializer, RequestModifierSpec}
+import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.network.message.{InvData, Message, MessageSerializer, RequestModifierSpec}
 import scorex.crypto.hash
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -13,7 +13,8 @@ import scorex.util.encode.Base16
 /**
   * RequestModifiers message is used to ask peers about transactions and block parts to download
   */
-class RequestModifiersSpecification extends ErgoPropertyTest with DecodingUtils {
+class RequestModifiersSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.network.DecodingUtils._
 
   property("requestModifiers reference parser") {
 

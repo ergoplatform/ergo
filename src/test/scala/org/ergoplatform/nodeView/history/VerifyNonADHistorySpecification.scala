@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -7,11 +8,14 @@ import org.ergoplatform.modifiers.history.header.HeaderSerializer
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.utils.HistoryTestHelpers
-import scorex.core.consensus.ProgressInfo
+import org.ergoplatform.utils.{ErgoCorePropertyTest, MapPimp}
 
-class VerifyNonADHistorySpecification extends HistoryTestHelpers {
-  import scorex.core.utils.MapPimp
+class VerifyNonADHistorySpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.HistoryTestHelpers._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ChainGenerator._
+  import org.ergoplatform.tools.MinerBench._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)

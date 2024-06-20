@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.crypto
 import org.bouncycastle.util.BigIntegers
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import sigmastate.basics.CryptoConstants
+import sigmastate.crypto.CryptoConstants
 import sigmastate.serialization.GroupElementSerializer
 
 import scala.annotation.tailrec

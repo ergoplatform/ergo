@@ -1,19 +1,16 @@
 package org.ergoplatform.network
 
 import akka.actor.ActorRef
-import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.app.Version
-import scorex.core.network.PeerSpec
-import scorex.core.network.peer.PeerInfo
+import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, ConnectionId}
 
-class PeerFilteringRuleSpecification extends ErgoPropertyTest {
-
+class PeerFilteringRuleSpecification extends ErgoCorePropertyTest {
   private def peerWithVersion(version: Version): ConnectedPeer = {
     val ref = ActorRef.noSender
     val peerSpec = PeerSpec("", version, "", None, Seq.empty)
-    val peerInfo = PeerInfo(peerSpec, lastHandshake = 0L, None)
-    ConnectedPeer(ConnectionId(null, null, null), ref, lastMessage = 0L, Some(peerInfo))
+    val peerInfo = PeerInfo(peerSpec, lastHandshake = 0L, None, 0L)
+    ConnectedPeer(ConnectionId(null, null, null), ref, Some(peerInfo))
   }
 
   property("syncv2 filter") {

@@ -10,31 +10,33 @@ import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.FullBlockApplied
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FullBlockApplied
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigmastate.SigmaAnd
 import sigmastate.Values.{ErgoTree, SigmaPropConstant}
-import sigmastate.basics.DLogProtocol
-import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.crypto.DLogProtocol
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGenerators with Eventually {
+class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   implicit private val timeout: Timeout = defaultTimeout
 
@@ -47,7 +49,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     await(minerRef.askWithStatus(GenerateCandidate(mandatoryTransactions, reply = true)).mapTo[Candidate].map(_.externalVersion))
 
   val defaultSettings: ErgoSettings = {
-    val empty = ErgoSettings.read()
+    val empty = ErgoSettingsReader.read()
 
     val nodeSettings = empty.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,
@@ -114,7 +116,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val txCost =
       state.validateWithCost(
         ErgoTransaction(costlyTx.inputs, costlyTx.dataInputs, costlyTx.outputCandidates),
-        Some(r.s.stateContext),
+        r.s.stateContext,
         costLimit = 440000,
         None
       ).get
@@ -206,7 +208,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     }
 
     // wait for mempool to be cleaned
-    scorex.core.utils.untilTimeout(5.minute, 500.millis) {
+    org.ergoplatform.utils.untilTimeout(5.minute, 500.millis) {
       log.debug(s"Wait until transactions in mempool will be included into blocks. Currents size: ${requestReaders.m.size}")
       requestReaders.m.size shouldBe 0
       system.terminate()
@@ -376,7 +378,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
     val forkSettings: ErgoSettings = {
-      val empty = ErgoSettings.read()
+      val empty = ErgoSettingsReader.read()
 
       val nodeSettings = empty.nodeSettings.copy(mining = true,
         stateType = StateType.Utxo,

@@ -1,17 +1,22 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoTreePredef
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.MonetarySettings
-import org.ergoplatform.utils.{ErgoPropertyTest, RandomWrapper}
+import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import scala.concurrent.duration._
 
-class CandidateGeneratorPropSpec extends ErgoPropertyTest {
+class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   val delta: Int = settings.chainSettings.monetary.minerRewardDelay
 
@@ -167,7 +172,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
       val costs: Seq[Int] = fromBigMempool.map { tx =>
-        us.validateWithCost(tx, Some(upcomingContext), Int.MaxValue, Some(verifier)).getOrElse {
+        us.validateWithCost(tx, upcomingContext, Int.MaxValue, Some(verifier)).getOrElse {
           val boxesToSpend =
             tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
           tx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext).get
@@ -199,11 +204,11 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
     val bh     = boxesHolderGen.sample.get
     var us     = createUtxoState(bh, parameters)
-    val height = ErgoHistory.EmptyHistoryHeight
+    val height = EmptyHistoryHeight
 
     val ms = MonetarySettings(minerRewardDelay = delta)
     val st = settings.copy(chainSettings = settings.chainSettings.copy(monetary = ms))
-    val sc = ErgoStateContext.empty(genesisStateDigest, st, parameters)
+    val sc = ErgoStateContext.empty(genesisStateDigest, st.chainSettings, parameters)
     val txBoxes = bh.boxes.grouped(inputsNum).map(_.values.toIndexedSeq).toSeq
 
     val blockTx =
@@ -248,7 +253,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
       Gen.nonEmptyListOf(validErgoTransactionGenTemplate(minAssets = 0, propositionGen = feeProp))
     ) { btxs =>
       val blockTxs = btxs.map(_._2)
-      val height   = ErgoHistory.EmptyHistoryHeight
+      val height   = EmptyHistoryHeight
       val txs = CandidateGenerator.collectRewards(
         us.emissionBoxOpt,
         height,

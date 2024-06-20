@@ -4,11 +4,11 @@ import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.fastIdToBytes
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
-import scorex.core.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 import spire.implicits.cfor
-import special.collection.Extensions._
+import sigma.Extensions._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -27,7 +27,7 @@ case class BalanceInfo() extends ScorexLogging {
     * @param history - database handle
     * @return this object
     */
-  def retreiveAdditionalTokenInfo(history: ErgoHistoryReader): BalanceInfo = {
+  def retrieveAdditionalTokenInfo(history: ErgoHistoryReader): BalanceInfo = {
     additionalTokenInfo ++= tokens.map(token => {
       history.typedExtraIndexById[IndexedToken](uniqueId(token._1)) match {
         case Some(iT) => (token._1,(iT.name,iT.decimals))

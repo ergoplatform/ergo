@@ -8,12 +8,12 @@ import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import io.circe.generic.semiauto.deriveEncoder
 import org.ergoplatform.network.ErgoSyncTracker
-import scorex.core.api.http.{ApiError, ApiResponse, ApiRoute}
+import scorex.core.api.http.{ApiResponse, ApiRoute}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.network.NetworkController.ReceivableMessages.{ConnectTo, GetConnectedPeers, GetPeersStatus}
-import scorex.core.network.peer.{PeerInfo, PeersStatus}
-import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
-import scorex.core.settings.RESTApiSettings
+import org.ergoplatform.network.peer.{PeerInfo, PeersStatus}
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
+import org.ergoplatform.settings.RESTApiSettings
 
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
@@ -56,7 +56,7 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
         con.peerInfo.map { peerInfo =>
           PeerInfoResponse(
             address = peerInfo.peerSpec.declaredAddress.map(_.toString).getOrElse(""),
-            lastMessage = con.lastMessage,
+            lastMessage = peerInfo.lastStoredActivityTime,
             lastHandshake = peerInfo.lastHandshake,
             name = peerInfo.peerSpec.nodeName,
             connectionType = peerInfo.connectionType.map(_.toString),

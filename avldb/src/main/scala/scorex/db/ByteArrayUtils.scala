@@ -2,6 +2,15 @@ package scorex.db
 
 object ByteArrayUtils {
 
+  // Java comparator
+  object BYTE_ARRAY_COMPARATOR extends Ordering[Array[Byte]] {
+    def compare(o1: Array[Byte], o2: Array[Byte]) = compare(o1, o2)
+  }
+  // Scala comparator
+  implicit object ByteArrayOrdering extends Ordering[Array[Byte]] {
+    def compare(o1: Array[Byte], o2: Array[Byte]) = ByteArrayUtils.compare(o1, o2)
+  }
+
   def compare(o1: Array[Byte], o2: Array[Byte]): Int = {
     val len = Math.min(o1.length, o2.length)
     var i = 0

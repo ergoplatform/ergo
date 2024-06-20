@@ -9,14 +9,15 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.mempool.ErgoMemPool.SortingOption
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.ergoplatform.wallet.boxes.{BoxSelector, ReplaceCompactCollectBoxSelector}
+import org.scalatest.matchers.should.Matchers
 import scorex.util.ModifierId
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import java.io.File
 import scala.annotation.tailrec
@@ -29,10 +30,13 @@ import scala.util.Try
   * Generate blocks starting from start timestamp and until current time with expected block interval
   * between them, to ensure that difficulty does not change.
   */
-object ChainGenerator extends App with ErgoTestHelpers {
+object ChainGenerator extends App with ErgoTestHelpers with Matchers {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   val realNetworkSetting = {
-    val initSettings = ErgoSettings.read(Args(None, Some(NetworkType.TestNet)))
+    val initSettings = ErgoSettingsReader.read(Args(None, Some(NetworkType.TestNet)))
     initSettings.copy(chainSettings = initSettings.chainSettings.copy(genesisId = None))
   }
 
@@ -94,7 +98,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
                    acc: Seq[ModifierId]): Seq[ModifierId] = {
     val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
     if (time < System.currentTimeMillis()) {
-      val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
+      val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(GenesisHeight),
         initBox, state.stateContext)
 
       val candidate = genCandidate(prover.hdPubKeys.head.key, last, time, txs, state)

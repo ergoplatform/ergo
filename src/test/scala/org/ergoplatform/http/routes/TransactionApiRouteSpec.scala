@@ -7,22 +7,21 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.http.api.{ApiCodecs, TransactionsApiRoute}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, RESTApiSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.SType
 import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import special.collection.Extensions._
+import sigma.Extensions._
 
 import java.net.InetSocketAddress
 import scala.concurrent.duration._
@@ -33,6 +32,9 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   with Stubs
   with ApiCodecs
   with FailFastCirceSupport {
+
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
 
   val prefix = "/transactions"
 
@@ -243,7 +245,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
       Map(
         ErgoBox.R4 -> ByteArrayConstant("name".getBytes("UTF-8")),
         ErgoBox.R5 -> ByteArrayConstant("4".getBytes("UTF-8")),
-      ).asJson
+      ).asInstanceOf[AdditionalRegisters].asJson
 
     Post(prefix + s"/unconfirmed/outputs/byRegisters", searchedRegs) ~> chainedRoute ~> check {
       status shouldBe StatusCodes.OK
@@ -271,7 +273,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
         ErgoBox.R4 -> ByteArrayConstant("name".getBytes("UTF-8")),
         ErgoBox.R5 -> ByteArrayConstant("4".getBytes("UTF-8")),
         ErgoBox.R6 -> ByteArrayConstant("description".getBytes("UTF-8")),
-      ).asJson
+      ).asInstanceOf[AdditionalRegisters].asJson
 
     Post(prefix + s"/unconfirmed/outputs/byRegisters", searchedRegs) ~> chainedRoute ~> check {
       status shouldBe StatusCodes.OK

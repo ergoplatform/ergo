@@ -4,8 +4,8 @@ import java.nio.ByteBuffer
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.network.message.{InvData, InvSpec, Message, MessageSerializer}
+import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.network.message.{InvData, InvSpec, Message, MessageSerializer}
 import scorex.crypto.hash
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -13,7 +13,8 @@ import scorex.util.encode.Base16
 /**
   * Inv message is informing peers around about transactions and block parts available
   */
-class InvSpecification extends ErgoPropertyTest with DecodingUtils {
+class InvSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.network.DecodingUtils._
 
   property("inv reference parser") {
     val magic = Array(1: Byte, 0: Byte, 2: Byte, 4: Byte) // mainnet magic

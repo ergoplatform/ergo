@@ -4,8 +4,8 @@ import java.nio.ByteBuffer
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoMessageSpec, ErgoSyncInfoV1}
-import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.network.message.{Message, MessageSerializer}
+import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.network.message.{Message, MessageSerializer}
 import scorex.crypto.hash
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -16,7 +16,8 @@ import scorex.util.encode.Base16
   *
   * syncInfo v1 is about a sequence of header ids just
   */
-class ErgoSyncInfoSpecification extends ErgoPropertyTest with DecodingUtils {
+class ErgoSyncInfoSpecification extends ErgoCorePropertyTest {
+  import org.ergoplatform.network.DecodingUtils._
 
   property("sync info v1 reference parser") {
     val magic = Array(1: Byte, 0: Byte, 2: Byte, 4: Byte) // mainnet magic

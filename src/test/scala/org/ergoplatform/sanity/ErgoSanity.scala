@@ -14,29 +14,30 @@ import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
-import org.scalacheck.Gen
-import scorex.core.network.DeliveryTracker
-import scorex.core.{PersistentNodeViewModifier, bytesToId}
-import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.testkit.generators.{ModifierProducerTemplateItem, SynInvalid, Valid}
-import scorex.testkit.properties._
+import scorex.testkit.properties.HistoryTests
 import scorex.testkit.properties.mempool.{MempoolRemovalTest, MempoolTransactionsTest}
 import scorex.testkit.properties.state.StateApplicationTest
+import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.core.bytesToId
+import org.scalacheck.Gen
+import scorex.core.network.DeliveryTracker
+import scorex.crypto.authds.ADDigest
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.utils.Random
 
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
 
 trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
   with StateApplicationTest[ST]
   with MempoolTransactionsTest
   with MempoolRemovalTest
   with HistoryTests
-  with ErgoTestHelpers
-  with HistoryTestHelpers {
-
+  with ErgoTestHelpers {
+  import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.generators.ErgoNodeGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   override val memPool: MPool = ErgoMemPool.empty(settings)
 
@@ -100,18 +101,7 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
     syncInfoSpec,
     settings,
     syncTracker,
-    deliveryTracker)(ec) {
-
-    protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
-      mod match {
-        case fb: ErgoFullBlock if fb.header.isNew(1.hour) =>
-          fb.toSeq.foreach(s => broadcastModifierInv(s))
-        case h: Header if h.isNew(1.hour) =>
-          broadcastModifierInv(h)
-        case _ =>
-      }
-    }
-  }
+    deliveryTracker)(ec)
 
 }
 

@@ -220,7 +220,21 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxesByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => (addr.retrieveBoxes(history, offset, limit).reverse, addr.boxCount)
+        case Some(addr) =>
+          val lim = 200
+          println(addr.retrieveBoxes(history, 0, lim).reverse.map(_.id).mkString("\",\"")) // a1
+          println(addr.retrieveBoxes(history, lim, lim).reverse.map(_.id).mkString("\",\""))      // a2
+          println(addr.retrieveBoxes(history, 2 * lim, lim).reverse.map(_.id).mkString("\",\"")) // a3
+          println(addr.retrieveBoxes(history, 3 * lim, lim).reverse.map(_.id).mkString("\",\"")) // a4
+          println(addr.retrieveBoxes(history, 4 * lim, lim).reverse.map(_.id).mkString("\",\"")) // a5
+          println(addr.retrieveBoxes(history, 5 * lim, lim).reverse.map(_.id).mkString("\",\""))
+          println(addr.retrieveBoxes(history, 6 * lim, lim).reverse.map(_.id).mkString("\",\""))
+          println(addr.retrieveBoxes(history, 7 * lim, lim).reverse.map(_.id).mkString("\",\""))
+          println(addr.retrieveBoxes(history, 8 * lim, lim).reverse.map(_.id).mkString("\",\""))
+          println(addr.retrieveBoxes(history, 9 * lim, lim).reverse.map(_.id).mkString("\",\""))
+          println(addr.boxCount)
+          val boxes = addr.retrieveBoxes(history, offset, limit).reverse
+          (boxes, addr.boxCount)
         case None       => (Seq.empty[IndexedErgoBox], 0L)
       }
     }

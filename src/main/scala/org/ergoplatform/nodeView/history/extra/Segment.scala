@@ -22,8 +22,8 @@ import scala.reflect.ClassTag
  * This mechanism is used to prevent excessive serialization/deserialization delays caused by objects with a lot of transaction/box indexes.
  * @param parentId - identifier of parent object
  * @param factory  - parent object factory
- * @param txs      - list of numberic transaction indexes
- * @param boxes    - list of numberic box indexes, negative values indicate the box is spent
+ * @param txs      - list of numeric transaction indexes
+ * @param boxes    - list of numeric box indexes, negative values indicate the box is spent
  * @param idMod    - function to apply to ids during segmentation and db lookup
  * @tparam T       - type of parent object
  */
@@ -55,12 +55,12 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
   /**
    * @return total number of boxes associated with the parent object
    */
-  def boxCount(implicit segmentTreshold: Int): Long = segmentTreshold * boxSegmentCount + boxes.length
+  def boxCount(implicit segmentThreshold: Int): Long = segmentThreshold * boxSegmentCount + boxes.length
 
   /**
    * @return total number of transactions associated with the parent object
    */
-  def txCount(implicit segmentTreshold: Int): Long = segmentTreshold * txSegmentCount + txs.length
+  def txCount(implicit segmentThreshold: Int): Long = segmentThreshold * txSegmentCount + txs.length
 
   /**
    * Locate which segment the given box number is in and change its sign, meaning it spends unspent boxes and vice versa.
@@ -141,7 +141,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param limit  - items to retrieve
    * @return array of offsets
    */
-  private def getSegmentsForRange(offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[Int] =
+  private[extra] def getSegmentsForRange(offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[Int] =
     (math.max(math.floor(offset * 1F / segmentTreshold).toInt, 1) to math.ceil((offset + limit) * 1F / segmentTreshold).toInt).toArray
 
   /**
@@ -186,18 +186,18 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param array         - the indexes already in memory
    * @param idOf          - function to calculate segment ids, either [[txSegmentId]] or [[boxSegmentId]]
    * @param arraySelector - function to select index array from retreived segments
-   * @param retreive      - function to retreive indexes from database
+   * @param retrieve      - function to retreive indexes from database
    * @tparam B - type of desired indexes, either [[IndexedErgoTransaction]] or [[IndexedErgoBox]]
    * @return
    */
-  private def getFromSegments[B: ClassTag](history: ErgoHistoryReader,
+  private[extra] def getFromSegments[B: ClassTag](history: ErgoHistoryReader,
                                            offset: Int,
                                            limit: Int,
                                            segmentCount: Int,
                                            array: ArrayBuffer[Long],
                                            idOf: (ModifierId, Int) => ModifierId,
                                            arraySelector: T => ArrayBuffer[Long],
-                                           retreive: (ArrayBuffer[Long], ErgoHistoryReader) => Array[B])
+                                           retrieve: (ArrayBuffer[Long], ErgoHistoryReader) => Array[B])
                                           (implicit segmentTreshold: Int): Array[B] = {
     val total: Int = segmentTreshold * segmentCount + array.length
     if(offset >= total)
@@ -210,9 +210,11 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
         ) ++=: data
       }
       data ++= (if(offset < array.length) array else Nil)
-      retreive(sliceReversed(data, offset % segmentTreshold, math.min(total - offset, limit)), history)
+      val sr = sliceReversed(data, offset % segmentTreshold, math.min(total - offset, limit))
+  //    println(s"sr: $sr")
+      retrieve(sr, history)
     } else
-      retreive(sliceReversed(array, offset, limit), history)
+      retrieve(sliceReversed(array, offset, limit), history)
   }
 
   /**
@@ -244,7 +246,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param mempool     - mempool to use, if unconfirmed is true
    * @param offset      - items to skip from the start
    * @param limit       - items to retrieve
-   * @param sortDir     - whether to start retreival from newest box ([[DESC]]) or oldest box ([[ASC]])
+   * @param sortDir     - whether to start retrieval from newest box ([[DESC]]) or oldest box ([[ASC]])
    * @param unconfirmed - whether to include unconfirmed boxes
    * @return array of unspent boxes
    */

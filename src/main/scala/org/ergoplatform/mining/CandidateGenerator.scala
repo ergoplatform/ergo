@@ -72,7 +72,7 @@ class CandidateGenerator(
 
   override def receive: Receive = {
 
-    /** first we need to get Readers to have some initial state to work with */
+    // first we need to get Readers to have some initial state to work with
     case Readers(h, s: UtxoStateReader, m, _) =>
       val lastHeaders   = h.lastHeaders(500).headers
       val avgMiningTime = getBlockMiningTimeAvg(lastHeaders.map(_.timestamp))
@@ -116,10 +116,10 @@ class CandidateGenerator(
     case _: NodeViewChange =>
     // Just ignore all other NodeView Changes
 
-    /**
-      * When new block is applied, either one mined by us or received from peers isn't equal to our candidate's parent,
-      * we need to generate new candidate and possibly also discard existing solution if it is also behind
-      */
+    /*
+     * When new block is applied, either one mined by us or received from peers isn't equal to our candidate's parent,
+     * we need to generate new candidate and possibly also discard existing solution if it is also behind
+     */
     case FullBlockApplied(header) =>
       log.info(
         s"Preparing new candidate on getting new block at ${header.height}"
@@ -883,7 +883,7 @@ object CandidateGenerator extends ScorexLogging {
   }
 
   /**
-    * Derives header without pow from [[CandidateBlock]].
+    * Derives header without pow from a block candidate provided
     */
   def deriveUnprovenHeader(candidate: CandidateBlock): HeaderWithoutPow = {
     val (parentId, height) = derivedHeaderFields(candidate.parentOpt)

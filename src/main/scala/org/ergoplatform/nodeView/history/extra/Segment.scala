@@ -141,8 +141,22 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param limit  - items to retrieve
    * @return array of offsets
    */
-  private[extra] def getSegmentsForRange(offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[Int] =
-    (math.max(math.floor(offset * 1F / segmentTreshold).toInt, 1) to math.ceil((offset + limit) * 1F / segmentTreshold).toInt).toArray
+  private[extra] def getSegmentsForRange(offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[Int] = {
+    val floor = math.max(math.floor(offset * 1F / segmentTreshold).toInt, 1)
+    if(offset == 1400) {
+      println("floor0: " + floor)
+    }
+   /* val floor = if(floor0 * segmentTreshold < offset) {
+      floor0 + 1
+    } else {
+      floor0
+    }*/
+    val ceil = math.ceil((offset + limit) * 1F / segmentTreshold).toInt
+    if(offset == 1400) {
+      println("ceil: " + ceil)
+    }
+    (floor to ceil).toArray
+  }
 
   /**
    * Get a range of elements from an ArrayBuffer by removing the last "offset" elements,
@@ -204,14 +218,40 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       return Array.empty[B] // return empty array if all elements are skipped
     if(offset + limit > array.length && segmentCount > 0) {
       val data: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
-      getSegmentsForRange(offset, limit).map(n => math.max(segmentCount - n, 0)).distinct.foreach { num =>
-        arraySelector(
-          history.typedExtraIndexById[T](idMod(idOf(parentId, num))).get
-        ) ++=: data
+      val altData: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
+      var toRead = limit
+      altData ++= (if(offset < array.length) array else Nil)   // todo: partial filling
+      toRead -= altData.length
+      getSegmentsForRange(offset - array.length, limit).map(n => math.min(segmentCount, n)).distinct.foreach { num =>
+        val lowerBound = array.length + (num - 1) * segmentTreshold
+        val upperBound = lowerBound + segmentTreshold
+
+        val target = offset + limit
+
+        if (target > lowerBound) { //todo: >= ?
+          val arr = arraySelector(
+            history.typedExtraIndexById[T](idMod(idOf(parentId, num))).get
+          ).reverse
+          if (target > upperBound) { //todo: >= ?
+            altData ++= arr.slice(offset - lowerBound, arr.size)
+          } else {
+            if(offset > lowerBound) {
+              altData ++= arr.slice(offset - lowerBound, offset - lowerBound + limit)
+            } else {
+              altData ++= arr.slice(0, target - lowerBound)
+            }
+          }
+        }
       }
       data ++= (if(offset < array.length) array else Nil)
-      val sr = sliceReversed(data, offset % segmentTreshold, math.min(total - offset, limit))
-  //    println(s"sr: $sr")
+      println("================")
+      println("offset: " + offset)
+      println("data: " + altData.length)
+      println("first: " + altData.head)
+      println("last: " + altData.last)
+
+      // val off = if(offset > array.length) (offset  - array.length) % segmentTreshold else offset % segmentTreshold
+      val sr = altData // sliceReversed(data, off, math.min(total - offset, limit))
       retrieve(sr, history)
     } else
       retrieve(sliceReversed(array, offset, limit), history)
@@ -246,7 +286,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param mempool     - mempool to use, if unconfirmed is true
    * @param offset      - items to skip from the start
    * @param limit       - items to retrieve
-   * @param sortDir     - whether to start retrieval from newest box ([[DESC]]) or oldest box ([[ASC]])
+   * @param sortDir     - whether to start retrieval from newest box (DESC) or oldest box (ASC)
    * @param unconfirmed - whether to include unconfirmed boxes
    * @return array of unspent boxes
    */

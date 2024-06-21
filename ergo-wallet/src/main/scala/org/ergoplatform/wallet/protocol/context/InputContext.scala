@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.protocol.context
 
-import sigmastate.interpreter.ContextExtension
+import sigma.interpreter.ContextExtension
 
 /**
   * Part of execution context regarding a box to be spent.

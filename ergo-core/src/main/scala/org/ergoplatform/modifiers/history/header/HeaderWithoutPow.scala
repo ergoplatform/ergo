@@ -17,19 +17,20 @@ class HeaderWithoutPow(val version: Header.Version, // 1 byte
                        val nBits: Long, //actually it is unsigned int
                        val height: Int,
                        val extensionRoot: Digest32,
-                       val votes: Array[Byte]) { //3 bytes
+                       val votes: Array[Byte], //3 bytes
+                       val unparsedBytes: Array[Byte]) {
   def toHeader(powSolution: AutolykosSolution, headerSize: Option[Int] = None): Header =
     Header(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionRoot, powSolution, votes, headerSize)
+      nBits, height, extensionRoot, powSolution, votes, unparsedBytes, headerSize)
 }
 
 object HeaderWithoutPow {
 
   def apply(version: Header.Version, parentId: ModifierId, ADProofsRoot: Digest32, stateRoot: ADDigest,
             transactionsRoot: Digest32, timestamp: Header.Timestamp, nBits: Long, height: Int,
-            extensionRoot: Digest32, votes: Array[Byte]): HeaderWithoutPow = {
+            extensionRoot: Digest32, votes: Array[Byte], unparsedBytes: Array[Byte]): HeaderWithoutPow = {
     new HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionRoot, votes)
+      nBits, height, extensionRoot, votes, unparsedBytes)
   }
 
 }

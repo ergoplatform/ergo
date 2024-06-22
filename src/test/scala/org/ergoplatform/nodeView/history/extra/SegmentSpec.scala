@@ -90,10 +90,7 @@ class SegmentSpec extends ErgoCorePropertyTest {
       )
     }
 
-    val lim = 200
-
-    //getFromSegments(3 * lim, lim).distinct.length shouldBe lim
-
+   val lim = 200
 
     val a1 = getFromSegments(0, lim)
     val a2 = getFromSegments(lim, lim)
@@ -129,5 +126,65 @@ class SegmentSpec extends ErgoCorePropertyTest {
 
     (a1 ++ a2 ++ a3 ++ a4 ++ a5 ++ a6 ++ a7 ++ a8 ++ a9).distinct.length shouldBe(1706)
 
+    val lim2 = 100
+
+    val b1 = getFromSegments(0, lim2)
+    val b2 = getFromSegments(lim2, lim2)
+    val b3 = getFromSegments(2 * lim2, lim2)
+    val b4 = getFromSegments(3 * lim2, lim2)
+    val b5 = getFromSegments(4 * lim2, lim2)
+    val b6 = getFromSegments(5 * lim2, lim2)
+    val b7 = getFromSegments(6 * lim2, lim2)
+    val b8 = getFromSegments(7 * lim2, lim2)
+    val b9 = getFromSegments(8 * lim2, lim2)
+    val b10 = getFromSegments(9 * lim2, lim2)
+    val b11 = getFromSegments(10 * lim2, lim2)
+    val b12 = getFromSegments(11 * lim2, lim2)
+    val b13 = getFromSegments(12 * lim2, lim2)
+    val b14 = getFromSegments(13 * lim2, lim2)
+    val b15 = getFromSegments(14 * lim2, lim2)
+    val b16 = getFromSegments(15 * lim2, lim2)
+    val b17 = getFromSegments(16 * lim2, lim2)
+    val b18 = getFromSegments(17 * lim2, lim2)
+    val b19 = getFromSegments(18 * lim2, lim2)
+
+    b1.distinct.length shouldBe(lim2)
+    b2.distinct.length shouldBe(lim2)
+    b3.distinct.length shouldBe(lim2)
+    b4.distinct.length shouldBe(lim2)
+    b5.distinct.length shouldBe(lim2)
+    b6.distinct.length shouldBe(lim2)
+    b7.distinct.length shouldBe(lim2)
+    b8.distinct.length shouldBe(lim2)
+    b9.distinct.length shouldBe(lim2)
+    b10.distinct.length shouldBe(lim2)
+    b11.distinct.length shouldBe(lim2)
+    b12.distinct.length shouldBe(lim2)
+    b13.distinct.length shouldBe(lim2)
+    b14.distinct.length shouldBe(lim2)
+    b15.distinct.length shouldBe(lim2)
+    b16.distinct.length shouldBe(lim2)
+    b17.distinct.length shouldBe(lim2)
+    b18.distinct.length shouldBe(6)
+    b19.distinct.length shouldBe(0)
+
+    (b1 ++ b2).distinct.length shouldBe(2 * lim2)
+    (b2 ++ b3).distinct.length shouldBe(2 * lim2)
+    (b1 ++ b2 ++ b3).distinct.length shouldBe(3 * lim2)
+
+    (b1 ++ b2 ++ b3 ++ b4 ++ b5 ++ b6 ++ b7 ++ b8 ++ b9 ++
+      b10 ++ b11 ++ b12 ++ b13 ++ b14 ++ b15 ++ b16 ++ b17 ++ b18).distinct.length shouldBe(1706)
+
+    val lim3 = 682 // array + segment threshold
+    val c1 = getFromSegments(0, lim3)
+    val c2 = getFromSegments(lim3, lim3)
+    val c3 = getFromSegments(2 * lim3, lim3)
+    val c4 = getFromSegments(3 * lim3, lim3)
+
+    c1.distinct.length shouldBe(lim3)
+    c2.distinct.length shouldBe(lim3)
+    c3.distinct.length shouldBe(342)
+    c4.distinct.length shouldBe(0)
+    (c1 ++ c2 ++ c3).distinct.length shouldBe(1706)
   }
 }

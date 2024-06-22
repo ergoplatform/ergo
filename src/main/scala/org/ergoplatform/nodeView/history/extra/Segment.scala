@@ -143,32 +143,9 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    */
   private[extra] def getSegmentsForRange(offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[Int] = {
     val floor = math.max(math.floor(offset * 1F / segmentTreshold).toInt, 1)
-    if(offset == 1400) {
-      println("floor0: " + floor)
-    }
-   /* val floor = if(floor0 * segmentTreshold < offset) {
-      floor0 + 1
-    } else {
-      floor0
-    }*/
     val ceil = math.ceil((offset + limit) * 1F / segmentTreshold).toInt
-    if(offset == 1400) {
-      println("ceil: " + ceil)
-    }
     (floor to ceil).toArray
   }
-
-  /**
-   * Get a range of elements from an ArrayBuffer by removing the last "offset" elements,
-   * then getting the last "limit" elements reversed.
-   *
-   * @param arr    - array to get range from
-   * @param offset - number of items to skip from the end
-   * @param limit  - number of items to retrieve
-   * @return a reversed range in "arr" ArrayBuffer
-   */
-  private def sliceReversed(arr: ArrayBuffer[Long], offset: Int, limit: Int): ArrayBuffer[Long] =
-    arr.slice(arr.length - limit - offset, arr.length - offset).reverse
 
   /**
    * Get an array of transactions with full bodies from an array of numeric transaction indexes
@@ -200,42 +177,39 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param array         - the indexes already in memory
    * @param idOf          - function to calculate segment ids, either [[txSegmentId]] or [[boxSegmentId]]
    * @param arraySelector - function to select index array from retreived segments
-   * @param retrieve      - function to retreive indexes from database
+   * @param retrieve      - function to retrieve indexes from database
    * @tparam B - type of desired indexes, either [[IndexedErgoTransaction]] or [[IndexedErgoBox]]
    * @return
    */
   private[extra] def getFromSegments[B: ClassTag](history: ErgoHistoryReader,
-                                           offset: Int,
-                                           limit: Int,
-                                           segmentCount: Int,
-                                           array: ArrayBuffer[Long],
-                                           idOf: (ModifierId, Int) => ModifierId,
-                                           arraySelector: T => ArrayBuffer[Long],
-                                           retrieve: (ArrayBuffer[Long], ErgoHistoryReader) => Array[B])
-                                          (implicit segmentTreshold: Int): Array[B] = {
+                                                  offset: Int,
+                                                  limit: Int,
+                                                  segmentCount: Int,
+                                                  array: ArrayBuffer[Long],
+                                                  idOf: (ModifierId, Int) => ModifierId,
+                                                  arraySelector: T => ArrayBuffer[Long],
+                                                  retrieve: (ArrayBuffer[Long], ErgoHistoryReader) => Array[B])
+                                                 (implicit segmentTreshold: Int): Array[B] = {
     val total: Int = segmentTreshold * segmentCount + array.length
-    if(offset >= total)
+    if (offset >= total)
       return Array.empty[B] // return empty array if all elements are skipped
-    if(offset + limit > array.length && segmentCount > 0) {
-      val data: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
+    if (offset + limit > array.length && segmentCount > 0) {
       val altData: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
-      var toRead = limit
-      altData ++= (if(offset < array.length) array else Nil)   // todo: partial filling
-      toRead -= altData.length
+      altData ++= (if (offset < array.length) array.slice(offset, Math.min(offset + limit, array.length)) else Nil)
       getSegmentsForRange(offset - array.length, limit).map(n => math.min(segmentCount, n)).distinct.foreach { num =>
         val lowerBound = array.length + (num - 1) * segmentTreshold
         val upperBound = lowerBound + segmentTreshold
 
         val target = offset + limit
 
-        if (target > lowerBound) { //todo: >= ?
+        if (target > lowerBound) {
           val arr = arraySelector(
             history.typedExtraIndexById[T](idMod(idOf(parentId, num))).get
           ).reverse
-          if (target > upperBound) { //todo: >= ?
+          if (target > upperBound) {
             altData ++= arr.slice(offset - lowerBound, arr.size)
           } else {
-            if(offset > lowerBound) {
+            if (offset > lowerBound) {
               altData ++= arr.slice(offset - lowerBound, offset - lowerBound + limit)
             } else {
               altData ++= arr.slice(0, target - lowerBound)
@@ -243,18 +217,11 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
           }
         }
       }
-      data ++= (if(offset < array.length) array else Nil)
-      println("================")
-      println("offset: " + offset)
-      println("data: " + altData.length)
-      println("first: " + altData.head)
-      println("last: " + altData.last)
 
-      // val off = if(offset > array.length) (offset  - array.length) % segmentTreshold else offset % segmentTreshold
-      val sr = altData // sliceReversed(data, off, math.min(total - offset, limit))
-      retrieve(sr, history)
-    } else
-      retrieve(sliceReversed(array, offset, limit), history)
+      retrieve(altData, history)
+    } else {
+      retrieve(array.slice(offset, offset + limit), history)
+    }
   }
 
   /**

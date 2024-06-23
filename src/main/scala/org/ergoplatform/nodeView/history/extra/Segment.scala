@@ -196,7 +196,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
     if (offset + limit > array.length && segmentCount > 0) {
       val altData: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
       altData ++= (if (offset < array.length) array.slice(offset, Math.min(offset + limit, array.length)) else Nil)
-      getSegmentsForRange(offset - array.length, limit).map(n => math.min(segmentCount, n)).distinct.foreach { num =>
+      getSegmentsForRange(offset - array.length, limit).map(n => math.max(segmentCount - n, 0)).reverse.distinct.foreach { num =>
         val lowerBound = array.length + (num - 1) * segmentTreshold
         val upperBound = lowerBound + segmentTreshold
 
@@ -268,7 +268,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       case DESC =>
         data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
         var segment: Int = boxSegmentCount
-        while(data.length < (limit + offset) && segment > 0) {
+        while (data.length < (limit + offset) && segment > 0) {
           segment -= 1
           history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
@@ -276,7 +276,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
         data.reverse.slice(offset, offset + limit)
       case ASC =>
         var segment: Int = 0
-        while(data.length < (limit + offset) && segment < boxSegmentCount) {
+        while (data.length < (limit + offset) && segment < boxSegmentCount) {
           data ++= history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
           segment += 1
@@ -285,7 +285,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
           data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
         data.slice(offset, offset + limit)
     }
-    if(unconfirmed) {
+    if (unconfirmed) {
       val mempoolBoxes = filterMempool(mempool.getAll.flatMap(_.transaction.outputs))
       val unconfirmedBoxes = mempoolBoxes.map(new IndexedErgoBox(0, None, None, _, 0))
       sortDir match {

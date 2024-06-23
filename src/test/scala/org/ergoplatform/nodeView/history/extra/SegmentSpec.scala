@@ -15,12 +15,6 @@ import scala.util.{Try}
 
 class SegmentSpec extends ErgoCorePropertyTest {
 
-  property("getSegmentsForRange") {
-    val hash = ModifierId @@ Base16.encode(Array.fill(32)(0.toByte))
-    val ia = IndexedErgoAddress(hash, new ArrayBuffer[Long](), new ArrayBuffer[Long]())
-    println(ia.getSegmentsForRange(1800,200)(512).mkString(", "))
-  }
-
   property("correct slicing in getFromSegments") {
     implicit val segmentTreshold: Int = 512
 

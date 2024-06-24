@@ -142,7 +142,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @return array of offsets
    */
   private[extra] def getSegmentsForRange(offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[Int] = {
-    val floor = math.max(math.floor(offset * 1F / segmentTreshold).toInt, 1)
+    val floor = math.max(math.floor(offset * 1F / segmentTreshold).toInt, 0)
     val ceil = math.ceil((offset + limit) * 1F / segmentTreshold).toInt
     (floor to ceil).toArray
   }
@@ -194,15 +194,22 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
     if (offset >= total)
       return Array.empty[B] // return empty array if all elements are skipped
     if (offset + limit > array.length && segmentCount > 0) {
+
+      val target = offset + limit
+
       val altData: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
       altData ++= (if (offset < array.length) array.slice(offset, Math.min(offset + limit, array.length)) else Nil)
-      getSegmentsForRange(offset - array.length, limit).map(n => math.max(segmentCount - n, 0)).reverse.distinct.foreach { num =>
-        val lowerBound = array.length + (num - 1) * segmentTreshold
+      val segments = getSegmentsForRange(offset - array.length, limit).map(n => math.min(segmentCount - 1, n)).distinct
+      println("0: " + history.typedExtraIndexById[T](idMod(idOf(parentId, 0))).isDefined)
+      println("1: " + history.typedExtraIndexById[T](idMod(idOf(parentId, 1))).isDefined)
+      println("2: " + history.typedExtraIndexById[T](idMod(idOf(parentId, 2))).isDefined)
+      println("3: " + history.typedExtraIndexById[T](idMod(idOf(parentId, 3))).isDefined)
+      println("segments: " + segments.mkString(", "))
+      segments.foreach { num =>
+        val lowerBound = array.length + num * segmentTreshold
         val upperBound = lowerBound + segmentTreshold
 
-        val target = offset + limit
-
-        if (target > lowerBound) {
+        if (altData.length < limit && target > lowerBound) {
           val arr = arraySelector(
             history.typedExtraIndexById[T](idMod(idOf(parentId, num))).get
           ).reverse

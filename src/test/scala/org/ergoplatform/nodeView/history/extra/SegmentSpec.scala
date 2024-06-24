@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.ErgoSettings
-import scala.util.{Try}
+import scala.util.Try
 
 class SegmentSpec extends ErgoCorePropertyTest {
 
@@ -33,14 +33,14 @@ class SegmentSpec extends ErgoCorePropertyTest {
       override protected[history] val historyStorage: HistoryStorage = new HistoryStorage(null, null, null ,null) {
         override def getExtraIndex(id: ModifierId): Option[ExtraIndex] = {
           val b = Base16.decode(id).get.head
-          if(b == 1) {
-            Some(segment2)
-          } else if(b == 2) {
-            Some(segment1)
-          } else if(b == 3) {
+          if(b == 0) {
             Some(segment0)
+          } else if(b == 1) {
+            Some(segment1)
+          } else if(b == 2) {
+            Some(segment2)
           } else {
-            ???
+            None
           }
         }
       }
@@ -97,28 +97,28 @@ class SegmentSpec extends ErgoCorePropertyTest {
     val a9 = getFromSegments(8 * lim, lim)
     val a10 = getFromSegments(9 * lim, lim)
 
-    a1.distinct.length shouldBe(lim)
-    a2.distinct.length shouldBe(lim)
-    a3.distinct.length shouldBe(lim)
-    a4.distinct.length shouldBe(lim)
+    a1.distinct.length shouldBe lim
+    a2.distinct.length shouldBe lim
+    a3.distinct.length shouldBe lim
+    a4.distinct.length shouldBe lim
 
-    ((a2 ++ a4).distinct.length shouldBe lim*2)
+    (a2 ++ a4).distinct.length shouldBe lim*2
 
-    a5.distinct.length shouldBe(lim)
+    a5.distinct.length shouldBe lim
 
-    ((a3 ++ a5).distinct.length shouldBe lim*2)
+    (a3 ++ a5).distinct.length shouldBe lim*2
 
-    a6.distinct.length shouldBe(lim)
-    a7.distinct.length shouldBe(lim)
+    a6.distinct.length shouldBe lim
+    a7.distinct.length shouldBe lim
 
-    (a1 ++ a2 ++ a3 ++ a4 ++ a5 ++ a6 ++ a7).distinct.length shouldBe(1400)
+    (a1 ++ a2 ++ a3 ++ a4 ++ a5 ++ a6 ++ a7).distinct.length shouldBe 1400
 
-    a8.distinct.length shouldBe(lim)
-    a9.distinct.length shouldBe(106)
-    a10.distinct.length shouldBe(0)
+    a8.distinct.length shouldBe lim
+    a9.distinct.length shouldBe 106
+    a10.distinct.length shouldBe 0
 
 
-    (a1 ++ a2 ++ a3 ++ a4 ++ a5 ++ a6 ++ a7 ++ a8 ++ a9).distinct.length shouldBe(1706)
+    (a1 ++ a2 ++ a3 ++ a4 ++ a5 ++ a6 ++ a7 ++ a8 ++ a9).distinct.length shouldBe 1706
 
     val lim2 = 100
 
@@ -142,32 +142,32 @@ class SegmentSpec extends ErgoCorePropertyTest {
     val b18 = getFromSegments(17 * lim2, lim2)
     val b19 = getFromSegments(18 * lim2, lim2)
 
-    b1.distinct.length shouldBe(lim2)
-    b2.distinct.length shouldBe(lim2)
-    b3.distinct.length shouldBe(lim2)
-    b4.distinct.length shouldBe(lim2)
-    b5.distinct.length shouldBe(lim2)
-    b6.distinct.length shouldBe(lim2)
-    b7.distinct.length shouldBe(lim2)
-    b8.distinct.length shouldBe(lim2)
-    b9.distinct.length shouldBe(lim2)
-    b10.distinct.length shouldBe(lim2)
-    b11.distinct.length shouldBe(lim2)
-    b12.distinct.length shouldBe(lim2)
-    b13.distinct.length shouldBe(lim2)
-    b14.distinct.length shouldBe(lim2)
-    b15.distinct.length shouldBe(lim2)
-    b16.distinct.length shouldBe(lim2)
-    b17.distinct.length shouldBe(lim2)
-    b18.distinct.length shouldBe(6)
-    b19.distinct.length shouldBe(0)
+    b1.distinct.length shouldBe lim2
+    b2.distinct.length shouldBe lim2
+    b3.distinct.length shouldBe lim2
+    b4.distinct.length shouldBe lim2
+    b5.distinct.length shouldBe lim2
+    b6.distinct.length shouldBe lim2
+    b7.distinct.length shouldBe lim2
+    b8.distinct.length shouldBe lim2
+    b9.distinct.length shouldBe lim2
+    b10.distinct.length shouldBe lim2
+    b11.distinct.length shouldBe lim2
+    b12.distinct.length shouldBe lim2
+    b13.distinct.length shouldBe lim2
+    b14.distinct.length shouldBe lim2
+    b15.distinct.length shouldBe lim2
+    b16.distinct.length shouldBe lim2
+    b17.distinct.length shouldBe lim2
+    b18.distinct.length shouldBe 6
+    b19.distinct.length shouldBe 0
 
     (b1 ++ b2).distinct.length shouldBe(2 * lim2)
     (b2 ++ b3).distinct.length shouldBe(2 * lim2)
     (b1 ++ b2 ++ b3).distinct.length shouldBe(3 * lim2)
 
     (b1 ++ b2 ++ b3 ++ b4 ++ b5 ++ b6 ++ b7 ++ b8 ++ b9 ++
-      b10 ++ b11 ++ b12 ++ b13 ++ b14 ++ b15 ++ b16 ++ b17 ++ b18).distinct.length shouldBe(1706)
+      b10 ++ b11 ++ b12 ++ b13 ++ b14 ++ b15 ++ b16 ++ b17 ++ b18).distinct.length shouldBe 1706
 
     val lim3 = 682 // array + segment threshold
     val c1 = getFromSegments(0, lim3)
@@ -175,10 +175,10 @@ class SegmentSpec extends ErgoCorePropertyTest {
     val c3 = getFromSegments(2 * lim3, lim3)
     val c4 = getFromSegments(3 * lim3, lim3)
 
-    c1.distinct.length shouldBe(lim3)
-    c2.distinct.length shouldBe(lim3)
-    c3.distinct.length shouldBe(342)
-    c4.distinct.length shouldBe(0)
-    (c1 ++ c2 ++ c3).distinct.length shouldBe(1706)
+    c1.distinct.length shouldBe lim3
+    c2.distinct.length shouldBe lim3
+    c3.distinct.length shouldBe 342
+    c4.distinct.length shouldBe 0
+    (c1 ++ c2 ++ c3).distinct.length shouldBe 1706
   }
 }

@@ -262,39 +262,41 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param limit       - items to retrieve
    * @param sortDir     - whether to start retrieval from newest box (DESC) or oldest box (ASC)
    * @param unconfirmed - whether to include unconfirmed boxes
+   * @param retrieve    - function to retrieve indexes from database
+   * @param memMap      - function to transform mempool boxes
    * @return array of unspent boxes
    */
-  def retrieveUtxos(history: ErgoHistoryReader,
-                    mempool: ErgoMemPoolReader,
-                    offset: Int,
-                    limit: Int,
-                    sortDir: Direction,
-                    unconfirmed: Boolean): Seq[IndexedErgoBox] = {
-    val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
-    val confirmedBoxes: Seq[IndexedErgoBox] = sortDir match {
+  private[extra] def retrieveUtxos[B: ClassTag]
+                 (history: ErgoHistoryReader,
+                  mempool: ErgoMemPoolReader,
+                  offset: Int,
+                  limit: Int,
+                  sortDir: Direction,
+                  unconfirmed: Boolean,
+                  retrieve: (ArrayBuffer[Long], ErgoHistoryReader) => Array[B],
+                  memMap: ErgoBox => B): Seq[B] = {
+    val data: ArrayBuffer[B] = ArrayBuffer.empty[B]
+    val confirmedBoxes: Seq[B] = sortDir match {
       case DESC =>
-        data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+        data ++= retrieve(boxes.filter(_ > 0), history)
         var segment: Int = boxSegmentCount
         while (data.length < (limit + offset) && segment > 0) {
           segment -= 1
-          history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
-            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
+          retrieve(history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes.filter(_ > 0), history) ++=: data
         }
         data.reverse.slice(offset, offset + limit)
       case ASC =>
         var segment: Int = 0
         while (data.length < (limit + offset) && segment < boxSegmentCount) {
-          data ++= history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
-            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+          data ++= retrieve(history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes.filter(_ > 0), history)
           segment += 1
         }
         if (data.length < (limit + offset))
-          data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+          data ++= retrieve(boxes.filter(_ > 0), history)
         data.slice(offset, offset + limit)
     }
     if (unconfirmed) {
-      val mempoolBoxes = filterMempool(mempool.getAll.flatMap(_.transaction.outputs))
-      val unconfirmedBoxes = mempoolBoxes.map(new IndexedErgoBox(0, None, None, _, 0))
+      val unconfirmedBoxes = filterMempool(mempool.getAll.flatMap(_.transaction.outputs)).map(memMap)
       sortDir match {
         case DESC => unconfirmedBoxes ++ confirmedBoxes
         case ASC => confirmedBoxes ++ unconfirmedBoxes
@@ -302,6 +304,25 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
     } else
       confirmedBoxes
   }
+
+  /**
+   * Get a range of the boxes associated with the parent that are NOT spent
+   *
+   * @param history     - history to use
+   * @param mempool     - mempool to use, if unconfirmed is true
+   * @param offset      - items to skip from the start
+   * @param limit       - items to retrieve
+   * @param sortDir     - whether to start retrieval from newest box (DESC) or oldest box (ASC)
+   * @param unconfirmed - whether to include unconfirmed boxes
+   * @return array of unspent boxes
+   */
+  def retrieveUtxos(history: ErgoHistoryReader,
+                    mempool: ErgoMemPoolReader,
+                    offset: Int,
+                    limit: Int,
+                    sortDir: Direction,
+                    unconfirmed: Boolean): Seq[IndexedErgoBox] =
+    retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, getBoxes, box => new IndexedErgoBox(0, None, None, box, 0))
 
   /**
    * Logic for [[Segment.rollback]]

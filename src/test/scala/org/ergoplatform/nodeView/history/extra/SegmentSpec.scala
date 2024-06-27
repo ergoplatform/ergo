@@ -6,11 +6,14 @@ import scorex.util.encode.Base16
 
 import scala.collection.mutable.ArrayBuffer
 import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Direction}
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.extra.SegmentSerializer.boxSegmentId
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.ErgoSettings
+
 import scala.util.Try
 
 class SegmentSpec extends ErgoCorePropertyTest {
@@ -180,5 +183,131 @@ class SegmentSpec extends ErgoCorePropertyTest {
     c3.distinct.length shouldBe 342
     c4.distinct.length shouldBe 0
     (c1 ++ c2 ++ c3).distinct.length shouldBe 1706
+  }
+
+  property("correct slicing in retrieveUtxos") {
+    implicit val segmentTreshold: Int = 512
+
+    val hash = ModifierId @@ Base16.encode(Array.fill(32)(0.toByte))
+    val boxes = new ArrayBuffer[Long]()
+    (1 to 1706).foreach { i =>
+      if(i % 6 == 0)
+        boxes.append(i)
+      else
+        boxes.append(-i)
+    }
+
+    val h0 = boxSegmentId(hash, 0)
+    val h1 = boxSegmentId(hash, 1)
+    val h2 = boxSegmentId(hash, 2)
+    val segment0 = IndexedErgoAddress(h0, new ArrayBuffer[Long](), boxes.take(segmentTreshold))
+    val segment1 = IndexedErgoAddress(h1, new ArrayBuffer[Long](), boxes.slice(segmentTreshold, segmentTreshold * 2))
+    val segment2 = IndexedErgoAddress(h2, new ArrayBuffer[Long](), boxes.slice(segmentTreshold * 2, segmentTreshold * 3))
+    val ia = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.slice(segmentTreshold * 3, boxes.size).reverse)
+    ia.boxSegmentCount = 3
+
+    val hr = new ErgoHistoryReader {
+      override protected[history] val historyStorage: HistoryStorage = new HistoryStorage(null, null, null ,null) {
+        override def getExtraIndex(id: ModifierId): Option[ExtraIndex] = {
+          if(id == h0) {
+            Some(segment0)
+          } else if(id == h1) {
+            Some(segment1)
+          } else if(id == h2) {
+            Some(segment2)
+          } else {
+            None
+          }
+        }
+      }
+      override protected val settings: ErgoSettings = null
+      override protected def requireProofs: Boolean = ???
+      override protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] = ???
+      override protected def validate(m: NonHeaderBlockSection): Try[Unit] = ???
+      override val powScheme: AutolykosPowScheme = null
+    }
+
+    def retrieveUtxos(offset: Int, limit: Int, sd: Direction): Seq[Long] =
+      ia.retrieveUtxos[Long](
+        hr,
+        null,
+        offset,
+        limit,
+        sd,
+        unconfirmed = false,
+        (b, _) => b.toArray,
+        _ => 0
+      )
+
+    val lim = 20
+
+    val a1 = retrieveUtxos(0, lim, ASC)
+    val a2 = retrieveUtxos(lim, lim, ASC)
+    val a3 = retrieveUtxos(2 * lim, lim, ASC)
+    val a4 = retrieveUtxos(3 * lim, lim, ASC)
+    val a5 = retrieveUtxos(4 * lim, lim, ASC)
+    val a6 = retrieveUtxos(5 * lim, lim, ASC)
+    val a7 = retrieveUtxos(6 * lim, lim, ASC)
+    val a8 = retrieveUtxos(7 * lim, lim, ASC)
+    val a9 = retrieveUtxos(8 * lim, lim, ASC)
+    val a10 = retrieveUtxos(9 * lim, lim, ASC)
+
+    a1.distinct.length shouldBe lim
+    a2.distinct.length shouldBe lim
+    a3.distinct.length shouldBe lim
+    a4.distinct.length shouldBe lim
+
+    (a2 ++ a4).distinct.length shouldBe lim*2
+
+    a5.distinct.length shouldBe lim
+
+    (a3 ++ a5).distinct.length shouldBe lim*2
+
+    a6.distinct.length shouldBe lim
+    a7.distinct.length shouldBe lim
+
+    (a1 ++ a2 ++ a3 ++ a4 ++ a5 ++ a6 ++ a7).distinct.length shouldBe lim*7
+
+    a8.distinct.length shouldBe lim
+    a9.distinct.length shouldBe lim
+    a10.distinct.length shouldBe lim
+
+    (a1 ++ a2 ++ a3 ++ a4 ++ a5 ++ a6 ++ a7 ++ a8 ++ a9 ++ a10).distinct.length shouldBe lim*10
+
+    val lim2 = 30
+
+    val b1 = retrieveUtxos(0, lim2, DESC)
+    val b2 = retrieveUtxos(lim2, lim2, DESC)
+    val b3 = retrieveUtxos(2 * lim2, lim2, DESC)
+    val b4 = retrieveUtxos(3 * lim2, lim2, DESC)
+    val b5 = retrieveUtxos(4 * lim2, lim2, DESC)
+    val b6 = retrieveUtxos(5 * lim2, lim2, DESC)
+    val b7 = retrieveUtxos(6 * lim2, lim2, DESC)
+    val b8 = retrieveUtxos(7 * lim2, lim2, DESC)
+    val b9 = retrieveUtxos(8 * lim2, lim2, DESC)
+    val b10 = retrieveUtxos(9 * lim2, lim2, DESC)
+
+    b1.distinct.length shouldBe lim2
+    b2.distinct.length shouldBe lim2
+    b3.distinct.length shouldBe lim2
+    b4.distinct.length shouldBe lim2
+
+    (b2 ++ b4).distinct.length shouldBe lim2*2
+
+    b5.distinct.length shouldBe lim2
+
+    (b3 ++ b5).distinct.length shouldBe lim2*2
+
+    b6.distinct.length shouldBe lim2
+    b7.distinct.length shouldBe lim2
+
+    (b1 ++ b2 ++ b3 ++ b4 ++ b5 ++ b6 ++ b7).distinct.length shouldBe lim2*7
+
+    b8.distinct.length shouldBe lim2
+    b9.distinct.length shouldBe lim2
+    b10.distinct.length shouldBe 1706 / 6 - 9 * lim2
+
+    (b1 ++ b2 ++ b3 ++ b4 ++ b5 ++ b6 ++ b7 ++ b8 ++ b9 ++ b10).distinct.length shouldBe 1706 / 6
+
   }
 }

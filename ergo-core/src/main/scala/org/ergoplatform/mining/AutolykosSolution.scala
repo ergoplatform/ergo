@@ -127,6 +127,10 @@ object AutolykosSolutionSerializer {
     serializer(blockVersion).serialize(solution, w)
   }
 
+  def toBytes(blockVersion: Version, solution: AutolykosSolution): Array[Byte] = {
+    serializer(blockVersion).toBytes(solution)
+  }
+
   def parse(r: Reader, blockVersion: Version): AutolykosSolution = {
     serializer(blockVersion).parse(r)
   }

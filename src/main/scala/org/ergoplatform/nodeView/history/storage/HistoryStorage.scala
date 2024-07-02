@@ -26,27 +26,27 @@ import scala.jdk.CollectionConverters.asScalaIteratorConverter
   * @param extraStore   - key-value store, where key is id of Index and value is it's bytes
   * @param config       - cache configs
   */
-class HistoryStorage private(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStore: LDBKVStore, config: CacheSettings)
+class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStore: LDBKVStore, config: CacheSettings)
   extends ScorexLogging
     with AutoCloseable
     with ScorexEncoding {
 
-  private val headersCache =
+  private lazy val headersCache =
     Caffeine.newBuilder()
       .maximumSize(config.history.headersCacheSize)
       .build[String, BlockSection]()
 
-  private val blockSectionsCache =
+  private lazy val blockSectionsCache =
     Caffeine.newBuilder()
       .maximumSize(config.history.blockSectionsCacheSize)
       .build[String, BlockSection]()
 
-  private val extraCache =
+  private lazy val extraCache =
     Caffeine.newBuilder()
       .maximumSize(config.history.extraCacheSize)
       .build[String, ExtraIndex]()
 
-  private val indexCache =
+  private lazy val indexCache =
     Caffeine.newBuilder()
       .maximumSize(config.history.indexesCacheSize)
       .build[ByteArrayWrapper, Array[Byte]]

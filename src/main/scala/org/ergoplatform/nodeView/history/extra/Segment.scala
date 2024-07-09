@@ -197,35 +197,30 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
 
       val target = offset + limit
 
-      val altData: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
-      altData ++= (if (offset < array.length) array.slice(offset, Math.min(offset + limit, array.length)) else Nil)
+      val collected: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
+      collected ++= (if (offset < array.length) array.slice(offset, Math.min(offset + limit, array.length)) else Nil)
       val segments = getSegmentsForRange(offset - array.length, limit).map(n => math.min(segmentCount - 1, n)).distinct
-      println("0: " + history.typedExtraIndexById[T](idMod(idOf(parentId, 0))).isDefined)
-      println("1: " + history.typedExtraIndexById[T](idMod(idOf(parentId, 1))).isDefined)
-      println("2: " + history.typedExtraIndexById[T](idMod(idOf(parentId, 2))).isDefined)
-      println("3: " + history.typedExtraIndexById[T](idMod(idOf(parentId, 3))).isDefined)
-      println("segments: " + segments.mkString(", "))
       segments.foreach { num =>
         val lowerBound = array.length + num * segmentTreshold
         val upperBound = lowerBound + segmentTreshold
 
-        if (altData.length < limit && target > lowerBound) {
+        if (collected.length < limit && target > lowerBound) {
           val arr = arraySelector(
             history.typedExtraIndexById[T](idMod(idOf(parentId, num))).get
           ).reverse
           if (target > upperBound) {
-            altData ++= arr.slice(offset - lowerBound, arr.size)
+            collected ++= arr.slice(offset - lowerBound, arr.size)
           } else {
             if (offset > lowerBound) {
-              altData ++= arr.slice(offset - lowerBound, offset - lowerBound + limit)
+              collected ++= arr.slice(offset - lowerBound, offset - lowerBound + limit)
             } else {
-              altData ++= arr.slice(0, target - lowerBound)
+              collected ++= arr.slice(0, target - lowerBound)
             }
           }
         }
       }
 
-      retrieve(altData, history)
+      retrieve(collected, history)
     } else {
       retrieve(array.slice(offset, offset + limit), history)
     }

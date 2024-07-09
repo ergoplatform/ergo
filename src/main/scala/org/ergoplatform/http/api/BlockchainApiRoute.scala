@@ -152,7 +152,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getTxsByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[(Seq[IndexedErgoTransaction],Long)] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => (addr.retrieveTxs(history, offset, limit).reverse, addr.txCount)
+        case Some(addr) => (addr.retrieveTxs(history, offset, limit), addr.txCount)
         case None       => (Seq.empty[IndexedErgoTransaction], 0L)
       }
     }

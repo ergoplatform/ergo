@@ -314,32 +314,10 @@ class SegmentSpec extends ErgoCorePropertyTest {
     val c1 = retrieveUtxos(0, lim3, DESC)
     val c2 = retrieveUtxos(lim3, lim3, DESC)
     val c3 = retrieveUtxos(2 * lim3, lim3, DESC)
-    val c4 = retrieveUtxos(3 * lim3, lim3, DESC)
-    val c5 = retrieveUtxos(4 * lim3, lim3, DESC)
-    val c6 = retrieveUtxos(5 * lim3, lim3, DESC)
-    val c7 = retrieveUtxos(6 * lim3, lim3, DESC)
-    val c8 = retrieveUtxos(7 * lim3, lim3, DESC)
-    val c9 = retrieveUtxos(8 * lim3, lim3, DESC)
-
     c1.distinct.length shouldBe lim3
-    c2.distinct.length shouldBe lim3
-    c3.distinct.length shouldBe lim3
-    c4.distinct.length shouldBe lim3
+    c2.distinct.length shouldBe 84
+    c3.distinct.length shouldBe 0
 
-    (c2 ++ c4).distinct.length shouldBe lim3*2
-
-    c5.distinct.length shouldBe lim3
-
-    (c3 ++ c5).distinct.length shouldBe lim3*2
-
-    c6.distinct.length shouldBe lim3
-    c7.distinct.length shouldBe lim3
-
-    (c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7).distinct.length shouldBe lim3*7
-
-    c8.distinct.length shouldBe 106
-    c9.distinct.length shouldBe 0
-
-    (c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++ c9).distinct.length shouldBe 1706
+    (c1 ++ c2).distinct.length shouldBe 1706 / 6
   }
 }

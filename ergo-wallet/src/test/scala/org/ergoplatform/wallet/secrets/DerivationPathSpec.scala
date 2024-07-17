@@ -4,7 +4,6 @@ import org.ergoplatform.sdk.wallet
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -13,8 +12,8 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 class DerivationPathSpec
   extends AnyPropSpec
     with Matchers
-    with ScalaCheckPropertyChecks
-    with Generators {
+    with ScalaCheckPropertyChecks {
+  import org.ergoplatform.wallet.utils.WalletGenerators._
 
   property("derivation from encoded path") {
     forAll(derivationPathGen) { path =>

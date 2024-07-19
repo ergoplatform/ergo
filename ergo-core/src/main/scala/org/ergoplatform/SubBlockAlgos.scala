@@ -25,9 +25,24 @@ import scala.collection.mutable
   */
 object SubBlockAlgos {
 
-  val subsPerBlock = 128 // sub blocks per block
+  // Only sub-blocks may have transactions, full-blocks may only bring block reward transaction ( designated
+  // by using emission or re-emission NFTs).
+  // As a full-block is also a sub-block, and miner does not know output in advance, the following requirements
+  // for the block are introduced. And to be on par with other proposals in consensus performance, we call them
+  // input block (sub-block) and ordering block(full-block):
+  //  * ordering block's Merkle tree is corresponding to latest input block's Merkle tree , or latest ordering block's
+  //    Merkle tree if there are no input blocks after previous ordering block, with only reward transaction added
+  //  * every block (input and ordering) also contains digest of new transactions since last input block. For ordering
+  //  block, they are ignored.
 
-  val weakTransactionIdLength = 6
+  // todo: storage rent collecting?
+
+  // Another option is to use 2-PoW-for 1 technique, so sub-block (input block) is defined not by
+  // hash(b) < T/subsPerBlock , but by reverse(hash(b)) < T/subsPerBlock , while ordering block is defined
+  // by hash(b) < T
+  val subsPerBlock = 128 // sub blocks per block, adjustable via miners voting
+
+  val weakTransactionIdLength = 6 // value taken from Bitcoin's compact blocks BIP
 
   def isSub(header: Header, requiredDifficulty: Difficulty): Boolean = {
     val diff = requiredDifficulty / subsPerBlock
@@ -42,7 +57,7 @@ object SubBlockAlgos {
   // version
   // sub block (~200 bytes) - contains a link to parent block
   // previous sub block id
-  // transactions since last sub blocks (8 byte ids?)
+  // transactions since last sub blocks
 
   /**
     * Sub-block message, sent by the node to peers when a sub-block is generated

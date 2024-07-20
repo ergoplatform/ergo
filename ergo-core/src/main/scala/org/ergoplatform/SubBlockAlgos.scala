@@ -34,8 +34,7 @@ object SubBlockAlgos {
   //    Merkle tree if there are no input blocks after previous ordering block, with only reward transaction added
   //  * every block (input and ordering) also contains digest of new transactions since last input block. For ordering
   //  block, they are ignored.
-
-  // todo: storage rent collecting?
+  //  * script execution context is the same for input and ordering blocks, aside // todo: mining pubkey?
 
   // Another option is to use 2-PoW-for 1 technique, so sub-block (input block) is defined not by
   // hash(b) < T/subsPerBlock , but by reverse(hash(b)) < T/subsPerBlock , while ordering block is defined

@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.interpreter
 import org.ergoplatform.{ErgoLikeTransaction, Input, UnsignedErgoLikeTransaction}
 import scorex.util.encode.Base16
 import sigmastate.crypto.DLogProtocol.DLogProverInput
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigma.interpreter.{ContextExtension, ProverResult}
 
 /**
   * A naive Ergo prover implementation not performing transaction cost verification.

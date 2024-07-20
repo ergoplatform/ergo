@@ -12,11 +12,11 @@ import scorex.core.api.http.{ApiResponse, ApiRoute}
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import sigmastate.crypto.DLogProtocol.ProveDlog
+import sigma.data.ProveDlog
 
 import java.security.SecureRandom
 import scala.util.Failure
-import sigmastate.serialization.{ErgoTreeSerializer, GroupElementSerializer, SigmaSerializer}
+import sigma.serialization.{ErgoTreeSerializer, GroupElementSerializer, SigmaSerializer}
 
 class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
   implicit val context: ActorRefFactory

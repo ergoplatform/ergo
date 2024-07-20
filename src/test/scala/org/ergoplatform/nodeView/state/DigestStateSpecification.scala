@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.core._
 import scorex.crypto.authds.ADDigest
-import sigmastate.interpreter.ProverResult
+import sigma.interpreter.ProverResult
 
 class DigestStateSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._

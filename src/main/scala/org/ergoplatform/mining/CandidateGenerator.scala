@@ -50,6 +50,9 @@ class CandidateGenerator(
 
   import org.ergoplatform.mining.CandidateGenerator._
 
+  private val candidateGenInterval =
+    ergoSettings.nodeSettings.blockCandidateGenerationInterval
+
   /** retrieve Readers once on start and then get updated by events */
   override def preStart(): Unit = {
     log.info("CandidateGenerator is starting")
@@ -85,7 +88,8 @@ class CandidateGenerator(
       context.become(
         initialized(
           CandidateGeneratorState(
-            cache       = None,
+            cachedCandidate = None,
+            cachedPreviousCandidate = None,
             solvedBlock = None,
             h,
             s,
@@ -112,7 +116,16 @@ class CandidateGenerator(
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
     case ChangedMempool(mp: ErgoMemPoolReader) =>
-      context.become(initialized(state.copy(mpr = mp)))
+      if (hasCandidateExpired(
+        state.cachedCandidate,
+        state.solvedBlock,
+        candidateGenInterval
+      )) {
+        context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, mpr = mp)))
+        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+      } else {
+        context.become(initialized(state.copy(mpr = mp)))
+      }
     case _: NodeViewChange =>
     // Just ignore all other NodeView Changes
 
@@ -124,11 +137,11 @@ class CandidateGenerator(
       log.info(
         s"Preparing new candidate on getting new block at ${header.height}"
       )
-      if (needNewCandidate(state.cache, header)) {
+      if (needNewCandidate(state.cachedCandidate, header)) {
         if (needNewSolution(state.solvedBlock, header.id))
-          context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+          context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None)))
         else
-          context.become(initialized(state.copy(cache = None)))
+          context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
       } else {
         context.become(initialized(state))
@@ -136,8 +149,8 @@ class CandidateGenerator(
 
     case gen @ GenerateCandidate(txsToInclude, reply) =>
       val senderOpt = if (reply) Some(sender()) else None
-      if (cachedFor(state.cache, txsToInclude)) {
-        senderOpt.foreach(_ ! StatusReply.success(state.cache.get))
+      if (cachedFor(state.cachedCandidate, txsToInclude)) {
+        senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
         CandidateGenerator.generateCandidate(
@@ -161,7 +174,7 @@ class CandidateGenerator(
             log.info(s"Generated new candidate in $generationTook ms")
             context.become(
               initialized(
-                state.copy(cache = Some(candidate), avgGenTime = generationTook.millis)
+                state.copy(cachedCandidate = Some(candidate), cachedPreviousCandidate = state.cachedCandidate, avgGenTime = generationTook.millis)
               )
             )
             senderOpt.foreach(_ ! StatusReply.success(candidate))
@@ -179,7 +192,7 @@ class CandidateGenerator(
       }
 
     case preSolution: AutolykosSolution
-        if state.solvedBlock.isEmpty && state.cache.nonEmpty =>
+        if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
       // Inject node pk if it is not externally set (in Autolykos 2)
       val solution =
         if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
@@ -188,7 +201,10 @@ class CandidateGenerator(
           preSolution
         }
       val result: StatusReply[Unit] = {
-        val newBlock = completeBlock(state.cache.get.candidateBlock, solution)
+        val newBlock = state.cachedCandidate
+          .map(candidate => completeBlock( candidate.candidateBlock, solution))
+          .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
+          .getOrElse(completeBlock( state.cachedPreviousCandidate.get.candidateBlock, solution))
         log.info(s"New block mined, header: ${newBlock.header}")
         ergoSettings.chainSettings.powScheme
           .validate(newBlock.header)
@@ -198,8 +214,8 @@ class CandidateGenerator(
             context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
             StatusReply.success(())
           case Failure(exception) =>
-            log.warn(s"Removing candidate due to invalid block", exception)
-            context.become(initialized(state.copy(cache = None)))
+            log.warn(s"Removing candidates due to invalid block", exception)
+            context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
             StatusReply.error(
               new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
             )
@@ -240,7 +256,8 @@ object CandidateGenerator extends ScorexLogging {
 
   /** Local state of candidate generator to avoid mutable vars */
   case class CandidateGeneratorState(
-    cache: Option[Candidate],
+    cachedCandidate: Option[Candidate],
+    cachedPreviousCandidate: Option[Candidate],
     solvedBlock: Option[ErgoFullBlock],
     hr: ErgoHistoryReader,
     sr: UtxoStateReader,
@@ -293,6 +310,33 @@ object CandidateGenerator extends ScorexLogging {
     bestFullBlockId: ModifierId
   ): Boolean = {
     solvedBlock.nonEmpty && !solvedBlock.map(_.parentId).contains(bestFullBlockId)
+  }
+
+  /** Regenerate candidate to let new transactions in, miners are polling for candidate in ~ 100ms
+    * interval so they switch to it.
+    * If blockCandidateGenerationInterval elapsed since last block generation,
+    * then new tx in mempool is a reasonable trigger of candidate regeneration
+    */
+  def hasCandidateExpired(
+    cachedCandidate: Option[Candidate],
+    solvedBlock: Option[ErgoFullBlock],
+    candidateGenInterval: FiniteDuration
+   ): Boolean = {
+    def candidateAge(c: Candidate): FiniteDuration =
+      (System.currentTimeMillis() - c.candidateBlock.timestamp).millis
+    // non-empty solved block means we wait for newly mined block to be applied
+    if (solvedBlock.isDefined) {
+      false
+    } else {
+      cachedCandidate match {
+        // if current candidate is older than candidateGenInterval
+        case Some(c) if candidateGenInterval.compare(candidateAge(c)) <= 0 =>
+          log.info(s"Regenerating block candidate")
+          true
+        case _ =>
+          false
+      }
+    }
   }
 
   /** Calculate average mining time from latest block header timestamps */

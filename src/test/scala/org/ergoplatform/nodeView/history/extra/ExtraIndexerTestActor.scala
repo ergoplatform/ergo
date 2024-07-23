@@ -25,8 +25,8 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
 
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, UtxoSettings(utxoBootstrap = false, 0, 2), NipopowSettings(nipopowBootstrap = false, 1), mining = false,
-    ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, useExternalMiner = false, internalMinersCount = 1,
-    internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
+    ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, blockCandidateGenerationInterval = 20.seconds, useExternalMiner = false,
+    internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
     200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
     1000000, 100, adProofsSuffixLength = 112 * 1024, extraIndex = false)
 

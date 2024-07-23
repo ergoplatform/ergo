@@ -63,8 +63,8 @@ object ChainGenerator extends App with ErgoTestHelpers with Matchers {
   val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
   val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
-    -1, UtxoSettings(false, 0, 2), NipopowSettings(false, 1), mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
-    internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
+    -1, UtxoSettings(false, 0, 2), NipopowSettings(false, 1), mining = false, txCostLimit, txSizeLimit, blockCandidateGenerationInterval = 20.seconds,
+    useExternalMiner = false, internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
     200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
     1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false)
   val ms = settings.chainSettings.monetary.copy(

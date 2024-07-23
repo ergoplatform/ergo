@@ -255,6 +255,7 @@ object ValidationRules {
   val txNegHeight: Short = 122 // introduced in v2 blocks
   val txReemission: Short = 123 // introduced in EIP-27 (soft-fork)
   val txMonotonicHeight: Short = 124 // introduced in v3 blocks
+  val txIsUsingBlockchainContext: Short = 125 // introduced in sigma-state v5.0.14
 
   // header validation
   val hdrGenesisParent: Short = 200

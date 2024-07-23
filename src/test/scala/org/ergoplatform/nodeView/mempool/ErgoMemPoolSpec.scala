@@ -76,8 +76,8 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     var poolCost = ErgoMemPool.empty(sortByCostSettings)
     poolCost = poolCost.process(UnconfirmedTransaction(tx, None), wus)._1
     val validationContext = wus.stateContext.simplifiedUpcoming()
-    val cost = wus.validateWithCost(tx, validationContext, Int.MaxValue, None).get
-    poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, cost).weight
+    val state = wus.validateWithCost(tx, validationContext, Int.MaxValue, None).get
+    poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, state.cost).weight
   }
 
   it should "decline already contained transaction" in {
@@ -419,9 +419,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val tx = invalidErgoTransactionGen.sample.get
     val now = System.currentTimeMillis()
 
-    val utx1 = new UnconfirmedTransaction(tx, None, now, now, None, None)
-    val utx2 = new UnconfirmedTransaction(tx, None, now, now, None, None)
-    val utx3 = new UnconfirmedTransaction(tx, None, now + 1, now + 1, None, None)
+    val utx1 = new UnconfirmedTransaction(tx, None, now, now, None, None, false)
+    val utx2 = new UnconfirmedTransaction(tx, None, now, now, None, None, false)
+    val utx3 = new UnconfirmedTransaction(tx, None, now + 1, now + 1, None, None, false)
     val updPool = pool.put(utx1, 100).remove(utx1).put(utx2, 500).put(utx3, 5000)
     updPool.size shouldBe 1
     updPool.get(utx3.id).get.lastCheckedTime shouldBe (now + 1)

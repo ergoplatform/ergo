@@ -18,7 +18,8 @@ class UnconfirmedTransaction(val transaction: ErgoTransaction,
                              val createdTime: Long,
                              val lastCheckedTime: Long,
                              val transactionBytes: Option[Array[Byte]],
-                             val source: Option[ConnectedPeer])
+                             val source: Option[ConnectedPeer],
+                             val isUsingBlockchainContext: Boolean)
   extends ScorexLogging {
 
   def id: ModifierId = transaction.id
@@ -33,7 +34,8 @@ class UnconfirmedTransaction(val transaction: ErgoTransaction,
       createdTime,
       lastCheckedTime = System.currentTimeMillis(),
       transactionBytes,
-      source)
+      source,
+      isUsingBlockchainContext)
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -48,12 +50,12 @@ object UnconfirmedTransaction {
 
   def apply(tx: ErgoTransaction, source: Option[ConnectedPeer]): UnconfirmedTransaction = {
     val now = System.currentTimeMillis()
-    new UnconfirmedTransaction(tx, None, now, now, Some(tx.bytes), source)
+    new UnconfirmedTransaction(tx, None, now, now, Some(tx.bytes), source, false)
   }
 
   def apply(tx: ErgoTransaction, txBytes: Array[Byte], source: Option[ConnectedPeer]): UnconfirmedTransaction = {
     val now = System.currentTimeMillis()
-    new UnconfirmedTransaction(tx, None, now, now, Some(txBytes), source)
+    new UnconfirmedTransaction(tx, None, now, now, Some(txBytes), source, false)
   }
 
 }

@@ -88,9 +88,9 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
         case head :: tail if costAcc < CostLimit =>
           val validationContext = state.stateContext.simplifiedUpcoming()
           state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
-            case Success(txCost) =>
-              val updTx = head.withCost(txCost)
-              validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)
+            case Success(validationState) =>
+              val updTx = head.withCost(validationState.cost)
+              validationLoop(tail, validated += updTx, invalidated, validationState.cost + costAcc)
             case Failure(e) =>
               val txId = head.id
               log.info(s"Transaction $txId invalidated: ${e.getMessage}")
@@ -102,7 +102,14 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     }
 
     val res = validationLoop(txsToValidate, mutable.ArrayBuilder.make(), mutable.ArrayBuilder.make(), 0L)
-    wrapRefArray(res._1.result()) -> wrapRefArray(res._2.result())
+
+    val recheckRes = res._1.result().filter(
+      x => x.isUsingBlockchainContext
+        && x.transaction.dataInputs
+            .map(s => state.boxById(s.boxId).isDefined)
+            .reduce((x, y) => x || y))
+
+    wrapRefArray(recheckRes) -> wrapRefArray(res._2.result())
   }
 
 }

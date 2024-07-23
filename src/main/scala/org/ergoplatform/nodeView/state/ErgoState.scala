@@ -105,7 +105,7 @@ object ErgoState extends ScorexLogging {
   def execTransactions(transactions: Seq[ErgoTransaction],
                        currentStateContext: ErgoStateContext,
                        nodeSettings: NodeConfigurationSettings)
-                      (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
+                      (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[(Boolean, Long)] = {
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
     def preAllocatedBuilder[T: ClassTag](sizeHint: Int): mutable.ArrayBuilder[T] = {
@@ -133,10 +133,10 @@ object ErgoState extends ScorexLogging {
 
     val checkpointHeight = nodeSettings.checkpoint.map(_.height).getOrElse(0)
     if (currentStateContext.currentHeight <= checkpointHeight) {
-      Valid(0L)
+      Valid((false, 0L))
     } else {
       import spire.syntax.all.cfor
-      var costResult: ValidationResult[Long] = Valid[Long](0L)
+      var costResult: ValidationResult[(Boolean, Long)] = Valid[(Boolean, Long)]((false, 0L))
       cfor(0)(_ < transactions.length && costResult.isValid, _ + 1) { i =>
         val validCostResult = costResult.asInstanceOf[Valid[Long]]
         val tx = transactions(i)
@@ -148,7 +148,7 @@ object ErgoState extends ScorexLogging {
         costResult = tx.validateStateless()
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry, tx.id, tx.modifierTypeId)
           .validateNoFailure(txDataBoxes, dataBoxesTry, tx.id, tx.modifierTypeId)
-          .payload[Long](validCostResult.value)
+          .payload[(Boolean, Long)]((false, validCostResult.value))
           .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", tx.id, tx.modifierTypeId, e)) { case (_, (dataBoxes, toSpend)) =>
             tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value)(verifier).result
           }

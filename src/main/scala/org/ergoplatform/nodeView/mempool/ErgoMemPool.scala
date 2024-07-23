@@ -250,8 +250,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
                 val validationContext = utxo.stateContext.simplifiedUpcoming()
                 utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
-                  case Success(cost) =>
-                    acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
+                  case Success(state) =>
+                    acceptIfNoDoubleSpend(unconfirmedTx.withCost(state.cost), validationStartTime)
                   case Failure(ex) =>
                     this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
                 }

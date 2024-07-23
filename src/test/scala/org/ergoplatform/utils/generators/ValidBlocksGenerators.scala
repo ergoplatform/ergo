@@ -126,7 +126,7 @@ object ValidBlocksGenerators
       tx.inputs.flatMap(i => boxesToSpend.find(_.id == i.boxId)),
       tx.dataInputs.flatMap(i => dataBoxesToUse.find(_.id == i.boxId)),
       emptyStateContext,
-      -2000000)(emptyVerifier).getOrElse(0)
+      -2000000)(emptyVerifier).map(_.cost).getOrElse(0)
   }
 
   /**

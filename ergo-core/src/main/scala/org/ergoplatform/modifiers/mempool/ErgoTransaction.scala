@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction.unresolvedIndices
 import org.ergoplatform.modifiers.transaction.Signable
 import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId, TransactionTypeId}
 import org.ergoplatform.nodeView.ErgoContext
-import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoValidationState}
 import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.ValidationRules._
@@ -79,6 +79,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   lazy val outAssetsTry: Try[(Map[Seq[Byte], Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
 
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
+
 
   /**
     * Stateless transaction validation with result returned as `ValidationResult`
@@ -359,7 +360,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long)
-                      (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
+                      (implicit verifier: ErgoInterpreter): ValidationState[(Boolean, Long)] = {
 
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -436,6 +437,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
       .validate(txReemission, !stateContext.chainSettings.reemission.checkReemissionRules ||
         verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifier(id, id, modifierTypeId))
+      // Remember and check input boxes for existing isUsingBlockchainContext in any of ergotrees
+      .payloadMap(res => (boxesToSpend.map(_.ergoTree.isUsingBlockchainContext).reduce((x,y) => x || y), res))
   }
 
   /**
@@ -445,8 +448,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long = 0L)
-                      (implicit verifier: ErgoInterpreter): Try[Int] = {
-    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry.map(_.toInt)
+                      (implicit verifier: ErgoInterpreter): Try[UtxoValidationState] = {
+    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry.map(x => UtxoValidationState(x._2.toInt, x._1))
   }
 
   override type M = ErgoTransaction

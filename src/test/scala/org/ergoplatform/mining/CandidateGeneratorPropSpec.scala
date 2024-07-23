@@ -177,7 +177,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
             tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
           tx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext).get
         }
-      }
+      }.map(_.cost)
 
       fromBigMempool.length should be > 2
       fromBigMempool.map(_.size).sum should be < maxSize

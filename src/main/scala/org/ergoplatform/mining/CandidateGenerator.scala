@@ -823,8 +823,8 @@ object CandidateGenerator extends ScorexLogging {
               maxBlockCost,
               Some(verifier)
             ) match {
-              case Success(costConsumed) =>
-                val newTxs = acc :+ (tx -> costConsumed)
+              case Success(stateConsumed) =>
+                val newTxs = acc :+ (tx -> stateConsumed.cost)
                 val newBoxes = newTxs.flatMap(_._1.outputs)
 
                 collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
@@ -833,10 +833,10 @@ object CandidateGenerator extends ScorexLogging {
                       newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
                     )
                     feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
-                      case Success(cost) =>
-                        val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
+                      case Success(state) =>
+                        val blockTxs: Seq[CostedTransaction] = (feeTx -> state.cost) +: newTxs
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
+                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> state.cost), invalidTxs)
                         } else {
                           log.debug(s"Finishing block assembly on limits overflow, " +
                                     s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")

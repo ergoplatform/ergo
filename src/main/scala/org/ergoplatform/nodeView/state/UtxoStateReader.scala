@@ -47,7 +47,7 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
   def validateWithCost(tx: ErgoTransaction,
                        context: ErgoStateContext,
                        costLimit: Int,
-                       interpreterOpt: Option[ErgoInterpreter]): Try[Int] = {
+                       interpreterOpt: Option[ErgoInterpreter]): Try[UtxoValidationState] = {
     val parameters = context.currentParameters.withBlockCost(costLimit)
     val verifier = interpreterOpt.getOrElse(ErgoInterpreter(parameters))
 
@@ -58,10 +58,10 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
         tx.dataInputs.flatMap(i => boxById(i.boxId)),
         context,
         accumulatedCost = 0L)(verifier) match {
-        case Success(txCost) if txCost > costLimit =>
-          Failure(TooHighCostError(tx, Some(txCost)))
-        case Success(txCost) =>
-          Success(txCost)
+        case Success(state) if state.cost > costLimit =>
+          Failure(TooHighCostError(tx, Some(state.cost)))
+        case Success(state) =>
+          Success(state)
         case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
           Failure(TooHighCostError(tx, None))
         case f: Failure[_] => f

@@ -44,7 +44,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
 
   private def checkTx(from: IndexedSeq[ErgoBox], tx: ErgoTransaction): Try[Int] = {
     tx.statelessValidity().flatMap(_ => tx.statefulValidity(from, emptyDataBoxes, emptyStateContext))
-  }
+  }.map(_.cost)
 
   private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
     new ErgoBoxCandidate(
@@ -303,10 +303,10 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
        val outputIncTxCost0 = txMod2.statefulValidity(from.init :+ modifiedIn0, emptyDataBoxes, emptyStateContext).get
        val outputIncTxCost1 = txMod3.statefulValidity(from.init :+ modifiedIn1, emptyDataBoxes, emptyStateContext).get
 
-       (inputIncTxCost0 - initTxCost) shouldEqual Parameters.TokenAccessCostDefault * 2 // one more group + one more token in total
-       (inputIncTxCost1 - initTxCost) shouldEqual Parameters.TokenAccessCostDefault // one more token in total
-       (outputIncTxCost0 - inputIncTxCost0) shouldEqual Parameters.TokenAccessCostDefault * 2
-       (outputIncTxCost1 - inputIncTxCost1) shouldEqual Parameters.TokenAccessCostDefault
+       (inputIncTxCost0.cost - initTxCost.cost) shouldEqual Parameters.TokenAccessCostDefault * 2 // one more group + one more token in total
+       (inputIncTxCost1.cost - initTxCost.cost) shouldEqual Parameters.TokenAccessCostDefault // one more token in total
+       (outputIncTxCost0.cost - inputIncTxCost0.cost) shouldEqual Parameters.TokenAccessCostDefault * 2
+       (outputIncTxCost1.cost - inputIncTxCost1.cost) shouldEqual Parameters.TokenAccessCostDefault
      }
    }
 
@@ -416,7 +416,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
      val sc = stateContextWith(paramsWith(approxCost))
      sc.currentParameters.maxBlockCost shouldBe approxCost
      val calculatedCost = tx.statefulValidity(from, IndexedSeq(), sc)(ErgoInterpreter(sc.currentParameters)).get
-     approxCost - calculatedCost <= 1 shouldBe true
+     approxCost - calculatedCost.cost <= 1 shouldBe true
 
      // transaction exceeds computations limit
      val sc2 = stateContextWith(paramsWith(approxCost - 1))

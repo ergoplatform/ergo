@@ -57,7 +57,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
       val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
-      us.validateWithCost(tx, us.stateContext.simplifiedUpcoming(), txCostLimit, None).get should be <= 100000
+      us.validateWithCost(tx, us.stateContext.simplifiedUpcoming(), txCostLimit, None).get.cost should be <= 100000
       val block1 = validFullBlock(Some(lastBlock), us, Seq(ErgoTransaction(tx)))
       us = us.applyModifier(block1, None)(_ => ()).get
       foundersBox = tx.outputs.head
@@ -103,7 +103,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val validationContext = us.stateContext.simplifiedUpcoming()
       val validationRes1 = us.validateWithCost(tx, validationContext, 100000, None)
       validationRes1 shouldBe 'success
-      val txCost = validationRes1.get
+      val txCost = validationRes1.get.cost
 
       val validationRes2 = us.validateWithCost(tx, validationContext, txCost - 1, None)
       validationRes2 shouldBe 'failure

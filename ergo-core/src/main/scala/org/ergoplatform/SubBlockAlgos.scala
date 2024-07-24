@@ -1,15 +1,18 @@
 package org.ergoplatform
 
 import org.ergoplatform.SubBlockAlgos.SubBlockInfo
+import org.ergoplatform.modifiers.history.header.Header.{Timestamp, Version}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.MessageSpecV1
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.Constants
+import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
+import sigmastate.crypto.CryptoConstants.EcPointType
 
 import scala.collection.mutable
 
@@ -34,7 +37,11 @@ object SubBlockAlgos {
   //    Merkle tree if there are no input blocks after previous ordering block, with only reward transaction added
   //  * every block (input and ordering) also contains digest of new transactions since last input block. For ordering
   //  block, they are ignored.
-  //  * script execution context is the same for input and ordering blocks, aside // todo: mining pubkey?
+  //  * script execution context different for input and ordering blocks for the following fields :
+  //     * timestamp - next input or ordering
+  //     * height - the same for input blocks and next ordering block
+  //     * votes -
+  //     * minerPk -
 
   // Another option is to use 2-PoW-for 1 technique, so sub-block (input block) is defined not by
   // hash(b) < T/subsPerBlock , but by reverse(hash(b)) < T/subsPerBlock , while ordering block is defined
@@ -60,12 +67,15 @@ object SubBlockAlgos {
 
   /**
     * Sub-block message, sent by the node to peers when a sub-block is generated
-    * @param version - message version (to allow injecting new fields)
+    * @param version - message version E(to allow injecting new fields)
     * @param subBlock - subblock
     * @param prevSubBlockId - previous sub block id `subBlock` is following, if missed, sub-block is linked
     *                         to a previous block
     */
-  case class SubBlockInfo(version: Byte, subBlock: Header, prevSubBlockId: Option[Array[Byte]])
+  case class SubBlockInfo(version: Byte, subBlock: Header, prevSubBlockId: Option[Array[Byte]]) {
+    def transactionsConfirmedDigest: Digest32 = subBlock.transactionsRoot
+    def subblockTransactionsDigest: Digest32 = ??? // read from extension
+  }
 
   object SubBlockInfo {
 

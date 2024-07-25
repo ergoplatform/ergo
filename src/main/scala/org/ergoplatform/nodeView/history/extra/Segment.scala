@@ -154,8 +154,9 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param history - database handle
    * @return array of transactions with full bodies
    */
-  private def getTxs(arr: ArrayBuffer[Long], history: ErgoHistoryReader): Array[IndexedErgoTransaction] = // sorted to match explorer
-    arr.map(n => NumericTxIndex.getTxByNumber(history, n).get.retrieveBody(history)).toArray.sortBy(tx => (-tx.height, tx.id))
+  private def getTxs(arr: ArrayBuffer[Long], history: ErgoHistoryReader): Array[IndexedErgoTransaction] = {
+    arr.map(n => NumericTxIndex.getTxByNumber(history, n).get.retrieveBody(history)).toArray
+  }
 
   /**
    * Get an array of boxes from an array of numeric box indexes

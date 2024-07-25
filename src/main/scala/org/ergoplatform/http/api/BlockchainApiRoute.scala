@@ -20,7 +20,7 @@ import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
 import scorex.core.api.http.ApiResponse
 import scorex.util.{ModifierId, bytesToId}
-import sigma.ast.ErgoTree
+import sigmastate.Values.ErgoTree
 import spire.implicits.cfor
 
 import scala.concurrent.duration.{Duration, SECONDS}
@@ -85,7 +85,6 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getBoxesByErgoTreeR ~
       getBoxesByErgoTreeUnspentR ~
       getTokenInfoByIdR ~
-      getTokenInfoByIdsR ~
       getAddressBalanceTotalR ~
       getAddressBalanceTotalGetRoute
     }
@@ -327,12 +326,6 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getTokenInfoByIds(ids: Seq[ModifierId]): Future[Seq[IndexedToken]] = {
-    getHistory.map { history =>
-      ids.flatMap(id => history.typedExtraIndexById[IndexedToken](uniqueId(id)))
-    }
-  }
-
   private def getTokenInfoById(id: ModifierId): Future[Option[IndexedToken]] = {
     getHistory.map { history =>
       history.typedExtraIndexById[IndexedToken](uniqueId(id))
@@ -341,10 +334,6 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getTokenInfoByIdR: Route = (get & pathPrefix("token" / "byId") & modifierId) { id =>
     ApiResponse(getTokenInfoById(id))
-  }
-
-  private def getTokenInfoByIdsR: Route = (post & pathPrefix("tokens") & entity(as[Seq[ModifierId]])) { ids =>
-    ApiResponse(getTokenInfoByIds(ids))
   }
 
   private def getBoxesByTokenId(id: ModifierId, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =

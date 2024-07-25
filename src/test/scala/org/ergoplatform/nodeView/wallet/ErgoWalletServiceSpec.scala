@@ -12,7 +12,6 @@ import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanR
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.validErgoTransactionGen
 import org.ergoplatform.utils.{ErgoCorePropertyTest, MempoolTestHelpers, WalletTestOps}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
@@ -24,9 +23,10 @@ import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
-import sigma.ast.{ByteArrayConstant, ErgoTree, EvaluatedValue, FalseLeaf, SType, TrueLeaf}
-import sigma.Extensions.ArrayOps
+import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
+import sigmastate.eval.Extensions.ArrayOps
 import sigmastate.helpers.TestingHelpers.testBox
+import sigmastate.{SType, Values}
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.Random
@@ -43,6 +43,7 @@ class ErgoWalletServiceSpec
   import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   override val ergoSettings: ErgoSettings = settings
@@ -96,7 +97,7 @@ class ErgoWalletServiceSpec
           ErgoLikeTransaction(IndexedSeq(), IndexedSeq()),
           creationOutIndex = 0,
           None,
-          testBox(1L, ErgoTree.fromProposition(TrueLeaf.toSigmaProp), 0),
+          testBox(1L, Values.TrueLeaf.toSigmaProp, 0),
           Set(PaymentsScanId)
         )
       )
@@ -131,7 +132,7 @@ class ErgoWalletServiceSpec
       case (ergoBoxes, _) =>
         val ergoBox = ergoBoxes.head
 
-        val registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = Option(Map(ErgoBox.R4 -> FalseLeaf))
+        val registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = Option(Map(ErgoBox.R4 -> sigmastate.Values.FalseLeaf))
         val illegalAssetIssueRequest = AssetIssueRequest(address = pks.head, Some(1), amount = 1, "test", "test", 4, registers)
         val invalidCandidates = requestsToBoxCandidates(Seq(illegalAssetIssueRequest), ergoBox.id, startHeight, parameters, pks)
         invalidCandidates.failed.get.getMessage shouldBe "Additional registers contain R0...R6"

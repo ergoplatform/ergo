@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox.R1
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import org.ergoplatform.{ErgoTreePredef, P2PKAddress}
-import sigma.ast.{ByteArrayConstant, ErgoTree}
+import sigmastate.Values.ByteArrayConstant
 import sigmastate.eval.Extensions.ArrayByteOps
 import sigmastate.helpers.TestingHelpers._
 
@@ -97,10 +97,10 @@ class ScanningPredicateSpecification extends ErgoCorePropertyTest {
   property("containsAsset") {
     forAll(proveDlogGen) { pk =>
       forAll(assetGen) { case (tokenId, amt) =>
-        val box = testBox(value = 1, ErgoTree.fromSigmaBoolean(pk), creationHeight = 0, additionalTokens = Seq(tokenId -> amt))
+        val box = testBox(value = 1, pk, creationHeight = 0, additionalTokens = Seq(tokenId -> amt))
         ContainsAssetPredicate(tokenId).filter(box) shouldBe true
 
-        val emptyBox = testBox(value = 1, ErgoTree.fromSigmaBoolean(pk), creationHeight = 0)
+        val emptyBox = testBox(value = 1, pk, creationHeight = 0)
         ContainsAssetPredicate(tokenId).filter(emptyBox) shouldBe false
 
         ContainsAssetPredicate(mutateRandomByte(tokenId.toArray).toTokenId).filter(box) shouldBe false

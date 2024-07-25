@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoLikeTransactionSerializer, Input}
 import org.ergoplatform.ErgoBox.BoxId
-import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
+import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.history.header.Header
@@ -27,7 +27,8 @@ import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, Validati
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
+import sigmastate.serialization.ConstantStore
+import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 
 import java.util
 import scala.annotation.nowarn

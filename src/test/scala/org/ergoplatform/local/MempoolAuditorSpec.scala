@@ -15,12 +15,12 @@ import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import sigma.ast.ErgoTree
-import sigma.ast.syntax.ValueOps
+import sigmastate.Values.ErgoTree
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
 import sigmastate.lang.SigmaCompiler
-import sigma.serialization.ErgoTreeSerializer
+import sigmastate.lang.Terms.ValueOps
+import sigmastate.serialization.ErgoTreeSerializer
 
 import scala.concurrent.duration._
 
@@ -70,7 +70,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     val validTx = validTransactionFromBoxes(boxes.toIndexedSeq, outputsProposition = tree)
 
-    val temporarilyValidTx = validTransactionFromBoxes(validTx.outputs, outputsProposition = ErgoTree.fromSigmaBoolean(proveDlogGen.sample.get))
+    val temporarilyValidTx = validTransactionFromBoxes(validTx.outputs, outputsProposition = proveDlogGen.sample.get)
 
     subscribeEvents(classOf[FailedTransaction])
     nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(validTx, None))

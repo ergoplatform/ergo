@@ -1,7 +1,7 @@
 package org.ergoplatform.http.api.requests
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import sigma.data.SigmaBoolean
+import sigmastate.Values.SigmaBoolean
 
 /**
   * Represent a request for extracting prover hints from transaction.

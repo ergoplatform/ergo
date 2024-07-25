@@ -17,8 +17,8 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
-import sigma.ast.SType
-import sigma.ast.EvaluatedValue
+import sigmastate.SType
+import sigmastate.Values.EvaluatedValue
 import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.concurrent.Future

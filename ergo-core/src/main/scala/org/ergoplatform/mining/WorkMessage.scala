@@ -4,7 +4,7 @@ import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
-import sigma.data.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 
 
 /**

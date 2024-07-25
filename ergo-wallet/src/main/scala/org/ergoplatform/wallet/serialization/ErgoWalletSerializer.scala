@@ -3,7 +3,8 @@ package org.ergoplatform.wallet.serialization
 import java.nio.ByteBuffer
 import scorex.util.ByteArrayBuilder
 import scorex.util.serialization._
-import sigma.serialization._
+import sigmastate.serialization.{SigmaSerializer, ConstantStore}
+import sigmastate.utils.{SigmaByteWriter, SigmaByteReader}
 
 import scala.util.Try
 

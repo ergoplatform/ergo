@@ -12,8 +12,9 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
+import sigmastate.SType
+import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import cats.syntax.either._
-import sigma.ast.{ErgoTree, EvaluatedValue, SType}
 
 class JsonSerializationCoreSpec extends ErgoCorePropertyTest
   with ApiCodecs {

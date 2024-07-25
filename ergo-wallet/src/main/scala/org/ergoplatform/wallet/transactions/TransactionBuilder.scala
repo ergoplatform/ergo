@@ -7,7 +7,8 @@ import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
-import sigma.eval.Extensions.EvalIterableOps
+import sigmastate.eval.Extensions._
+import sigmastate.eval._
 import sigmastate.utils.Extensions._
 import sigma.Coll
 import sigma.Extensions._

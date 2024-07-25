@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
-import sigma.ast.EvaluatedValue
-import sigma.ast._
+import sigmastate.Values.EvaluatedValue
+import sigmastate.{SType, Values}
 import sigma.Extensions._
 
 /**
@@ -26,10 +26,10 @@ case class ContainsScanningPredicate(regId: ErgoBox.RegisterId,
 
   override def filter(box: ErgoBox): Boolean = {
     value match {
-      case ByteArrayConstant(bytes) =>
+      case Values.ByteArrayConstant(bytes) =>
         box.get(regId).exists {
           _ match {
-            case ByteArrayConstant(arr) => arr.toArray.containsSlice(bytes.toArray)
+            case Values.ByteArrayConstant(arr) => arr.toArray.containsSlice(bytes.toArray)
             case _ => false
           }
         }
@@ -59,42 +59,42 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedVa
   //todo: try to remove boilerplate below
   override def filter(box: ErgoBox): Boolean = {
     value match {
-      case ByteArrayConstant(bytes) =>
+      case Values.ByteArrayConstant(bytes) =>
         if(box.get(regId).isDefined && box.get(regId).get.tpe.equals(value.tpe)) {
           box.get(regId).exists {
             _ match {
-              case ByteArrayConstant(arr) => arr.toArray.sameElements(bytes.toArray)
+              case Values.ByteArrayConstant(arr) => arr.toArray.sameElements(bytes.toArray)
               case _ => false
             }
           }
         } else {
           false
         }
-      case GroupElementConstant(groupElement) =>
+      case Values.GroupElementConstant(groupElement) =>
         box.get(regId).exists {
           _ match {
-            case GroupElementConstant(ge) => groupElement == ge
+            case Values.GroupElementConstant(ge) => groupElement == ge
             case _ => false
           }
         }
-      case BooleanConstant(bool) =>
+      case Values.BooleanConstant(bool) =>
         box.get(regId).exists {
           _ match {
-            case BooleanConstant(b) => bool == b
+            case Values.BooleanConstant(b) => bool == b
             case _ => false
           }
         }
-      case IntConstant(int) =>
+      case Values.IntConstant(int) =>
         box.get(regId).exists {
           _ match {
-            case IntConstant(i) => int == i
+            case Values.IntConstant(i) => int == i
             case _ => false
           }
         }
-      case LongConstant(long) =>
+      case Values.LongConstant(long) =>
         box.get(regId).exists {
           _ match {
-            case IntConstant(l) => long == l
+            case Values.IntConstant(l) => long == l
             case _ => false
           }
         }

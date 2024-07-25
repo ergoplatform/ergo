@@ -4,7 +4,7 @@ import io.circe.parser._
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.util.encode.Base16
-import sigma.ast.ByteArrayConstant
+import sigmastate.Values.ByteArrayConstant
 import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.language.implicitConversions

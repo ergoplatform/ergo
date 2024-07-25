@@ -17,12 +17,12 @@ import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import sigma.Colls
-import sigma.ast.ErgoTree
-import sigma.data.ProveDlog
+import sigmastate.Values.ErgoTree
+import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
-import sigma.interpreter.ProverResult
+import sigmastate.eval._
+import sigmastate.interpreter.ProverResult
 import sigma.Extensions._
-import sigma.eval.Extensions.EvalIterableOps
 
 trait WalletTestOps extends NodeViewBaseOps {
   import org.ergoplatform.utils.ErgoNodeTestConstants._

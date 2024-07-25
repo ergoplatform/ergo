@@ -159,19 +159,19 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
               log.error("Calculated proofHash is not equal to the declared one, doing another attempt")
 
-              /*
-               * Proof generated was different from one announced.
-               *
-               * In most cases, announced proof is okay, and as proof is already checked, problem in some
-               * extra bytes added to the proof.
-               *
-               * Could be related to https://github.com/ergoplatform/ergo/issues/1614
-               *
-               * So the problem could appear on mining nodes only, and caused by
-               * proofsForTransactions() wasting the tree unexpectedly.
-               *
-               * We are trying to generate proof again now.
-               */
+              /**
+                * Proof generated was different from one announced.
+                *
+                * In most cases, announced proof is okay, and as proof is already checked, problem in some
+                * extra bytes added to the proof.
+                *
+                * Could be related to https://github.com/ergoplatform/ergo/issues/1614
+                *
+                * So the problem could appear on mining nodes only, and caused by
+                * proofsForTransactions() wasting the tree unexpectedly.
+                *
+                * We are trying to generate proof again now.
+                */
 
               persistentProver.rollback(inRoot)
                 .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))

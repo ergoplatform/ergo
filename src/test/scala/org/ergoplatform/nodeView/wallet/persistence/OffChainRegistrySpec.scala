@@ -9,7 +9,7 @@ import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import sigma.ast.ByteArrayConstant
+import sigmastate.Values.ByteArrayConstant
 
 import scala.collection.immutable.TreeSet
 import scala.util.Random

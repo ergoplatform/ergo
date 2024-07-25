@@ -7,7 +7,8 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction._
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoBox}
-import sigma.ast.{SType, EvaluatedValue}
+import sigmastate.SType
+import sigmastate.Values.EvaluatedValue
 
 /**
   * A payment request contains an address (probably containing script), value, assets, additional registers.

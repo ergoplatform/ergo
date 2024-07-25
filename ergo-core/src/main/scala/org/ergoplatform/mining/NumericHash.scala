@@ -12,10 +12,8 @@ import scala.annotation.tailrec
   * in range from 0 to a maximum number divisible by q without remainder.
   * If yes, it returns the result mod q, otherwise make one more iteration using hash as an input.
   * This is done to ensure uniform distribution of the resulting numbers.
-  *
-  * Used in Autolykos v1 only!
   */
-class ModQHash(val q: BigInt) extends ScorexLogging with ScorexEncoding {
+class NumericHash(val q: BigInt) extends ScorexLogging with ScorexEncoding {
   assert(q.bigInteger.bitLength() <= 256, "We use 256 bit hash here")
   // biggest number <= 2^256 that is divisible by q without remainder
   val validRange: BigInt = (BigInt(2).pow(256) / q) * q

@@ -3,7 +3,7 @@ package org.ergoplatform.settings
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.util.encode.Base16
-import sigma.data.ProveDlog
+import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import scala.util.Try
 

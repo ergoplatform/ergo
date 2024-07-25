@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
+import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header

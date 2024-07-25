@@ -21,16 +21,17 @@ import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.hash.Digest
 import scorex.util.encode.Base16
+import sigmastate.Values.SigmaBoolean
 import sigmastate._
-import sigmastate.crypto.DLogProtocol.{DLogProverInput, FirstDLogProverMessage}
+import sigmastate.crypto.CryptoConstants.EcPointType
+import sigmastate.crypto.DLogProtocol.{DLogProverInput, FirstDLogProverMessage, ProveDlog}
 import sigmastate.crypto.VerifierMessage.Challenge
 import sigmastate.crypto._
 import sigmastate.interpreter._
-import sigma.serialization.{OpCodes, SigSerializer}
+import sigmastate.serialization.OpCodes
 import org.ergoplatform.sdk.JsonCodecs
-import sigma.Extensions.ArrayOps
-import sigma.crypto._
-import sigma.data._
+import sigmastate.eval.Extensions.ArrayOps
+import sigmastate.utils.Helpers._
 
 import java.math.BigInteger
 import scala.annotation.nowarn
@@ -128,7 +129,7 @@ trait ApiCodecs extends JsonCodecs {
   })
 
   implicit val secretBigIntEncoder: Encoder[BigInteger] = Encoder.instance { w =>
-    ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(sigma.crypto.groupSize, w)).asJson
+    ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(CryptoConstants.groupSize, w)).asJson
   }
 
   implicit val secretBigIntDecoder: Decoder[BigInteger] = arrayBytesDecoder.map { bytes =>

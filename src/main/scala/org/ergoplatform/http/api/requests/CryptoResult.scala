@@ -1,6 +1,6 @@
 package org.ergoplatform.http.api.requests
 
-import sigma.data.SigmaBoolean
+import sigmastate.Values.SigmaBoolean
 
 /**
   * Result of reduction of ErgoTree for context provided (used in /script/executeWithContext)

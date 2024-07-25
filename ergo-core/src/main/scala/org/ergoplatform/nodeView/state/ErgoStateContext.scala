@@ -18,10 +18,10 @@ import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, Validati
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
-import sigma.Extensions.ArrayOps
-import sigma.crypto.EcPointType
-import sigma.{Coll, Colls}
-import sigma.eval.SigmaDsl
+import sigmastate.crypto.CryptoConstants.EcPointType
+import sigmastate.eval.Extensions.ArrayOps
+import sigmastate.eval.SigmaDsl
+import sigma.Coll
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
@@ -82,7 +82,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     PreHeader.toSigma(lastHeaders.headOption.getOrElse(PreHeader.fake))
 
   override def sigmaLastHeaders: Coll[sigma.Header] =
-    Colls.fromArray(lastHeaders.drop(1).map(h => Header.toSigma(h)).toArray)
+    SigmaDsl.Colls.fromArray(lastHeaders.drop(1).map(h => Header.toSigma(h)).toArray)
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block

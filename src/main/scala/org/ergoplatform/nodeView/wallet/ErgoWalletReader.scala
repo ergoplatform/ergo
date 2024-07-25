@@ -18,7 +18,7 @@ import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.{ErgoBox, NodeViewComponent, P2PKAddress}
 import scorex.util.ModifierId
-import sigma.data.SigmaBoolean
+import sigmastate.Values.SigmaBoolean
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import java.util.concurrent.TimeUnit

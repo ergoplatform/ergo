@@ -10,7 +10,7 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.crypto.hash.Blake2b256
 import scorex.db.{LDBFactory, LDBKVStore}
 import scorex.util.ScorexLogging
-import sigma.serialization.SigmaSerializer
+import sigmastate.serialization.SigmaSerializer
 
 import java.io.File
 import scala.util.{Failure, Success, Try}

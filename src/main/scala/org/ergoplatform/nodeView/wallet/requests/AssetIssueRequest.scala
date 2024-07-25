@@ -7,7 +7,8 @@ import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
-import sigma.ast._
+import sigmastate.SType
+import sigmastate.Values.EvaluatedValue
 
 /**
   * Request for new asset issuing.

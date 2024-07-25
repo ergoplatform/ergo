@@ -10,7 +10,7 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
-import sigma.ast.ByteArrayConstant
+import sigmastate.Values.ByteArrayConstant
 
 object ErgoNodeWalletGenerators {
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._

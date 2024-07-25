@@ -6,7 +6,7 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 import org.ergoplatform.wallet.interface4j.SecretString
 import scodec.bits.BitVector
-import sigma.crypto.CryptoFacade
+import sigmastate.crypto.CryptoFacade
 
 import scala.util.{Failure, Try}
 

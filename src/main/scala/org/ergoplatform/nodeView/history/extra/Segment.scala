@@ -287,6 +287,60 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       confirmedBoxes
   }
 
+
+  /**
+   * Overloaded retrieveUtxos for mempool filtering
+   * Get a range of the boxes associated with the parent that are NOT spent
+   *
+   * @param history     - history to use
+   * @param mempool     - mempool to use, if unconfirmed is true
+   * @param offset      - items to skip from the start
+   * @param limit       - items to retrieve
+   * @param sortDir     - whether to start retreival from newest box ([[DESC]]) or oldest box ([[ASC]])
+   * @param unconfirmed - whether to include unconfirmed boxes
+   * @param spentBoxesIdsInMempool - Set of box IDs that are spent in the mempool (to be excluded if necessary)
+   * @return array of unspent boxes
+   */
+  def retrieveUtxos(history: ErgoHistoryReader,
+                    mempool: ErgoMemPoolReader,
+                    offset: Int,
+                    limit: Int,
+                    sortDir: Direction,
+                    unconfirmed: Boolean,
+                    spentBoxesIdsInMempool: Set[ModifierId]): Seq[IndexedErgoBox] = {
+    val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
+    val confirmedBoxes: Seq[IndexedErgoBox] = sortDir match {
+      case DESC =>
+        data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+        var segment: Int = boxSegmentCount
+        while(data.length < (limit + offset) && segment > 0) {
+          segment -= 1
+          history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
+            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id)) ++=: data
+        }
+        data.reverse.slice(offset, offset + limit)
+      case ASC =>
+        var segment: Int = 0
+        while(data.length < (limit + offset) && segment < boxSegmentCount) {
+          data ++= history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
+            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+          segment += 1
+        }
+        if (data.length < (limit + offset))
+          data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+        data.slice(offset, offset + limit)
+    }
+    if(unconfirmed) {
+      val mempoolBoxes = filterMempool(mempool.getAll.flatMap(_.transaction.outputs))
+      val unconfirmedBoxes = mempoolBoxes.map(new IndexedErgoBox(0, None, None, _, 0)).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+      sortDir match {
+        case DESC => unconfirmedBoxes ++ confirmedBoxes
+        case ASC => confirmedBoxes ++ unconfirmedBoxes
+      }
+    } else
+      confirmedBoxes
+  }
+
   /**
    * Logic for [[Segment.rollback]]
    *

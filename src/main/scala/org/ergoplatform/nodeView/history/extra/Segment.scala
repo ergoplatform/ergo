@@ -237,70 +237,20 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
   def retrieveBoxes(history: ErgoHistoryReader, offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[IndexedErgoBox] =
     getFromSegments(history, offset, limit, boxSegmentCount, boxes, boxSegmentId, _.boxes, getBoxes)
 
-  /**
-   * Get a range of the boxes associated with the parent that are NOT spent
-   *
-   * @param history     - history to use
-   * @param mempool     - mempool to use, if unconfirmed is true
-   * @param offset      - items to skip from the start
-   * @param limit       - items to retrieve
-   * @param sortDir     - whether to start retreival from newest box ([[DESC]]) or oldest box ([[ASC]])
-   * @param unconfirmed - whether to include unconfirmed boxes
-   * @return array of unspent boxes
-   */
-  def retrieveUtxos(history: ErgoHistoryReader,
-                    mempool: ErgoMemPoolReader,
-                    offset: Int,
-                    limit: Int,
-                    sortDir: Direction,
-                    unconfirmed: Boolean): Seq[IndexedErgoBox] = {
-    val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
-    val confirmedBoxes: Seq[IndexedErgoBox] = sortDir match {
-      case DESC =>
-        data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
-        var segment: Int = boxSegmentCount
-        while(data.length < (limit + offset) && segment > 0) {
-          segment -= 1
-          history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
-            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get) ++=: data
-        }
-        data.reverse.slice(offset, offset + limit)
-      case ASC =>
-        var segment: Int = 0
-        while(data.length < (limit + offset) && segment < boxSegmentCount) {
-          data ++= history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
-            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
-          segment += 1
-        }
-        if (data.length < (limit + offset))
-          data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
-        data.slice(offset, offset + limit)
-    }
-    if(unconfirmed) {
-      val mempoolBoxes = filterMempool(mempool.getAll.flatMap(_.transaction.outputs))
-      val unconfirmedBoxes = mempoolBoxes.map(new IndexedErgoBox(0, None, None, _, 0))
-      sortDir match {
-        case DESC => unconfirmedBoxes ++ confirmedBoxes
-        case ASC => confirmedBoxes ++ unconfirmedBoxes
-      }
-    } else
-      confirmedBoxes
-  }
-
 
   /**
-   * Overloaded retrieveUtxos for mempool filtering
-   * Get a range of the boxes associated with the parent that are NOT spent
-   *
-   * @param history     - history to use
-   * @param mempool     - mempool to use, if unconfirmed is true
-   * @param offset      - items to skip from the start
-   * @param limit       - items to retrieve
-   * @param sortDir     - whether to start retreival from newest box ([[DESC]]) or oldest box ([[ASC]])
-   * @param unconfirmed - whether to include unconfirmed boxes
-   * @param spentBoxesIdsInMempool - Set of box IDs that are spent in the mempool (to be excluded if necessary)
-   * @return array of unspent boxes
-   */
+    * Overloaded retrieveUtxos for mempool filtering
+    * Get a range of the boxes associated with the parent that are NOT spent
+    *
+    * @param history                - history to use
+    * @param mempool                - mempool to use, if unconfirmed is true
+    * @param offset                 - items to skip from the start
+    * @param limit                  - items to retrieve
+    * @param sortDir                - whether to start retrieval from newest box ([[DESC]]) or oldest box ([[ASC]])
+    * @param unconfirmed            - whether to include unconfirmed boxes
+    * @param spentBoxesIdsInMempool - Set of box IDs that are spent in the mempool (to be excluded if necessary)
+    * @return array of unspent boxes
+    */
   def retrieveUtxos(history: ErgoHistoryReader,
                     mempool: ErgoMemPoolReader,
                     offset: Int,
@@ -313,7 +263,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       case DESC =>
         data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
         var segment: Int = boxSegmentCount
-        while(data.length < (limit + offset) && segment > 0) {
+        while (data.length < (limit + offset) && segment > 0) {
           segment -= 1
           history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id)) ++=: data
@@ -321,7 +271,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
         data.reverse.slice(offset, offset + limit)
       case ASC =>
         var segment: Int = 0
-        while(data.length < (limit + offset) && segment < boxSegmentCount) {
+        while (data.length < (limit + offset) && segment < boxSegmentCount) {
           data ++= history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
           segment += 1
@@ -330,7 +280,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
           data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
         data.slice(offset, offset + limit)
     }
-    if(unconfirmed) {
+    if (unconfirmed) {
       val mempoolBoxes = filterMempool(mempool.getAll.flatMap(_.transaction.outputs))
       val unconfirmedBoxes = mempoolBoxes.map(new IndexedErgoBox(0, None, None, _, 0)).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
       sortDir match {

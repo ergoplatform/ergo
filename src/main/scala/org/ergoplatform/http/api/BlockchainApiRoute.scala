@@ -243,37 +243,22 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getBoxesByAddressUnspent(
-  addr: ErgoAddress,
-  offset: Int,
-  limit: Int,
-  sortDir: Direction,
-  unconfirmed: Boolean,
-  excludeMempoolSpent: Boolean
-): Future[Seq[IndexedErgoBox]] = {
+                                        addr: ErgoAddress,
+                                        offset: Int,
+                                        limit: Int,
+                                        sortDir: Direction,
+                                        unconfirmed: Boolean,
+                                        excludeMempoolSpent: Boolean
+                                      ): Future[Seq[IndexedErgoBox]] = {
 
-  val originalLimit = limit
-
-  def fetchAndFilter(limit: Int, accumulated: Seq[IndexedErgoBox] = Seq.empty): Future[Seq[IndexedErgoBox]] = {
-    getHistoryWithMempool.flatMap { case (history, mempool) =>
+    getHistoryWithMempool.map { case (history, mempool) =>
       val spentBoxesIdsInMempool = if (excludeMempoolSpent) mempool.spentInputs.map(bytesToId).toSet else Set.empty[ModifierId]
 
-      val addressUtxos = getAddress(addr)(history)
+      getAddress(addr)(history)
         .getOrElse(IndexedErgoAddress(hashErgoTree(addr.script)))
-        .retrieveUtxos(history, mempool, offset + accumulated.length, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
-
-      val updatedAccumulated = accumulated ++ addressUtxos
-      if (updatedAccumulated.length >= originalLimit || addressUtxos.length < limit) {
-        Future.successful(updatedAccumulated.take(originalLimit))
-      } else {
-        val maxLimit = 200
-        val newLimit = Math.min(limit * 2, maxLimit)
-        fetchAndFilter(newLimit, updatedAccumulated)
-      }
+        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
     }
   }
-
-  fetchAndFilter(originalLimit)
-}
 
   private def validateAndGetBoxesByAddressUnspent(address: ErgoAddress,
                                                   offset: Int,
@@ -343,7 +328,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     getHistoryWithMempool.map { case (history, mempool) =>
       getAddress(tree)(history)
         .getOrElse(IndexedErgoAddress(hashErgoTree(tree)))
-        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed)
+        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, Set.empty)
     }
 
   private def getBoxesByErgoTreeUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging & sortDir & unconfirmed) { (tree, offset, limit, dir, unconfirmed) =>
@@ -382,7 +367,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     getHistoryWithMempool.map { case (history, mempool) =>
       history.typedExtraIndexById[IndexedToken](uniqueId(id))
         .getOrElse(IndexedToken(id))
-        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed)
+        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, Set.empty)
     }
 
   private def getBoxesByTokenIdUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byTokenId") & modifierId & paging & sortDir & unconfirmed) { (id, offset, limit, dir, unconfirmed) =>

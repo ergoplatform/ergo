@@ -186,11 +186,18 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
                                                   offset: Int,
                                                   limit: Int,
                                                   segmentCount: Int,
-                                                  array: ArrayBuffer[Long],
+                                                  arr: ArrayBuffer[Long],
                                                   idOf: (ModifierId, Int) => ModifierId,
                                                   arraySelector: T => ArrayBuffer[Long],
-                                                  retrieve: (ArrayBuffer[Long], ErgoHistoryReader) => Array[B])
+                                                  retrieve: (ArrayBuffer[Long], ErgoHistoryReader) => Array[B],
+                                                  txsFlag: Boolean)
                                                  (implicit segmentTreshold: Int): Array[B] = {
+    val array = if(txsFlag) {
+      arr.reverse
+    } else {
+      arr
+    }
+
     val total: Int = segmentTreshold * segmentCount + array.length
     if (offset >= total)
       return Array.empty[B] // return empty array if all elements are skipped
@@ -206,9 +213,15 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
         val upperBound = lowerBound + segmentTreshold
 
         if (collected.length < limit && target > lowerBound) {
-          val arr = arraySelector(
-            history.typedExtraIndexById[T](idMod(idOf(parentId, num))).get
-          ).reverse
+          val arr = if(txsFlag) {
+            arraySelector(
+              history.typedExtraIndexById[T](idMod(idOf(parentId, (segmentCount - 1) - num))).get
+            ).reverse
+          } else {
+            arraySelector(
+              history.typedExtraIndexById[T](idMod(idOf(parentId, num))).get
+            ).reverse
+          }
           if (target > upperBound) {
             collected ++= arr.slice(offset - lowerBound, arr.size)
           } else {
@@ -236,7 +249,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @return array of transactions with full bodies
    */
   def retrieveTxs(history: ErgoHistoryReader, offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[IndexedErgoTransaction] =
-    getFromSegments(history, offset, limit, txSegmentCount, txs, txSegmentId, _.txs, getTxs)
+    getFromSegments(history, offset, limit, txSegmentCount, txs, txSegmentId, _.txs, getTxs, txsFlag = true)
 
   /**
    * Get a range of the boxes associated with the parent object
@@ -247,7 +260,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @return array of boxes
    */
   def retrieveBoxes(history: ErgoHistoryReader, offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[IndexedErgoBox] =
-    getFromSegments(history, offset, limit, boxSegmentCount, boxes, boxSegmentId, _.boxes, getBoxes)
+    getFromSegments(history, offset, limit, boxSegmentCount, boxes, boxSegmentId, _.boxes, getBoxes, txsFlag = false)
 
   /**
    * Get a range of the boxes associated with the parent that are NOT spent

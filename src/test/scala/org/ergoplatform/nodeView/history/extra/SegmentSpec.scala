@@ -83,7 +83,8 @@ class SegmentSpec extends ErgoCorePropertyTest {
         arraySelector = { ai => ai.boxes },
         retrieve = {
           case (arr, _) => arr.toArray
-        }
+        },
+        txsFlag = false
       )
     }
 

@@ -39,7 +39,7 @@ By default, the node processes all blocks from the genesis block. However, there
 
 ergo {
   ...
-  node.utxoBootstrap = true
+  node.utxo.utxoBootstrap = true
   ...
 }
 ```

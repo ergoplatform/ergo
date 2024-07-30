@@ -7,7 +7,7 @@ import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.MessageSpecV1
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import org.ergoplatform.serialization.ErgoSerializer
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, Parameters}
 import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
@@ -18,12 +18,12 @@ import scala.collection.mutable
 
 /**
   * Implementation steps:
-  * * implement basic sub block algorithms (isSub etc)
-  * * implement sub block network message
-  * * implement sub block info support in sync tracker
-  * * implement downloading sub blocks chain
+  * * implement basic input block algorithms (isInput etc)
+  * * implement input block network message
+  * * implement input block info support in sync tracker
+  * * implement downloading input blocks chain
   * * implement avoiding downloading full-blocks
-  * * sub blocks support in /mining API
+  * * input blocks support in /mining API
   * * sub confirmations API
   */
 object SubBlockAlgos {
@@ -38,24 +38,28 @@ object SubBlockAlgos {
   //  * every block (input and ordering) also contains digest of new transactions since last input block. For ordering
   //  block, they are ignored.
   //  * script execution context different for input and ordering blocks for the following fields :
-  //     * timestamp - next input or ordering
+  //     * timestamp - next input or ordering block has non-decreasing timestamp to ours
   //     * height - the same for input blocks and next ordering block
-  //     * votes -
-  //     * minerPk -
+  //     * votes - could be different in different (input and ordering) blocks
+  //     * minerPk - could be different in different (input and ordering) blocks
 
   // Another option is to use 2-PoW-for 1 technique, so sub-block (input block) is defined not by
   // hash(b) < T/subsPerBlock , but by reverse(hash(b)) < T/subsPerBlock , while ordering block is defined
   // by hash(b) < T
-  val subsPerBlock = 128 // sub blocks per block, adjustable via miners voting
+
+  // sub blocks per block, adjustable via miners voting
+  // todo: likely we need to update rule exMatchParameters (#409)
+  val subsPerBlock = Parameters.SubsPerBlockDefault
 
   val weakTransactionIdLength = 6 // value taken from Bitcoin's compact blocks BIP
 
-  def isSub(header: Header, requiredDifficulty: Difficulty): Boolean = {
-    val diff = requiredDifficulty / subsPerBlock
-    header.requiredDifficulty >= diff
+  def isInput(header: Header): Boolean = {
+  //  val fullTarget = AutolykosPowScheme.getB(header.nBits)
+  //  val subTarget = fullTarget * subsPerBlock
+
+    // todo: calc hit and check block kind
+    false
   }
-
-
 
   // messages:
   //

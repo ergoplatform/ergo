@@ -206,7 +206,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Get target `b` from encoded difficulty `nBits`
     */
-  private[mining] def getB(nBits: Long): BigInt = {
+  def getB(nBits: Long): BigInt = {
     q / DifficultySerializer.decodeCompactBits(nBits)
   }
 

@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.21"
+  version: "5.0.22"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -6410,6 +6410,13 @@ paths:
           name: includeUnconfirmed
           required: false
           description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: excludeMempoolSpent
+          required: false
+          description: if true exclude spent inputs from mempool
           schema:
             type: boolean
             default: false

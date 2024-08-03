@@ -50,8 +50,8 @@ object HistoryTestHelpers extends FileUtils {
     val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
     val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      UtxoSettings(false, 0, 2), NipopowSettings(false, 1), mining = false, txCostLimit, txSizeLimit, useExternalMiner = false,
-      internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None,
+      UtxoSettings(false, 0, 2), NipopowSettings(false, 1), mining = false, txCostLimit, txSizeLimit, blockCandidateGenerationInterval = 20.seconds,
+      useExternalMiner = false, internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None,
       offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
       rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false
 )

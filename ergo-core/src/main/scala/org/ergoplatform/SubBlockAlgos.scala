@@ -1,6 +1,7 @@
 package org.ergoplatform
 
 import org.ergoplatform.SubBlockAlgos.SubBlockInfo
+import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history.header.Header.{Timestamp, Version}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
@@ -48,15 +49,23 @@ object SubBlockAlgos {
   // by hash(b) < T
 
   // sub blocks per block, adjustable via miners voting
-  // todo: likely we need to update rule exMatchParameters (#409)
+  // todo: likely we need to update rule exMatchParameters (#409) to add new parameter to vote
   val subsPerBlock = Parameters.SubsPerBlockDefault
 
   val weakTransactionIdLength = 6 // value taken from Bitcoin's compact blocks BIP
 
-  def isInput(header: Header): Boolean = {
-  //  val fullTarget = AutolykosPowScheme.getB(header.nBits)
-  //  val subTarget = fullTarget * subsPerBlock
+  lazy val powScheme = new AutolykosPowScheme(32, 26)
 
+  sealed trait BlockKind
+  
+
+  def isInput(header: Header): Boolean = {
+    val fullTarget = powScheme.getB(header.nBits)
+    val subTarget = fullTarget * subsPerBlock
+    val hit = powScheme.hitForVersion2(header) // todo: cache hit
+
+
+    hit < subsPerBlock
     // todo: calc hit and check block kind
     false
   }

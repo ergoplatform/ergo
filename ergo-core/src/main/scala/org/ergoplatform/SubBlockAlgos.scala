@@ -2,18 +2,15 @@ package org.ergoplatform
 
 import org.ergoplatform.SubBlockAlgos.SubBlockInfo
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.modifiers.history.header.Header.{Timestamp, Version}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.MessageSpecV1
-import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.{Constants, Parameters}
 import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
-import sigmastate.crypto.CryptoConstants.EcPointType
 
 import scala.collection.mutable
 
@@ -57,17 +54,24 @@ object SubBlockAlgos {
   lazy val powScheme = new AutolykosPowScheme(32, 26)
 
   sealed trait BlockKind
-  
 
-  def isInput(header: Header): Boolean = {
+  case object InputBlock extends BlockKind
+  case object FinalizingBlock extends BlockKind
+  case object InvalidPoWBlock extends BlockKind
+
+  def blockKind(header: Header): BlockKind = {
     val fullTarget = powScheme.getB(header.nBits)
     val subTarget = fullTarget * subsPerBlock
-    val hit = powScheme.hitForVersion2(header) // todo: cache hit
+    val hit = powScheme.hitForVersion2(header) // todo: cache hit in header
 
-
-    hit < subsPerBlock
-    // todo: calc hit and check block kind
-    false
+    // todo: consider 2-for-1 pow technique
+    if (hit < subTarget) {
+      InputBlock
+    } else if (hit >= subTarget && hit < fullTarget) {
+      FinalizingBlock
+    } else {
+      InvalidPoWBlock
+    }
   }
 
   // messages:
@@ -94,9 +98,6 @@ object SubBlockAlgos {
 
     val initialMessageVersion = 1
 
-    /**
-      * Serializer which can convert self to bytes
-      */
     def serializer: ErgoSerializer[SubBlockInfo] = new ErgoSerializer[SubBlockInfo] {
       override def serialize(sbi: SubBlockInfo, w: Writer): Unit = {
         w.put(sbi.version)

@@ -240,7 +240,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
               }
             case Failure(e) =>
               log.warn(s"Invalid modifier! Typeid: ${modToApply.modifierTypeId} id: ${modToApply.id} ", e)
-              history.reportModifierIsInvalid(modToApply, progressInfo).map { case (newHis, newProgressInfo) =>
+              history.reportModifierIsInvalid(modToApply).map { case (newHis, newProgressInfo) =>
                 context.system.eventStream.publish(SemanticallyFailedModification(modToApply.modifierTypeId, modToApply.id, e))
                 UpdateInformation(newHis, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
               }

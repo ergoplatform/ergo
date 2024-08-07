@@ -119,9 +119,7 @@ trait ErgoHistory
     * @return ProgressInfo with next modifier to try to apply
     */
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
-  def reportModifierIsInvalid(modifier: BlockSection,
-                              progressInfo: ProgressInfo[BlockSection]
-                             ): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {
+  def reportModifierIsInvalid(modifier: BlockSection): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {
     log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>

@@ -84,7 +84,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
   private def justPutToHistory(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] = {
     historyStorage.insert(Array.empty[(ByteArrayWrapper, Array[Byte])], Array[BlockSection](m)).map { _ =>
-      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+      ProgressInfo.empty
     }
   }
 

@@ -13,18 +13,18 @@ package object core {
 
   type VersionTag = VersionTag.Type
 
-  def idsToString(ids: Seq[(NetworkObjectTypeId.Value, util.ModifierId)])(implicit enc: ScorexEncoder): String = {
+  def idsToString(ids: Seq[(NetworkObjectTypeId.Value, util.ModifierId)]): String = {
     List(ids.headOption, ids.lastOption)
       .flatten
-      .map { case (typeId, id) => s"($typeId,${enc.encodeId(id)})" }
+      .map { case (typeId, id) => s"($typeId,${ScorexEncoder.encodeId(id)})" }
       .mkString("[", "..", "]")
   }
 
-  def idsToString(modifierType: NetworkObjectTypeId.Value, ids: Seq[util.ModifierId])(implicit encoder: ScorexEncoder): String = {
+  def idsToString(modifierType: NetworkObjectTypeId.Value, ids: Seq[util.ModifierId]): String = {
     idsToString(ids.map(id => (modifierType, id)))
   }
 
-  def idsToString(invData: InvData)(implicit encoder: ScorexEncoder): String = idsToString(invData.typeId, invData.ids)
+  def idsToString(invData: InvData): String = idsToString(invData.typeId, invData.ids)
 
   def bytesToId: Array[Byte] => util.ModifierId = scorex.util.bytesToId
 

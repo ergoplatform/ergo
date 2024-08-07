@@ -12,7 +12,6 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
 import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
-import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.core._
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.validation.ModifierValidator
@@ -38,8 +37,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                 override val store: LDBVersionedStore,
                 override protected val ergoSettings: ErgoSettings)
   extends ErgoState[UtxoState]
-    with UtxoStateReader
-    with ScorexEncoding {
+    with UtxoStateReader {
 
   import UtxoState.metadata
 
@@ -49,7 +47,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
-    log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
+    log.info(s"Rollback UtxoState to version ${Algos.encode(version)}")
     store.get(versionToBytes(version)) match {
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
@@ -58,7 +56,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         }
         rollbackResult
       case None =>
-        Failure(new Error(s"Unable to get root hash at version ${Algos.encoder.encode(version)}"))
+        Failure(new Error(s"Unable to get root hash at version ${Algos.encode(version)}"))
     }
   }
 

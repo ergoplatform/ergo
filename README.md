@@ -2,7 +2,7 @@
 
 # Ergo
 
-Welcome to the repository for the [Ergo Platform](https://ergoplatform.org/). Ergo is a Proof-of-Work cryptocurrency protocol that has been designed to offer a secure environment for new kinds of money, peer-to-peer interactions, trust-minimized financial tooling and derivatives. And this repository contains the reference client, also known as the node, for Ergo.
+Welcome to the repository for the [Ergo Platform](https://ergoplatform.org/). Ergo is a Proof-of-Work cryptocurrency protocol that has been designed to offer a secure environment for new kinds of money, peer-to-peer interactions, trust-minimized financial tooling and derivatives. This repository contains the reference client, also known as the node, for Ergo.
 
 The reference client is primarily written in Scala. While certain components of the protocol are implemented in other languages (for instance, [sigma-rust](https://github.com/ergoplatform/sigma-rust) is a Rust-based implementation of the ErgoScript cryptocurrency scripting language), the reference client provides the most complete and comprehensive implementation of the Ergo protocol at the moment.
 

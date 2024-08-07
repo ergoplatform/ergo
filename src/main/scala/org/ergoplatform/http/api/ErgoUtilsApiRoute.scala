@@ -9,7 +9,7 @@ import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.api.http.{ApiResponse, ApiRoute}
-import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.utils.ScorexEncoder
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigmastate.crypto.DLogProtocol.ProveDlog
@@ -18,10 +18,7 @@ import java.security.SecureRandom
 import scala.util.Failure
 import sigmastate.serialization.{ErgoTreeSerializer, GroupElementSerializer, SigmaSerializer}
 
-class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
-  implicit val context: ActorRefFactory
-) extends ApiRoute
-  with ScorexEncoding {
+class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(implicit val context: ActorRefFactory) extends ApiRoute {
 
   private val SeedSize = 32
   private val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
@@ -46,7 +43,7 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
   private def seed(length: Int): String = {
     val seed = new Array[Byte](length)
     new SecureRandom().nextBytes(seed) //seed mutated here!
-    encoder.encode(seed)
+    ScorexEncoder.encode(seed)
   }
 
   def seedRoute: Route = (get & path("seed")) {
@@ -60,7 +57,7 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
   def hashBlake2b: Route = {
     (post & path("hash" / "blake2b") & entity(as[Json])) { json =>
       json.as[String] match {
-        case Right(message) => ApiResponse(encoder.encode(Blake2b256(message)))
+        case Right(message) => ApiResponse(ScorexEncoder.encode(Blake2b256(message)))
         case Left(ex)       => ApiError(StatusCodes.BadRequest, ex.getMessage())
       }
     }

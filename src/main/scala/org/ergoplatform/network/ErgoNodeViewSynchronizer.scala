@@ -22,7 +22,7 @@ import org.ergoplatform.network.message.{InvSpec, MessageSpec, ModifiersSpec, Re
 import scorex.core.network._
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import org.ergoplatform.network.message.{InvData, Message, ModifiersData}
-import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.utils.ScorexEncoder
 import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
@@ -53,7 +53,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                settings: ErgoSettings,
                                syncTracker: ErgoSyncTracker,
                                deliveryTracker: DeliveryTracker)(implicit ex: ExecutionContext)
-  extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
+  extends Actor with Synchronizer with ScorexLogging {
 
   import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 
@@ -777,7 +777,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case _ =>
           // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
           penalizeMisbehavingPeer(remote)
-          log.warn(s"Failed to parse transaction with declared id ${encoder.encodeId(id)} from ${remote.toString}")
+          log.warn(s"Failed to parse transaction with declared id ${ScorexEncoder.encodeId(id)} from ${remote.toString}")
       }
     }
   }
@@ -801,7 +801,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // Forget about block section, so it will be redownloaded if announced again only
           deliveryTracker.setUnknown(id, modifierTypeId)
           penalizeMisbehavingPeer(remote)
-          log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
+          log.warn(s"Failed to parse modifier with declared id ${ScorexEncoder.encodeId(id)} from ${remote.toString}")
           None
       }
     }
@@ -1230,7 +1230,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         } else {
           // A block section is not delivered on time.
           log.info(s"Peer ${peer.toString} has not delivered network object " +
-                   s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time")
+                   s"$modifierTypeId : ${ScorexEncoder.encodeId(modifierId)} on time")
 
           // Number of delivery checks for a block section, utxo set snapshot chunk or manifest
           // increased or initialized, except the case where we can have issues with connectivity,

@@ -6,7 +6,7 @@ import scorex.util.encode.{Base16, BytesEncoder}
 
 import scala.util.Try
 
-class ScorexEncoder extends BytesEncoder {
+object ScorexEncoder extends BytesEncoder {
   @inline
   override val Alphabet: String = Base16.Alphabet
 
@@ -15,14 +15,6 @@ class ScorexEncoder extends BytesEncoder {
 
   @inline
   override def decode(input: String): Try[Array[Byte]] = Base16.decode(input)
-
-  /**
-    * This method might be useful and reimplemented, if encoding of ModifierId and VersionTag
-    * is different form default bytes encoding, e.g. this method should be reimplemented together
-    * with encode() and decode methods
-    */
-  @inline
-  def encode(input: String): String = input
 
   /**
     * This method might be useful and reimplemented, if encoding of ModifierId and VersionTag
@@ -40,8 +32,4 @@ class ScorexEncoder extends BytesEncoder {
   @inline
   def encodeId(input: ModifierId): String = input
 
-}
-
-object ScorexEncoder {
-  val default: ScorexEncoder = new ScorexEncoder()
 }

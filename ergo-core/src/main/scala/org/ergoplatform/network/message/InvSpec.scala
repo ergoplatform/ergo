@@ -14,7 +14,7 @@ import scorex.util.serialization.{Reader, Writer}
  * or it can be sent in reply to a `SyncInfo` message (or application-specific messages like `GetMempool`).
  *
  */
-object InvSpec extends MessageSpecV1[InvData] {
+object InvSpec extends MessageSpecInitial[InvData] {
 
   val maxInvObjects: Int = 400
 

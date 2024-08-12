@@ -9,7 +9,7 @@ import scorex.util.serialization.{Reader, Writer}
 /**
  * The `GetNipopowProof` message requests a `NipopowProof` message from the receiving node
  */
-object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
+object GetNipopowProofSpec extends MessageSpecInitial[NipopowProofData] {
 
   val SizeLimit = 1000
 

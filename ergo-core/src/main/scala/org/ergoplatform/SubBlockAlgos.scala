@@ -4,7 +4,7 @@ import org.ergoplatform.SubBlockAlgos.SubBlockInfo
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
-import org.ergoplatform.network.message.MessageSpecV1
+import org.ergoplatform.network.message.MessageSpecInitial
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.{Constants, Parameters}
 import scorex.crypto.hash.Digest32
@@ -122,7 +122,7 @@ object SubBlockAlgos {
     * Message that is informing about sub block produced.
     * Contains header and link to previous sub block ().
     */
-  object SubBlockMessageSpec extends MessageSpecV1[SubBlockInfo] {
+  object SubBlockMessageSpec extends MessageSpecInitial[SubBlockInfo] {
 
     val MaxMessageSize = 10000
 
@@ -142,7 +142,7 @@ object SubBlockAlgos {
     * On receiving sub block or block, the node is sending last sub block or block id it has to get short transaction
     * ids since then
     */
-  object GetDataSpec extends MessageSpecV1[ModifierId] {
+  object GetDataSpec extends MessageSpecInitial[ModifierId] {
 
     import scorex.util.{bytesToId, idToBytes}
 
@@ -160,7 +160,7 @@ object SubBlockAlgos {
 
   case class TransactionsSince(transactionsWithBlockIds: Array[(ModifierId, Array[Array[Byte]])])
 
-  class DataSpec extends MessageSpecV1[TransactionsSince] {
+  class DataSpec extends MessageSpecInitial[TransactionsSince] {
 
     override val messageCode: MessageCode = 92: Byte
     override val messageName: String = "GetData"

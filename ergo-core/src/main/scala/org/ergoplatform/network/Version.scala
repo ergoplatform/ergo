@@ -37,6 +37,8 @@ object Version {
   val Eip37ForkVersion: Version = Version(4, 0, 100)
   val JitSoftForkVersion: Version = Version(5, 0, 0)
 
+  val SubblocksVersion: Version = Version(6, 0, 0)  // todo: check before activation
+
   val UtxoSnapsnotActivationVersion: Version = Version(5, 0, 12)
 
   val NipopowActivationVersion: Version = Version(5, 0, 13)

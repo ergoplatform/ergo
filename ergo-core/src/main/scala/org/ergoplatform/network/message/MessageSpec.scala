@@ -29,10 +29,20 @@ trait MessageSpec[Content] extends ErgoSerializer[Content] {
 }
 
 /**
-  * P2p messages, that where implemented since the beginning.
+  * P2p messages, that where implemented before sub-blocks
   */
-trait MessageSpecV1[Content] extends MessageSpec[Content] {
+trait MessageSpecInitial[Content] extends MessageSpec[Content] {
 
   override val protocolVersion: Version = Version.initial
+
+}
+
+
+/**
+  * Sub-blocks related messages, V2 of the protocol
+  */
+trait MessageSpecSubblocks[Content] extends MessageSpec[Content] {
+
+  override val protocolVersion: Version = Version.SubblocksVersion
 
 }

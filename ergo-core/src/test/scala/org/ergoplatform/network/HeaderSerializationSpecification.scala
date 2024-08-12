@@ -9,7 +9,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
-import sigmastate.crypto.CryptoConstants.EcPointType
+import sigma.crypto.EcPointType
 
 import java.nio.ByteBuffer
 
@@ -43,7 +43,7 @@ class HeaderSerializationSpecification extends ErgoCorePropertyTest {
     val votes = Array[Byte](4, 3, 0)
 
     val h = Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits,
-                    height, extensionRoot, powSolution, votes)
+                    height, extensionRoot, powSolution, votes, Array.emptyByteArray)
 
     h.id shouldBe "8cf6dca6b9505243e36192fa107735024c0000cf4594b1daa2dc4e13ee86f26f"
 
@@ -141,7 +141,7 @@ class HeaderSerializationSpecification extends ErgoCorePropertyTest {
     val votes = Array[Byte](0, 0, 0)
 
     val h = Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits,
-      height, extensionRoot, powSolution, votes)
+      height, extensionRoot, powSolution, votes, Array.emptyByteArray)
 
     h.id shouldBe "f46c89e44f13a92d8409341490f97f05c85785fa8d2d2164332cc066eda95c39"
 

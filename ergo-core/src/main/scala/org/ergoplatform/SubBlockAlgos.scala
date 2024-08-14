@@ -1,13 +1,11 @@
 package org.ergoplatform
 
-import org.ergoplatform.SubBlockAlgos.SubBlockInfo
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.MessageSpecInitial
-import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.{Constants, Parameters}
-import scorex.crypto.hash.Digest32
+import org.ergoplatform.subblocks.SubBlockInfo
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -82,61 +80,7 @@ object SubBlockAlgos {
   // previous sub block id
   // transactions since last sub blocks
 
-  /**
-    * Sub-block message, sent by the node to peers when a sub-block is generated
-    * @param version - message version E(to allow injecting new fields)
-    * @param subBlock - subblock
-    * @param prevSubBlockId - previous sub block id `subBlock` is following, if missed, sub-block is linked
-    *                         to a previous block
-    */
-  case class SubBlockInfo(version: Byte, subBlock: Header, prevSubBlockId: Option[Array[Byte]]) {
-    def transactionsConfirmedDigest: Digest32 = subBlock.transactionsRoot
-    def subblockTransactionsDigest: Digest32 = ??? // read from extension
-  }
 
-  object SubBlockInfo {
-
-    val initialMessageVersion = 1
-
-    def serializer: ErgoSerializer[SubBlockInfo] = new ErgoSerializer[SubBlockInfo] {
-      override def serialize(sbi: SubBlockInfo, w: Writer): Unit = {
-        w.put(sbi.version)
-        HeaderSerializer.serialize(sbi.subBlock, w)
-        w.putOption(sbi.prevSubBlockId){case (w, id) => w.putBytes(id)}
-      }
-
-      override def parse(r: Reader): SubBlockInfo = {
-        val version = r.getByte()
-        if (version == initialMessageVersion) {
-          val subBlock = HeaderSerializer.parse(r)
-          val prevSubBlockId = r.getOption(r.getBytes(Constants.ModifierIdSize))
-          new SubBlockInfo(version, subBlock, prevSubBlockId)
-        } else {
-          throw new Exception("Unsupported sub-block message version")
-        }
-      }
-    }
-  }
-
-  /**
-    * Message that is informing about sub block produced.
-    * Contains header and link to previous sub block ().
-    */
-  object SubBlockMessageSpec extends MessageSpecInitial[SubBlockInfo] {
-
-    val MaxMessageSize = 10000
-
-    override val messageCode: MessageCode = 90: Byte
-    override val messageName: String = "SubBlock"
-
-    override def serialize(data: SubBlockInfo, w: Writer): Unit = {
-      SubBlockInfo.serializer.serialize(data, w)
-    }
-
-    override def parse(r: Reader): SubBlockInfo = {
-      SubBlockInfo.serializer.parse(r)
-    }
-  }
 
   /**
     * On receiving sub block or block, the node is sending last sub block or block id it has to get short transaction

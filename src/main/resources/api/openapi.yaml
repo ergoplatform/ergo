@@ -445,7 +445,7 @@ components:
           description: Transaction inputs
           type: array
           items:
-            $ref: '#/components/schemas/ErgoTransactionInput'
+            $ref: '#/components/schemas/IndexedErgoBox'
         dataInputs:
           description: Transaction data inputs
           type: array
@@ -455,7 +455,7 @@ components:
           description: Transaction outputs
           type: array
           items:
-            $ref: '#/components/schemas/ErgoTransactionOutput'
+            $ref: '#/components/schemas/IndexedErgoBox'
         inclusionHeight:
           description: Height of a block the transaction was included in
           type: integer
@@ -3096,7 +3096,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '"02c9e71790399816b3e40b2207e9ade19a9b7fe0600186cfb8e2b115bfdb34b57f38cd3c9f2890d11720eb3bb993993f00ededf812a590d2993df094a7ca4f0213e4820e1ab831eed5dc5c72665396d3a01d2a12900f1c3ab77700b284ae24fa8e8f7754f86f2282c795db6b0b17df1c29cc0552e59d01f7d777c638a813333277271c2f8b4d99d01ff0e6ee8695697bdd5b568089395620d7198c6093ce8bc59b928611b1b12452c05addaa42f4beff6a0a6fe90000000380d0dbc3f40210090402040005c801040205c8010500040004000e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04d807d601e4c6a70408d602b2a5730000d603e4c6a70601d604e4c6a7080ed605e4c6a70505d606e4c6a70705d60795720399c1a7c1720299c17202c1a7eb027201d1ededededededededed93c27202c2a793e4c672020408720193e4c6720205059572039d9c72057eb272047301000573029d9c72057eb2720473030005730494e4c672020601720393e4c672020705720693e4c67202080e720493e4c67202090ec5a79572039072079c720672059272079c72067205917207730595ef720393b1db630872027306d801d608b2db63087202730700ed938c7208017308938c7208027206c8df35000508cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba0405c8a8c105010105dc8b020e0266608cdea8baf0380008cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04c8df350000c0843d1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304c8df350000"'
+                example: '02c9e71790399816b3e40b2207e9ade19a9b7fe0600186cfb8e2b115bfdb34b57f38cd3c9f2890d11720eb3bb993993f00ededf812a590d2993df094a7ca4f0213e4820e1ab831eed5dc5c72665396d3a01d2a12900f1c3ab77700b284ae24fa8e8f7754f86f2282c795db6b0b17df1c29cc0552e59d01f7d777c638a813333277271c2f8b4d99d01ff0e6ee8695697bdd5b568089395620d7198c6093ce8bc59b928611b1b12452c05addaa42f4beff6a0a6fe90000000380d0dbc3f40210090402040005c801040205c8010500040004000e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04d807d601e4c6a70408d602b2a5730000d603e4c6a70601d604e4c6a7080ed605e4c6a70505d606e4c6a70705d60795720399c1a7c1720299c17202c1a7eb027201d1ededededededededed93c27202c2a793e4c672020408720193e4c6720205059572039d9c72057eb272047301000573029d9c72057eb2720473030005730494e4c672020601720393e4c672020705720693e4c67202080e720493e4c67202090ec5a79572039072079c720672059272079c72067205917207730595ef720393b1db630872027306d801d608b2db63087202730700ed938c7208017308938c7208027206c8df35000508cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba0405c8a8c105010105dc8b020e0266608cdea8baf0380008cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04c8df350000c0843d1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304c8df350000'
         responses:
           '200':
             description: JSON with ID of the new transaction
@@ -3152,7 +3152,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '"02c9e71790399816b3e40b2207e9ade19a9b7fe0600186cfb8e2b115bfdb34b57f38cd3c9f2890d11720eb3bb993993f00ededf812a590d2993df094a7ca4f0213e4820e1ab831eed5dc5c72665396d3a01d2a12900f1c3ab77700b284ae24fa8e8f7754f86f2282c795db6b0b17df1c29cc0552e59d01f7d777c638a813333277271c2f8b4d99d01ff0e6ee8695697bdd5b568089395620d7198c6093ce8bc59b928611b1b12452c05addaa42f4beff6a0a6fe90000000380d0dbc3f40210090402040005c801040205c8010500040004000e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04d807d601e4c6a70408d602b2a5730000d603e4c6a70601d604e4c6a7080ed605e4c6a70505d606e4c6a70705d60795720399c1a7c1720299c17202c1a7eb027201d1ededededededededed93c27202c2a793e4c672020408720193e4c6720205059572039d9c72057eb272047301000573029d9c72057eb2720473030005730494e4c672020601720393e4c672020705720693e4c67202080e720493e4c67202090ec5a79572039072079c720672059272079c72067205917207730595ef720393b1db630872027306d801d608b2db63087202730700ed938c7208017308938c7208027206c8df35000508cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba0405c8a8c105010105dc8b020e0266608cdea8baf0380008cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04c8df350000c0843d1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304c8df350000"'
+                example: '02c9e71790399816b3e40b2207e9ade19a9b7fe0600186cfb8e2b115bfdb34b57f38cd3c9f2890d11720eb3bb993993f00ededf812a590d2993df094a7ca4f0213e4820e1ab831eed5dc5c72665396d3a01d2a12900f1c3ab77700b284ae24fa8e8f7754f86f2282c795db6b0b17df1c29cc0552e59d01f7d777c638a813333277271c2f8b4d99d01ff0e6ee8695697bdd5b568089395620d7198c6093ce8bc59b928611b1b12452c05addaa42f4beff6a0a6fe90000000380d0dbc3f40210090402040005c801040205c8010500040004000e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04d807d601e4c6a70408d602b2a5730000d603e4c6a70601d604e4c6a7080ed605e4c6a70505d606e4c6a70705d60795720399c1a7c1720299c17202c1a7eb027201d1ededededededededed93c27202c2a793e4c672020408720193e4c6720205059572039d9c72057eb272047301000573029d9c72057eb2720473030005730494e4c672020601720393e4c672020705720693e4c67202080e720493e4c67202090ec5a79572039072079c720672059272079c72067205917207730595ef720393b1db630872027306d801d608b2db63087202730700ed938c7208017308938c7208027206c8df35000508cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba0405c8a8c105010105dc8b020e0266608cdea8baf0380008cd030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04c8df350000c0843d1005040004000e36100204a00b08cd0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798ea02d192a39a8cc7a701730073011001020402d19683030193a38cc7b2a57300000193c2b2a57301007473027303830108cdeeac93b1a57304c8df350000'
         responses:
           '200':
             description: JSON with ID of the new transaction
@@ -3283,7 +3283,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+              example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       responses:
         '200':
           description: Ergo transaction
@@ -3383,7 +3383,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+              example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       responses:
         '200':
           description: Unconfirmed transaction output boxes that correspond to given ErgoTree hex
@@ -3656,7 +3656,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: '"127.0.0.1:5673"'
+              example: '127.0.0.1:5673'
       responses:
         '200':
           description: Attempt to connect to the peer
@@ -3767,7 +3767,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '"7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16"'
+                example: '7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16'
         default:
           description: Error
           content:
@@ -3816,7 +3816,7 @@ paths:
             schema:
               description: Encoded Ergo Address
               type: string
-              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
+              example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
       responses:
         '200':
           description: Address validity with validation error
@@ -3928,7 +3928,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+              example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       responses:
         '200':
           description: Ergo address
@@ -3963,7 +3963,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '"83375fd213cfd7dfd984ce1901d62c302a1db53160b416674c8da1a393a6bbc316"'
+                example: '83375fd213cfd7dfd984ce1901d62c302a1db53160b416674c8da1a393a6bbc316'
         default:
           description: Error
           content:
@@ -3983,7 +3983,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: '"7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV"'
+              example: '7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV'
       responses:
         '200':
           description: Base16-encoded 32 byte hash
@@ -3991,7 +3991,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '"6ed54addddaf10fe8fcda330bd443a57914fbce38a9fa27248b07e361cc76a41"'
+                example: '6ed54addddaf10fe8fcda330bd443a57914fbce38a9fa27248b07e361cc76a41'
         default:
           description: Error
           content:
@@ -6028,10 +6028,10 @@ paths:
         required: true
         content:
           application/json:
-            description: adderess associated with transactions
+            description: address associated with transactions
             schema:
               type: string
-              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
+              example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
       parameters:
         - in: query
           name: offset
@@ -6064,7 +6064,7 @@ paths:
                       $ref: '#/components/schemas/IndexedErgoTransaction'
                   total:
                     type: integer
-                    description: Total count of retreived transactions
+                    description: Total count of retrieved transactions
         '404':
           description: No transactions found for wanted address
           content:
@@ -6321,7 +6321,7 @@ paths:
             description: adderess associated with boxes
             schema:
               type: string
-              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
+              example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
       parameters:
         - in: query
           name: offset
@@ -6381,7 +6381,7 @@ paths:
             description: adderess associated with unspent boxes
             schema:
               type: string
-              example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
+              example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
       parameters:
         - in: query
           name: offset
@@ -6410,6 +6410,13 @@ paths:
           name: includeUnconfirmed
           required: false
           description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: excludeMempoolSpent
+          required: false
+          description: if true exclude spent inputs from mempool
           schema:
             type: boolean
             default: false
@@ -6489,7 +6496,7 @@ paths:
             description: hex encoded ergotree
             schema:
               type: string
-              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+              example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       parameters:
         - in: query
           name: offset
@@ -6543,7 +6550,7 @@ paths:
             description: hex encoded ergotree
             schema:
               type: string
-              example: '"100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301"'
+              example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       parameters:
         - in: query
           name: offset

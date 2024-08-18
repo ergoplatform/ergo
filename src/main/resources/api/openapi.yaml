@@ -1302,6 +1302,15 @@ components:
             type: string
             description: hex-encoded serialized box bytes
 
+    PrivateKeyRequest:
+          description: Request for getting a secret corresponding to wallet address
+          type: object
+          required:
+            - address
+          properties:
+            address:
+              $ref: '#/components/schemas/ErgoAddress'
+
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
       type: object
@@ -4881,7 +4890,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ErgoAddress"
+              $ref: "#/components/schemas/PrivateKeyRequest"
       responses:
         '200':
           description: Successfully retrieved secret key

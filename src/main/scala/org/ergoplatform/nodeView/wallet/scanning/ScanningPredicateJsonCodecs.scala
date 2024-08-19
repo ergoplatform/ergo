@@ -5,9 +5,9 @@ import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.http.api.ApiCodecs
-import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
 import sigma.Extensions._
+import sigmastate.SType
 
 
 object ScanningPredicateJsonCodecs extends ApiCodecs {

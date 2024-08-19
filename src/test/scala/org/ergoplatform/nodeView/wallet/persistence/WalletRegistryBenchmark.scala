@@ -51,7 +51,7 @@ object WalletRegistryBenchmark extends App {
   val walletVars = WalletVars.apply(storage, settings).withProver(prover)
 
   val boxes = walletVars.proverOpt.get.hdPubKeys.map { pk =>
-    createBox(1000000000, pk.key, 1)
+    createBox(1000000000, ErgoTree.fromSigmaBoolean(pk.key), 1)
   }.map { box =>
     TrackedBox(box, 2, Set(Constants.PaymentsScanId))
   }

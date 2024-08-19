@@ -196,7 +196,7 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
   def transactionSigningRequestGen(includeInputs: Boolean): Gen[TransactionSigningRequest] = for {
     (secret, pubKey) <- dlogSecretWithPublicImageGen
     (secretDh, _) <- dhtSecretWithPublicImageGen
-    (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
+    (inputBoxes, utx) <- validUnsignedErgoTransactionGen(ErgoTree.fromSigmaBoolean(pubKey))
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
     secretSeq = Seq(ExternalSecret(DlogSecretKey(secret)), ExternalSecret(DhtSecretKey(secretDh)))
   } yield TransactionSigningRequest(utx, TransactionHintsBag.empty, secretSeq,

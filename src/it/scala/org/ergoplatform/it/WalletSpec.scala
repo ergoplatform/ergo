@@ -10,12 +10,8 @@ import org.ergoplatform.it.api.NodeApi.UnexpectedStatusCodeException
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.ergoplatform.it.util.RichEither
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
-import org.ergoplatform.nodeView.wallet.requests.{
-  PaymentRequest,
-  RequestsHolder,
-  RequestsHolderEncoder
-}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoWalletServiceImpl}
+import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, RequestsHolder, RequestsHolderEncoder}
 import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
 import org.ergoplatform.wallet.interface4j.SecretString

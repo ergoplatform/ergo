@@ -19,6 +19,7 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
+import sigmastate.Values.ErgoTree
 import org.scalatest.matchers.should.Matchers
 import sigmastate.crypto.DLogProtocol
 import sigmastate.crypto.DLogProtocol.DLogProverInput
@@ -210,7 +211,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     val input = Input(rewardBox.id, emptyProverResult)
 
     val outputs = IndexedSeq(
-      new ErgoBoxCandidate(rewardBox.value, prop, readers.s.stateContext.currentHeight)
+      new ErgoBoxCandidate(rewardBox.value, ErgoTree.fromSigmaBoolean(prop), readers.s.stateContext.currentHeight)
     )
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
 

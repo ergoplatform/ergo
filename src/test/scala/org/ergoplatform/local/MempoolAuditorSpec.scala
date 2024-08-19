@@ -70,7 +70,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     val validTx = validTransactionFromBoxes(boxes.toIndexedSeq, outputsProposition = tree)
 
-    val temporarilyValidTx = validTransactionFromBoxes(validTx.outputs, outputsProposition = proveDlogGen.sample.get)
+    val temporarilyValidTx = validTransactionFromBoxes(validTx.outputs, outputsProposition = ErgoTree.fromProposition(proveDlogGen.sample.get))
 
     subscribeEvents(classOf[FailedTransaction])
     nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(validTx, None))

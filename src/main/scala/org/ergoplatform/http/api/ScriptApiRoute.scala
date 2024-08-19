@@ -14,8 +14,8 @@ import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.util.encode.Base16
+import sigmastate.{SBoolean, SSigmaProp}
 import sigmastate.Values.{ByteArrayConstant, ErgoTree}
-import sigmastate._
 import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.CompiletimeIRContext
 import sigmastate.interpreter.Interpreter
@@ -64,9 +64,9 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
     Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
       case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
-        Success(script)
+        Success(ErgoTree.fromProposition(script))
       case CompilerResult(_, _, _, script: Value[SBoolean.type@unchecked]) if script.tpe == SBoolean =>
-        Success(script.toSigmaProp)
+        Success(ErgoTree.fromProposition(script.toSigmaProp))
       case other =>
         Failure(new Exception(s"Source compilation result is of type ${other.buildTree.tpe}, but `SBoolean` expected"))
     }

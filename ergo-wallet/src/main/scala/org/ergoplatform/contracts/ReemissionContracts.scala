@@ -39,8 +39,8 @@ trait ReemissionContracts {
   /** Helper method to produce v1 tree from a SigmaPropValue instance (i.e. root node of AST).*/
   private def v1Tree(prop: SigmaPropValue): ErgoTree = {
     val version: Byte = 1
-    val headerFlags = ErgoTree.headerWithVersion(version)
-    ErgoTree.fromProposition(headerFlags, prop)
+    val header = ErgoTree.headerWithVersion(version)
+    ErgoTree.fromProposition(header, prop)
   }
 
   /**

@@ -54,7 +54,7 @@ object ErgoCoreGenerators {
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
 
-  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(_.toSigmaProp)
+  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(ErgoTree.fromSigmaBoolean)
 
   lazy val ergoPropositionGen: Gen[ErgoTree] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogTreeGen)
 

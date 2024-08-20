@@ -84,9 +84,9 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
   property("monotonic creation height") {
     def stateContext(height: Int, blockVersion: Byte): ErgoStateContext = {
       val header = defaultHeaderGen.sample.get.copy(version = blockVersion, height = height)
-      val params = Parameters(LaunchParameters.height,
-                              LaunchParameters.parametersTable.updated(Parameters.BlockVersion, blockVersion),
-                              LaunchParameters.proposedUpdate)
+      val params = Parameters(MainnetLaunchParameters.height,
+                              MainnetLaunchParameters.parametersTable.updated(Parameters.BlockVersion, blockVersion),
+                              MainnetLaunchParameters.proposedUpdate)
       new ErgoStateContext(Seq(header), None, genesisStateDigest, params, ErgoValidationSettings.initial,
         VotingData.empty)(settings.chainSettings)
     }

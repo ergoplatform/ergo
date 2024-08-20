@@ -1,6 +1,6 @@
 package org.ergoplatform.tools
 
-import org.ergoplatform.settings.LaunchParameters.parametersTable
+import org.ergoplatform.settings.MainnetLaunchParameters.parametersTable
 import org.ergoplatform.settings.Parameters.{maxValues, minValues, parametersDescs, stepsTable}
 
 object DefaultParametersPrinter extends App {

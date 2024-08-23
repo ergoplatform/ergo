@@ -14,13 +14,12 @@ import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.util.encode.Base16
-import sigmastate.{SBoolean, SSigmaProp}
-import sigmastate.Values.{ByteArrayConstant, ErgoTree}
-import sigmastate.crypto.DLogProtocol.ProveDlog
-import sigmastate.eval.CompiletimeIRContext
+import sigma.ast.{ByteArrayConstant, ErgoTree, SBoolean, SSigmaProp, Value}
+import sigma.compiler.{CompilerResult, SigmaCompiler}
+import sigma.compiler.ir.CompiletimeIRContext
+import sigma.data.ProveDlog
+import sigma.serialization.ValueSerializer
 import sigmastate.interpreter.Interpreter
-import sigmastate.lang.{CompilerResult, SigmaCompiler}
-import sigmastate.serialization.ValueSerializer
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -60,7 +59,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   private def compileSource(source: String, env: Map[String, Any]): Try[ErgoTree] = {
-    import sigmastate.Values._
     val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
     Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
       case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>

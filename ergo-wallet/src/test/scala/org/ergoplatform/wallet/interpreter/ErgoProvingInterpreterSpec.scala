@@ -9,10 +9,11 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.{ModifierId, Random}
 import scorex.util.encode.Base16
 import sigma.Colls
-import sigmastate.CTHRESHOLD
-import sigmastate.Values.{ErgoTree, GroupElementConstant, SigmaBoolean}
-import sigmastate.interpreter.{ContextExtension, HintsBag}
-import sigmastate.serialization.ErgoTreeSerializer
+import sigma.ast.{ErgoTree, GroupElementConstant}
+import sigma.data.{CGroupElement, CTHRESHOLD, SigmaBoolean}
+import sigma.interpreter.ContextExtension
+import sigma.serialization.ErgoTreeSerializer
+import sigmastate.interpreter.HintsBag
 
 
 class ErgoProvingInterpreterSpec

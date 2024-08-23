@@ -4,17 +4,18 @@ import org.ergoplatform.ErgoAddressEncoder.TestnetNetworkPrefix
 import org.ergoplatform.ErgoTreePredef.boxCreationHeight
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.utils.FileUtils
-import org.ergoplatform.{ErgoBox, ErgoTreePredef, Height, Self}
+import org.ergoplatform.{ErgoBox, ErgoTreePredef}
 import scorex.crypto.authds.avltree.batch.Remove
-import sigmastate.Values._
+import sigma.ast.syntax.ValueOps
+import sigma.ast.{EQ, ErgoTree, GE, Height, IntConstant, Self, SigmaAnd, SigmaOr, SigmaPropConstant, TransformingSigmaBuilder}
+import sigma.compiler.ir.{CompiletimeIRContext, IRContext}
+import sigma.compiler.{CompilerSettings, SigmaCompiler}
+import sigma.crypto.CryptoConstants.dlogGroup
+import sigma.data.ProveDlog
 import sigmastate._
-import sigmastate.crypto.CryptoConstants.dlogGroup
-import sigmastate.crypto.DLogProtocol.ProveDlog
-import sigmastate.eval.{CompiletimeIRContext, IRContext}
-import sigmastate.lang.Terms._
-import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
 
 import scala.util.Try
 
@@ -33,8 +34,8 @@ class ScriptsSpec extends ErgoCorePropertyTest with FileUtils {
 
   property("simple operations without cryptography") {
     // true/false
-    applyBlockSpendingScript(ErgoTree.fromProposition(Values.TrueLeaf.toSigmaProp)) shouldBe 'success
-    applyBlockSpendingScript(ErgoTree.fromProposition(Values.FalseLeaf.toSigmaProp)) shouldBe 'failure
+    applyBlockSpendingScript(TrueTree) shouldBe 'success
+    applyBlockSpendingScript(FalseTree) shouldBe 'failure
     // eq
     applyBlockSpendingScript(
       ErgoTree.fromProposition(EQ(IntConstant(1), IntConstant(1)).toSigmaProp)) shouldBe 'success

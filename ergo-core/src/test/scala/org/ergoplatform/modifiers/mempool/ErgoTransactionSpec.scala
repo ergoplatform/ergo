@@ -1,5 +1,8 @@
 package org.ergoplatform.modifiers.mempool
 
+// needed for Scala 2.11
+import cats.syntax.either._
+import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.settings._
@@ -9,13 +12,13 @@ import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.ModifierId
 import sigma.Colls
-import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant}
-import sigmastate.crypto.CryptoConstants
-import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
-import cats.syntax.either._
-import sigmastate.utils.Helpers._
+import sigma.util.Extensions.SigmaBooleanOps
+import sigma.ast.{ByteArrayConstant, ByteConstant, ErgoTree, IntConstant, LongArrayConstant, SigmaPropConstant}
+import sigma.crypto.CryptoConstants
+import sigma.data.ProveDlog
+import sigma.interpreter.{ContextExtension, ProverResult}
+import org.ergoplatform.settings.Constants.TrueTree
 
 
 class ErgoTransactionSpec extends ErgoCorePropertyTest {
@@ -48,7 +51,7 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
         new ProverResult(Base16.decode("5aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340").get, ContextExtension.empty)))
 
     val outputCandidates: IndexedSeq[ErgoBoxCandidate] = IndexedSeq(
-      new ErgoBoxCandidate(1000000000L, minerPk, height, Colls.emptyColl, Map()),
+      new ErgoBoxCandidate(1000000000L, ErgoTree.fromSigmaBoolean(minerPk), height, Colls.emptyColl, Map()),
       new ErgoBoxCandidate(1000000L, chainSettings.monetary.feeProposition, height, Colls.emptyColl, Map())
     )
     val tx = ErgoTransaction(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate])
@@ -62,7 +65,7 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
 
     // tx with registers in outputs
     val outputCandidates2: IndexedSeq[ErgoBoxCandidate] = IndexedSeq(
-      new ErgoBoxCandidate(1000000000L, minerPk, height, Colls.emptyColl,
+      new ErgoBoxCandidate(1000000000L, ErgoTree.fromSigmaBoolean(minerPk), height, Colls.emptyColl,
         Map(
           R6 -> IntConstant(10),
           R4 -> ByteConstant(1),
@@ -70,7 +73,7 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
           R7 -> LongArrayConstant(Array(1L, 2L, 1234123L)),
           R8 -> ByteArrayConstant(Base16.decode("123456123456123456123456123456123456123456123456123456123456123456").get))
       ),
-      new ErgoBoxCandidate(1000000000L, minerPk, height, Colls.emptyColl, Map()))
+      new ErgoBoxCandidate(1000000000L, ErgoTree.fromSigmaBoolean(minerPk), height, Colls.emptyColl, Map()))
     val tx2 = ErgoTransaction(inputs: IndexedSeq[Input], outputCandidates2: IndexedSeq[ErgoBoxCandidate])
 
     Base16.encode(tx2.bytes) shouldBe "02c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f774238b4a04b4201da0578be3dac11067b567a73831f35b024a2e623c1f8da230407f63bab62c62ed9b93808b106b5a7e8b1751fa656f4c5de467400ca796a4fc9c0d746a69702a77bd78b1a80a5ef5bf5713bbd95d93a4f23b27ead385aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340000000028094ebdc030008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942e8070005020108cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b94204141103020496d396010e211234561234561234561234561234561234561234561234561234561234561234568094ebdc030008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942e8070000"
@@ -88,7 +91,7 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
   property("context extension with neg id") {
     val negId: Byte = -10
 
-    val b = new ErgoBox(1000000000L, Constants.TrueLeaf, Colls.emptyColl,
+    val b = new ErgoBox(1000000000L, TrueTree, Colls.emptyColl,
                          Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
                   0, 0)
     val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension(Map(negId -> IntConstant(0)))))
@@ -109,7 +112,7 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
   property("context extension with neg and pos ids") {
     val negId: Byte = -20
 
-    val b = new ErgoBox(1000000000L, Constants.TrueLeaf, Colls.emptyColl,
+    val b = new ErgoBox(1000000000L, TrueTree, Colls.emptyColl,
       Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
       0, 0)
     val ce = ContextExtension(Map(negId -> IntConstant(0), (-negId).toByte -> IntConstant(1)))

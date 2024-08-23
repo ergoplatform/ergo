@@ -18,9 +18,9 @@ import org.ergoplatform.wallet.protocol.context.InputContext
 import org.scalacheck.Gen
 import sigma.util.BenchmarkUtil
 import scorex.crypto.hash.Blake2b256
-import sigmastate.AND
+import sigma.ast.ErgoTree.DefaultHeader
+import sigma.ast.{AND, ErgoTree, TrueLeaf}
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.Values.TrueLeaf
 
 import scala.util.{Random, Try}
 
@@ -243,7 +243,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
    }
 
    property("stateful validation should catch false proposition") {
-     val propositionGen = Gen.const(Constants.FalseLeaf)
+     val propositionGen = Gen.const(Constants.FalseTree)
      val gen = validErgoTransactionGenTemplate(1, 1, 1, propositionGen)
      forAll(gen) { case (from, tx) =>
        tx.statelessValidity().isSuccess shouldBe true
@@ -409,6 +409,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
      // check that validation pass if cost limit equals to approximated cost
      val sc = stateContextWith(paramsWith(approxCost))
      sc.currentParameters.maxBlockCost shouldBe approxCost
+     println("bv: " + sc.currentParameters.blockVersion)
      val calculatedCost = tx.statefulValidity(from, IndexedSeq(), sc)(ErgoInterpreter(sc.currentParameters)).get
      approxCost - calculatedCost <= 1 shouldBe true
 
@@ -444,7 +445,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
 
      forAll(smallPositiveInt) { inputsNum =>
 
-       val nonTrivialTrueGen = Gen.const(AND(Seq(TrueLeaf, TrueLeaf)).toSigmaProp.treeWithSegregation)
+       val nonTrivialTrueGen = Gen.const(ErgoTree.withSegregation(DefaultHeader, AND(Seq(TrueLeaf, TrueLeaf)).toSigmaProp))
        val gen = validErgoTransactionGenTemplate(0, 0, inputsNum, nonTrivialTrueGen)
        val (from, tx) = gen.sample.get
        tx.statelessValidity().isSuccess shouldBe true

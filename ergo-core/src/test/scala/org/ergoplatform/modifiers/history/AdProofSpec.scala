@@ -11,6 +11,7 @@ import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
 import scorex.crypto.hash.Digest32
 import scorex.util._
 import sigmastate.helpers.TestingHelpers._
+import org.ergoplatform.settings.Constants.TrueTree
 
 class AdProofSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoCoreTestConstants.startHeight
@@ -31,12 +32,12 @@ class AdProofSpec extends ErgoCorePropertyTest {
   (IndexedSeq[Insert], PrevDigest, NewDigest, Proof) = {
 
     val prover = new BatchAVLProver[Digest32, HF](KL, None)
-    val zeroBox = testBox(0, Constants.TrueLeaf, startHeight, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId)
+    val zeroBox = testBox(0, TrueTree, startHeight, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId)
     prover.performOneOperation(Insert(zeroBox.id, ADValue @@ zeroBox.bytes))
     prover.generateProof()
 
     val prevDigest = prover.digest
-    val boxes = (1 to howMany) map { i => testBox(1, Constants.TrueLeaf, startHeight, boxIndex = i.toShort) }
+    val boxes = (1 to howMany) map { i => testBox(1, TrueTree, startHeight, boxIndex = i.toShort) }
     boxes.foreach(box => prover.performOneOperation(Insert(box.id, ADValue @@ box.bytes)))
     val pf = prover.generateProof()
 
@@ -70,14 +71,14 @@ class AdProofSpec extends ErgoCorePropertyTest {
   property("verify should be failed if there are more operations than expected") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    val moreInsertions = operations :+ insert(testBox(10, Constants.TrueLeaf, creationHeight = startHeight))
+    val moreInsertions = operations :+ insert(testBox(10, TrueTree, creationHeight = startHeight))
     proof.verify(StateChanges(IndexedSeq.empty, moreInsertions, IndexedSeq.empty), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are illegal operation") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    val differentInsertions = operations.init :+ insert(testBox(10, Constants.TrueLeaf, creationHeight = startHeight))
+    val differentInsertions = operations.init :+ insert(testBox(10, TrueTree, creationHeight = startHeight))
     proof.verify(StateChanges(IndexedSeq.empty, differentInsertions, IndexedSeq.empty), prevDigest, newDigest) shouldBe 'failure
   }
 

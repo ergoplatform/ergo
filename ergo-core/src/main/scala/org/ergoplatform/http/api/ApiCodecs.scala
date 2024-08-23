@@ -1,6 +1,8 @@
 package org.ergoplatform.http.api
 
 import cats.syntax.either._
+import sigmastate.utils.Helpers._
+
 import io.circe._
 import io.circe.syntax._
 import org.bouncycastle.util.BigIntegers
@@ -14,24 +16,22 @@ import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.{Algos, ErgoAlgos}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.validation.ValidationResult
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.authds.{LeafData, Side}
 import scorex.crypto.hash.Digest
 import scorex.util.encode.Base16
-import sigmastate.Values.SigmaBoolean
 import sigmastate._
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.crypto.DLogProtocol.{DLogProverInput, FirstDLogProverMessage, ProveDlog}
+import sigmastate.crypto.DLogProtocol.{DLogProverInput, FirstDLogProverMessage}
 import sigmastate.crypto.VerifierMessage.Challenge
 import sigmastate.crypto._
 import sigmastate.interpreter._
-import sigmastate.serialization.OpCodes
-import org.ergoplatform.sdk.JsonCodecs
-import sigmastate.eval.Extensions.ArrayOps
-import sigmastate.utils.Helpers._
+import org.ergoplatform.sdk.{JsonCodecs, SecretString}
+import sigma.crypto.EcPointType
+import sigma.data._
+import sigma.serialization.{OpCodes, SigSerializer}
+import sigma.Extensions.ArrayOps
 
 import java.math.BigInteger
 import scala.annotation.nowarn
@@ -129,7 +129,7 @@ trait ApiCodecs extends JsonCodecs {
   })
 
   implicit val secretBigIntEncoder: Encoder[BigInteger] = Encoder.instance { w =>
-    ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(CryptoConstants.groupSize, w)).asJson
+    ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(sigma.crypto.groupSize, w)).asJson
   }
 
   implicit val secretBigIntDecoder: Decoder[BigInteger] = arrayBytesDecoder.map { bytes =>

@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox.R1
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import org.ergoplatform.{ErgoTreePredef, P2PKAddress}
-import sigmastate.Values.{ByteArrayConstant, ErgoTree}
+import sigma.ast.{ByteArrayConstant, ErgoTree}
 import sigmastate.eval.Extensions.ArrayByteOps
 import sigmastate.helpers.TestingHelpers._
 

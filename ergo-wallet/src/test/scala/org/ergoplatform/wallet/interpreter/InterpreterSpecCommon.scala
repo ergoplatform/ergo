@@ -3,10 +3,11 @@ package org.ergoplatform.wallet.interpreter
 import org.ergoplatform.sdk.BlockchainParameters
 import org.ergoplatform.sdk.wallet.protocol.context.BlockchainStateContext
 import scorex.util.encode.Base16
-import sigmastate.crypto.CryptoConstants
-import sigmastate.eval.Extensions.ArrayOps
-import sigmastate.eval.{CGroupElement, CPreHeader}
+import sigma.Extensions.ArrayOps
+import sigma.crypto.CryptoConstants
+import sigma.data.CGroupElement
 import sigma.{Coll, Colls, Header, PreHeader}
+import sigmastate.eval.CPreHeader
 
 trait InterpreterSpecCommon {
 

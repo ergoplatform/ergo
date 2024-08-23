@@ -4,13 +4,13 @@ import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import sigmastate.Values.ErgoTree.DefaultHeader
-import sigmastate.Values.{ByteArrayConstant, ErgoTree, TrueLeaf}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigma.ast.ByteArrayConstant
+import sigma.interpreter.{ContextExtension, ProverResult}
 
 class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoTestHelpers
@@ -103,7 +103,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
 
         val feeProp = settings.chainSettings.monetary.feeProposition
         val inputBox = wus.takeBoxes(100).collectFirst{
-          case box if box.ergoTree == ErgoTree.withSegregation(DefaultHeader, TrueLeaf.toSigmaProp) => box
+          case box if box.ergoTree == TrueTree => box
         }.get
         val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
 

@@ -9,18 +9,19 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyG
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import sigmastate.Values.ErgoTree
-import sigmastate.eval.{IRContext, RuntimeIRContext}
+import sigma.ast.ErgoTree
+import sigma.ast.syntax.ValueOps
+import sigma.compiler.SigmaCompiler
+import sigma.compiler.ir.CompiletimeIRContext
+import sigma.serialization.ErgoTreeSerializer
 import sigmastate.interpreter.Interpreter.emptyEnv
-import sigmastate.lang.SigmaCompiler
-import sigmastate.lang.Terms.ValueOps
-import sigmastate.serialization.ErgoTreeSerializer
+import org.ergoplatform.settings.Constants.TrueTree
 
 import scala.concurrent.duration._
 
@@ -29,8 +30,6 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
-
-  implicit lazy val context: IRContext = new RuntimeIRContext
 
   val cleanupDuration: FiniteDuration = 200.millis
   val settingsToTest: ErgoSettings = settings.copy(
@@ -57,12 +56,12 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootDigest)
 
-    val boxes = ErgoState.newBoxes(genesis.transactions).find(_.ergoTree == Constants.TrueLeaf)
+    val boxes = ErgoState.newBoxes(genesis.transactions).find(_.ergoTree == TrueTree)
     boxes.nonEmpty shouldBe true
 
     val script = s"{sigmaProp(HEIGHT == ${genesis.height} + 1)}"
     val compiler = new SigmaCompiler(ErgoAddressEncoder.MainnetNetworkPrefix)
-    val prop = compiler.compile(emptyEnv, script).buildTree
+    val prop = compiler.compile(emptyEnv, script)(new CompiletimeIRContext).buildTree
     val tree = ErgoTree.fromProposition(prop.asSigmaProp)
 
     val bs = ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(tree)

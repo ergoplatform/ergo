@@ -18,10 +18,10 @@ import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, Validati
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.eval.Extensions.ArrayOps
-import sigmastate.eval.SigmaDsl
 import sigma.Coll
+import sigma.eval.SigmaDsl
+import sigma.Extensions.ArrayOps
+import sigma.crypto.EcPointType
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}

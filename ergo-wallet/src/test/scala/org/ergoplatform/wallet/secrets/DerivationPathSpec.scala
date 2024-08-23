@@ -1,8 +1,7 @@
 package org.ergoplatform.wallet.secrets
 
-import org.ergoplatform.sdk.wallet
+import org.ergoplatform.sdk.{SecretString, wallet}
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.scalatest.matchers.should.Matchers

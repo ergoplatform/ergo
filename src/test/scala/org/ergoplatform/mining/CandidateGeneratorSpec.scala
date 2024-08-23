@@ -19,9 +19,9 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
-import sigmastate.Values.ErgoTree
 import org.scalatest.matchers.should.Matchers
-import sigmastate.crypto.DLogProtocol
+import sigma.ast.ErgoTree
+import sigma.data.ProveDlog
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.concurrent.duration._
@@ -201,7 +201,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     // build new transaction that uses miner's reward as input
-    val prop: DLogProtocol.ProveDlog =
+    val prop: ProveDlog =
       DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
     val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
     val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last

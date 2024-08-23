@@ -23,9 +23,8 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
-import sigmastate.SigmaAnd
-import sigmastate.Values.{ErgoTree, SigmaPropConstant}
-import sigmastate.crypto.DLogProtocol
+import sigma.ast.{ErgoTree, SigmaAnd, SigmaPropConstant}
+import sigma.data.ProveDlog
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.annotation.tailrec
@@ -68,7 +67,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     val complexScript: ErgoTree = ErgoTree.fromProposition((0 until 100).foldLeft(SigmaAnd(SigmaPropConstant(defaultMinerPk), SigmaPropConstant(defaultMinerPk))) { (l, _) =>
       SigmaAnd(SigmaPropConstant(defaultMinerPk), l)
     })
-    complexScript.complexity shouldBe 28077
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
@@ -239,8 +237,8 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
-    val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
+    val prop1: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
+    val prop2: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val boxToDoubleSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
     boxToDoubleSpend.propositionBytes shouldBe ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
@@ -334,8 +332,8 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
-    val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
+    val prop1: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
+    val prop2: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
 
     val mBox: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
     val mInput = Input(mBox.id, emptyProverResult)

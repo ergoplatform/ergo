@@ -12,7 +12,6 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
@@ -24,6 +23,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 import akka.http.scaladsl.server.MissingQueryParamRejection
+import org.ergoplatform.sdk.SecretString
 
 case class WalletApiRoute(readersHolder: ActorRef,
                           nodeViewActorRef: ActorRef,
@@ -152,7 +152,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   private def withFee(requests: Seq[TransactionGenerationRequest]): Seq[TransactionGenerationRequest] = {
     requests :+ PaymentRequest(Pay2SAddress(ergoSettings.chainSettings.monetary.feeProposition),
-      ergoSettings.walletSettings.defaultTransactionFee, Seq.empty, Map.empty)
+      ergoSettings.walletSettings.defaultTransactionFee, Array.empty, Map.empty)
   }
 
   private def generateTransactionAndProcess(requests: Seq[TransactionGenerationRequest],

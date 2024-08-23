@@ -9,9 +9,9 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.Values.CollectionConstant
 import sigma.Extensions._
-import sigmastate.SByte
+import sigma.ast.SByte
+import sigma.ast.syntax.CollectionConstant
 
 import scala.collection.mutable.ArrayBuffer
 

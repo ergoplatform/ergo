@@ -3,8 +3,9 @@ package org.ergoplatform.settings
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import scorex.crypto.authds.avltree.batch.AvlTreeParameters
-import sigmastate.Values
-import sigmastate.Values.ErgoTree
+import sigma.ast.{ErgoTree, FalseLeaf, TrueLeaf}
+import sigma.ast.ErgoTree.{HeaderType, ZeroHeader}
+import sigma.ast.syntax.{FalseSigmaProp, TrueSigmaProp}
 
 object Constants {
   /**
@@ -42,9 +43,6 @@ object Constants {
 
   val SoftForkEpochs = 32 //about 45.5 days
 
-  def TrueLeaf: ErgoTree = ErgoTree.fromProposition(Values.TrueLeaf.toSigmaProp)
-  def FalseLeaf: ErgoTree = ErgoTree.fromProposition(Values.FalseLeaf.toSigmaProp)
-
   val StringEncoding = "UTF-8"
 
   // Maximum extension size
@@ -58,5 +56,9 @@ object Constants {
     * Keys and hashes are 256-bits long, values are boxes, so value size is dynamic.
     */
   object StateTreeParameters extends AvlTreeParameters(keySize = HashLength, valueSize = None, labelSize = HashLength)
+
+  def FalseTree: ErgoTree = ErgoTree.fromProposition(FalseLeaf.toSigmaProp)
+
+  def TrueTree: ErgoTree = ErgoTree.fromProposition(TrueLeaf.toSigmaProp)
 
 }

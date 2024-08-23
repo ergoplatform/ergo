@@ -13,17 +13,19 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.Constants.FalseTree
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.scalatest.OptionValues
 import scorex.crypto.authds.ADKey
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.encode.Base16
-import sigmastate.Values.{ByteArrayConstant, ErgoTree}
-import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.interpreter.ProverResult
+import sigma.ast.{ByteArrayConstant, ErgoTree}
+import sigma.data.ProveDlog
+import sigma.interpreter.ProverResult
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.helpers.TestingHelpers._
+import org.ergoplatform.settings.Constants.TrueTree
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
@@ -355,7 +357,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
         IndexedSeq(),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueTree, creationHeight = startHeight))
       )
       val txs = txsFromHolder :+ spendingTx
 
@@ -380,25 +382,25 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
         IndexedSeq(),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueTree, creationHeight = startHeight))
       )
 
       val spending2Tx = ErgoTransaction(
         IndexedSeq(Input(spendingTx.outputs.head.id, emptyProverResult)),
         IndexedSeq(),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueTree, creationHeight = startHeight))
       )
 
       val spending3Tx = ErgoTransaction(
         IndexedSeq(Input(spending2Tx.outputs.head.id, emptyProverResult)),
         IndexedSeq(),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueTree, creationHeight = startHeight))
       )
 
       val spending4Tx = ErgoTransaction(
         IndexedSeq(Input(spending2Tx.outputs.head.id, emptyProverResult)),
         IndexedSeq(),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.FalseLeaf, creationHeight = startHeight))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, FalseTree, creationHeight = startHeight))
       )
 
       val txs = txsFromHolder ++ Seq(spendingTx, spending2Tx, spending3Tx, spending4Tx)
@@ -420,7 +422,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
         IndexedSeq(),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, TrueTree, creationHeight = startHeight)))
 
       val txs = spendingTx +: txsFromHolder
 

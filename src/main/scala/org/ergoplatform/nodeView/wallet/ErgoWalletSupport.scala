@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.requests._
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey}
 import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
@@ -15,16 +16,15 @@ import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.util.ScorexLogging
 import sigma.Colls
-import sigmastate.Values.{ByteArrayConstant, ErgoTree}
-import sigmastate.crypto.DLogProtocol.ProveDlog
+import sigma.ast.{ByteArrayConstant, ErgoTree}
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
+import sigma.Extensions.ArrayOps
+import sigma.data.ProveDlog
 import sigmastate.utils.Extensions._
 
 import scala.util.{Failure, Success, Try}
@@ -101,7 +101,7 @@ trait ErgoWalletSupport extends ScorexLogging {
 
   // merge tokens from burn request with auto-burn mechanism
   private def mergeBurnWhitelistTokens(state: ErgoWalletState,
-                                       inputBoxes: Seq[TrackedBox],
+                                       inputBoxes: Array[TrackedBox],
                                        burnTokensRequestMap: TokensMap): TokensMap = {
     val input = inputBoxes.flatMap(_.tokens)
     state.walletVars.settings.walletSettings.tokensWhitelist match {
@@ -254,7 +254,7 @@ trait ErgoWalletSupport extends ScorexLogging {
       case changeBox: ErgoBoxAssets =>
         // todo: is this extra check needed ?
         val reemissionTokenId = ergoSettings.chainSettings.reemission.reemissionTokenId
-        val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => t._1.toTokenId -> t._2).toIndexedSeq
+        val assets = changeBox.tokens.filterKeys(_ != reemissionTokenId).map(t => t._1.toTokenId -> t._2).toArray
         new ErgoBoxCandidate(changeBox.value, ErgoTree.fromProposition(changeAddressOpt.get), walletHeight, assets.toColl)
     }
     val inputBoxes = selectionResult.inputBoxes.toIndexedSeq
@@ -309,12 +309,13 @@ trait ErgoWalletSupport extends ScorexLogging {
     val (requestsWithBurnTokens, requestsWithoutBurnTokens) = requests.partition(_.isInstanceOf[BurnTokensRequest])
     val burnTokensRequestMap = TransactionBuilder.collTokensToMap(
       requestsWithBurnTokens
+        .toArray
         .map(_.asInstanceOf[BurnTokensRequest])
         .flatMap(_.assetsToBurn)
         .toColl
     )
     //filter out tokens on whitelist from wallet and merge the rest with burnTokens from requests
-    val burnTokensMap = mergeBurnWhitelistTokens(state, inputBoxes, burnTokensRequestMap)
+    val burnTokensMap = mergeBurnWhitelistTokens(state, inputBoxes.toArray, burnTokensRequestMap)
 
     //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
     requestsToBoxCandidates(requestsWithoutBurnTokens, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)

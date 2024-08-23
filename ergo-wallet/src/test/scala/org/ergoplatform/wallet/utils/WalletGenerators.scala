@@ -11,10 +11,11 @@ import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.ADKey
 import scorex.util._
-import sigmastate.{SByte, SType}
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
-import sigmastate.crypto.DLogProtocol.ProveDlog
-import sigmastate.crypto.CryptoFacade.SecretKeyLength
+import sigma.Extensions.ArrayOps
+import sigma.ast.{ByteArrayConstant, ErgoTree, EvaluatedValue, FalseLeaf, SByte, SType, TrueLeaf}
+import sigma.ast.syntax.CollectionConstant
+import sigma.crypto.CryptoFacade.SecretKeyLength
+import sigma.data.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
@@ -182,7 +183,7 @@ object WalletGenerators {
         value,
         ErgoTreePredef.feeProposition(),
         h,
-        Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+        Array.empty[(ErgoBox.TokenId, Long)].toColl,
         Map.empty
       )
       unsignedInputs = ins

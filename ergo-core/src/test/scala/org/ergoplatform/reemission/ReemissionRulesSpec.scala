@@ -6,10 +6,9 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import sigma.Colls
-import sigmastate.AvlTreeData
-import sigmastate.TrivialProp.TrueProp
-import sigmastate.Values.ErgoTree
-import sigmastate.eval.Digest32Coll
+import sigma.ast.ErgoTree
+import sigma.data.TrivialProp.TrueProp
+import sigma.data.{AvlTreeData, Digest32Coll}
 import sigmastate.helpers.TestingHelpers.testBox
 import sigmastate.helpers.{ContextEnrichingTestProvingInterpreter, ErgoLikeContextTesting, ErgoLikeTestInterpreter}
 import sigmastate.interpreter.Interpreter.emptyEnv

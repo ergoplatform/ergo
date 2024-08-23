@@ -2,7 +2,6 @@ package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.ErgoLikeTransaction
-import org.ergoplatform.SigmaConstants.MaxBoxSize
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{NotEnoughErgsError, NotEnoughTokensError}
@@ -11,12 +10,13 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.crypto.hash.Blake2b256
 import scorex.util.bytesToId
-import sigmastate.Values
-import sigmastate.Values.{ErgoTree, SigmaPropValue}
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers._
 import sigmastate.utils.Extensions._
 import sigma.Extensions._
+import sigma.ast.ErgoTree
+import sigma.ast.syntax.SigmaPropValue
+import sigma.data.SigmaConstants.MaxBoxSize
 
 import scala.util.Random
 
@@ -27,7 +27,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
   private val onChainFilter = {box: TrackedBox => box.chainStatus.onChain}
   private val parentTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
 
-  private val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
+  private val TrueLeaf: SigmaPropValue = TrueLeaf.toSigmaProp
   private val StartHeight: Int = 0
 
   private def genTokens(count: Int) = {

@@ -3,19 +3,19 @@ package org.ergoplatform.wallet.boxes
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.ErgoLikeTransaction
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import sigmastate.Values
-import sigmastate.Values.{ErgoTree, SigmaPropValue}
 import sigmastate.helpers.TestingHelpers._
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
+import sigma.ast.ErgoTree
+import sigma.ast.syntax.SigmaPropValue
 
 class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {
 
   private val noFilter: TrackedBox => Boolean = _ => true
   val parentTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
 
-  val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
+  val TrueLeaf: SigmaPropValue = TrueLeaf.toSigmaProp
 
   def box(value:Long) = testBox(value, ErgoTree.fromProposition(TrueLeaf), 0)
   def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), Set(PaymentsScanId))

@@ -2,20 +2,21 @@ package org.ergoplatform.wallet.transactions
 
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.TokensMap
 import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.boxes.BoxSelector
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.utils.WalletTestHelpers
 import org.scalatest.matchers.should.Matchers
-import sigmastate.Values
-import sigmastate.Values.{ErgoTree, SigmaPropValue}
+import sigma.ast.{ErgoTree, TrueLeaf}
+import sigma.ast.syntax.SigmaPropValue
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
 import sigmastate.utils.Extensions._
 import sigmastate.utils.Helpers._
+import sigma.Extensions.ArrayOps
 
 import scala.util.{Success, Try}
 
@@ -35,7 +36,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
   val minChangeValue   = BoxSelector.MinBoxValue
   val minerRewardDelay = 720
 
-  val TrueProp: SigmaPropValue = Values.TrueLeaf.toSigmaProp
+  val TrueProp: SigmaPropValue = TrueLeaf.toSigmaProp
 
   val tid1 = stringToId("t1")
   val tid2 = stringToId("t2")
@@ -48,7 +49,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
   def boxCandidate(value: Long) = new ErgoBoxCandidate(value, ErgoTree.fromProposition(TrueProp), currentHeight)
 
   def boxCandidate(value: Long, tokens: Seq[(TokenId, Long)]) =
-    new ErgoBoxCandidate(value, ErgoTree.fromProposition(TrueProp), currentHeight, tokens.toColl)
+    new ErgoBoxCandidate(value, ErgoTree.fromProposition(TrueProp), currentHeight, tokens.toArray.toColl)
 
   def transaction(inputBox: ErgoBox,
                   outBox: ErgoBoxCandidate,

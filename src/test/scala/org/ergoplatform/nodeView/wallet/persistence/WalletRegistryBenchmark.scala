@@ -11,8 +11,10 @@ import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input}
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
-import sigmastate.Values.ErgoTree
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigma.ast.ErgoTree
+import sigma.interpreter.{ContextExtension, ProverResult}
+import sigma.ast.ErgoTree
+import sigma.data.CSigmaDslBuilder
 
 import scala.collection.compat.immutable.ArraySeq
 
@@ -27,9 +29,8 @@ object WalletRegistryBenchmark extends App {
                 additionalRegisters: AdditionalRegisters = Map.empty,
                 transactionId: ModifierId = ErgoBox.allZerosModifierId,
                 boxIndex: Short = 0): ErgoBox = {
-    import sigmastate.eval._
     new ErgoBox(value, ergoTree,
-      CostingSigmaDslBuilder.Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
+      CSigmaDslBuilder.Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
       additionalRegisters,
       transactionId, boxIndex, creationHeight)
   }

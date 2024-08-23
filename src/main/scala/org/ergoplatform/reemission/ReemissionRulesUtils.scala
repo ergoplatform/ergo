@@ -3,10 +3,9 @@ package org.ergoplatform.reemission
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.settings.ErgoSettingsReader
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
-import sigmastate.SBoolean
-import sigmastate.Values.{ErgoTree, Value}
-import sigmastate.eval.CompiletimeIRContext
-import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
+import sigma.ast.{ErgoTree, SBoolean, TransformingSigmaBuilder, Value}
+import sigma.compiler.ir.CompiletimeIRContext
+import sigma.compiler.{CompilerSettings, SigmaCompiler}
 
 import scala.util.Try
 

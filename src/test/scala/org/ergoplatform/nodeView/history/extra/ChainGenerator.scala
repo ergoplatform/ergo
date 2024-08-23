@@ -16,11 +16,10 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform._
 import org.scalatest.matchers.should.Matchers
 import scorex.util.ModifierId
+import sigma.ast.ErgoTree
+import sigma.data.ProveDlog
 import sigma.{Coll, Colls}
-import sigmastate.Values
-import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
 
 import java.io.File
 import scala.annotation.tailrec
@@ -40,8 +39,8 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
   val RewardDelay: Int = initSettings.chainSettings.monetary.minerRewardDelay
   val MaxTxsPerBlock: Int = 10
   val minerPk: ProveDlog = defaultProver.hdKeys.head.publicImage
-  val selfAddressScript: Values.ErgoTree = P2PKAddress(minerPk).script
-  val minerProp: Values.ErgoTree = ErgoTreePredef.rewardOutputScript(RewardDelay, minerPk)
+  val selfAddressScript: ErgoTree = P2PKAddress(minerPk).script
+  val minerProp: ErgoTree = ErgoTreePredef.rewardOutputScript(RewardDelay, minerPk)
   val votingEpochLength: Height = votingSettings.votingLength
   val protocolVersion: Byte = initSettings.chainSettings.protocolVersion
   val minimalSuffix = 2

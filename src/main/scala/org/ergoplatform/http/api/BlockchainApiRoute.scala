@@ -20,7 +20,7 @@ import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
 import scorex.core.api.http.ApiResponse
 import scorex.util.{ModifierId, bytesToId}
-import sigmastate.Values.ErgoTree
+import sigma.ast.ErgoTree
 import spire.implicits.cfor
 
 import scala.concurrent.duration.{Duration, SECONDS}

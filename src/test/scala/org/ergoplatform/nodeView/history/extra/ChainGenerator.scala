@@ -34,7 +34,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   val pow: AutolykosPowScheme = new AutolykosPowScheme(powScheme.k, powScheme.n)
-  val blockInterval: FiniteDuration = 2.minute
+  val blockInterval: FiniteDuration = 1.minute
   val EmissionTxCost: Long = 20000
   val MinTxAmount: Long = 2000000
   val RewardDelay: Int = initSettings.chainSettings.monetary.minerRewardDelay
@@ -47,20 +47,26 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
   val minimalSuffix = 2
   val txCostLimit: Height = initSettings.nodeSettings.maxTransactionCost
   val txSizeLimit: Height = initSettings.nodeSettings.maxTransactionSize
+  val startTime: Long = System.currentTimeMillis() - ((5000 - 1) * blockInterval.toMillis)
 
-  var startTime: Long = 0
+  var endTime: Long = 0
 
-  def generate(length: Int, dir: File)(history: ErgoHistory): Unit = {
-    val stateDir = new File(s"${dir.getAbsolutePath}/state")
-    stateDir.mkdirs()
-    val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, initSettings)
-    System.out.println(s"Going to generate a chain at ${dir.getAbsolutePath} starting from ${history.bestFullBlockOpt}")
-    startTime = System.currentTimeMillis() - (blockInterval * (length - 1)).toMillis
-    val chain = loop(state, None, None, Seq())(history)
-    System.out.println(s"Chain of length ${chain.length} generated")
+  def generate(length: Int, dir: File, history: ErgoHistory, stateOpt: Option[UtxoState]): UtxoState = {
+    val state = stateOpt.getOrElse {
+        val stateDir = new File(s"${dir.getAbsolutePath}/state")
+        stateDir.mkdirs()
+        ErgoState.generateGenesisUtxoState(stateDir, initSettings)._1
+    }
+    System.out.println(s"Going to ${if(stateOpt.isEmpty) "generate" else "extend"} chain at " +
+      s"${dir.getAbsolutePath} starting from ${history.fullBlockHeight}")
+    endTime = startTime + (blockInterval * length).toMillis
+    val initBox = history.bestFullBlockOpt.map(_.transactions.last.outputs.head)
+    val chain = loop(state, initBox, history.bestHeaderOpt, Seq())(history)
     history.bestHeaderOpt shouldBe history.bestFullBlockOpt.map(_.header)
     history.bestFullBlockOpt.get.id shouldBe chain.last
-    System.out.println("History was generated successfully")
+    System.out.println(s"History ${if(stateOpt.isEmpty) "generated" else "extended"} successfully, " +
+      s"blocks: ${history.fullBlockHeight}")
+    state
   }
 
   @tailrec
@@ -69,15 +75,19 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
                    last: Option[Header],
                    acc: Seq[ModifierId])(history: ErgoHistory): Seq[ModifierId] = {
     val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
-    if (time < System.currentTimeMillis()) {
+    if (time < endTime) {
       val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(GenesisHeight),
         initBox, state.stateContext)
 
       val candidate = genCandidate(defaultProver.hdPubKeys.head.key, last, time, txs, state)(history)
       val block = proveCandidate(candidate.get)
 
-      history.append(block.header).get
-      block.blockSections.foreach(s => if (!history.contains(s)) history.append(s).get)
+      assert(history.append(block.header).isSuccess)
+      block.blockSections.foreach(s => if (!history.contains(s)) {
+        val x = history.append(s)
+        if(x.isFailure) println(x.failed.get.getMessage)
+        assert(x.isSuccess)
+      })
 
       val outToPassNext = if (last.isEmpty) {
         block.transactions.flatMap(_.outputs).find(_.ergoTree == minerProp)
@@ -87,8 +97,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
 
       assert(outToPassNext.isDefined)
 
-      log.info(
-        s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
+      System.out.println(s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
       loop(state.applyModifier(block, None)(_ => ()).get, outToPassNext, Some(block.header), acc :+ block.id)(history)
     } else {

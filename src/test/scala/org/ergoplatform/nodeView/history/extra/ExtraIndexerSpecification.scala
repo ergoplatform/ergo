@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoAddressEncoder
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FullBlockApplied, Rollback}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.Rollback
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.Index
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.SegmentSerializer.{boxSegmentId, txSegmentId}
@@ -12,6 +12,7 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.util.{ModifierId, bytesToId}
 import spire.implicits.cfor
 
+import java.util.concurrent.locks.{Condition, ReentrantLock}
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
@@ -20,7 +21,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
   val initSettings: ErgoSettings = settings
-  case class CreateDB()
+  case class CreateDB(blockCount: Int)
+  case class Reset()
 
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
 
@@ -33,6 +35,9 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
   var _history: ErgoHistory = _
   def history: ErgoHistoryReader = _history.getReader
+
+  val lock: ReentrantLock = new ReentrantLock()
+  val done: Condition = lock.newCondition()
 
   def manualIndex(limit: Int): (ID_LL, // address -> (erg,tokenSum)
                                 ID_LL, // tokenId -> (boxesCount,_)
@@ -126,116 +131,119 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       seg._1.boxCount == seg._2._1
     })
 
+  // example G-30;R-20;G-35;R-30
+  def rollbackWithPattern(pattern: String): Unit = {
+
+    def rollback(n: Int): Unit = {
+      println(s"Rollback to $n")
+      var state = IndexerState.fromHistory(_history)
+
+      val txIndexBefore = state.globalTxIndex
+      val boxIndexBefore = state.globalBoxIndex
+
+      // manually count balances
+      val (addresses, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(n)
+
+      // perform rollback
+      indexer ! Rollback(history.bestHeaderIdAtHeight(n).get)
+      lock.lock()
+      done.await()
+      state = IndexerState.fromHistory(_history)
+
+      // address balances
+      checkAddresses(addresses) shouldBe 0
+
+      // token indexes
+      checkTokens(indexedTokens) shouldBe 0
+
+      // check indexnumbers
+      state.globalTxIndex shouldBe txsIndexed
+      state.globalBoxIndex shouldBe boxesIndexed
+
+      // check txs
+      cfor(0)(_ < txIndexBefore, _ + 1) { txNum =>
+        val txOpt = history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(txNum)))
+        if (txNum < state.globalTxIndex)
+          txOpt shouldNot be(empty)
+        else
+          txOpt shouldBe None
+      }
+
+      // check boxes
+      cfor(0)(_ < boxIndexBefore, _ + 1) { boxNum =>
+        val boxOpt = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(boxNum)))
+        if (boxNum < state.globalBoxIndex)
+          boxOpt shouldNot be(empty)
+        else
+          boxOpt shouldBe None
+      }
+    }
+
+    def generate(n: Int): Unit = {
+      println(s"Generate to $n")
+      indexer ! CreateDB(n)
+      indexer ! Index()
+      lock.lock()
+      done.await()
+    }
+
+    pattern.split(";").map(_.split("-")).map(x => x(0) -> x(1).toInt).foreach {
+      case ("G", n) => generate(n)
+      case ("R", n) => rollback(n)
+      case _ => System.err.println(s"Malformed rollback pattern: $pattern")
+    }
+  }
+
   property("extra indexer transactions") {
-    indexer ! CreateDB()
+    indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    Thread.sleep(5000)
+    lock.lock()
+    done.await()
     val state = IndexerState.fromHistory(_history)
     cfor(0)(_ < state.globalTxIndex, _ + 1) { n =>
       val id = history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n)))
       id shouldNot be(empty)
       history.typedExtraIndexById[IndexedErgoTransaction](id.get.m) shouldNot be(empty)
     }
+    indexer ! Reset()
+    Thread.sleep(1000)
   }
 
   property("extra indexer boxes") {
-    indexer ! CreateDB()
+    indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    Thread.sleep(5000)
+    lock.lock()
+    done.await()
     val state = IndexerState.fromHistory(_history)
     cfor(0)(_ < state.globalBoxIndex, _ + 1) { n =>
       val id = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n)))
       id shouldNot be(empty)
       history.typedExtraIndexById[IndexedErgoBox](id.get.m) shouldNot be(empty)
     }
+    indexer ! Reset()
   }
 
   property("extra indexer addresses") {
-    indexer ! CreateDB()
+    indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    Thread.sleep(5000)
+    lock.lock()
+    done.await()
     val (addresses, _, _, _) = manualIndex(HEIGHT)
     checkAddresses(addresses) shouldBe 0
+    indexer ! Reset()
   }
 
   property("extra indexer tokens") {
-    indexer ! CreateDB()
+    indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    Thread.sleep(5000)
+    lock.lock()
+    done.await()
     val (_, indexedTokens, _, _) = manualIndex(HEIGHT)
     checkTokens(indexedTokens) shouldBe 0
+    indexer ! Reset()
   }
 
   property("extra indexer rollback") {
-    indexer ! CreateDB()
-    indexer ! Index()
-    Thread.sleep(5000)
-    var state = IndexerState.fromHistory(_history)
-
-    val txIndexBefore = state.globalTxIndex
-    val boxIndexBefore = state.globalBoxIndex
-
-    // manually count balances
-    val (addresses, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(BRANCHPOINT)
-
-    // perform rollback
-    indexer ! Rollback(history.bestHeaderIdAtHeight(BRANCHPOINT).get)
-    Thread.sleep(5000)
-    state = IndexerState.fromHistory(_history)
-
-    // address balances
-    checkAddresses(addresses) shouldBe 0
-
-    // token indexes
-    checkTokens(indexedTokens) shouldBe 0
-
-    // check indexnumbers
-    state.globalTxIndex shouldBe txsIndexed
-    state.globalBoxIndex shouldBe boxesIndexed
-
-    // check txs
-    cfor(0)(_ < txIndexBefore, _ + 1) { txNum =>
-      val txOpt = history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(txNum)))
-      if (txNum < state.globalTxIndex)
-        txOpt shouldNot be(empty)
-      else
-        txOpt shouldBe None
-    }
-
-    // check boxes
-    cfor(0)(_ < boxIndexBefore, _ + 1) { boxNum =>
-      val boxOpt = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(boxNum)))
-      if (boxNum < state.globalBoxIndex)
-        boxOpt shouldNot be(empty)
-      else
-        boxOpt shouldBe None
-    }
-
-    // -------------------------------------------------------------------
-    // restart indexer to catch up
-    cfor(BRANCHPOINT)(_ <= HEIGHT, _ + 1) { i =>
-      indexer ! FullBlockApplied(history.bestHeaderAtHeight(i).get)
-    }
-    Thread.sleep(5000)
-    state = IndexerState.fromHistory(_history)
-
-    // Check addresses again
-    val (addresses2, indexedTokens2, _, _) = manualIndex(HEIGHT)
-    checkAddresses(addresses2) shouldBe 0
-    checkTokens(indexedTokens2) shouldBe 0
-
-    // check indexnumbers again
-    state.globalTxIndex shouldBe txIndexBefore
-    state.globalBoxIndex shouldBe boxIndexBefore
-
-    // check txs after caught up
-    cfor(0)(_ < txIndexBefore, _ + 1) { txNum =>
-      history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(txNum))) shouldNot be(empty)
-    }
-
-    // check boxes after caught up
-    cfor(0)(_ < boxIndexBefore, _ + 1) { boxNum =>
-      history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(boxNum))) shouldNot be(empty)
-    }
+    rollbackWithPattern("G-20;R-10;G-30;R-20;G-40;R-30;G-50;R-10")
   }
 }

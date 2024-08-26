@@ -5,10 +5,9 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.ValidationRules.rulesSpec
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import sigma.validation.{DisabledRule, ReplacedRule}
+import sigma.validation.{DisabledRule, ReplacedRule, ValidationException}
 import org.ergoplatform.validation.{ValidationRules => VR}
 import scorex.crypto.authds.ADDigest
-import sigmastate.utils.Helpers._
 
 import scala.util.Try
 
@@ -57,6 +56,16 @@ class VotingSpecification extends ErgoCorePropertyTest {
     rulesSpec foreach { r =>
       r._1 < sigma.validation.ValidationRules.FirstRuleId shouldBe true
     }
+  }
+
+  property(".toExtensionCandidate && .parseExtension") {
+    val update = ErgoValidationSettingsUpdate(
+      Seq.empty,
+      Seq(1011.toShort -> ReplacedRule(1011), 1008.toShort -> ReplacedRule(1008))
+    )
+    val vs = ErgoValidationSettings.initial.updated(update)
+    val vs2 = ErgoValidationSettings.parseExtension(vs.toExtensionCandidate).get
+    vs2.updateFromInitial == vs.updateFromInitial
   }
 
   property("ErgoValidationSettings toExtension/fromExtension roundtrip") {
@@ -195,6 +204,8 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
     val esc12 = process(esc11, expectedParameters12, h12).get
     checkValidationSettings(esc12.validationSettings, proposedUpdate)
+
+    esc12.validationSettings.sigmaSettings.isSoftFork(VR.CheckValidOpCode.id, ValidationException("", VR.CheckValidOpCode, Seq.empty)) shouldBe true
 
     // vote for soft-fork @ activation height
     val h12w = h12.copy(votes = forkVote)

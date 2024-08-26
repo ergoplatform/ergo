@@ -9,11 +9,11 @@ import org.ergoplatform._
 import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.util.encode.Base16
+import sigma.VersionContext
 import sigma.ast.{ByteArrayConstant, ErgoTree, SBoolean, SSigmaProp, Value}
 import sigma.compiler.{CompilerResult, SigmaCompiler}
 import sigma.compiler.ir.CompiletimeIRContext
@@ -21,7 +21,6 @@ import sigma.data.ProveDlog
 import sigma.serialization.ValueSerializer
 import sigmastate.interpreter.Interpreter
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -58,37 +57,48 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     keys.zipWithIndex.map { case (pk, i) => s"myPubKey_$i" -> pk }.toMap
   }
 
-  private def compileSource(source: String, env: Map[String, Any]): Try[ErgoTree] = {
+  private def compileSource(source: String, env: Map[String, Any], treeVersion: Int = 0): Try[ErgoTree] = {
     val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
+    val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(treeVersion.toByte)
     Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
       case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
-        Success(ErgoTree.fromProposition(script))
+        Success(ErgoTree.fromProposition(ergoTreeHeader, script))
       case CompilerResult(_, _, _, script: Value[SBoolean.type@unchecked]) if script.tpe == SBoolean =>
-        Success(ErgoTree.fromProposition(script.toSigmaProp))
+        Success(ErgoTree.fromProposition(ergoTreeHeader, script.toSigmaProp))
       case other =>
         Failure(new Exception(s"Source compilation result is of type ${other.buildTree.tpe}, but `SBoolean` expected"))
     }
   }
 
-  private def withWalletOp[T](op: ErgoWalletReader => Future[T])(toRoute: T => Route): Route = {
-    onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap(r => op(r.w)))(toRoute)
+  private def withWalletAndStateOp[T](op: (Readers) => T)(toRoute: T => Route): Route = {
+    onSuccess((readersHolder ? GetReaders).mapTo[Readers].map(r => op(r)))(toRoute)
   }
 
+  // todo: unite p2sAddress and p2shAddress
   def p2sAddressR: Route = (path("p2sAddress") & post & source) { source =>
-    withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
-      compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SAddress.apply).fold(
-        e => BadRequest(e.getMessage),
-        address => ApiResponse(addressResponse(address))
-      )
+    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext)) { case (addrsF, sc) =>
+      onSuccess(addrsF) { addrs =>
+        VersionContext.withVersions((sc.blockVersion - 1).toByte, 0) {
+          // todo: treeVersion == 1 is used here, revisit, likely 0 should be default for now
+          compileSource(source, keysToEnv(addrs.map(_.pubkey)), 1).map(Pay2SAddress.apply).fold(
+            e => BadRequest(e.getMessage),
+            address => ApiResponse(addressResponse(address))
+          )
+        }
+      }
     }
   }
 
   def p2shAddressR: Route = (path("p2shAddress") & post & source) { source =>
-    withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
-      compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(
-        e => BadRequest(e.getMessage),
-        address => ApiResponse(addressResponse(address))
-      )
+    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
+      onSuccess(addrsF) { addrs =>
+        VersionContext.withVersions((bv - 1).toByte, 0) {
+          compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(
+            e => BadRequest(e.getMessage),
+            address => ApiResponse(addressResponse(address))
+          )
+        }
+      }
     }
   }
 

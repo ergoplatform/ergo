@@ -100,7 +100,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   def signInputs(unsignedTx: UnsignedErgoLikeTransaction,
                  boxesToSpend: IndexedSeq[ErgoBox],
                  dataBoxes: IndexedSeq[ErgoBox],
-                 stateContext: BlockchainStateContext,
+                 stateContext: VersionedBlockchainStateContext,
                  txHints: TransactionHintsBag): Try[(IndexedSeq[Input], Long)] = {
     if (unsignedTx.inputs.length != boxesToSpend.length) {
       Failure(new Exception("Not enough boxes to spend"))
@@ -136,7 +136,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
                   unsignedTx,
                   boxIdx.toShort,
                   unsignedInput.extension,
-                  ValidationRules.currentSettings,
+                  stateContext.sigmaValidationSettings,
                   params.maxBlockCost,
                   totalCost,
                   activatedScriptVersion
@@ -164,7 +164,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   def sign(unsignedTx: UnsignedErgoLikeTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
            dataBoxes: IndexedSeq[ErgoBox],
-           stateContext: BlockchainStateContext,
+           stateContext: VersionedBlockchainStateContext,
            txHints: TransactionHintsBag = TransactionHintsBag.empty): Try[ErgoLikeTransaction] = {
 
     val signedInputs: Try[(IndexedSeq[Input], Long)] =

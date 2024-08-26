@@ -32,6 +32,7 @@ import sigma.Extensions.ArrayOps
 import sigma.crypto.CryptoFacade
 import sigma.data.{Digest32Coll, ProveDlog}
 import sigma.interpreter.ProverResult
+import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
@@ -355,7 +356,11 @@ object CandidateGenerator extends ScorexLogging {
       )
       None
     } else {
-      val desiredUpdate = ergoSettings.votingTargets.desiredUpdate
+      val desiredUpdate = if (stateContext.blockVersion == 3) {
+        ergoSettings.votingTargets.desiredUpdate.copy(statusUpdates = Seq(1011.toShort -> ReplacedRule(1011), 1008.toShort -> ReplacedRule(1008)))
+      } else {
+        ergoSettings.votingTargets.desiredUpdate
+      }
       Some(
         createCandidate(
           pk,
@@ -399,7 +404,7 @@ object CandidateGenerator extends ScorexLogging {
     val nextHeightCondition = if (ergoSettings.networkType.isMainNet) {
       nextHeight >= 823297 // mainnet voting start height, first block of epoch #804
     } else {
-      nextHeight >= 1024
+      nextHeight >= 256
     }
 
     // we automatically vote for 5.0 soft-fork in the mainnet if 120 = 0 vote not provided in settings

@@ -9,12 +9,12 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
-import org.ergoplatform.sdk.wallet.protocol.context.BlockchainStateContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationState}
+import org.ergoplatform.wallet.interpreter.VersionedBlockchainStateContext
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
@@ -22,6 +22,7 @@ import sigma.Coll
 import sigma.eval.SigmaDsl
 import sigma.Extensions.ArrayOps
 import sigma.crypto.EcPointType
+import sigma.validation.SigmaValidationSettings
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
@@ -68,7 +69,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                        val validationSettings: ErgoValidationSettings,
                        val votingData: VotingData)
                       (implicit val chainSettings: ChainSettings)
-  extends BlockchainStateContext
+  extends VersionedBlockchainStateContext
     with BytesSerializable
     with ScorexEncoding
     with ScorexLogging {
@@ -77,6 +78,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   private val votingSettings = chainSettings.voting
   private val popowAlgos = new NipopowAlgos(chainSettings)
+
+  override val sigmaValidationSettings: SigmaValidationSettings = validationSettings.sigmaSettings
 
   override def sigmaPreHeader: sigma.PreHeader =
     PreHeader.toSigma(lastHeaders.headOption.getOrElse(PreHeader.fake))

@@ -18,8 +18,8 @@ lazy val commonSettings = Seq(
   // without the tag version resolves to [branch name]-[git commit hash]-SNAPSHOT
   // don't set the version manually
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
-    "Bintray" at "https://jcenter.bintray.com/", //for org.ethereum % leveldbjni-all 
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
+    "Repo for leveldbjni-all" at "https://gitlab.com/api/v4/projects/61211221/packages/maven",
     "Typesafe maven releases" at "https://dl.bintray.com/typesafe/maven-releases/",
     "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
   homepage := Some(url("http://ergoplatform.org/")),

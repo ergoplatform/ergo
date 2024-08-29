@@ -33,9 +33,9 @@ class ExtensionCandidateTest extends ErgoCorePropertyTest {
 
         val fields = NipopowAlgos.packInterlinks(modifiers)
         val ext = ExtensionCandidate(fields)
-        val proof = ext.batchProofFor(fields.map(_._1.clone).toArray: _*)
-        proof shouldBe defined
-        proof.get.valid(ext.interlinksDigest) shouldBe true
+        val proofOpt = ext.batchProofFor(fields.map(_._1.clone).toArray: _*)
+        proofOpt shouldBe defined
+        proofOpt.get.valid(ext.interlinksDigest) shouldBe true
       }
     }
   }

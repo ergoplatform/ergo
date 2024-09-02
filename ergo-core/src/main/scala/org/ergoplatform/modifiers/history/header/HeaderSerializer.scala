@@ -32,7 +32,8 @@ object HeaderSerializer extends ErgoSerializer[Header] {
     // For block version >= 2, this new byte encodes length of possible new fields.
     // Set to 0 for now, so no new fields.
     if (h.version > Header.InitialVersion) {
-      w.putUByte(0)
+      w.putUByte(h.unparsedBytes.length)
+      w.putBytes(h.unparsedBytes)
     }
   }
 
@@ -56,15 +57,20 @@ object HeaderSerializer extends ErgoSerializer[Header] {
 
     // For block version >= 2, a new byte encodes length of possible new fields.
     // If this byte > 0, we read new fields but do nothing, as semantics of the fields is not known.
-    if (version > Header.InitialVersion) {
+    val unparsedBytes = if (version > Header.InitialVersion) {
       val newFieldsSize = r.getUByte()
-      if (newFieldsSize > 0) {
+      if (newFieldsSize > 0 && version > Header.Interpreter60Version) {
+        // new bytes could be added only for block version >= 5
         r.getBytes(newFieldsSize)
+      } else {
+        Array.emptyByteArray
       }
+    } else {
+      Array.emptyByteArray
     }
 
     HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, votes)
+      nBits, height, extensionHash, votes, unparsedBytes)
   }
 
   override def parse(r: Reader): Header = {

@@ -2,10 +2,9 @@ package org.ergoplatform
 
 import org.bouncycastle.util.BigIntegers
 import scorex.crypto.hash.Blake2b256
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.crypto.{BcDlogGroup, CryptoConstants}
+import sigma.crypto.{BcDlogGroup, CryptoConstants, EcPointType}
+import sigma.serialization.{GroupElementSerializer, SigmaSerializer}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
-import sigmastate.serialization.{GroupElementSerializer, SigmaSerializer}
 
 package object mining {
 
@@ -19,14 +18,14 @@ package object mining {
   // and also to obtain target in both Autolykos v1 and v2
   val q: BigInt = group.order
 
-  private val hashFn: NumericHash = new NumericHash(q)
+  private val modQHashFn: ModQHash = new ModQHash(q)
 
   /**
     * Hash function which output is in Zq. Used in Autolykos v.1
     * @param in - input (bit-string)
     * @return - output(in Zq)
     */
-  def hashModQ(in: Array[Byte]): BigInt = hashFn.hash(in)
+  def hashModQ(in: Array[Byte]): BigInt = modQHashFn.hash(in)
 
   /**
     * Convert byte array to unsigned integer

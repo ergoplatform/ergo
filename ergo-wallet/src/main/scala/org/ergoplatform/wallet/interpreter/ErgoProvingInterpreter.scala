@@ -5,13 +5,14 @@ import org.ergoplatform.sdk.BlockchainParameters
 import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.sdk.wallet.protocol.context.BlockchainStateContext
 import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey, SecretKey}
-import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
+import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import scorex.util.encode.Base16
-import sigmastate.AvlTreeData
-import sigmastate.Values.SigmaBoolean
+import sigma.interpreter.ContextExtension
+import sigma.validation.SigmaValidationSettings
+import sigma.data.{AvlTreeData, SigmaBoolean, SigmaLeaf}
 import sigmastate.crypto.SigmaProtocolPrivateInput
-import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
+import sigmastate.interpreter.ProverInterpreter
 import sigma.{Coll, Header, PreHeader}
 
 import java.util
@@ -45,7 +46,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   /**
     * Interpreter's secrets, in form of sigma protocols private inputs
     */
-  val secrets: IndexedSeq[SigmaProtocolPrivateInput[_]] = secretKeys.map(_.privateInput)
+  val secrets: IndexedSeq[SigmaProtocolPrivateInput[_]] = secretKeys.map(_.privateInput.asInstanceOf[SigmaProtocolPrivateInput[_ <: SigmaLeaf]])
 
   /**
     * Only secrets corresponding to hierarchical deterministic scheme (BIP-32 impl)

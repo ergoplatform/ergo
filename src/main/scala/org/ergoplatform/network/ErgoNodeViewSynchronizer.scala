@@ -5,9 +5,8 @@ import akka.actor.{Actor, ActorInitializationException, ActorKilledException, Ac
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
-import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoMessageSpec, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Algos, ErgoSettings, NetworkSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
@@ -24,7 +23,7 @@ import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPe
 import org.ergoplatform.network.message.{InvData, Message, ModifiersData}
 import org.ergoplatform.utils.ScorexEncoder
 import org.ergoplatform.validation.MalformedModifierError
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.core.network.DeliveryTracker
 import org.ergoplatform.network.peer.PenaltyType
 import scorex.crypto.hash.Digest32
@@ -34,7 +33,9 @@ import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younge
 import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
+import org.ergoplatform.network.message.subblocks.SubBlockMessageSpec
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
+import org.ergoplatform.subblocks.SubBlockInfo
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 
 import scala.annotation.tailrec
@@ -1075,6 +1076,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  def processSubblock(subBlockInfo: SubBlockInfo, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
+    if(subBlockInfo.valid()) {
+      val prevSbIdOpt = subBlockInfo.prevSubBlockId.map(bytesToId) // link to previous sub-block
+
+      prevSbIdOpt match {
+        case Some(prevSubBlockId) =>
+          log.debug(s"Processing valid sub-block ${subBlockInfo.subBlock.id} with parent sub-block ${prevSubBlockId}")
+        case None =>
+          log.debug(s"Processing valid sub-block ${subBlockInfo.subBlock.id} with parent block ${subBlockInfo.subBlock.parentId}")
+      }
+    } else {
+      log.warn(s"Sub-block ${subBlockInfo.subBlock.id} is invalid")
+      penalizeMisbehavingPeer(remote)
+    }
+  }
 
   /**
     * Object ids coming from other node.
@@ -1494,6 +1510,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       modifiersReq(hr, mp, data, remote)
     case (_: ModifiersSpec.type, data: ModifiersData, remote) =>
       modifiersFromRemote(hr, mp, data, remote, blockAppliedTxsCache)
+    // UTXO snapshot related messages
     case (spec: MessageSpec[_], _, remote) if spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
       usrOpt match {
         case Some(usr) => sendSnapshotsInfo(usr, remote)
@@ -1518,10 +1535,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Some(_) => processUtxoSnapshotChunk(serializedChunk, hr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
+    // Nipopows related messages
     case (_: GetNipopowProofSpec.type, data: NipopowProofData, remote) =>
       sendNipopowProof(data, hr, remote)
     case (_: NipopowProofSpec.type , proofBytes: Array[Byte], remote) =>
       processNipopowProof(proofBytes, hr, remote)
+    // Sub-blocks related messages
+    case (_: SubBlockMessageSpec.type, subBlockInfo: SubBlockInfo, remote) =>
+      processSubblock(subBlockInfo, hr, remote)
   }
 
   def initialized(hr: ErgoHistory,

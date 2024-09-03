@@ -16,6 +16,10 @@ import scorex.util.serialization.{Reader, Writer}
   * @param subBlock - subblock
   * @param prevSubBlockId - previous sub block id `subBlock` is following, if missed, sub-block is linked
   *                         to a previous block
+  * @param subblockTransactionsDigest - digest of new transactions appeared in subblock
+  * @param merkleProof - batch Merkle proof for `prevSubBlockId`` and `subblockTransactionsDigest`
+  *                      (as they are coming from extension section, and committed in `subBlock` header via extension
+  *                      digest)
   */
 case class SubBlockInfo(version: Byte,
                         subBlock: Header,

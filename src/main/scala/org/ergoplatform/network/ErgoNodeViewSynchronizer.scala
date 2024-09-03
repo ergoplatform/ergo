@@ -1077,18 +1077,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   def processSubblock(subBlockInfo: SubBlockInfo, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
-    if(subBlockInfo.valid()) {
-      val prevSbIdOpt = subBlockInfo.prevSubBlockId.map(bytesToId) // link to previous sub-block
+    val subBlockHeader = subBlockInfo.subBlock
+    if (subBlockHeader.height == hr.fullBlockHeight + 1) {
+      if (subBlockInfo.valid()) {
+        val prevSbIdOpt = subBlockInfo.prevSubBlockId.map(bytesToId) // link to previous sub-block
 
-      prevSbIdOpt match {
-        case Some(prevSubBlockId) =>
-          log.debug(s"Processing valid sub-block ${subBlockInfo.subBlock.id} with parent sub-block ${prevSubBlockId}")
-        case None =>
-          log.debug(s"Processing valid sub-block ${subBlockInfo.subBlock.id} with parent block ${subBlockInfo.subBlock.parentId}")
+        prevSbIdOpt match {
+          case Some(prevSubBlockId) =>
+            log.debug(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block ${prevSubBlockId}")
+          case None =>
+            log.debug(s"Processing valid sub-block ${subBlockHeader.id} with parent block ${subBlockHeader.parentId}")
+        }
+      } else {
+        log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
+        penalizeMisbehavingPeer(remote)
       }
     } else {
-      log.warn(s"Sub-block ${subBlockInfo.subBlock.id} is invalid")
-      penalizeMisbehavingPeer(remote)
+      log.info(s"Got sub-block for height ${subBlockHeader.height}, while height of our best full-block is ${hr.fullBlockHeight}")
+      // just ignore the subblock
     }
   }
 

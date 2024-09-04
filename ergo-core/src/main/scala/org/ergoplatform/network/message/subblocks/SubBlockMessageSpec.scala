@@ -1,7 +1,7 @@
 package org.ergoplatform.network.message.subblocks
 
 import org.ergoplatform.network.message.MessageConstants.MessageCode
-import org.ergoplatform.network.message.MessageSpecInitial
+import org.ergoplatform.network.message.{InvData, MessageSpecInitial, MessageSpecSubblocks}
 import org.ergoplatform.subblocks.SubBlockInfo
 import scorex.util.serialization.{Reader, Writer}
 
@@ -9,7 +9,7 @@ import scorex.util.serialization.{Reader, Writer}
   * Message that is informing about sub block produced.
   * Contains header and link to previous sub block ().
   */
-object SubBlockMessageSpec extends MessageSpecInitial[SubBlockInfo] {
+object SubBlockMessageSpec extends MessageSpecSubblocks[SubBlockInfo] {
 
   val MaxMessageSize = 10000
 

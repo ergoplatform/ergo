@@ -33,7 +33,7 @@ import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younge
 import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
-import org.ergoplatform.network.message.subblocks.SubBlockMessageSpec
+import org.ergoplatform.network.message.subblocks.{SubBlockMessageSpec, SubBlockTransactionsRequestSpec}
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import org.ergoplatform.subblocks.SubBlockInfo
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
@@ -1081,13 +1081,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (subBlockHeader.height == hr.fullBlockHeight + 1) {
       if (subBlockInfo.valid()) {
         val prevSbIdOpt = subBlockInfo.prevSubBlockId.map(bytesToId) // link to previous sub-block
-
-        prevSbIdOpt match {
-          case Some(prevSubBlockId) =>
-            log.debug(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block ${prevSubBlockId}")
-          case None =>
-            log.debug(s"Processing valid sub-block ${subBlockHeader.id} with parent block ${subBlockHeader.parentId}")
-        }
+        log.debug(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block $prevSbIdOpt and parent block ${subBlockHeader.parentId}")
+        // write sub-block to db, ask for transactions in it
+        viewHolderRef ! ProcessSubblock(subBlockInfo)
+        val msg = Message(SubBlockTransactionsRequestSpec, Right(subBlockInfo.subBlock.id), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
       } else {
         log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
         penalizeMisbehavingPeer(remote)

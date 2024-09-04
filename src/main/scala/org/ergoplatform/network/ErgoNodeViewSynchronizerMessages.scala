@@ -11,6 +11,7 @@ import scorex.core.network.ConnectedPeer
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.popow.NipopowProof
+import org.ergoplatform.subblocks.SubBlockInfo
 
 /**
   * Repository of messages processed ErgoNodeViewSynchronizer actor
@@ -142,4 +143,6 @@ object ErgoNodeViewSynchronizerMessages {
     * @param nipopowProof - proof to initialize history from
     */
   case class ProcessNipopow(nipopowProof: NipopowProof)
+
+  case class ProcessSubblock(subblock: SubBlockInfo)
 }

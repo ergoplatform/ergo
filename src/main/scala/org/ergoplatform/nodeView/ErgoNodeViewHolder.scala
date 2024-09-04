@@ -301,6 +301,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           updateNodeView(updatedHistory = Some(history()))
         }
       }
+
+    // subblocks related logic
+    case ProcessSubblock(sbi) =>
+      history().applySubBlockHeader(sbi)
   }
 
   /**

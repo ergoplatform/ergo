@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash}
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, GlobalConstants, Pay2SAddress}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -584,6 +584,6 @@ object ExtraIndexer {
 
   def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {
     val props = Props.create(classOf[ExtraIndexer], cacheSettings, chainSettings.addressEncoder)
-    system.actorOf(props.withDispatcher(GlobalConstants.IndexerDispatcher))
+    system.actorOf(props)
   }
 }

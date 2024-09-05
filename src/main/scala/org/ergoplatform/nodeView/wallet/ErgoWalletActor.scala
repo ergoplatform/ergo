@@ -509,7 +509,6 @@ object ErgoWalletActor extends ScorexLogging {
             boxSelector: BoxSelector,
             historyReader: ErgoHistoryReader)(implicit actorSystem: ActorSystem): ActorRef = {
     val props = Props(classOf[ErgoWalletActor], settings, parameters, service, boxSelector, historyReader)
-      .withDispatcher(GlobalConstants.ApiDispatcher)
     val walletActorRef = actorSystem.actorOf(props)
     CoordinatedShutdown(actorSystem).addActorTerminationTask(
       CoordinatedShutdown.PhaseBeforeServiceUnbind,

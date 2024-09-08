@@ -3,6 +3,7 @@ package org.ergoplatform.mining
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern.StatusReply
 import com.google.common.primitives.Longs
+import org.bouncycastle.util.encoders.Hex
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.DifficultySerializer
@@ -23,17 +24,19 @@ import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, 
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{DataInput, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
-import sigmastate.ErgoBoxRType
+import sigmastate.{ErgoBoxRType, Values}
 import sigmastate.crypto.DLogProtocol.ProveDlog
 import sigmastate.crypto.CryptoFacade
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import sigmastate.interpreter.ProverResult
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigma.{Coll, Colls}
+import sigmastate.Values.ShortConstant
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
@@ -136,9 +139,9 @@ class CandidateGenerator(
         context.become(initialized(state))
       }
 
-    case gen @ GenerateCandidate(txsToInclude, reply) =>
+    case gen @ GenerateCandidate(txsToInclude, reply, rentUTXOs) =>
       val senderOpt = if (reply) Some(sender()) else None
-      if (cachedFor(state.cache, txsToInclude)) {
+      if (cachedFor(state.cache, txsToInclude, rentUTXOs)) {
         senderOpt.foreach(_ ! StatusReply.success(state.cache.get))
       } else {
         val start = System.currentTimeMillis()
@@ -148,7 +151,8 @@ class CandidateGenerator(
           state.mpr,
           minerPk,
           txsToInclude,
-          ergoSettings
+          ergoSettings,
+          rentUTXOs
         ) match {
           case Some(Failure(ex)) =>
             log.error(s"Candidate generation failed", ex)
@@ -232,12 +236,14 @@ object CandidateGenerator extends ScorexLogging {
   case class Candidate(
     candidateBlock: CandidateBlock,
     externalVersion: WorkMessage,
-    txsToInclude: Seq[ErgoTransaction]
+    txsToInclude: Seq[ErgoTransaction],
+    rentUTXOs: Option[Array[ADKey]] = None
   )
 
   case class GenerateCandidate(
     txsToInclude: Seq[ErgoTransaction],
-    reply: Boolean
+    reply: Boolean,
+    rentUTXOs: Option[Array[ADKey]] = None
   )
 
   /** Local state of candidate generator to avoid mutable vars */
@@ -271,16 +277,30 @@ object CandidateGenerator extends ScorexLogging {
   /** checks that current candidate block is cached with given `txs` */
   def cachedFor(
     candidateOpt: Option[Candidate],
-    txs: Seq[ErgoTransaction]
+    txs: Seq[ErgoTransaction],
+    rentUtxos: Option[Array[ADKey]],
   ): Boolean = {
+
+    //log.info("NOW CHECKING CACHE:")
+
+    //log.info(s"rentUTXOs called from method: ${rentUtxos.isDefined} Num: ${rentUtxos.getOrElse(Array.empty[ADKey]).length}")
+//    if(candidateOpt.isDefined){
+//      val candidate = candidateOpt.get
+//      if(candidate.rentUTXOs.isDefined && rentUtxos.isDefined){
+////        log.info(s"rentUTXOs found in cache with total num: ${candidate.rentUTXOs.getOrElse(Array.empty[ADKey]).length}")
+////        log.info(rentUtxos.get.map(Hex.toHexString(_)).mkString(","))
+////        log.info(candidate.rentUTXOs.get.map(Hex.toHexString(_)).mkString(","))
+//      }
+//    }
     candidateOpt.isDefined && candidateOpt.exists { c =>
       txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(
         c.txsToInclude.contains
       ))
-    }
+    } && (rentUtxos.isEmpty || (rentUtxos.isDefined && candidateOpt.exists(c => c.rentUTXOs.isDefined &&
+      c.rentUTXOs.get.map(Hex.toHexString).sameElements(rentUtxos.get.map(Hex.toHexString)))))
   }
 
-  /** we need new candidate if given block is not parent of our cached block */
+  /** we need new candidate if given block is not parent of our cached block*/
   def needNewCandidate(
     cache: Option[Candidate],
     bestFullBlockHeader: Header
@@ -326,13 +346,14 @@ object CandidateGenerator extends ScorexLogging {
     m: ErgoMemPoolReader,
     pk: ProveDlog,
     txsToInclude: Seq[ErgoTransaction],
-    ergoSettings: ErgoSettings
+    ergoSettings: ErgoSettings,
+    rentUTXOs: Option[Array[ADKey]] = None
   ): Option[Try[(Candidate, EliminateTransactions)]] = {
     //mandatory transactions to include into next block taken from the previous candidate
     lazy val unspentTxsToInclude = txsToInclude.filter { tx =>
       inputsNotSpent(tx, s)
     }
-
+    log.info(s"Generating candidate with ${rentUTXOs.getOrElse(Array.empty[ADKey]).length} utxos")
     val stateContext = s.stateContext
 
     //only transactions valid from against the current utxo state we take from the mem pool
@@ -366,7 +387,8 @@ object CandidateGenerator extends ScorexLogging {
           poolTransactions,
           emissionTxOpt,
           unspentTxsToInclude,
-          ergoSettings
+          ergoSettings,
+          rentUTXOs
         )
       )
     }
@@ -434,6 +456,7 @@ object CandidateGenerator extends ScorexLogging {
     *                                (before transactions from the pool). No guarantee of inclusion in general case.
     * @return - candidate or an error
     */
+  //noinspection ScalaStyle
   def createCandidate(
                        minerPk: ProveDlog,
                        history: ErgoHistoryReader,
@@ -442,7 +465,8 @@ object CandidateGenerator extends ScorexLogging {
                        poolTxs: Seq[UnconfirmedTransaction],
                        emissionTxOpt: Option[ErgoTransaction],
                        prioritizedTransactions: Seq[ErgoTransaction],
-                       ergoSettings: ErgoSettings
+                       ergoSettings: ErgoSettings,
+                       rentUTXOs: Option[Array[ADKey]] = None
   ): Try[(Candidate, EliminateTransactions)] =
     Try {
       val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
@@ -516,7 +540,80 @@ object CandidateGenerator extends ScorexLogging {
       )
 
       val emissionTxs = emissionTxOpt.toSeq
+      log.info("Entering storageTx creation")
+      val storageTx: Array[ErgoTransaction] = {
+        log.info("Checking if rentUtxos is defined")
+        log.info(s"Rent utxos defined: ${rentUTXOs.isDefined} Num rentUtxos: ${rentUTXOs.getOrElse(Array.empty[ADKey]).length}")
+        if(rentUTXOs.isDefined && rentUTXOs.getOrElse(Array.empty[ADKey]).nonEmpty){
+          log.info("Found Rent Utxos!")
+          val inputBoxes = rentUTXOs.get.map{
+            id: ADKey =>
+              state.boxById(id).get
+          }
+          inputBoxes.sliding(50).map {
+            inputSlice =>
+            val tokens = inputSlice
+              .filter(b => b.value <= Parameters.StorageFeeFactorDefault * b.bytes.length)
+              .foldLeft(Map.empty[ModifierId, Long]) {
+                (m: Map[ModifierId, Long], b: ErgoBox) =>
+                  m ++ b.tokens.map { case (k, v) => k -> (v + m.getOrElse(k, 0L)) }
+              }
 
+            val totalFees = inputSlice.map(b => Math.min(Parameters.StorageFeeFactorDefault * b.bytes.length, b.value)).sum
+            var boxIndex = -1
+            var counter = -1
+            val inputs = for (b <- inputSlice) yield {
+              if (b.value > Parameters.StorageFeeFactorDefault * b.bytes.length) {
+
+                boxIndex = boxIndex + 1
+                counter = counter + 1
+               // log.info(s"Input Box #$counter has correlated output ${boxIndex}")
+                Input(b.id, ProverResult.apply(Array.emptyByteArray, ContextExtension(Map(127.toByte -> ShortConstant(boxIndex.toShort)))))
+              } else {
+                counter = counter + 1
+                //log.info(s"Input Box #$counter has no correlated output")
+                Input(b.id, ProverResult.apply(Array.emptyByteArray, ContextExtension(Map(127.toByte-> ShortConstant(0.toShort)))))
+              }
+
+            }
+            val address: Values.ErgoTree = {
+              if(ergoSettings.nodeSettings.storageRentAddress.isDefined){
+                log.info(s"Found address ${ergoSettings.nodeSettings.storageRentAddress.get}, using it for SR")
+                if(ergoSettings.networkType.isMainNet)
+                  ErgoAddressEncoder.Mainnet.fromString(ergoSettings.nodeSettings.storageRentAddress.get).get.script
+                else
+                  ErgoAddressEncoder.Testnet.fromString(ergoSettings.nodeSettings.storageRentAddress.get).get.script
+              }else{
+                log.info("No address found for SR collection, using miner PK instead.")
+                minerPk
+              }
+            }
+
+            val feeBox = new ErgoBoxCandidate(
+              totalFees,
+              address,
+              upcomingContext.currentHeight,
+              Colls.fromArray(tokens.toArray.map { case (m, l) => (Digest32Coll @@ Colls.fromArray(m.toBytes), l) })
+            )
+
+            val outputs =
+              inputSlice
+                .filter(b => b.value > Parameters.StorageFeeFactorDefault * b.bytes.length)
+                .map(b => new ErgoBoxCandidate(
+                  b.value - Parameters.StorageFeeFactorDefault * b.bytes.length,
+                  b.ergoTree,
+                  upcomingContext.currentHeight,
+                  b.additionalTokens,
+                  b.additionalRegisters
+                )) ++ List(feeBox)
+            log.info(s"Added rent UTXOs with total value ${totalFees}")
+            log.info(s"Added ${outputs.length} outputs")
+           new ErgoTransaction(inputs.toIndexedSeq, IndexedSeq.empty[DataInput], outputs.toIndexedSeq)
+          }.toArray
+        }else{
+          Array.empty[ErgoTransaction]
+        }
+      }
       // todo: remove in 5.0
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
       // differently due to bugs in AOT costing
@@ -534,7 +631,7 @@ object CandidateGenerator extends ScorexLogging {
         state.stateContext.currentParameters.maxBlockSize,
         state,
         upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
+        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction) ++ storageTx.toList
       )
 
       val eliminateTransactions = EliminateTransactions(toEliminate)
@@ -572,7 +669,7 @@ object CandidateGenerator extends ScorexLogging {
             s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
           )
           Success(
-            Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions
+            Candidate(candidate, ext, prioritizedTransactions, rentUTXOs) -> eliminateTransactions
           )
         case Failure(t: Throwable) =>
           // We can not produce a block for some reason, so print out an error
@@ -601,7 +698,8 @@ object CandidateGenerator extends ScorexLogging {
                   Candidate(
                     candidate,
                     deriveWorkMessage(candidate),
-                    prioritizedTransactions
+                    prioritizedTransactions,
+                    rentUTXOs
                   ) -> eliminateTransactions
               }
             case None =>

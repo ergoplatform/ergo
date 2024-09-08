@@ -40,7 +40,7 @@ class ErgoMiningThread(
     log.info(s"Stopping miner thread: ${self.path.name}")
 
   override def receive: Receive = {
-    case StatusReply.Success(Candidate(candidateBlock, _, _)) =>
+    case StatusReply.Success(Candidate(candidateBlock, _, _, _)) =>
       log.info(s"Initiating block mining")
       context.become(mining(nonce = 0, candidateBlock, solvedBlocksCount = 0))
       self ! MineCmd
@@ -53,7 +53,7 @@ class ErgoMiningThread(
     candidateBlock: CandidateBlock,
     solvedBlocksCount: Int
   ): Receive = {
-    case StatusReply.Success(Candidate(cb, _, _)) =>
+    case StatusReply.Success(Candidate(cb, _, _, _)) =>
       // if we get new candidate instead of a cached one, mine it
       if (cb.timestamp != candidateBlock.timestamp) {
         context.become(mining(nonce = 0, cb, solvedBlocksCount))

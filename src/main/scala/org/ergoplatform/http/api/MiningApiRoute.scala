@@ -12,6 +12,8 @@ import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
 import scorex.core.api.http.ApiResponse
+import scorex.crypto.authds.ADKey
+import scorex.util.encode.Base16
 import sigmastate.crypto.DLogProtocol.ProveDlog
 
 import scala.concurrent.Future
@@ -27,6 +29,7 @@ case class MiningApiRoute(miner: ActorRef,
   override val route: Route = pathPrefix("mining") {
     candidateR ~
       candidateWithTxsR ~
+      candidateWithRentR ~
       solutionR ~
       rewardAddressR ~
       rewardPublicKeyR
@@ -36,7 +39,16 @@ case class MiningApiRoute(miner: ActorRef,
     * Get block candidate. Useful for external miners.
     */
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
+
     val prepareCmd = CandidateGenerator.GenerateCandidate(Seq.empty, reply = true)
+    val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
+    ApiResponse(candidateF)
+  }
+
+  def candidateWithRentR: Route = (path("candidateWithRent")
+    & post & entity(as[Seq[String]])) { utxos =>
+    //log.info(s"called a candidateWithRent Api Request with ${utxos.size} utxos")
+    val prepareCmd = CandidateGenerator.GenerateCandidate(Seq.empty, reply = true, Some(utxos.map(u => ADKey @@ Base16.decode(u).get).toArray))
     val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
     ApiResponse(candidateF)
   }

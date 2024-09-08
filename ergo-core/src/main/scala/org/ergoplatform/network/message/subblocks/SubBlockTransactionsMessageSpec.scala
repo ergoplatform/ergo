@@ -7,7 +7,7 @@ import scorex.util.{bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 import sigma.util.Extensions.LongOps
 
-object SubBlockTransactionsSpec extends MessageSpecSubblocks[SubBlockTransactionsData]{
+object SubBlockTransactionsMessageSpec extends MessageSpecSubblocks[SubBlockTransactionsData]{
   /**
     * Code which identifies what message type is contained in the payload
     */
@@ -33,4 +33,5 @@ object SubBlockTransactionsSpec extends MessageSpecSubblocks[SubBlockTransaction
     }
     SubBlockTransactionsData(subBlockId, transactions)
   }
+
 }

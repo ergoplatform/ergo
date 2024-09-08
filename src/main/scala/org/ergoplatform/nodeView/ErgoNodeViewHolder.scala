@@ -305,6 +305,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     // subblocks related logic
     case ProcessSubblock(sbi) =>
       history().applySubBlockHeader(sbi)
+
+    case ProcessSubblockTransactions(std) =>
+      history().applySubBlockTransactions(std.subblockID, std.transactions)
   }
 
   /**

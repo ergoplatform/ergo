@@ -5,7 +5,7 @@ import org.ergoplatform.network.message.MessageSpecSubblocks
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 
-object SubBlockTransactionsRequestSpec extends MessageSpecSubblocks[ModifierId] {
+object SubBlockTransactionsRequestMessageSpec extends MessageSpecSubblocks[ModifierId] {
   /**
     * Code which identifies what message type is contained in the payload
     */

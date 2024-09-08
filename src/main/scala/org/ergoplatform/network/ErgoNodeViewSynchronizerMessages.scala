@@ -11,6 +11,7 @@ import scorex.core.network.ConnectedPeer
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.popow.NipopowProof
+import org.ergoplatform.network.message.subblocks.SubBlockTransactionsData
 import org.ergoplatform.subblocks.SubBlockInfo
 
 /**
@@ -145,4 +146,6 @@ object ErgoNodeViewSynchronizerMessages {
   case class ProcessNipopow(nipopowProof: NipopowProof)
 
   case class ProcessSubblock(subblock: SubBlockInfo)
+
+  case class ProcessSubblockTransactions(std: SubBlockTransactionsData)
 }

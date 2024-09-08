@@ -33,7 +33,7 @@ import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younge
 import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
-import org.ergoplatform.network.message.subblocks.{SubBlockMessageSpec, SubBlockTransactionsRequestSpec}
+import org.ergoplatform.network.message.subblocks.{SubBlockMessageSpec, SubBlockTransactionsData, SubBlockTransactionsMessageSpec, SubBlockTransactionsRequestMessageSpec}
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import org.ergoplatform.subblocks.SubBlockInfo
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
@@ -1078,13 +1078,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   def processSubblock(subBlockInfo: SubBlockInfo, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
     val subBlockHeader = subBlockInfo.subBlock
+    // apply sub-block if it is on current height
     if (subBlockHeader.height == hr.fullBlockHeight + 1) {
-      if (subBlockInfo.valid()) {
+      if (subBlockInfo.valid()) { // check PoW / Merkle proofs before processing
         val prevSbIdOpt = subBlockInfo.prevSubBlockId.map(bytesToId) // link to previous sub-block
         log.debug(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block $prevSbIdOpt and parent block ${subBlockHeader.parentId}")
         // write sub-block to db, ask for transactions in it
         viewHolderRef ! ProcessSubblock(subBlockInfo)
-        val msg = Message(SubBlockTransactionsRequestSpec, Right(subBlockInfo.subBlock.id), None)
+        // todo: ask for txs only if subblock's parent is a best subblock ?
+        val msg = Message(SubBlockTransactionsRequestMessageSpec, Right(subBlockInfo.subBlock.id), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
       } else {
         log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
@@ -1094,6 +1096,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.info(s"Got sub-block for height ${subBlockHeader.height}, while height of our best full-block is ${hr.fullBlockHeight}")
       // just ignore the subblock
     }
+  }
+
+  def processSubblockTransactionsRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
+    hr.getSubBlockTransactions(subBlockId) match {
+      case Some(transactions) =>
+        val std = SubBlockTransactionsData(subBlockId, transactions)
+        val msg = Message(SubBlockTransactionsMessageSpec, Right(std), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+      case None =>
+        log.warn(s"Transactions not found for requested sub block ${subBlockId}")
+    }
+  }
+
+  def processSubblockTransactions(transactionsData: SubBlockTransactionsData,
+                                  hr: ErgoHistoryReader,
+                                  remote: ConnectedPeer): Unit = {
+    // todo: check if not spam, ie transaction were requested
+    viewHolderRef ! ProcessSubblockTransactions(transactionsData)
   }
 
   /**
@@ -1547,6 +1567,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Sub-blocks related messages
     case (_: SubBlockMessageSpec.type, subBlockInfo: SubBlockInfo, remote) =>
       processSubblock(subBlockInfo, hr, remote)
+    case (_: SubBlockTransactionsRequestMessageSpec.type, subBlockId: String, remote) =>
+      processSubblockTransactionsRequest(ModifierId @@ subBlockId, hr, remote)
+    case (_: SubBlockTransactionsMessageSpec.type, transactions: SubBlockTransactionsData, remote) =>
+      processSubblockTransactions(transactions, hr, remote)
   }
 
   def initialized(hr: ErgoHistory,

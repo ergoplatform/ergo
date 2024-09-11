@@ -269,7 +269,8 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
 
     // and update wallet digest
     updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
-      if (height + 1 != blockHeight) {
+      val isUtxoSnapshotScan = height == 0 && blockHeight == 0
+      if (height + 1 != blockHeight && !isUtxoSnapshotScan) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
       val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.scans.contains(PaymentsScanId))

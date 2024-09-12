@@ -64,7 +64,9 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
       getUnconfirmedOutputByBoxIdR ~
       getUnconfirmedInputByBoxIdR ~
       getUnconfirmedTxsByErgoTreeR ~
+      getUnconfirmedTxIdsR ~
       getUnconfirmedTxByIdR ~
+      getUnconfirmedTxsByIdsR ~
       getUnconfirmedTransactionsR ~
       unconfirmedContainsR ~
       sendTransactionR ~
@@ -165,6 +167,29 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   def getUnconfirmedTxByIdR: Route =
     (pathPrefix("unconfirmed" / "byTransactionId") & get & modifierId) { modifierId =>
       ApiResponse(getMemPool.map(_.modifierById(modifierId)))
+    }
+
+  /** Get list of unconfirmed transaction ids */
+  def getUnconfirmedTxIdsR: Route = 
+    (pathPrefix("unconfirmed" / "transactionIds") & get) {
+      ApiResponse(getMemPool.map(_.getAll.map(_.id)))
+    }
+
+  /** Post list of unconfirmed transaction ids and check if they are in the mempool */
+  def getUnconfirmedTxsByIdsR: Route = 
+    (pathPrefix("unconfirmed" / "transactionIds") & post & entity(as[Json])) { txIds =>
+      txIds.as[List[String]] match {
+        case Left(ex) =>
+          ApiError(StatusCodes.BadRequest, ex.getMessage())
+        case Right(ids) =>
+          ApiResponse(
+            getMemPool.map { pool =>
+              pool.getAll
+                .filter(tx => ids.contains(tx.id))
+                .map(_.id)
+            }
+          )
+      }
     }
 
   /** Collect all transactions which inputs or outputs contain given ErgoTree hex */

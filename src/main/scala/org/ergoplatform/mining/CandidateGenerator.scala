@@ -410,10 +410,6 @@ object CandidateGenerator extends ScorexLogging {
       ergoSettings.votingTargets.softForkOption.getOrElse(0) == 1
     }
 
-    //todo: remove after 5.0 soft-fork activation
-    log.debug(s"betterVersion: $betterVersion, forkVotingAllowed: $forkVotingAllowed, " +
-              s"forkOrdered: $forkOrdered, nextHeightCondition: $nextHeightCondition")
-
     betterVersion &&
       forkVotingAllowed &&
       forkOrdered &&
@@ -427,7 +423,6 @@ object CandidateGenerator extends ScorexLogging {
     * @param history                 - blockchain reader (to extract parent)
     * @param proposedUpdate          - votes for parameters update or/and soft-fork
     * @param state                   - UTXO set reader
-    * @param timeProvider            - network time provider
     * @param poolTxs                 - memory pool transactions
     * @param emissionTxOpt           - optional emission transaction
     * @param prioritizedTransactions - transactions which are going into the block in the first place

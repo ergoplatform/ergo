@@ -25,6 +25,7 @@ import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.subblocks.SubBlockInfo
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -229,7 +230,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (success@Success(updateInfo), modToApply) =>
         if (updateInfo.failedMod.isEmpty) {
           val chainTipOpt = history.estimatedTip()
-          updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
+          updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.blockSection, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 if (modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
@@ -670,8 +671,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def processLocallyGeneratedModifiers: Receive = {
     case lm: LocallyGeneratedModifier =>
-      log.info(s"Got locally generated modifier ${lm.pmod.encodedId} of type ${lm.pmod.modifierTypeId}")
-      pmodModify(lm.pmod, local = true)
+      log.info(s"Got locally generated modifier ${lm.blockSection.encodedId} of type ${lm.blockSection.modifierTypeId}")
+      pmodModify(lm.blockSection, local = true)
   }
 
   protected def getCurrentInfo: Receive = {
@@ -724,6 +725,10 @@ object ErgoNodeViewHolder {
     // Modifiers received from the remote peer with new elements in it
     case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
 
+    /**
+      * Wrapper for a locally generated sub-block submitted via API
+      */
+    case class LocallyGeneratedSubBlock(sbi: SubBlockInfo)
 
     /**
       * Wrapper for a transaction submitted via API

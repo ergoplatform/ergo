@@ -76,10 +76,16 @@ object Extension extends ApiCodecs {
     */
   val SubBlocksDataPrefix: Byte = 0x03
 
+  val PrevSubBlockIdKey: Array[Byte] = Array(SubBlocksDataPrefix, 0x00)
+
+  val SubBlockTransactionsDigestKey: Array[Byte] = Array(SubBlocksDataPrefix, 0x01)
+
   /**
     * Prefix for keys related to sidechains data.
     */
   val SidechainsDataPrefix: Byte = 0x04
+
+
 
   /**
     * Id a type of network object encoding extension

@@ -77,13 +77,7 @@ class CandidateGenerator(
     /** first we need to get Readers to have some initial state to work with */
     case Readers(h, s: UtxoStateReader, m, _) =>
       val lastHeaders   = h.lastHeaders(500).headers
-      val avgMiningTime = getBlockMiningTimeAvg(lastHeaders.map(_.timestamp))
-      val avgTxsCount = getTxsPerBlockCountAvg(
-        lastHeaders.flatMap(h.getFullBlock).map(_.transactions.size)
-      )
-      log.info(
-        s"CandidateGenerator initialized, avgMiningTime: ${avgMiningTime.toSeconds}s, avgTxsCount: $avgTxsCount"
-      )
+      log.info(s"CandidateGenerator initialized")
       context.become(
         initialized(
           CandidateGeneratorState(
@@ -297,22 +291,6 @@ object CandidateGenerator extends ScorexLogging {
     solvedBlock.nonEmpty && !solvedBlock.map(_.parentId).contains(bestFullBlockId)
   }
 
-  /** Calculate average mining time from latest block header timestamps */
-  def getBlockMiningTimeAvg(
-    timestamps: IndexedSeq[Header.Timestamp]
-  ): FiniteDuration = {
-    val miningTimes =
-      timestamps.sorted
-        .sliding(2, 1)
-        .map { case IndexedSeq(prev, next) => next - prev }
-        .toVector
-    Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
-  }
-
-  /** Get average count of transactions per block */
-  def getTxsPerBlockCountAvg(txsPerBlock: IndexedSeq[Int]): Long =
-    Math.round(txsPerBlock.sum / txsPerBlock.length.toDouble)
-
   /** Helper which is checking that inputs of the transaction are not spent */
   private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean =
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
@@ -441,7 +419,8 @@ object CandidateGenerator extends ScorexLogging {
   ): Try[(Candidate, EliminateTransactions)] =
     Try {
       val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
-      // Extract best header and extension of a best block user their data for assembling a new block
+
+      // Extract best header and extension of a best block for assembling a new block
       val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
         .flatMap(h => history.typedModifierById[Extension](h.extensionId))

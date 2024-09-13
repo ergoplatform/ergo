@@ -76,7 +76,6 @@ class CandidateGenerator(
 
     /** first we need to get Readers to have some initial state to work with */
     case Readers(h, s: UtxoStateReader, m, _) =>
-      val lastHeaders   = h.lastHeaders(500).headers
       log.info(s"CandidateGenerator initialized")
       context.become(
         initialized(
@@ -226,7 +225,8 @@ object CandidateGenerator extends ScorexLogging {
   case class Candidate(
     candidateBlock: CandidateBlock,
     externalVersion: WorkMessage,
-    txsToInclude: Seq[ErgoTransaction]
+    txsToInclude: Seq[ErgoTransaction],
+    subBlock: Boolean
   )
 
   case class GenerateCandidate(
@@ -546,7 +546,7 @@ object CandidateGenerator extends ScorexLogging {
             s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
           )
           Success(
-            Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions
+            Candidate(candidate, ext, prioritizedTransactions, subBlock = false) -> eliminateTransactions
           )
         case Failure(t: Throwable) =>
           // We can not produce a block for some reason, so print out an error
@@ -575,7 +575,8 @@ object CandidateGenerator extends ScorexLogging {
                   Candidate(
                     candidate,
                     deriveWorkMessage(candidate),
-                    prioritizedTransactions
+                    prioritizedTransactions,
+                    subBlock = false
                   ) -> eliminateTransactions
               }
             case None =>
@@ -742,6 +743,8 @@ object CandidateGenerator extends ScorexLogging {
   ): Boolean = {
     blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
   }
+
+ // private var lastSubblockOpt = None
 
   /**
     * Collects valid non-conflicting transactions from `mandatoryTxs` and then `mempoolTxsIn` and adds a transaction

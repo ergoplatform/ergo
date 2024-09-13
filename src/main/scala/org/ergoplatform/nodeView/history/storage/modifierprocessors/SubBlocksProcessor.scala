@@ -22,4 +22,8 @@ trait SubBlocksProcessor {
     subBlockTransactions.get(sbId)
   }
 
+  def bestSubblock(): Option[SubBlockInfo] = {
+    ???
+  }
+
 }

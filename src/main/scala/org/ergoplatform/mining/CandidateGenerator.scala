@@ -22,6 +22,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
+import org.ergoplatform.subblocks.SubBlockInfo
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.hash.Digest32
@@ -425,18 +426,30 @@ object CandidateGenerator extends ScorexLogging {
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
         .flatMap(h => history.typedModifierById[Extension](h.extensionId))
 
+      val lastSubblockOpt:Option[SubBlockInfo] = history.bestSubblock()
+
+      // there was sub-block generated before for this block
+      val continueSubblock = lastSubblockOpt.exists(sbi => bestHeaderOpt.map(_.id).contains(sbi.subBlock.parentId))
+
       // Make progress in time since last block.
       // If no progress is made, then, by consensus rules, the block will be rejected.
+      // todo: review w. subblocks
       val timestamp =
         Math.max(System.currentTimeMillis(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
 
       val stateContext = state.stateContext
 
       // Calculate required difficulty for the new block
-      val nBits: Long = bestHeaderOpt
-        .map(parent => history.requiredDifficultyAfter(parent))
-        .map(d => DifficultySerializer.encodeCompactBits(d))
-        .getOrElse(ergoSettings.chainSettings.initialNBits)
+      val nBits: Long = if(continueSubblock) {
+        lastSubblockOpt.get.subBlock.nBits // .get is ok as lastSubblockOpt.exists in continueSubblock checks emptiness
+      } else {
+        bestHeaderOpt
+          .map(parent => history.requiredDifficultyAfter(parent))
+          .map(d => DifficultySerializer.encodeCompactBits(d))
+          .getOrElse(ergoSettings.chainSettings.initialNBits)
+      }
+
+      // todo: do not recalculate interlink vector if subblock available
 
       // Obtain NiPoPoW interlinks vector to pack it into the extension section
       val updInterlinks       = popowAlgos.updateInterlinks(bestHeaderOpt, bestExtensionOpt)
@@ -744,8 +757,6 @@ object CandidateGenerator extends ScorexLogging {
     blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
   }
 
- // private var lastSubblockOpt = None
-
   /**
     * Collects valid non-conflicting transactions from `mandatoryTxs` and then `mempoolTxsIn` and adds a transaction
     * collecting fees from them to `minerPk`.
@@ -805,6 +816,7 @@ object CandidateGenerator extends ScorexLogging {
                 val newTxs = acc :+ (tx -> costConsumed)
                 val newBoxes = newTxs.flatMap(_._1.outputs)
 
+                // todo: why to collect fees on each tx?
                 collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
                   case Some(feeTx) =>
                     val boxesToSpend = feeTx.inputs.flatMap(i =>

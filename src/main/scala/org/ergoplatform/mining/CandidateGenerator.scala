@@ -426,7 +426,7 @@ object CandidateGenerator extends ScorexLogging {
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
         .flatMap(h => history.typedModifierById[Extension](h.extensionId))
 
-      val lastSubblockOpt:Option[SubBlockInfo] = history.bestSubblock()
+      val lastSubblockOpt: Option[SubBlockInfo] = history.bestSubblock()
 
       // there was sub-block generated before for this block
       val continueSubblock = lastSubblockOpt.exists(sbi => bestHeaderOpt.map(_.id).contains(sbi.subBlock.parentId))

@@ -90,13 +90,13 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       if (readingUpTo - height < 300 && chainHeight - height > 1000) {
         readingUpTo = math.min(height + 1001, chainHeight)
         val blockNums = height + 1 to readingUpTo by 50
-        blockNums.zip(blockNums.tail).map { range => // ranges of 50 blocks for each thread to read
-          Future {
+        Future {
+          blockNums.zip(blockNums.tail).map { range => // ranges of 50 blocks for each thread to read
             (range._1 until range._2).foreach { blockNum =>
               history.bestBlockTransactionsAt(blockNum).map(blockCache.put(blockNum, _))
             }
-          }(context.dispatcher)
-        }
+          }
+        }(context.dispatcher)
       }
       txs
     }
@@ -237,7 +237,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     }.orElse(getBlockTransactionsAt(state.indexedHeight))
     val height = headerOpt.map(_.height).getOrElse(state.indexedHeight)
 
-    if(btOpt.isEmpty) {
+    if (btOpt.isEmpty) {
       log.warn(s"Could not read block $height / $chainHeight from database, waiting for new block until retrying")
       return state.decrementIndexedHeight.copy(caughtUp = true)
     }
@@ -411,7 +411,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         val newState: IndexerState = index(state.incrementIndexedHeight, Some(header))
         saveProgress(newState)
         context.become(loaded(newState))
-      } else if(header.height > state.indexedHeight + 1) { // applied block is ahead of indexer
+      } else if (header.height > state.indexedHeight + 1) { // applied block is ahead of indexer
         context.become(loaded(state.copy(caughtUp = false)))
         self ! Index()
       } else // applied block has already been indexed, skipping duplicate
@@ -425,8 +425,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         history.heightOf(branchPoint) match {
           case Some(branchHeight) =>
             if (branchHeight < state.indexedHeight) {
-              context.become (loaded (state.copy (rollbackTo = branchHeight) ) )
-              self ! RemoveAfter (branchHeight)
+              context.become(loaded(state.copy(rollbackTo = branchHeight)))
+              self ! RemoveAfter(branchHeight)
             }
           case None =>
             log.error(s"No rollback height found for $branchPoint")

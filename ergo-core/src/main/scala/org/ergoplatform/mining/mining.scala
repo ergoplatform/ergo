@@ -1,10 +1,29 @@
 package org.ergoplatform
 
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.mining.AutolykosSolution
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.header.Header
 import scorex.crypto.hash.Blake2b256
 import sigma.crypto.{BcDlogGroup, CryptoConstants, EcPointType}
 import sigma.serialization.{GroupElementSerializer, SigmaSerializer}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
+
+sealed trait ProveBlockResult
+
+case object NothingFound extends ProveBlockResult
+
+case class OrderingBlockFound(fb: ErgoFullBlock) extends ProveBlockResult
+
+case class OrderingBlockHeeaderFound(h: Header) extends ProveBlockResult
+
+case class InputBlockFound(fb: ErgoFullBlock) extends ProveBlockResult
+
+case class InputBlockHeaderFound(h: Header) extends ProveBlockResult
+
+case class InputSolutionFound(as: AutolykosSolution) extends ProveBlockResult
+
+case class OrderingSolutionFound(as: AutolykosSolution) extends ProveBlockResult
 
 package object mining {
 

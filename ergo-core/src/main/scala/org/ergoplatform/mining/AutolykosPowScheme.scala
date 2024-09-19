@@ -3,6 +3,7 @@ package org.ergoplatform.mining
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.{InputBlockFound, InputBlockHeaderFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingBlockHeeaderFound, OrderingSolutionFound, ProveBlockResult}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
@@ -278,6 +279,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
   //Proving-related code which is not critical for consensus below
 
+
   /**
     * Autolykos solver suitable for CPU-mining in testnet and devnets.
     *
@@ -295,7 +297,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
             votes: Array[Byte],
             sk: PrivateKey,
             minNonce: Long = Long.MinValue,
-            maxNonce: Long = Long.MaxValue): Option[Header] = {
+            maxNonce: Long = Long.MaxValue): ProveBlockResult = {
     val (parentId, height) = AutolykosPowScheme.derivedHeaderFields(parentOpt)
 
     val h = HeaderWithoutPow(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
@@ -305,7 +307,11 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val x = randomSecret()
     val hbs = Ints.toByteArray(h.height)
     val N = calcN(h)
-    checkNonces(version, hbs, msg, sk, x, b, N, minNonce, maxNonce).map(solution => h.toHeader(solution))
+    checkNonces(version, hbs, msg, sk, x, b, N, minNonce, maxNonce) match {
+      case NothingFound => NothingFound
+      case InputSolutionFound(as) => InputBlockHeaderFound(h.toHeader(as))
+      case OrderingSolutionFound(as) => OrderingBlockHeeaderFound(h.toHeader(as))
+    }
   }
 
   /**
@@ -323,17 +329,23 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                  votes: Array[Byte],
                  sk: PrivateKey,
                  minNonce: Long = Long.MinValue,
-                 maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
+                 maxNonce: Long = Long.MaxValue): ProveBlockResult = {
 
     val transactionsRoot = BlockTransactions.transactionsRoot(transactions, version)
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
-    prove(parentOpt, version, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, extensionCandidate.digest, votes, sk, minNonce, maxNonce).map { h =>
+    def constructBlockFromHeader(h: Header) = {
       val adProofs = ADProofs(h.id, adProofBytes)
       val blockTransactions = BlockTransactions(h.id, version, transactions)
       val extension = extensionCandidate.toExtension(h.id)
       new ErgoFullBlock(h, blockTransactions, extension, Some(adProofs))
+    }
+
+    prove(parentOpt, version, nBits, stateRoot, adProofsRoot, transactionsRoot,
+      timestamp, extensionCandidate.digest, votes, sk, minNonce, maxNonce) match {
+      case NothingFound => NothingFound
+      case InputBlockHeaderFound(h) => InputBlockFound(constructBlockFromHeader(h))
+      case OrderingBlockHeeaderFound(h) => OrderingBlockFound(constructBlockFromHeader(h))
     }
   }
 
@@ -344,7 +356,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   def proveCandidate(candidateBlock: CandidateBlock,
                      sk: PrivateKey,
                      minNonce: Long = Long.MinValue,
-                     maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
+                     maxNonce: Long = Long.MaxValue): ProveBlockResult = {
     proveBlock(candidateBlock.parentOpt,
       candidateBlock.version,
       candidateBlock.nBits,
@@ -372,14 +384,17 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                                   b: BigInt,
                                   N: Int,
                                   startNonce: Long,
-                                  endNonce: Long): Option[AutolykosSolution] = {
+                                  endNonce: Long): ProveBlockResult = {
+
+    val subblocksPerBlock = 10 // todo : make configurable
+
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
     val p1 = groupElemToBytes(genPk(sk))
     val p2 = groupElemToBytes(genPk(x))
 
     @tailrec
-    def loop(i: Long): Option[AutolykosSolution] = if (i == endNonce) {
-      None
+    def loop(i: Long): ProveBlockResult = if (i == endNonce) {
+      NothingFound
     } else {
       if (i % 1000000 == 0 && i > 0) println(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
@@ -398,7 +413,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       }
       if (d <= b) {
         log.debug(s"Solution found at $i")
-        Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
+        OrderingSolutionFound(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
+      } else if (d <= b * subblocksPerBlock) {
+        InputSolutionFound(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else {
         loop(i + 1)
       }

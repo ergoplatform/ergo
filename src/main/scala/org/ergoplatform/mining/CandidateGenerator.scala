@@ -437,7 +437,7 @@ object CandidateGenerator extends ScorexLogging {
 
       val stateContext = state.stateContext
 
-      // Calculate required difficulty for the new block
+      // Calculate required difficulty for the new block, the same diff for subblock
       val nBits: Long = if(continueSubblock) {
         lastSubblockOpt.get.subBlock.nBits // .get is ok as lastSubblockOpt.exists in continueSubblock checks emptiness
       } else {

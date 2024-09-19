@@ -13,15 +13,23 @@ trait SubBlocksProcessor extends ScorexLogging {
   val subBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
 
   def resetState() = {
-    
+    _bestSubblock = None
+
+    // todo: subBlockRecords & subBlockTransactions should be cleared a bit later, as other peers may still ask for them
+    subBlockRecords.clear()
+    subBlockTransactions.clear()
   }
 
   // sub-blocks related logic
   def applySubBlockHeader(sbi: SubBlockInfo): Unit = {
+    if (sbi.subBlock.height > _bestSubblock.map(_.subBlock.height).getOrElse(-1)) {
+      resetState()
+    }
+
     subBlockRecords.put(sbi.subBlock.id, sbi)
 
     // todo: currently only one chain of subblocks considered,
-    // in fact there could be multiple trees here (one subblocks tree per header)
+    // todo: in fact there could be multiple trees here (one subblocks tree per header)
     _bestSubblock match {
       case None => _bestSubblock = Some(sbi)
       case Some(maybeParent) if (sbi.prevSubBlockId.map(bytesToId).contains(maybeParent.subBlock.id)) =>

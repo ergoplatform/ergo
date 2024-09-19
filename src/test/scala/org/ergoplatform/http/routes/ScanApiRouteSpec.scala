@@ -17,7 +17,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.crypto.authds.ADKey
 import scorex.utils.Random
-import sigmastate.Values.ByteArrayConstant
+import sigma.ast.ByteArrayConstant
 
 import scala.concurrent.duration._
 import scala.util.Try

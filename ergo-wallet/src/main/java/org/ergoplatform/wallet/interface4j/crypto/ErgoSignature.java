@@ -2,7 +2,7 @@ package org.ergoplatform.wallet.interface4j.crypto;
 
 import org.bouncycastle.math.ec.custom.sec.SecP256K1Point;
 import scala.math.BigInt;
-import sigmastate.crypto.Platform;
+import sigma.crypto.Platform;
 
 import java.math.BigInteger;
 

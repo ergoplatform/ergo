@@ -66,8 +66,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
     val now = System.currentTimeMillis()
 
-    val allPoolTxs = mempool.getAllPrioritized
     // Check transactions sorted by priority. Parent transaction comes before its children.
+    val allPoolTxs = mempool.getAllPrioritized
     val txsToValidate = allPoolTxs.filter { utx =>
       (now - utx.lastCheckedTime) > TimeLimit
     }.toList

@@ -409,7 +409,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       .flatMap(extractTransactions)
       .filter(tx => !appliedTxs.exists(_.id == tx.id))
       .map(tx => UnconfirmedTransaction(tx, None))
-    memPool.remove(appliedTxs).put(rolledBackTxs)
+    memPool.removeWithDoubleSpends(appliedTxs).put(rolledBackTxs)
   }
 
   /**

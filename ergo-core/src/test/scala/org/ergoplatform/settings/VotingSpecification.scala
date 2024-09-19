@@ -4,9 +4,11 @@ import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.ValidationRules.rulesSpec
+import org.ergoplatform.validation.{ValidationRules => VR}
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import org.ergoplatform.validation.{DisabledRule, ReplacedRule, ValidationRules => VR}
+import org.ergoplatform.validation.{ValidationRules => VR}
 import scorex.crypto.authds.ADDigest
+import sigma.validation.{DisabledRule, ReplacedRule}
 import sigmastate.utils.Helpers._
 
 import scala.util.Try
@@ -38,7 +40,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
   private val proposedUpdate = ErgoValidationSettingsUpdate(
     Seq(ValidationRules.exDuplicateKeys, ValidationRules.exValueLength),
-    Seq(VR.CheckDeserializedScriptType.id -> DisabledRule, VR.CheckValidOpCode.id -> ReplacedRule((VR.FirstRuleId + 11).toShort)))
+    Seq(VR.CheckDeserializedScriptType.id -> DisabledRule, VR.CheckValidOpCode.id -> ReplacedRule((sigma.validation.ValidationRules.FirstRuleId + 11).toShort)))
   private val proposedUpdate2 = ErgoValidationSettingsUpdate(Seq(ValidationRules.fbOperationFailed), Seq())
   val ctx: ErgoStateContext = {
     new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters, validationSettingsNoIl, VotingData.empty)(updSettings)
@@ -53,7 +55,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
   property("correct rule ids") {
     rulesSpec foreach { r =>
-      r._1 < org.ergoplatform.validation.ValidationRules.FirstRuleId shouldBe true
+      r._1 < sigma.validation.ValidationRules.FirstRuleId shouldBe true
     }
   }
 

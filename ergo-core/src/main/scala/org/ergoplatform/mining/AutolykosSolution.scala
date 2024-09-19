@@ -11,8 +11,7 @@ import org.ergoplatform.modifiers.history.header.Header.Version
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.crypto.CryptoConstants
-import sigmastate.crypto.CryptoConstants.EcPointType
+import sigma.crypto.{CryptoConstants, EcPointType}
 
 /**
   * Solution for an Autolykos PoW puzzle.

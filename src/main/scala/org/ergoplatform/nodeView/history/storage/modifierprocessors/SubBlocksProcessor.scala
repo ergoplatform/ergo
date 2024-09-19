@@ -12,6 +12,10 @@ trait SubBlocksProcessor extends ScorexLogging {
   val subBlockRecords = mutable.Map[ModifierId, SubBlockInfo]()
   val subBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
 
+  def resetState() = {
+    
+  }
+
   // sub-blocks related logic
   def applySubBlockHeader(sbi: SubBlockInfo): Unit = {
     subBlockRecords.put(sbi.subBlock.id, sbi)

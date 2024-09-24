@@ -357,7 +357,12 @@ object CandidateGenerator extends ScorexLogging {
       None
     } else {
       val desiredUpdate = if (stateContext.blockVersion == 3) {
-        ergoSettings.votingTargets.desiredUpdate.copy(statusUpdates = Seq(1011.toShort -> ReplacedRule(1011), 1008.toShort -> ReplacedRule(1008)))
+        ergoSettings.votingTargets.desiredUpdate.copy(statusUpdates =
+          // todo: do new rules to replace old ones, with the same behavior
+          // 1007 is needed to switch off primitive type validation to add Unsigned Big Int support
+          // 1008 is needed to switch off non-primitive type validation to add Option & Header types support
+          // 1011 is needed to add new methods
+          Seq(1011.toShort -> ReplacedRule(1011), 1008.toShort -> ReplacedRule(1008), 1007.toShort -> ReplacedRule(1007)))
       } else {
         ergoSettings.votingTargets.desiredUpdate
       }

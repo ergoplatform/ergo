@@ -15,8 +15,8 @@ import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.Values.ErgoTree
 import sigma.Extensions._
+import sigma.ast.ErgoTree
 
 import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer

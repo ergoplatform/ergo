@@ -3,13 +3,12 @@ package org.ergoplatform.wallet.boxes
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.serialization.ConstantStore
-import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
+import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
 
 object ErgoBoxSerializer extends ErgoWalletSerializer[ErgoBox] {
 
   override def serialize(box: ErgoBox, w: Writer): Unit = {
-    val writer = new SigmaByteWriter(w, None)
+    val writer = new SigmaByteWriter(w, None, None, None)
     ErgoBox.sigmaSerializer.serialize(box, writer)
   }
 

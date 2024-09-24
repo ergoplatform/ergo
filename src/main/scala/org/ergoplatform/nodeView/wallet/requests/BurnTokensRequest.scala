@@ -11,7 +11,7 @@ import org.ergoplatform.ErgoBox
   * @param assetsToBurn sequence of token id's and amount to burn
   *
   */
-case class BurnTokensRequest(assetsToBurn: Seq[(ErgoBox.TokenId, Long)])
+case class BurnTokensRequest(assetsToBurn: Array[(ErgoBox.TokenId, Long)])
   extends TransactionGenerationRequest
 
 class BurnTokensRequestEncoder extends Encoder[BurnTokensRequest] {
@@ -27,7 +27,7 @@ class BurnTokensRequestDecoder extends Decoder[BurnTokensRequest] {
   def apply(cursor: HCursor): Decoder.Result[BurnTokensRequest] = {
     for {
       assetsToBurn <- cursor.downField("assetsToBurn").as[Option[Seq[(ErgoBox.TokenId, Long)]]]
-    } yield BurnTokensRequest(assetsToBurn.toSeq.flatten)
+    } yield BurnTokensRequest(assetsToBurn.toArray.flatten)
   }
 
 }

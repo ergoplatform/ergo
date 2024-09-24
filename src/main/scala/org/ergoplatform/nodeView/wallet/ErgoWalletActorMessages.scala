@@ -10,13 +10,14 @@ import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ChainStatus
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
+import org.ergoplatform.sdk.SecretString
 import scorex.util.ModifierId
-import sigmastate.Values.SigmaBoolean
-import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigma.data.{ProveDlog, SigmaBoolean}
+import sigmastate.crypto.DLogProtocol.DLogProverInput
+
 import scala.util.Try
 
 /**

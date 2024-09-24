@@ -10,7 +10,7 @@ import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs, 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
-import org.ergoplatform.settings.{Args, Constants, ErgoSettings, ErgoSettingsReader}
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoAddress, Pay2SAddress}
 import org.ergoplatform.wallet.{Constants => WalletConstants}
@@ -20,6 +20,7 @@ import org.scalatest.matchers.should.Matchers
 import scala.util.{Random, Try}
 import scala.concurrent.duration._
 import akka.http.scaladsl.server.MissingQueryParamRejection
+import org.ergoplatform.settings.Constants.FalseTree
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators
 
 class WalletApiRouteSpec extends AnyFlatSpec
@@ -50,8 +51,8 @@ class WalletApiRouteSpec extends AnyFlatSpec
   implicit val requestsHolderEncoder: RequestsHolderEncoder = new RequestsHolderEncoder(ergoSettings)
   implicit val addressJsonDecoder: Decoder[ErgoAddress] = ErgoAddressJsonEncoder(settings.chainSettings).decoder
 
-  val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf)(settings.addressEncoder), 100L, Seq.empty, Map.empty)
-  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf)(settings.addressEncoder), None, 100L, "TEST", "Test", 8)
+  val paymentRequest = PaymentRequest(Pay2SAddress(FalseTree)(settings.addressEncoder), 100L, Array.empty, Map.empty)
+  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(FalseTree)(settings.addressEncoder), None, 100L, "TEST", "Test", 8)
   val requestsHolder = RequestsHolder(
     (0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)),
     Some(10000L),

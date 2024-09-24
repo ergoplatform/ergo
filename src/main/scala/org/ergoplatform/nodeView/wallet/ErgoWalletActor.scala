@@ -13,12 +13,13 @@ import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.BoxSelector
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.util.ScorexLogging
+
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 

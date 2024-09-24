@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.22"
+  version: "6.0.0"
   title: Ergo Node API
   description: Specification of Ergo Node API for ChatGPT plugin.
     The following endpoints supported 

@@ -17,9 +17,10 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.eval.Extensions._
-import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
+import sigma.Colls
+import sigma.Extensions._
+import sigma.crypto.EcPointType
+import sigma.data.{CAvlTree, CBigInt, CGroupElement, CHeader}
 
 import scala.annotation.nowarn
 import scala.concurrent.duration.FiniteDuration
@@ -138,14 +139,18 @@ object Header extends ApiCodecs {
     */
   val Interpreter50Version: Byte = 3
 
+  /**
+    * Block version after the 6.0 soft-fork
+    * 6.0 interpreter (EIP-50)
+    */
+  val Interpreter60Version: Byte = 4
 
   def toSigma(header: Header): sigma.Header =
     CHeader(
-      id = header.id.toBytes.toColl,
       version = header.version,
       parentId = header.parentId.toBytes.toColl,
       ADProofsRoot = header.ADProofsRoot.asInstanceOf[Array[Byte]].toColl,
-      stateRoot = CAvlTree(ErgoInterpreter.avlTreeFromDigest(header.stateRoot.toColl)),
+      stateRootDigest = header.stateRoot.toColl,
       transactionsRoot = header.transactionsRoot.asInstanceOf[Array[Byte]].toColl,
       timestamp = header.timestamp,
       nBits = header.nBits,
@@ -155,7 +160,8 @@ object Header extends ApiCodecs {
       powOnetimePk = CGroupElement(header.powSolution.w),
       powNonce = header.powSolution.n.toColl,
       powDistance = CBigInt(header.powSolution.d.bigInteger),
-      votes = header.votes.toColl
+      votes = header.votes.toColl,
+      unparsedBytes = Colls.emptyColl[Byte] // todo: fix after merging w. 5.0.23
     )
 
   val modifierTypeId: NetworkObjectTypeId.Value = HeaderTypeId.value

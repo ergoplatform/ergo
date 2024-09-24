@@ -3,7 +3,7 @@ package org.ergoplatform.settings
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.util.encode.Base16
-import sigmastate.crypto.DLogProtocol.ProveDlog
+import sigma.data.ProveDlog
 
 import scala.util.Try
 
@@ -28,6 +28,14 @@ case class ErgoSettings(directory: String,
         .orElse(addressEncoder.fromString(str).collect { case p2pk: P2PKAddress => p2pk.pubkey })
         .toOption
     }
+
+  def launchParameters: Parameters = {
+    if (networkType == NetworkType.DevNet) {
+      DevnetLaunchParameters
+    } else {
+      MainnetLaunchParameters
+    }
+  }
 
 }
 

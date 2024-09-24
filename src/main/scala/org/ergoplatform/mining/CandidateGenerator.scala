@@ -27,12 +27,12 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
-import sigmastate.ErgoBoxRType
-import sigmastate.crypto.DLogProtocol.ProveDlog
-import sigmastate.crypto.CryptoFacade
-import sigmastate.eval.Extensions._
-import sigmastate.eval._
-import sigmastate.interpreter.ProverResult
+import sigma.ast.syntax.ErgoBoxRType
+import sigma.Extensions.ArrayOps
+import sigma.crypto.CryptoFacade
+import sigma.data.{Digest32Coll, ProveDlog}
+import sigma.interpreter.ProverResult
+import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
@@ -356,7 +356,16 @@ object CandidateGenerator extends ScorexLogging {
       )
       None
     } else {
-      val desiredUpdate = ergoSettings.votingTargets.desiredUpdate
+      val desiredUpdate = if (stateContext.blockVersion == 3) {
+        ergoSettings.votingTargets.desiredUpdate.copy(statusUpdates =
+          // todo: do new rules to replace old ones, with the same behavior
+          // 1007 is needed to switch off primitive type validation to add Unsigned Big Int support
+          // 1008 is needed to switch off non-primitive type validation to add Option & Header types support
+          // 1011 is needed to add new methods
+          Seq(1011.toShort -> ReplacedRule(1011), 1008.toShort -> ReplacedRule(1008), 1007.toShort -> ReplacedRule(1007)))
+      } else {
+        ergoSettings.votingTargets.desiredUpdate
+      }
       Some(
         createCandidate(
           pk,
@@ -400,7 +409,7 @@ object CandidateGenerator extends ScorexLogging {
     val nextHeightCondition = if (ergoSettings.networkType.isMainNet) {
       nextHeight >= 823297 // mainnet voting start height, first block of epoch #804
     } else {
-      nextHeight >= 4096
+      nextHeight >= 256
     }
 
     // we automatically vote for 5.0 soft-fork in the mainnet if 120 = 0 vote not provided in settings
@@ -409,10 +418,6 @@ object CandidateGenerator extends ScorexLogging {
     } else {
       ergoSettings.votingTargets.softForkOption.getOrElse(0) == 1
     }
-
-    //todo: remove after 5.0 soft-fork activation
-    log.debug(s"betterVersion: $betterVersion, forkVotingAllowed: $forkVotingAllowed, " +
-              s"forkOrdered: $forkOrdered, nextHeightCondition: $nextHeightCondition")
 
     betterVersion &&
       forkVotingAllowed &&
@@ -746,7 +751,7 @@ object CandidateGenerator extends ScorexLogging {
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
       val feeAmount = feeBoxes.map(_.value).sum
       val feeAssets =
-        feeBoxes.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
+        feeBoxes.toArray.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult.empty))
       val minerBox =
         new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())

@@ -5,10 +5,9 @@ import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.SType
-import sigmastate.Values.EvaluatedValue
+import sigma.ast.{EvaluatedValue, SType}
+import sigma.serialization.ValueSerializer
 import sigmastate.eval.Extensions.ArrayByteOps
-import sigmastate.serialization.ValueSerializer
 
 
 object ScanningPredicateSerializer extends ErgoSerializer[ScanningPredicate] {

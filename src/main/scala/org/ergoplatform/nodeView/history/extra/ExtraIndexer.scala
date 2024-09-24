@@ -89,12 +89,10 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       if (height % 1000 == 0) blockCache.keySet.filter(_ < height).map(blockCache.remove)
       if (readingUpTo - height < 300 && chainHeight - height > 1000) {
         readingUpTo = math.min(height + 1001, chainHeight)
-        val blockNums = height + 1 to readingUpTo by 50
+        val blockNums = height + 1 to readingUpTo
         Future {
-          blockNums.zip(blockNums.tail).map { range => // ranges of 50 blocks for each thread to read
-            (range._1 until range._2).foreach { blockNum =>
-              history.bestBlockTransactionsAt(blockNum).map(blockCache.put(blockNum, _))
-            }
+          blockNums.foreach { blockNum =>
+            history.bestBlockTransactionsAt(blockNum).map(blockCache.put(blockNum, _))
           }
         }(context.dispatcher)
       }

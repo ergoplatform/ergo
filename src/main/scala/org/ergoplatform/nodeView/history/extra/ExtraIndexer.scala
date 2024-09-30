@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash}
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, GlobalConstants, Pay2SAddress}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -25,13 +25,15 @@ import spire.syntax.all.cfor
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable
 import scala.collection.concurrent
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters._
 
 /**
   * Base trait for extra indexer actor and its test.
   */
 trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
+
+  private implicit val ec: ExecutionContextExecutor = context.dispatcher
 
   /**
     * Max buffer size (determined by config)
@@ -97,7 +99,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
               (range._1 until range._2).foreach { blockNum =>
                 history.bestBlockTransactionsAt(blockNum).map(blockCache.put(blockNum, _))
               }
-            }(context.dispatcher)
+            }
           }
         } else {
           val blockNums = height + 1 to readingUpTo
@@ -105,7 +107,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
             blockNums.foreach { blockNum =>
               history.bestBlockTransactionsAt(blockNum).map(blockCache.put(blockNum, _))
             }
-          }(context.dispatcher)
+          }
         }
       }
       txs
@@ -248,7 +250,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     val height = headerOpt.map(_.height).getOrElse(state.indexedHeight)
 
     if (btOpt.isEmpty) {
-      log.warn(s"Could not read block $height / $chainHeight from database, waiting for new block until retrying")
+      log.error(s"Could not read block $height / $chainHeight from database, waiting for new block until retrying")
       return state.decrementIndexedHeight.copy(caughtUp = true)
     }
 
@@ -594,6 +596,6 @@ object ExtraIndexer {
 
   def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {
     val props = Props.create(classOf[ExtraIndexer], cacheSettings, chainSettings.addressEncoder)
-    system.actorOf(props)
+    system.actorOf(props.withDispatcher(GlobalConstants.IndexerDispatcher))
   }
 }

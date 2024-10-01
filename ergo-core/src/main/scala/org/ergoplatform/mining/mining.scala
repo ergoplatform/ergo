@@ -15,15 +15,23 @@ case object NothingFound extends ProveBlockResult
 
 case class OrderingBlockFound(fb: ErgoFullBlock) extends ProveBlockResult
 
-case class OrderingBlockHeeaderFound(h: Header) extends ProveBlockResult
+case class OrderingBlockHeaderFound(h: Header) extends ProveBlockResult
 
 case class InputBlockFound(fb: ErgoFullBlock) extends ProveBlockResult
 
 case class InputBlockHeaderFound(h: Header) extends ProveBlockResult
 
-case class InputSolutionFound(as: AutolykosSolution) extends ProveBlockResult
+sealed trait BlockSolutionSearchResult
 
-case class OrderingSolutionFound(as: AutolykosSolution) extends ProveBlockResult
+case object NoSolutionFound extends BlockSolutionSearchResult
+
+sealed trait SolutionFound extends BlockSolutionSearchResult {
+  val as: AutolykosSolution
+}
+
+case class InputSolutionFound(override val as: AutolykosSolution) extends SolutionFound
+
+case class OrderingSolutionFound(override val as: AutolykosSolution) extends SolutionFound
 
 package object mining {
 

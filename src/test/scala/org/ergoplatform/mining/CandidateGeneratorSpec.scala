@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, OrderingBlockFound}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.ErgoTree
@@ -139,7 +139,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case StatusReply.Success(candidate: Candidate) =>
         defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+          .asInstanceOf[OrderingBlockFound]  // todo: fix
+          .fb
     }
 
     // now block should be cached
@@ -182,7 +183,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+          .asInstanceOf[OrderingBlockFound]  // todo: fix
+          .fb
         // let's pretend we are mining at least a bit so it is realistic
         expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
@@ -228,7 +230,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+          .asInstanceOf[OrderingBlockFound]  // todo: fix
+          .fb
         testProbe.expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
 

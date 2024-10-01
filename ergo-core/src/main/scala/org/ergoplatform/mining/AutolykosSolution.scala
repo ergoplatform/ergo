@@ -64,6 +64,7 @@ case class WeakAutolykosSolution(pk: EcPointType, n: Array[Byte]) {
 }
 
 object WeakAutolykosSolution extends ApiCodecs {
+
   implicit val jsonEncoder: Encoder[WeakAutolykosSolution] = { s: WeakAutolykosSolution =>
     Map(
       "pk" -> s.pk.asJson,

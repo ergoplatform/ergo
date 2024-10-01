@@ -24,7 +24,7 @@ import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Pa
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.subblocks.SubBlockInfo
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
@@ -172,9 +172,10 @@ class CandidateGenerator(
         }
       }
 
-    case preSolution: AutolykosSolution
+    case sf: SolutionFound
         if state.solvedBlock.isEmpty && state.cache.nonEmpty =>
       // Inject node pk if it is not externally set (in Autolykos 2)
+      val preSolution = sf.as
       val solution =
         if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
           AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
@@ -187,10 +188,15 @@ class CandidateGenerator(
         ergoSettings.chainSettings.powScheme
           .validate(newBlock.header)
           .map(_ => newBlock) match {
-          case Success(newBlock) =>
+          case Success(newBlock) if sf.isInstanceOf[OrderingSolutionFound] =>
             sendToNodeView(newBlock)
             context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
             StatusReply.success(())
+          case Success(_) if sf.isInstanceOf[InputSolutionFound] =>
+            log.info("Sub-block mined!")
+            StatusReply.error(
+              new Exception(s"Input block found!", new Exception())
+            )
           case Failure(exception) =>
             log.warn(s"Removing candidate due to invalid block", exception)
             context.become(initialized(state.copy(cache = None)))

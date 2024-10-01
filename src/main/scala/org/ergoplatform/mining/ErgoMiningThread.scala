@@ -2,7 +2,7 @@ package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern.StatusReply
-import org.ergoplatform.{InputBlockFound, NothingFound, OrderingBlockFound}
+import org.ergoplatform.{InputBlockFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingSolutionFound}
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.util.ScorexLogging
@@ -69,10 +69,11 @@ class ErgoMiningThread(
       val lastNonceToCheck = nonce + NonceStep
       powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck) match {
         case OrderingBlockFound(newBlock) =>
-          log.info(s"Found solution, sending it for validation")
-          candidateGenerator ! newBlock.header.powSolution
-        case InputBlockFound(_) =>
-          // todo: process
+          log.info(s"Found solution for ordering block, sending it for validation")
+          candidateGenerator ! OrderingSolutionFound(newBlock.header.powSolution)
+        case InputBlockFound(newBlock) =>
+          log.info(s"Found solution for input block, sending it for validation")
+          candidateGenerator ! InputSolutionFound(newBlock.header.powSolution)
         case NothingFound =>
           log.info(s"Trying nonce $lastNonceToCheck")
           context.become(mining(lastNonceToCheck, candidateBlock, solvedBlocksCount))

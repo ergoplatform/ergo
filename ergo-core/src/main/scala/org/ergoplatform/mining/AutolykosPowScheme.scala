@@ -3,7 +3,7 @@ package org.ergoplatform.mining
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.{InputBlockFound, InputBlockHeaderFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingBlockHeeaderFound, OrderingSolutionFound, ProveBlockResult}
+import org.ergoplatform.{BlockSolutionSearchResult, InputBlockFound, InputBlockHeaderFound, InputSolutionFound, NoSolutionFound, NothingFound, OrderingBlockFound, OrderingBlockHeaderFound, OrderingSolutionFound, ProveBlockResult}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
@@ -308,9 +308,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val hbs = Ints.toByteArray(h.height)
     val N = calcN(h)
     checkNonces(version, hbs, msg, sk, x, b, N, minNonce, maxNonce) match {
-      case NothingFound => NothingFound
+      case NoSolutionFound => NothingFound
       case InputSolutionFound(as) => InputBlockHeaderFound(h.toHeader(as))
-      case OrderingSolutionFound(as) => OrderingBlockHeeaderFound(h.toHeader(as))
+      case OrderingSolutionFound(as) => OrderingBlockHeaderFound(h.toHeader(as))
     }
   }
 
@@ -345,7 +345,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       timestamp, extensionCandidate.digest, votes, sk, minNonce, maxNonce) match {
       case NothingFound => NothingFound
       case InputBlockHeaderFound(h) => InputBlockFound(constructBlockFromHeader(h))
-      case OrderingBlockHeeaderFound(h) => OrderingBlockFound(constructBlockFromHeader(h))
+      case OrderingBlockHeaderFound(h) => OrderingBlockFound(constructBlockFromHeader(h))
     }
   }
 
@@ -384,7 +384,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                                   b: BigInt,
                                   N: Int,
                                   startNonce: Long,
-                                  endNonce: Long): ProveBlockResult = {
+                                  endNonce: Long): BlockSolutionSearchResult = {
 
     val subblocksPerBlock = 10 // todo : make configurable
 
@@ -393,8 +393,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val p2 = groupElemToBytes(genPk(x))
 
     @tailrec
-    def loop(i: Long): ProveBlockResult = if (i == endNonce) {
-      NothingFound
+    def loop(i: Long): BlockSolutionSearchResult = if (i == endNonce) {
+      NoSolutionFound
     } else {
       if (i % 1000000 == 0 && i > 0) println(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)

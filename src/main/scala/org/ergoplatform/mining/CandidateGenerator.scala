@@ -183,25 +183,28 @@ class CandidateGenerator(
           preSolution
         }
       val result: StatusReply[Unit] = {
-        val newBlock = completeBlock(state.cache.get.candidateBlock, solution)
-        log.info(s"New block mined, header: ${newBlock.header}")
-        ergoSettings.chainSettings.powScheme
-          .validate(newBlock.header)
-          .map(_ => newBlock) match {
-          case Success(newBlock) if sf.isInstanceOf[OrderingSolutionFound] =>
-            sendToNodeView(newBlock)
-            context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
-            StatusReply.success(())
-          case Success(_) if sf.isInstanceOf[InputSolutionFound] =>
-            log.info("Sub-block mined!")
+        sf match {
+          case _: OrderingSolutionFound =>
+            val newBlock = completeBlock(state.cache.get.candidateBlock, solution)
+            log.info(s"New block mined, header: ${newBlock.header}")
+            ergoSettings.chainSettings.powScheme
+              .validate(newBlock.header)
+              .map(_ => newBlock) match {
+              case Success(newBlock) =>
+                sendToNodeView(newBlock)
+                context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
+                StatusReply.success(())
+              case Failure(exception) =>
+                log.warn(s"Removing candidate due to invalid block", exception)
+                context.become(initialized(state.copy(cache = None)))
+                StatusReply.error(
+                  new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
+                )
+            }
+          case _: InputSolutionFound =>
+            log.info("Input=block mined!")
             StatusReply.error(
-              new Exception(s"Input block found!", new Exception())
-            )
-          case Failure(exception) =>
-            log.warn(s"Removing candidate due to invalid block", exception)
-            context.become(initialized(state.copy(cache = None)))
-            StatusReply.error(
-              new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
+              new Exception(s"Input block found!")
             )
         }
       }

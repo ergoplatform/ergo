@@ -62,6 +62,8 @@ class ErgoMiningThread(
       }
     case StatusReply.Error(ex) =>
       log.error(s"Accepting solution or preparing candidate did not succeed", ex)
+      context.become(mining(nonce + 1, candidateBlock, solvedBlocksCount))
+      self ! MineCmd
     case StatusReply.Success(()) =>
       log.info(s"Solution accepted")
       context.become(mining(nonce, candidateBlock, solvedBlocksCount + 1))

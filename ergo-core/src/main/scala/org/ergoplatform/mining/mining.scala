@@ -1,11 +1,37 @@
 package org.ergoplatform
 
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.mining.AutolykosSolution
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.header.Header
 import scorex.crypto.hash.Blake2b256
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.crypto.{BcDlogGroup, CryptoConstants}
+import sigma.crypto.{BcDlogGroup, CryptoConstants, EcPointType}
+import sigma.serialization.{GroupElementSerializer, SigmaSerializer}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
-import sigmastate.serialization.{GroupElementSerializer, SigmaSerializer}
+
+sealed trait ProveBlockResult
+
+case object NothingFound extends ProveBlockResult
+
+case class OrderingBlockFound(fb: ErgoFullBlock) extends ProveBlockResult
+
+case class OrderingBlockHeaderFound(h: Header) extends ProveBlockResult
+
+case class InputBlockFound(fb: ErgoFullBlock) extends ProveBlockResult
+
+case class InputBlockHeaderFound(h: Header) extends ProveBlockResult
+
+sealed trait BlockSolutionSearchResult
+
+case object NoSolutionFound extends BlockSolutionSearchResult
+
+sealed trait SolutionFound extends BlockSolutionSearchResult {
+  val as: AutolykosSolution
+}
+
+case class InputSolutionFound(override val as: AutolykosSolution) extends SolutionFound
+
+case class OrderingSolutionFound(override val as: AutolykosSolution) extends SolutionFound
 
 package object mining {
 
@@ -19,14 +45,14 @@ package object mining {
   // and also to obtain target in both Autolykos v1 and v2
   val q: BigInt = group.order
 
-  private val hashFn: NumericHash = new NumericHash(q)
+  private val modQHashFn: ModQHash = new ModQHash(q)
 
   /**
     * Hash function which output is in Zq. Used in Autolykos v.1
     * @param in - input (bit-string)
     * @return - output(in Zq)
     */
-  def hashModQ(in: Array[Byte]): BigInt = hashFn.hash(in)
+  def hashModQ(in: Array[Byte]): BigInt = modQHashFn.hash(in)
 
   /**
     * Convert byte array to unsigned integer

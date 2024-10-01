@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import org.ergoplatform.GlobalConstants
 import org.ergoplatform.nodeView.ErgoReadersHolder._
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -69,7 +68,7 @@ object ErgoReadersHolderRef {
 
   def apply(viewHolderRef: ActorRef)
            (implicit context: ActorRefFactory): ActorRef = {
-    val props = Props(new ErgoReadersHolder(viewHolderRef)).withDispatcher(GlobalConstants.ApiDispatcher)
+    val props = Props(new ErgoReadersHolder(viewHolderRef))
     context.actorOf(props)
   }
 

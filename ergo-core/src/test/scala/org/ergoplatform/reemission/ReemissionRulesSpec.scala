@@ -6,9 +6,9 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import sigma.Colls
-import sigmastate.AvlTreeData
-import sigmastate.TrivialProp.TrueProp
-import sigmastate.eval.Digest32Coll
+import sigma.ast.ErgoTree
+import sigma.data.TrivialProp.TrueProp
+import sigma.data.{AvlTreeData, Digest32Coll}
 import sigmastate.helpers.TestingHelpers.testBox
 import sigmastate.helpers.{ContextEnrichingTestProvingInterpreter, ErgoLikeContextTesting, ErgoLikeTestInterpreter}
 import sigmastate.interpreter.Interpreter.emptyEnv
@@ -152,7 +152,7 @@ class ReemissionRulesSpec extends ErgoCorePropertyTest {
 
     // merging with 1 box - successful case
     val newReemissionBox = new ErgoBoxCandidate(reemissionBox.value + mergedValue - feeValue, prop, currentHeight, reemissionBoxAssets)
-    val feeBox = new ErgoBoxCandidate(feeValue, TrueProp, currentHeight)
+    val feeBox = new ErgoBoxCandidate(feeValue, ErgoTree.fromSigmaBoolean(TrueProp), currentHeight)
     val spendingTransaction = ErgoLikeTransaction(inputs, IndexedSeq(newReemissionBox, feeBox))
 
     checkRewardsTx(currentHeight, pkBytes, inputBoxes, spendingTransaction, true)
@@ -167,7 +167,7 @@ class ReemissionRulesSpec extends ErgoCorePropertyTest {
 
     // paying too high fee
     val newReemissionBox3 = new ErgoBoxCandidate(reemissionBox.value + mergedValue - feeValue - 1, prop, currentHeight, reemissionBoxAssets)
-    val feeBox3 = new ErgoBoxCandidate(feeValue + 1, TrueProp, currentHeight)
+    val feeBox3 = new ErgoBoxCandidate(feeValue + 1, ErgoTree.fromSigmaBoolean(TrueProp), currentHeight)
     val spendingTransaction3 = ErgoLikeTransaction(inputs2, IndexedSeq(newReemissionBox3, feeBox3))
 
     checkRewardsTx(currentHeight, pkBytes, inputBoxes, spendingTransaction3, false)
@@ -181,7 +181,7 @@ class ReemissionRulesSpec extends ErgoCorePropertyTest {
     // reemission box value must be increased
     val feeValue5 = mergedValue
     val newReemissionBox5 = new ErgoBoxCandidate(reemissionBox.value + mergedValue - feeValue5, prop, currentHeight, reemissionBoxAssets)
-    val feeBox5 = new ErgoBoxCandidate(feeValue5, TrueProp, currentHeight)
+    val feeBox5 = new ErgoBoxCandidate(feeValue5, ErgoTree.fromSigmaBoolean(TrueProp), currentHeight)
     val spendingTransaction5 = ErgoLikeTransaction(inputs, IndexedSeq(newReemissionBox5, feeBox5))
     checkRewardsTx(currentHeight, pkBytes, inputBoxes, spendingTransaction5, false)
 

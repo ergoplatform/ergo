@@ -1,9 +1,10 @@
 package org.ergoplatform.mining
 
+import org.ergoplatform.{OrderingBlockHeaderFound, ProveBlockResult}
 import org.ergoplatform.modifiers.history.header.Header
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import sigmastate.crypto.CryptoConstants.EcPointType
+import sigma.crypto.EcPointType
 
 import scala.util.{Random, Success, Try}
 
@@ -25,15 +26,15 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
                      votes: Array[Byte],
                      sk: PrivateKey,
                      minNonce: Long = Long.MinValue,
-                     maxNonce: Long = Long.MaxValue): Option[Header] = {
+                     maxNonce: Long = Long.MaxValue): ProveBlockResult = {
     val (parentId, height) = AutolykosPowScheme.derivedHeaderFields(parentOpt)
     val pk: EcPointType = genPk(sk)
     val w: EcPointType = genPk(Random.nextLong())
     val n: Array[Byte] = Array.fill(8)(0: Byte)
     val d: BigInt = q / (height + 10)
     val s = AutolykosSolution(pk, w, n, d)
-    Some(Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, s, votes))
+    OrderingBlockHeaderFound(Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
+      nBits, height, extensionHash, s, votes, Array.emptyByteArray))
   }
 
   override def realDifficulty(header: Header): PrivateKey = header.requiredDifficulty

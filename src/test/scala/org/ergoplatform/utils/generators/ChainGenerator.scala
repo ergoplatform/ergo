@@ -1,6 +1,6 @@
 package org.ergoplatform.utils.generators
 
-import org.ergoplatform.Input
+import org.ergoplatform.{Input, OrderingBlockFound}
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
@@ -14,9 +14,8 @@ import org.ergoplatform.utils.BoxUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import sigma.Colls
-import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigma.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.Random
 
@@ -101,7 +100,7 @@ object ChainGenerator {
                  extensionHash: Digest32 = EmptyDigest32,
                  tsOpt: Option[Long] = None,
                  diffBitsOpt: Option[Long] = None,
-                 useRealTs: Boolean): Header =
+                 useRealTs: Boolean): Header = {
     powScheme.prove(
       prev,
       Header.InitialVersion,
@@ -114,7 +113,9 @@ object ChainGenerator {
       extensionHash,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
-    ).get
+    ).asInstanceOf[OrderingBlockFound]  // todo: fix
+    .fb.header
+  }
 
   def genChain(height: Int): Seq[ErgoFullBlock] =
     blockStream(None).take(height)
@@ -169,7 +170,8 @@ object ChainGenerator {
       validExtension,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
-    ).get
+    ).asInstanceOf[OrderingBlockFound]  // todo: fix
+      .fb
   }
 
   def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {

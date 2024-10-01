@@ -16,8 +16,7 @@ import scorex.util.ModifierId
 case class ProgressInfo[PM <: BlockSection](branchPoint: Option[ModifierId],
                                             toRemove: Seq[PM],
                                             toApply: Seq[PM],
-                                            toDownload: Seq[(NetworkObjectTypeId.Value, ModifierId)])
-                                           (implicit encoder: ScorexEncoder) {
+                                            toDownload: Seq[(NetworkObjectTypeId.Value, ModifierId)]) {
 
   if (toRemove.nonEmpty)
     require(branchPoint.isDefined, s"Branch point should be defined for non-empty `toRemove`")
@@ -25,7 +24,11 @@ case class ProgressInfo[PM <: BlockSection](branchPoint: Option[ModifierId],
   lazy val chainSwitchingNeeded: Boolean = toRemove.nonEmpty
 
   override def toString: String = {
-    s"ProgressInfo(BranchPoint: ${branchPoint.map(encoder.encodeId)}, " +
+    s"ProgressInfo(BranchPoint: ${branchPoint.map(ScorexEncoder.encodeId)}, " +
       s" to remove: ${toRemove.map(_.encodedId)}, to apply: ${toApply.map(_.encodedId)})"
   }
+}
+
+object ProgressInfo {
+  val empty = ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
 }

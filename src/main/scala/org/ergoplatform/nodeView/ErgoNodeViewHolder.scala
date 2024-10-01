@@ -19,13 +19,13 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
-import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.subblocks.SubBlockInfo
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -40,7 +40,7 @@ import scala.util.{Failure, Success, Try}
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings)
-  extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
+  extends Actor with ScorexLogging with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
 
@@ -230,7 +230,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (success@Success(updateInfo), modToApply) =>
         if (updateInfo.failedMod.isEmpty) {
           val chainTipOpt = history.estimatedTip()
-          updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
+          updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.blockSection, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 if (modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
@@ -240,7 +240,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
               }
             case Failure(e) =>
               log.warn(s"Invalid modifier! Typeid: ${modToApply.modifierTypeId} id: ${modToApply.id} ", e)
-              history.reportModifierIsInvalid(modToApply, progressInfo).map { case (newHis, newProgressInfo) =>
+              history.reportModifierIsInvalid(modToApply).map { case (newHis, newProgressInfo) =>
                 context.system.eventStream.publish(SemanticallyFailedModification(modToApply.modifierTypeId, modToApply.id, e))
                 UpdateInformation(newHis, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
               }
@@ -302,6 +302,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           updateNodeView(updatedHistory = Some(history()))
         }
       }
+
+    // subblocks related logic
+    case ProcessSubblock(sbi) =>
+      history().applySubBlockHeader(sbi)
+
+    case ProcessSubblockTransactions(std) =>
+      history().applySubBlockTransactions(std.subblockID, std.transactions)
   }
 
   /**
@@ -402,7 +409,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       .flatMap(extractTransactions)
       .filter(tx => !appliedTxs.exists(_.id == tx.id))
       .map(tx => UnconfirmedTransaction(tx, None))
-    memPool.remove(appliedTxs).put(rolledBackTxs)
+    memPool.removeWithDoubleSpends(appliedTxs).put(rolledBackTxs)
   }
 
   /**
@@ -573,7 +580,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.info("State and history are both empty on startup")
         Success(stateIn)
       case (stateId, Some(block), _) if stateId == block.id =>
-        log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
+        log.info(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
         Success(stateIn)
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
@@ -664,8 +671,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def processLocallyGeneratedModifiers: Receive = {
     case lm: LocallyGeneratedModifier =>
-      log.info(s"Got locally generated modifier ${lm.pmod.encodedId} of type ${lm.pmod.modifierTypeId}")
-      pmodModify(lm.pmod, local = true)
+      log.info(s"Got locally generated modifier ${lm.blockSection.encodedId} of type ${lm.blockSection.modifierTypeId}")
+      pmodModify(lm.blockSection, local = true)
   }
 
   protected def getCurrentInfo: Receive = {
@@ -718,6 +725,10 @@ object ErgoNodeViewHolder {
     // Modifiers received from the remote peer with new elements in it
     case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
 
+    /**
+      * Wrapper for a locally generated sub-block submitted via API
+      */
+    case class LocallyGeneratedSubBlock(sbi: SubBlockInfo)
 
     /**
       * Wrapper for a transaction submitted via API

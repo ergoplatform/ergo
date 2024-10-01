@@ -13,7 +13,7 @@ import scorex.util.serialization.{Reader, Writer}
  *
  * Payload of this message should be determined in underlying applications.
  */
-class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ErgoSerializer[SI]) extends MessageSpecV1[SI] {
+class SyncInfoMessageSpec[SI <: SyncInfo](serializer: ErgoSerializer[SI]) extends MessageSpecInitial[SI] {
 
   override val messageCode: MessageCode = 65: Byte
   override val messageName: String = "Sync"

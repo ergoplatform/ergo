@@ -6,12 +6,12 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.http.api.ApiCodecs
+import org.ergoplatform.mining.AutolykosSolution.pkForV2
 import org.ergoplatform.modifiers.history.header.Header.Version
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.crypto.CryptoConstants
-import sigmastate.crypto.CryptoConstants.EcPointType
+import sigma.crypto.{CryptoConstants, EcPointType}
 
 /**
   * Solution for an Autolykos PoW puzzle.
@@ -58,6 +58,31 @@ object AutolykosSolution extends ApiCodecs {
   }
 
 }
+
+case class WeakAutolykosSolution(pk: EcPointType, n: Array[Byte]) {
+  val encodedPk: Array[Byte] = groupElemToBytes(pk)
+}
+
+object WeakAutolykosSolution extends ApiCodecs {
+
+  implicit val jsonEncoder: Encoder[WeakAutolykosSolution] = { s: WeakAutolykosSolution =>
+    Map(
+      "pk" -> s.pk.asJson,
+      "n" -> Algos.encode(s.n).asJson
+    ).asJson
+  }
+
+  implicit val jsonDecoder: Decoder[WeakAutolykosSolution] = { c: HCursor =>
+    for {
+      pkOpt <- c.downField("pk").as[Option[EcPointType]]
+      n <- c.downField("n").as[Array[Byte]]
+    } yield {
+      WeakAutolykosSolution(pkOpt.getOrElse(pkForV2), n)
+    }
+  }
+
+}
+
 
 
 /**

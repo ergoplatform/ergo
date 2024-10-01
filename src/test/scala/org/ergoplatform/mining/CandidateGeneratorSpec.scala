@@ -16,11 +16,12 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, OrderingBlockFound}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
+import sigma.ast.ErgoTree
+import sigma.data.ProveDlog
 import org.scalatest.matchers.should.Matchers
-import sigmastate.crypto.DLogProtocol
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.concurrent.duration._
@@ -138,7 +139,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case StatusReply.Success(candidate: Candidate) =>
         defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+          .asInstanceOf[OrderingBlockFound]  // todo: fix
+          .fb
     }
 
     // now block should be cached
@@ -181,7 +183,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+          .asInstanceOf[OrderingBlockFound]  // todo: fix
+          .fb
         // let's pretend we are mining at least a bit so it is realistic
         expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
@@ -200,7 +203,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     // build new transaction that uses miner's reward as input
-    val prop: DLogProtocol.ProveDlog =
+    val prop: ProveDlog =
       DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
     val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
     val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
@@ -210,7 +213,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     val input = Input(rewardBox.id, emptyProverResult)
 
     val outputs = IndexedSeq(
-      new ErgoBoxCandidate(rewardBox.value, prop, readers.s.stateContext.currentHeight)
+      new ErgoBoxCandidate(rewardBox.value, ErgoTree.fromSigmaBoolean(prop), readers.s.stateContext.currentHeight)
     )
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
 
@@ -227,7 +230,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+          .asInstanceOf[OrderingBlockFound]  // todo: fix
+          .fb
         testProbe.expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
 

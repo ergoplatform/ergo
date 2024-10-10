@@ -4,8 +4,8 @@ import org.ergoplatform.ErgoBox.{BoxId, TokenId}
 import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.ADKey
 import scorex.util.ModifierId
-import sigmastate.eval.Digest32Coll
-import sigmastate.eval.Extensions.ArrayOps
+import sigma.data.Digest32Coll
+import sigma.Extensions.ArrayOps
 import supertagged.TaggedType
 
 object IdUtils {

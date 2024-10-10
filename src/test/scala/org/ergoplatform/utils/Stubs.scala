@@ -34,7 +34,7 @@ import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.utils.TestFileUtils
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.crypto.authds.ADDigest

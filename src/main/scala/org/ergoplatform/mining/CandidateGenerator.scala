@@ -24,7 +24,7 @@ import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Pa
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.subblocks.SubBlockInfo
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound, SubBlockAlgos}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
@@ -202,9 +202,12 @@ class CandidateGenerator(
                 )
             }
           case _: InputSolutionFound =>
-            log.info("Input=block mined!")
+            log.info("Input-block mined!")
+            val newBlock = completeBlock(state.cache.get.candidateBlock, solution)
+            val powValid = SubBlockAlgos.checkInputBlockPoW(newBlock.header)
+            // todo: check links? send to node view, update state
             StatusReply.error(
-              new Exception(s"Input block found!")
+              new Exception(s"Input block found! PoW valid: $powValid")
             )
         }
       }

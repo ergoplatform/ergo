@@ -72,6 +72,14 @@ object SubBlockAlgos {
     }
   }
 
+  def checkInputBlockPoW(header: Header): Boolean = {
+    val hit = powScheme.hitForVersion2(header) // todo: cache hit in header
+
+    val orderingTarget = powScheme.getB(header.nBits)
+    val inputTarget = orderingTarget * subsPerBlock
+    hit < inputTarget
+  }
+
   // messages:
   //
   // sub block signal:

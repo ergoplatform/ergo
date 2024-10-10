@@ -185,7 +185,7 @@ class CandidateGenerator(
       val result: StatusReply[Unit] = {
         sf match {
           case _: OrderingSolutionFound =>
-            val newBlock = completeBlock(state.cache.get.candidateBlock, solution)
+            val newBlock = completeOrderingBlock(state.cache.get.candidateBlock, solution)
             log.info(s"New block mined, header: ${newBlock.header}")
             ergoSettings.chainSettings.powScheme
               .validate(newBlock.header)
@@ -203,7 +203,7 @@ class CandidateGenerator(
             }
           case _: InputSolutionFound =>
             log.info("Input-block mined!")
-            val newBlock = completeBlock(state.cache.get.candidateBlock, solution)
+            val newBlock = completeInputBlock(state.cache.get.candidateBlock, solution)
             val powValid = SubBlockAlgos.checkInputBlockPoW(newBlock.header)
             // todo: check links? send to node view, update state
             StatusReply.error(
@@ -911,7 +911,15 @@ object CandidateGenerator extends ScorexLogging {
   /**
     * Assemble `ErgoFullBlock` using candidate block and provided pow solution.
     */
-  def completeBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
+  def completeOrderingBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
+    val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
+    val adProofs = ADProofs(header.id, candidate.adProofBytes)
+    val blockTransactions = BlockTransactions(header.id, candidate.version, candidate.transactions)
+    val extension = Extension(header.id, candidate.extension.fields)
+    new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
+  }
+
+  def completeInputBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
     val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
     val adProofs = ADProofs(header.id, candidate.adProofBytes)
     val blockTransactions = BlockTransactions(header.id, candidate.version, candidate.transactions)

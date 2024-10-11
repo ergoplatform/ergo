@@ -37,7 +37,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   override val route: Route = pathPrefix("script") {
     toStrictEntity(10.seconds) {
-      p2shAddressR ~
+      // p2shAddressR ~
         p2sAddressR ~
         addressToTreeR ~
         addressToBytesR ~
@@ -84,6 +84,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
+  /*
   def p2shAddressR: Route = (path("p2shAddress") & post & source) { source =>
     withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
       compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(
@@ -91,7 +92,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         address => ApiResponse(addressResponse(address))
       )
     }
-  }
+  } */
 
   def executeWithContextR: Route =
     (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>

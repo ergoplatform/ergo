@@ -196,46 +196,6 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
 
   }
 
-  property("should break up fee inputs into multiple transactions if there are too many") {
-    val bh = boxesHolderGen.sample.get
-    val us = createUtxoState(bh,parameters)
-    val height = us.stateContext.currentHeight
-    
-    // Generate a large number of fee boxes
-    val feeBoxes= (1 to 1000).map(_ =>
-      val value = Gen.choose(1,100).sample.get(100L, 10000L).sample.get
-      createBox(value,feeProp, creationHeight = Some(height))
-    )
-
-    // Create transactions spending these fee boxes
-    val feeTransactions = feeBoxes.map { box =>
-    val input = Input(box.id, ProverResult.empty)
-    val output = new ErgoBoxCandidate(box.value, feeProp, height)
-    new ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
-
-    val txs = CandidateGenerator.collectFees(height, feeTransactions, defaultMinerPk, emptyStateContext).toSeq
-
-    // check that multiple transactions were created
-    txs.length shouldBe > (1)
-
-    // check that each transacton does not exceed a reasonable input limit
-    val maxInputsPerTx = 100 
-    txs.foreach { tx =>
-      tx.inputs.size should be <= maxInputsPerTx
-    }
-
-    // Check that all fee inputs were collected
-    val collectedInputs = txs.flatMap(_.inputs).map(_.boxId).toSet
-    val originalInputs = feeTransactions.flatMap(_.inputs).map(_.boxId).toSet
-    collectedInputs should equal(originalInputs)
-  }
-
-  // Check that all outputs go to the miner
-  txs.flatMap(_.outputs).foreach { output =>
-    output.propositionBytes shouldEqual expectedRewardOutputScriptBytes(defaultMinerPk)
-  }
-  }
-
   property("should not be able to spend recent fee boxes") {
 
     val delta          = 1

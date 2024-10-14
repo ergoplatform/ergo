@@ -78,7 +78,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   def p2sAddressR: Route = (path("p2sAddress") & post & source) { source =>
     withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext)) { case (addrsF, sc) =>
       onSuccess(addrsF) { addrs =>
-        VersionContext.withVersions((sc.blockVersion - 1).toByte, 0) {
+        VersionContext.withVersions((sc.blockVersion - 1).toByte, 1) {
           // todo: treeVersion == 1 is used here, revisit, likely 0 should be default for now
           compileSource(source, keysToEnv(addrs.map(_.pubkey)), 1).map(Pay2SAddress.apply).fold(
             e => BadRequest(e.getMessage),

@@ -21,12 +21,14 @@ import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigma.{Colls, VersionContext}
 import sigma.ast.ErgoTree.DefaultHeader
-import sigma.ast.{AND, ErgoTree, TrueLeaf}
+import sigma.ast.{AND, ErgoTree, SBoolean, SSigmaProp, TrueLeaf, Value}
+import sigma.compiler.{CompilerResult, SigmaCompiler}
+import sigma.compiler.ir.CompiletimeIRContext
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigma.serialization.ErgoTreeSerializer.DefaultSerializer
 import sigmastate.helpers.TestingHelpers._
 
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
 
@@ -485,17 +487,32 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
     }
   }
 
-  property("Execution of 6.0 Ergoscript reducing to false") {
+  private def compileSource(source: String, version: Byte) = {
+    VersionContext.withVersions(version, 1) {
+      val compiler = new SigmaCompiler(16.toByte)
+      val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(1.toByte)
+      val ergoTree = Try(compiler.compile(Map.empty, source)(new CompiletimeIRContext)).flatMap {
+        case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
+          Success(ErgoTree.fromProposition(ergoTreeHeader, script))
+        case CompilerResult(_, _, _, script: Value[SBoolean.type@unchecked]) if script.tpe == SBoolean =>
+          Success(ErgoTree.fromProposition(ergoTreeHeader, script.toSigmaProp))
+        case other =>
+          Failure(new Exception(s"Source compilation result is of type ${other.buildTree.tpe}, but `SBoolean` expected"))
+      }.get
+      ergoTree
+    }
+  }
 
+  private def compileSourceV6(source: String) = compileSource(source, 3)
+
+  property("Execution of 6.0 Ergoscript") {
     val protocolVersion = 4.toByte
     val params = new Parameters(0, DevnetLaunchParameters.parametersTable.updated(123, protocolVersion), ErgoValidationSettingsUpdate.empty)
 
     val stateContext = emptyStateContext.copy(currentParameters = params)(chainSettings)
     stateContext.blockVersion shouldBe protocolVersion
 
-    val ergoTree = (VersionContext.withVersions(3, 1) {
-      DefaultSerializer.deserializeErgoTree(Base16.decode("1b130206022edf0580fcf622d193db060873007301").get)
-    })
+    val ergoTree = compileSourceV6("sigmaProp(Global.serialize(2).size > 0)")
 
     ergoTree.root.isRight shouldBe true // parsed
 
@@ -509,8 +526,58 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
     val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
 
     val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
+    f.isSuccess shouldBe true
+  }
+
+  property("Execution of 6.0 Ergoscript reducing to false") {
+
+    val protocolVersion = 4.toByte
+    val params = new Parameters(0, DevnetLaunchParameters.parametersTable.updated(123, protocolVersion), ErgoValidationSettingsUpdate.empty)
+
+    val stateContext = emptyStateContext.copy(currentParameters = params)(chainSettings)
+    stateContext.blockVersion shouldBe protocolVersion
+
+    val ergoTree = compileSourceV6("sigmaProp(Global.serialize(2).size <= 0)")
+
+    ergoTree.root.isRight shouldBe true // parsed todo: check unparsed String execution
+
+    val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
+      Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+      0, 0)
+    val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+
+    val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
+
+    val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
+
+    val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
     f.isSuccess shouldBe false
-    f.failed.get.getMessage.endsWith("#0 => Success((false,6))") shouldBe true
+    f.failed.get.getMessage.contains("#0 => Success((false,") shouldBe true
+  }
+
+  property("6.0 execution of unparsed Ergoscript reducing to false") {
+
+    val protocolVersion = 4.toByte
+    val params = new Parameters(0, DevnetLaunchParameters.parametersTable.updated(123, protocolVersion), ErgoValidationSettingsUpdate.empty)
+
+    val stateContext = emptyStateContext.copy(currentParameters = params)(chainSettings)
+    stateContext.blockVersion shouldBe protocolVersion
+
+    val ergoTree = DefaultSerializer.deserializeErgoTree(Base16.decode("1b130206022edf0580fcf622d193db060873007301").get)
+
+    ergoTree.root.isRight shouldBe false
+
+    val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
+      Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+      0, 0)
+    val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+
+    val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
+
+    val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
+
+    val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
+    f.isSuccess shouldBe false
   }
 
 }

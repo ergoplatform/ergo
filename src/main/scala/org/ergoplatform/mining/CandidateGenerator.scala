@@ -58,9 +58,9 @@ class CandidateGenerator(
   }
 
   /** Send solved block to local blockchain controller */
-  private def sendToNodeView(newBlock: ErgoFullBlock): Unit = {
+  private def sendOrderingToNodeView(newBlock: ErgoFullBlock): Unit = {
     log.info(
-      s"New block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
+      s"New ordering block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
     )
     viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
     val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
@@ -69,6 +69,12 @@ class CandidateGenerator(
       newBlock.mandatoryBlockSections
     }
     sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
+  }
+
+  private def sendInputToNodeView(newBlock: ErgoFullBlock): Unit = {
+    log.info(
+      s"New input block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
+    )
   }
 
   override def receive: Receive = {
@@ -188,10 +194,10 @@ class CandidateGenerator(
             val newBlock = completeOrderingBlock(state.cache.get.candidateBlock, solution)
             log.info(s"New block mined, header: ${newBlock.header}")
             ergoSettings.chainSettings.powScheme
-              .validate(newBlock.header)
+              .validate(newBlock.header)  // check header PoW only
               .map(_ => newBlock) match {
               case Success(newBlock) =>
-                sendToNodeView(newBlock)
+                sendOrderingToNodeView(newBlock)
                 context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
                 StatusReply.success(())
               case Failure(exception) =>
@@ -206,6 +212,7 @@ class CandidateGenerator(
             val newBlock = completeInputBlock(state.cache.get.candidateBlock, solution)
             val powValid = SubBlockAlgos.checkInputBlockPoW(newBlock.header)
             // todo: check links? send to node view, update state
+            sendInputToNodeView(newBlock)
             StatusReply.error(
               new Exception(s"Input block found! PoW valid: $powValid")
             )

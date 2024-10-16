@@ -15,11 +15,11 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransacti
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.{LocallyGeneratedInputBlock, LocallyGeneratedOrderingBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.subblocks.SubBlockInfo
@@ -57,24 +57,20 @@ class CandidateGenerator(
     readersHolderRef ! GetReaders
   }
 
-  /** Send solved block to local blockchain controller */
+  /** Send solved ordering block to processing */
   private def sendOrderingToNodeView(newBlock: ErgoFullBlock): Unit = {
     log.info(
       s"New ordering block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
     )
-    viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
-    val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
-      newBlock.blockSections
-    } else {
-      newBlock.mandatoryBlockSections
-    }
-    sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
+    viewHolderRef ! LocallyGeneratedOrderingBlock(newBlock)
   }
 
+  /** Send solved input block to processing */
   private def sendInputToNodeView(newBlock: ErgoFullBlock): Unit = {
     log.info(
       s"New input block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
     )
+    viewHolderRef ! LocallyGeneratedInputBlock(newBlock)
   }
 
   override def receive: Receive = {
@@ -211,7 +207,8 @@ class CandidateGenerator(
             log.info("Input-block mined!")
             val newBlock = completeInputBlock(state.cache.get.candidateBlock, solution)
             val powValid = SubBlockAlgos.checkInputBlockPoW(newBlock.header)
-            // todo: check links? send to node view, update state
+            // todo: check links?
+            // todo: update candidate generator state
             sendInputToNodeView(newBlock)
             StatusReply.error(
               new Exception(s"Input block found! PoW valid: $powValid")

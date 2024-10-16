@@ -670,9 +670,23 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def processLocallyGeneratedModifiers: Receive = {
-    case lm: LocallyGeneratedModifier =>
+    case lm: LocallyGeneratedBlockSection =>
       log.info(s"Got locally generated modifier ${lm.blockSection.encodedId} of type ${lm.blockSection.modifierTypeId}")
       pmodModify(lm.blockSection, local = true)
+    case LocallyGeneratedOrderingBlock(efb) =>
+      log.info(s"Got locally generated ordering block ${efb.id}")
+      pmodModify(efb.header, local = true)
+      val sectionsToApply = if (settings.nodeSettings.stateType == StateType.Digest) {
+        efb.blockSections
+      } else {
+        efb.mandatoryBlockSections
+      }
+      sectionsToApply.foreach { section =>
+        pmodModify(section, local = true)
+      }
+    case LocallyGeneratedInputBlock(efb) =>
+      log.info(s"Got locally generated input block ${efb.id}")
+      // todo: real processing
   }
 
   protected def getCurrentInfo: Receive = {

@@ -5,4 +5,4 @@ import org.ergoplatform.modifiers.BlockSection
 /**
   * Wrapper for locally generated block section
   */
-case class LocallyGeneratedModifier(blockSection: BlockSection)
+case class LocallyGeneratedBlockSection(blockSection: BlockSection)

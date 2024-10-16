@@ -13,7 +13,7 @@ import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperation
 import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.core._
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import org.ergoplatform.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
@@ -108,7 +108,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   private def applyFullBlock(fb: ErgoFullBlock, estimatedTip: Option[Height])
-                            (generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = {
+                            (generate: LocallyGeneratedBlockSection => Unit): Try[UtxoState] = {
     val keepVersions = ergoSettings.nodeSettings.keepVersions
 
     // avoid storing versioned information in the database when block being processed is behind
@@ -192,7 +192,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           if (fb.adProofs.isEmpty) {
             if (fb.height >= estimatedTip.getOrElse(Int.MaxValue) - ergoSettings.nodeSettings.adProofsSuffixLength) {
               val adProofs = ADProofs(fb.header.id, proofBytes)
-              generate(LocallyGeneratedModifier(adProofs))
+              generate(LocallyGeneratedBlockSection(adProofs))
             }
           }
 
@@ -213,7 +213,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   override def applyModifier(mod: BlockSection, estimatedTip: Option[Height])
-                            (generate: LocallyGeneratedModifier => Unit): Try[UtxoState] = mod match {
+                            (generate: LocallyGeneratedBlockSection => Unit): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock => applyFullBlock(fb, estimatedTip)(generate)
 
     case bs: BlockSection =>

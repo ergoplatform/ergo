@@ -12,7 +12,7 @@ import scala.util.{Failure, Success, Try}
 trait EmptyBlockSectionProcessor extends BlockSectionProcessor {
 
   override protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] =
-    Success(ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty))
+    Success(ProgressInfo.empty)
 
   override protected def validate(m: NonHeaderBlockSection): Try[Unit] =
     Failure(new Error("Regime that does not support block sections processing"))

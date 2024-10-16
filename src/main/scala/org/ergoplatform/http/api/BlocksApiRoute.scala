@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.BadRequest
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32
@@ -127,9 +127,9 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     if (ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess) {
       log.info("Received a new valid block through the API: " + block)
 
-      viewHolderRef ! LocallyGeneratedModifier(block.header)
+      viewHolderRef ! LocallyGeneratedBlockSection(block.header)
       block.blockSections.foreach {
-        viewHolderRef ! LocallyGeneratedModifier(_)
+        viewHolderRef ! LocallyGeneratedBlockSection(_)
       }
 
       ApiResponse.OK

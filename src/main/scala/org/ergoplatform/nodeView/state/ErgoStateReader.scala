@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.{ErgoBox, NodeViewComponent}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -69,7 +69,7 @@ object ErgoStateReader extends ScorexLogging {
       .flatMap(b => ErgoStateContextSerializer(settings.chainSettings).parseBytesTry(b).toOption)
       .getOrElse {
         log.warn("Can't read blockchain parameters from database")
-        ErgoStateContext.empty(settings.chainSettings, LaunchParameters)
+        ErgoStateContext.empty(settings.chainSettings, settings.launchParameters)
       }
   }
 
@@ -94,7 +94,7 @@ object ErgoStateReader extends ScorexLogging {
       if (lastHeaders.size != Constants.LastHeadersInContext) {
         Failure(new Exception(s"Only ${lastHeaders.size} headers found in reconstructStateContextBeforeEpoch"))
       } else {
-        val empty = ErgoStateContext.empty(settings.chainSettings, LaunchParameters)
+        val empty = ErgoStateContext.empty(settings.chainSettings, settings.launchParameters)
         val esc = new ErgoStateContext( lastHeaders,
                                         None,
                                         empty.genesisStateDigest,

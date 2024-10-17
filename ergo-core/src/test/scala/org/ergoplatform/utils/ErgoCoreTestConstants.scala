@@ -41,7 +41,7 @@ object ErgoCoreTestConstants extends ScorexLogging {
   implicit val validationSettingsNoIl: ErgoValidationSettings = validationSettings
     .updated(ErgoValidationSettingsUpdate(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty), Seq()))
 
-  val parameters: Parameters = LaunchParameters
+  val parameters: Parameters = MainnetLaunchParameters
   val nipopowAlgos = new NipopowAlgos(chainSettings)
 
   val emission: EmissionRules = chainSettings.emissionRules

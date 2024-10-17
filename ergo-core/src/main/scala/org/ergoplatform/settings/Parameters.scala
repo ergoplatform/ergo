@@ -131,7 +131,13 @@ class Parameters(val height: Height,
     if (softForkStartingHeight.nonEmpty
       && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs)
       && softForkApproved(votes)) {
-      table = table.updated(BlockVersion, table(BlockVersion) + 1)
+      val newVersion = table(BlockVersion) + 1
+
+      // insert sub-blocks per block parameter on block version v4 (protocol v6) activation
+      if (newVersion == 4) {
+        table = table.updated(SubblocksPerBlockIncrease, SubblocksPerBlockDefault)
+      }
+      table = table.updated(BlockVersion, newVersion)
       activatedUpdate = proposedUpdate
     }
 

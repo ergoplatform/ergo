@@ -47,6 +47,7 @@ object RocksDBFactory extends ScorexLogging {
       lock.writeLock().lock()
       try {
         map.remove(path)
+        impl.syncWal()
         impl.close()
         open.set(false)
       } finally {
@@ -57,8 +58,8 @@ object RocksDBFactory extends ScorexLogging {
 
   private val normalOptions: Options =  new Options()
     .setCreateIfMissing(true)
-    .setWriteBufferSize(32 * SizeUnit.MB)
     .setAllowMmapReads(true)
+    .setAtomicFlush(true)
     .setIncreaseParallelism(4)
     .setCompressionType(CompressionType.LZ4_COMPRESSION)
     .setCompactionStyle(CompactionStyle.LEVEL)

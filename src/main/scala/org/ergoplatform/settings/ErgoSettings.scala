@@ -29,6 +29,14 @@ case class ErgoSettings(directory: String,
         .toOption
     }
 
+  def launchParameters: Parameters = {
+    if (networkType == NetworkType.DevNet) {
+      DevnetLaunchParameters
+    } else {
+      MainnetLaunchParameters
+    }
+  }
+
 }
 
 object ErgoSettings {

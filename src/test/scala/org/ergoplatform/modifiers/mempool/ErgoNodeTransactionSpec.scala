@@ -90,9 +90,9 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
   property("monotonic creation height") {
     def stateContext(height: Int, blockVersion: Byte): ErgoStateContext = {
       val header = defaultHeaderGen.sample.get.copy(version = blockVersion, height = height)
-      val params = Parameters(LaunchParameters.height,
-                              LaunchParameters.parametersTable.updated(Parameters.BlockVersion, blockVersion),
-                              LaunchParameters.proposedUpdate)
+      val params = Parameters(MainnetLaunchParameters.height,
+                              MainnetLaunchParameters.parametersTable.updated(Parameters.BlockVersion, blockVersion),
+                              MainnetLaunchParameters.proposedUpdate)
       new ErgoStateContext(Seq(header), None, genesisStateDigest, params, ErgoValidationSettings.initial,
         VotingData.empty)(settings.chainSettings)
     }
@@ -496,7 +496,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
   property("Soft-forked execution of Ergoscript containing unknown methods") {
 
     val activatedVersion = 3.toByte
-    val params = new Parameters(0, LaunchParameters.parametersTable.updated(123, activatedVersion + 1), ErgoValidationSettingsUpdate.empty)
+    val params = new Parameters(0, MainnetLaunchParameters.parametersTable.updated(123, activatedVersion + 1), ErgoValidationSettingsUpdate.empty)
 
     // for next version, rule 1011 should be replaced , otherwise transaction validation will fail
     // in this test, the rule is replaced with self, but for real activation this choice should be revised

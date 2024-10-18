@@ -13,6 +13,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
+import org.ergoplatform.network.message.subblocks.SubBlockTransactionsData
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.{LocallyGeneratedInputBlock, LocallyGeneratedOrderingBlock}
@@ -66,11 +67,11 @@ class CandidateGenerator(
   }
 
   /** Send solved input block to processing */
-  private def sendInputToNodeView(newBlock: ErgoFullBlock): Unit = {
+  private def sendInputToNodeView(sbi: SubBlockInfo, sbt: SubBlockTransactionsData): Unit = {
     log.info(
-      s"New input block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
+      s"New input block ${sbi.subBlock.id} w. nonce ${Longs.fromByteArray(sbi.subBlock.powSolution.n)}"
     )
-    viewHolderRef ! LocallyGeneratedInputBlock(newBlock)
+    viewHolderRef ! LocallyGeneratedInputBlock(sbi, sbt)
   }
 
   override def receive: Receive = {
@@ -209,7 +210,10 @@ class CandidateGenerator(
             val powValid = SubBlockAlgos.checkInputBlockPoW(newBlock.header)
             // todo: check links?
             // todo: update candidate generator state
-            sendInputToNodeView(newBlock)
+            // todo: form and send real data
+            val sbi: SubBlockInfo = null
+            val sbt : SubBlockTransactionsData = null
+            sendInputToNodeView(sbi, sbt)
             StatusReply.error(
               new Exception(s"Input block found! PoW valid: $powValid")
             )

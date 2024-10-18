@@ -684,9 +684,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       sectionsToApply.foreach { section =>
         pmodModify(section, local = true)
       }
-    case LocallyGeneratedInputBlock(efb) =>
-      log.info(s"Got locally generated input block ${efb.id}")
-      // todo: real processing
+    case LocallyGeneratedInputBlock(sbi, sbt) =>
+      log.info(s"Got locally generated input block ${sbi.subBlock.id}")
+      history().applySubBlockHeader(sbi)
+      history().applySubBlockTransactions(sbi.subBlock.id, sbt.transactions)
+      // todo: finish processing
   }
 
   protected def getCurrentInfo: Receive = {

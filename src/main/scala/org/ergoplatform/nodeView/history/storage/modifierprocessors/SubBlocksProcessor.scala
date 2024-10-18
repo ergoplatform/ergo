@@ -8,7 +8,11 @@ import scala.collection.mutable
 
 trait SubBlocksProcessor extends ScorexLogging {
 
+  /**
+    * Pointer to a best input-block known
+    */
   var _bestSubblock: Option[SubBlockInfo] = None
+
   val subBlockRecords = mutable.Map[ModifierId, SubBlockInfo]()
   val subBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
 

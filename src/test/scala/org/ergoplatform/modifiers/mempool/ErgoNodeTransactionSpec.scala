@@ -506,27 +506,43 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
   private def compileSourceV6(source: String) = compileSource(source, 3)
 
   property("Execution of 6.0 Ergoscript") {
-    val protocolVersion = 4.toByte
-    val params = new Parameters(0, DevnetLaunchParameters.parametersTable.updated(123, protocolVersion), ErgoValidationSettingsUpdate.empty)
+    val scripts = Array(
+      "sigmaProp(Global.serialize(2).size > 0)",
+      """{
+        | val b = 1.toByte
+        | b.toBits == Coll(false, false, false, false, false, false, false, true)
+        |}""".stripMargin,
+      """{
+        |  val b = bigInt("-1")
+        |  val m = unsignedBigInt("5")
+        |  val ub = b.toUnsignedMod(m)
+        |  ub >= 0
+        | } """.stripMargin
+    )
 
-    val stateContext = emptyStateContext.copy(currentParameters = params)(chainSettings)
-    stateContext.blockVersion shouldBe protocolVersion
+    scripts.foreach { script =>
+      val protocolVersion = 4.toByte
+      val params = new Parameters(0, DevnetLaunchParameters.parametersTable.updated(123, protocolVersion), ErgoValidationSettingsUpdate.empty)
 
-    val ergoTree = compileSourceV6("sigmaProp(Global.serialize(2).size > 0)")
+      val stateContext = emptyStateContext.copy(currentParameters = params)(chainSettings)
+      stateContext.blockVersion shouldBe protocolVersion
 
-    ergoTree.root.isRight shouldBe true // parsed
+      val ergoTree = compileSourceV6(script)
 
-    val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
-      Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
-      0, 0)
-    val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      ergoTree.root.isRight shouldBe true // parsed
 
-    val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
+      val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
+        Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+        0, 0)
+      val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
-    val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
+      val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
 
-    val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
-    f.isSuccess shouldBe true
+      val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
+
+      val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
+      f.isSuccess shouldBe true
+    }
   }
 
   property("Execution of 6.0 Ergoscript reducing to false") {
@@ -539,7 +555,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
 
     val ergoTree = compileSourceV6("sigmaProp(Global.serialize(2).size <= 0)")
 
-    ergoTree.root.isRight shouldBe true // parsed todo: check unparsed String execution
+    ergoTree.root.isRight shouldBe true // parsed
 
     val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
       Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",

@@ -17,7 +17,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.validation.ValidationResult.Valid
 import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
 import org.ergoplatform.core.{VersionTag, idToVersion}
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
@@ -53,7 +53,7 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
     * @param generate function that handles newly created modifier as a result of application the current one
     * @return new State
     */
-  def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[IState]
+  def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedBlockSection => Unit): Try[IState]
 
   def rollbackTo(version: VersionTag): Try[IState]
 

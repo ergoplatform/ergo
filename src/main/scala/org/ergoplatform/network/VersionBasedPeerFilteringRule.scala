@@ -40,7 +40,7 @@ trait VersionBasedPeerFilteringRule extends PeerFilteringRule {
     * @return - whether the peer should be selected
     */
   override def condition(peer: ConnectedPeer): Boolean = {
-    val version = peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
+    val version = peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.Eip37ForkVersion)
     condition(version)
   }
 
@@ -83,7 +83,7 @@ object NipopowSupportFilter extends PeerFilteringRule {
     * @return - whether the peer should be selected
     */
   override def condition(peer: ConnectedPeer): Boolean = {
-    val version = peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
+    val version = peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.Eip37ForkVersion)
 
     peer.mode.flatMap(_.nipopowBootstrapped).isEmpty &&
       version.compare(Version.NipopowActivationVersion) >= 0

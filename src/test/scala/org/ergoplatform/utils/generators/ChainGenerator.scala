@@ -1,6 +1,6 @@
 package org.ergoplatform.utils.generators
 
-import org.ergoplatform.Input
+import org.ergoplatform.{Input, OrderingBlockFound}
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
@@ -100,7 +100,7 @@ object ChainGenerator {
                  extensionHash: Digest32 = EmptyDigest32,
                  tsOpt: Option[Long] = None,
                  diffBitsOpt: Option[Long] = None,
-                 useRealTs: Boolean): Header =
+                 useRealTs: Boolean): Header = {
     powScheme.prove(
       prev,
       Header.InitialVersion,
@@ -113,7 +113,9 @@ object ChainGenerator {
       extensionHash,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
-    ).get
+    ).asInstanceOf[OrderingBlockFound]  // todo: fix
+    .fb.header
+  }
 
   def genChain(height: Int): Seq[ErgoFullBlock] =
     blockStream(None).take(height)
@@ -168,7 +170,8 @@ object ChainGenerator {
       validExtension,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
-    ).get
+    ).asInstanceOf[OrderingBlockFound]  // todo: fix
+      .fb
   }
 
   def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {

@@ -9,9 +9,8 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTyp
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.{EmptyHistoryHeight, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, HeadersProcessor}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, HeadersProcessor, SubBlocksProcessor}
 import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
-import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 
@@ -27,8 +26,8 @@ trait ErgoHistoryReader
     with ContainsModifiers[BlockSection]
     with HeadersProcessor
     with BlockSectionProcessor
-    with ScorexLogging
-    with ScorexEncoding {
+    with SubBlocksProcessor
+    with ScorexLogging {
 
   type ModifierIds = Seq[(NetworkObjectTypeId.Value, ModifierId)]
 

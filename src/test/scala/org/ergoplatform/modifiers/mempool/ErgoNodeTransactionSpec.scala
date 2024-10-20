@@ -505,22 +505,23 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
 
   private def compileSourceV6(source: String) = compileSource(source, 3)
 
-  property("Execution of 6.0 Ergoscript") {
-    val scripts = Array(
-      "sigmaProp(Global.serialize(2).size > 0)",
-      """{
-        | val b = 1.toByte
-        | b.toBits == Coll(false, false, false, false, false, false, false, true)
-        |}""".stripMargin,
-      """{
-        |  val b = bigInt("-1")
-        |  val m = unsignedBigInt("5")
-        |  val ub = b.toUnsignedMod(m)
-        |  ub >= 0
-        | } """.stripMargin
-    )
+  private val v60scripts = Array(
+    "sigmaProp(Global.serialize(2).size > 0)",
+    """{
+      | val b = 1.toByte
+      | b.toBits == Coll(false, false, false, false, false, false, false, true)
+      |}""".stripMargin,
+    """{
+      |  val b = bigInt("-1")
+      |  val m = unsignedBigInt("5")
+      |  val ub = b.toUnsignedMod(m)
+      |  ub >= 0
+      | } """.stripMargin
+  )
 
-    scripts.foreach { script =>
+  property("Execution of 6.0 Ergoscript") {
+
+    v60scripts.foreach { script =>
       val protocolVersion = 4.toByte
       val params = new Parameters(0, DevnetLaunchParameters.parametersTable.updated(123, protocolVersion), ErgoValidationSettingsUpdate.empty)
 
@@ -595,5 +596,4 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
     val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
     f.isSuccess shouldBe false
   }
-
 }

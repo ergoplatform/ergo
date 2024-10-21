@@ -497,7 +497,8 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
     val trees = Array(
       "1b130206022edf0580fcf622d193db060873007301", // contains SBigInt.nbits
       "19110204040400d191b1dc6a03dd0173007301", // sigmaProp(Global.serialize(2).size > 0)
-      "1916030601ff090105090100d192dc061473000173017302" // { val b = bigInt("-1"); val m = unsignedBigInt("5"); val ub = b.toUnsignedMod(m); ub >= 0 }
+      "1916030601ff090105090100d192dc061473000173017302", // { val b = bigInt("-1"); val m = unsignedBigInt("5"); val ub = b.toUnsignedMod(m); ub >= 0 }
+    "190d00d193db0207e4e30102850880" // { val b = getVar[Byte](1).get; b.toBits == Coll(false, false, false, false, false, false, false, true) }
       // todo: scripts with optional / Header values
     )
 
@@ -530,9 +531,5 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
       utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver).isSuccess shouldBe true
     }
   }
-
-  // todo: make script for
-  //  "190b010d0880d1937300850880", // { val b = 1.toByte; b.toBits == Coll(false, false, false, false, false, false, false, true) }
-  // which is successfully parsed
-
+  
 }

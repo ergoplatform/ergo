@@ -143,7 +143,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     * @param id             - hash of the (ergotree) address
     * @param spendOrReceive - IndexedErgoBox to receive (Right) or spend (Left)
     */
-  private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[IndexedErgoBox, IndexedErgoBox])(implicit state: IndexerState): Unit = {
+  private def findAndUpdateTree(id: ModifierId, spendOrReceive: Either[IndexedErgoBox, IndexedErgoBox])(state: IndexerState): Unit = {
     trees.get(id).map { tree =>
       spendOrReceive match {
         case Left(iEb) => tree.addTx(state.globalTxIndex).spendBox(iEb, Some(history)) // spend box

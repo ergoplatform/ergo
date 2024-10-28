@@ -198,7 +198,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   /**
     * Write buffered indexes to database and clear buffers.
     */
-  private def saveProgress(state: IndexerState, writeLog: Boolean = true): Unit = {
+  private def saveProgress(state: IndexerState): Unit = {
 
     val start: Long = System.currentTimeMillis
 
@@ -225,9 +225,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       ((((general ++= boxes.values) ++= trees.values) ++= tokens.values) ++= segments.values).toArray
     )
 
-    if (writeLog) {
-      log.info(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
-    }
+    log.debug(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
 
     // clear buffers for next batch
     general.clear()
@@ -257,7 +255,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     val txs: Seq[ErgoTransaction] = btOpt.get.txs
 
     var boxCount: Int = 0
-    implicit var newState: IndexerState = state
+    var newState: IndexerState = state
 
     // record transactions and boxes
     cfor(0)(_ < txs.length, _ + 1) { n =>
@@ -274,7 +272,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           val boxId = bytesToId(tx.inputs(i).boxId)
           if (findAndSpendBox(boxId, tx.id, height)) { // spend box and add tx
             val iEb = boxes(boxId)
-            findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))
+            findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))(state)
             cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
               findAndUpdateToken(iEb.box.additionalTokens(j)._1.toModifierId, Left(iEb))
             }
@@ -291,7 +289,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         outputs(i) = iEb.globalIndex
 
         // box by address
-        findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))
+        findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))(state)
 
         // check if box is creating new tokens, if yes record them
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
@@ -335,7 +333,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
     var newState: IndexerState = state
 
-    saveProgress(newState, writeLog = false)
+    saveProgress(newState)
     log.info(s"Rolling back indexes from ${state.indexedHeight} to $height")
 
     try {
@@ -396,7 +394,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       // Save changes
       newState = newState.copy(indexedHeight = height, rollbackTo = 0, caughtUp = true)
       historyStorage.removeExtra(toRemove.toArray)
-      saveProgress(newState, writeLog = false)
+      saveProgress(newState)
     } catch {
       case t: Throwable => log.error(s"removeAfter during rollback failed due to: ${t.getMessage}", t)
     }

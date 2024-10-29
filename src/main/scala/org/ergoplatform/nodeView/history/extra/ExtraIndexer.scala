@@ -86,7 +86,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     * @param height - blockheight to get transations from
     * @return transactions at height
     */
-  private def getBlockTransactionsAt(height: Int): Option[BlockTransactions] =
+  private def getBlockTransactionsAt(height: Int): Option[BlockTransactions] = {
     blockCache.remove(height).orElse(history.bestBlockTransactionsAt(height)).map { txs =>
       if (height % 1000 == 0) blockCache.keySet.filter(_ < height).map(blockCache.remove)
       if (readingUpTo - height < 300 && chainHeight - height > 1000) {
@@ -112,6 +112,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       }
       txs
     }
+  }
 
   /**
     * Spend an IndexedErgoBox from buffer or database. Also record tokens for later use in balance tracking logic.
@@ -239,7 +240,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     * Process a batch of BlockTransactions into memory and occasionally write them to database.
     *
     * @param state     - current indexer state
-    * @param headerOpt - header to index blocktransactions of (used after caught up with chain)
+    * @param headerOpt - header to index block transactions of (used after caught up with chain)
     */
   protected def index(state: IndexerState, headerOpt: Option[Header] = None): IndexerState = {
     val btOpt = headerOpt.flatMap { header =>
@@ -267,7 +268,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       inputTokens.clear()
 
       //process transaction inputs
-      if (height != 1) { //only after 1st block (skip genesis box)
+      if (height > 1) { //only after 1st block (skip genesis box)
         cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
           val boxId = bytesToId(tx.inputs(i).boxId)
           if (findAndSpendBox(boxId, tx.id, height)) { // spend box and add tx
@@ -277,6 +278,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
               findAndUpdateToken(iEb.box.additionalTokens(j)._1.toModifierId, Left(iEb))
             }
             inputs(i) = iEb.globalIndex
+          } else {
+            log.warn(s"Not found input box: $boxId")
           }
         }
       }

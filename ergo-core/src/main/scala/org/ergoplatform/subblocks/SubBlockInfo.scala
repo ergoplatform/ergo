@@ -38,7 +38,7 @@ case class SubBlockInfo(version: Byte,
 
 object SubBlockInfo {
 
-  val initialMessageVersion = 1
+  val initialMessageVersion = 1.toByte
 
   private val bmp = new BatchMerkleProofSerializer[Digest32, CryptographicHash[Digest32]]()(Blake2b256)
 

@@ -26,6 +26,7 @@ import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.subblocks.SubBlockInfo
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound, SubBlockAlgos}
+import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
@@ -211,7 +212,12 @@ class CandidateGenerator(
             // todo: check links?
             // todo: update candidate generator state
             // todo: form and send real data
-            val sbi: SubBlockInfo = null
+
+            val prevSubBlockId: Option[Array[Byte]] = null
+            val subblockTransactionsDigest: Digest32 = null
+            val merkleProof: BatchMerkleProof[Digest32] = null
+
+            val sbi: SubBlockInfo = SubBlockInfo(SubBlockInfo.initialMessageVersion, newBlock.header, prevSubBlockId, subblockTransactionsDigest, merkleProof)
             val sbt : SubBlockTransactionsData = null
             sendInputToNodeView(sbi, sbt)
             StatusReply.error(

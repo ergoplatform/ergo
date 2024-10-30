@@ -250,8 +250,7 @@ object CandidateGenerator extends ScorexLogging {
   case class Candidate(
     candidateBlock: CandidateBlock,
     externalVersion: WorkMessage,
-    txsToInclude: Seq[ErgoTransaction],
-    subBlock: Boolean
+    txsToInclude: Seq[ErgoTransaction]
   )
 
   case class GenerateCandidate(
@@ -583,7 +582,7 @@ object CandidateGenerator extends ScorexLogging {
             s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
           )
           Success(
-            Candidate(candidate, ext, prioritizedTransactions, subBlock = false) -> eliminateTransactions
+            Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions
           )
         case Failure(t: Throwable) =>
           // We can not produce a block for some reason, so print out an error
@@ -612,8 +611,7 @@ object CandidateGenerator extends ScorexLogging {
                   Candidate(
                     candidate,
                     deriveWorkMessage(candidate),
-                    prioritizedTransactions,
-                    subBlock = false
+                    prioritizedTransactions
                   ) -> eliminateTransactions
               }
             case None =>

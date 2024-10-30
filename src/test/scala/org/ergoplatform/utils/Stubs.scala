@@ -113,7 +113,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
     def receive: Receive = {
       case CandidateGenerator.GenerateCandidate(_, reply) =>
         if (reply) {
-          val candidate = Candidate(null, externalWorkMessage, Seq.empty, subBlock = false) // API does not use CandidateBlock
+          val candidate = Candidate(null, externalWorkMessage, Seq.empty) // API does not use CandidateBlock
           sender() ! StatusReply.success(candidate)
         }
       case _: AutolykosSolution => sender() ! StatusReply.success(())

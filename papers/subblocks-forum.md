@@ -10,7 +10,7 @@ thus we have blockchain like
 
 (ordering) block - input block - input block - input block - (ordering) block - input block - input block - (ordering) block
 
-* transactions are broken into two classes, for first one result of transaction validation can't change from one input block to other , for the second, validation result can vary (this is true for transactions relying on block timestamp, miner pubkey, timestamp).
+* transactions are broken into two classes, for first one result of transaction validation can't change from one input block to other , for the second, validation result can vary (this is true for transactions relying on block timestamp, miner pubkey).
 * only transactions of the first class (about 99% of all transactions normally) can be included in input (sub) blocks only. Transactions of the second class can be included in both kinds of blocks.
 * as a miner does not know in advance, he is preparing for both options by:
     - setting Merkle tree root of the block header to transactions seen in the last input block and before that (since the last ordering block) plus new second-class transactions

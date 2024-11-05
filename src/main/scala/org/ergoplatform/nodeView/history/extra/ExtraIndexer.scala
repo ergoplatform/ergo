@@ -330,7 +330,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     * Remove all indexes after a given height and revert address balances.
     *
     * @param state  - current state of indexer
-    * @param height - starting height
+    * @param height - forking height (height of last common block)
     */
   private def removeAfter(state: IndexerState, height: Int): IndexerState = {
 

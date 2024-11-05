@@ -26,7 +26,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
   val HEIGHT: Int = 50
   val BRANCHPOINT: Int = HEIGHT / 2
-  implicit val segmentThreshold: Int = 8
+  implicit val segmentThreshold: Int = 16
 
   val system: ActorSystem = ActorSystem.create("indexer-test")
   val indexer: ActorRef = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))

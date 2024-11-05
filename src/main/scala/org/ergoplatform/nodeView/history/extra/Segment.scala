@@ -175,7 +175,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param offset        - number of items to skip from the start
    * @param limit         - max number of item to be returned
    * @param segmentCount  - number of segments of the parent address
-   * @param array         - the indexes already in memory
+   * @param arr         - the indexes already in memory
    * @param idOf          - function to calculate segment ids, either [[txSegmentId]] or [[boxSegmentId]]
    * @param arraySelector - function to select index array from retreived segments
    * @param retrieve      - function to retrieve indexes from database

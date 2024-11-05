@@ -2,11 +2,13 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.http.api.SortDirection
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FullBlockApplied, Rollback}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.Index
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.SegmentSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.util.{ModifierId, bytesToId}
@@ -26,7 +28,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
   val HEIGHT: Int = 50
   val BRANCHPOINT: Int = HEIGHT / 2
-  implicit val segmentThreshold: Int = 16
+  implicit val segmentThreshold: Int = 8
 
   val system: ActorSystem = ActorSystem.create("indexer-test")
   val indexer: ActorRef = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))
@@ -186,6 +188,12 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     // address balances
     checkAddresses(addresses) shouldBe 0
 
+    addresses.keys.foreach { addr =>
+      val utxos = history.typedExtraIndexById[IndexedErgoAddress](addr).get
+        .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, false, Set.empty)
+      utxos.exists(_.isSpent) shouldBe false
+    }
+
     // token indexes
     checkTokens(indexedTokens) shouldBe 0
 
@@ -236,6 +244,12 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     // check boxes after caught up
     cfor(0)(_ < boxIndexBefore, _ + 1) { boxNum =>
       history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(boxNum))) shouldNot be(empty)
+    }
+
+    addresses2.keys.foreach { addr =>
+      val utxos = history.typedExtraIndexById[IndexedErgoAddress](addr).get
+        .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, false, Set.empty)
+      utxos.exists(_.isSpent) shouldBe false
     }
   }
 }

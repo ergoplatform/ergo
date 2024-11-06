@@ -249,6 +249,13 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     addresses2.keys.foreach { addr =>
       val utxos = history.typedExtraIndexById[IndexedErgoAddress](addr).get
         .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, false, Set.empty)
+      val trees = utxos.map(_.box.ergoTree).map(hashErgoTree)
+      trees.forall(_ == addr) shouldBe true
+    }
+
+    addresses2.keys.foreach { addr =>
+      val utxos = history.typedExtraIndexById[IndexedErgoAddress](addr).get
+        .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, false, Set.empty)
       utxos.exists(_.isSpent) shouldBe false
     }
   }

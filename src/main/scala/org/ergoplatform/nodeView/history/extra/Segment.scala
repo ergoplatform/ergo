@@ -40,7 +40,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
   /**
    * Internal segment buffer
    */
-  private[extra] val buffer: mutable.HashMap[ModifierId,T] = new mutable.HashMap[ModifierId,T]
+  private[extra] val buffer: mutable.HashMap[ModifierId, T] = new mutable.HashMap[ModifierId, T]
 
   /**
    * Number of segments in database containing box numbers
@@ -81,13 +81,11 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
         val mid = (low + high) >>> 1
         segmentId = boxSegmentId(parentId, mid)
         buffer.get(segmentId).orElse(history.typedExtraIndexById[T](idMod(segmentId))).foreach { segment =>
-          if(abs(segment.boxes.head) < boxNumAbs &&
-            abs(segment.boxes.last) < boxNumAbs)
+          if (abs(segment.boxes.head) < boxNumAbs && abs(segment.boxes.last) < boxNumAbs) {
             low = mid + 1
-          else if(abs(segment.boxes.head) > boxNumAbs &&
-            abs(segment.boxes.last) > boxNumAbs)
+          } else if (abs(segment.boxes.head) > boxNumAbs && abs(segment.boxes.last) > boxNumAbs) {
             high = mid - 1
-          else {
+          } else {
             low = high + 1 // break
             buffer.put(segmentId, segment)
           }

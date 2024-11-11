@@ -206,12 +206,14 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     // perform segmentation on big addresses and save their internal segment buffer
     trees.values.foreach { tree =>
       tree.buffer.values.foreach(seg => segments.put(seg.id, seg))
+      tree.buffer.clear()
       tree.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 
     // perform segmentation on big tokens and save their internal segment buffer
     tokens.values.foreach { token =>
       token.buffer.values.foreach(seg => segments.put(seg.id, seg))
+      token.buffer.clear()
       token.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 
@@ -593,7 +595,9 @@ object ExtraIndexer {
       0
     }))
 
-  def getIndex(key: Array[Byte], history: ErgoHistoryReader): ByteBuffer = getIndex(key, history.historyStorage)
+  def getIndex(key: Array[Byte], history: ErgoHistoryReader): ByteBuffer = {
+    getIndex(key, history.historyStorage)
+  }
 
   def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {
     val props = Props.create(classOf[ExtraIndexer], cacheSettings, chainSettings.addressEncoder)

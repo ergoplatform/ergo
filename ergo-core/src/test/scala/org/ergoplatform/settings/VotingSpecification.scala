@@ -3,7 +3,7 @@ package org.ergoplatform.settings
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
-import org.ergoplatform.settings.ValidationRules.rulesSpec
+import org.ergoplatform.settings.ValidationRules.{exEmpty, exIlEncoding, exIlStructure, exIlUnableToValidate, rulesSpec}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import sigma.validation.{DisabledRule, ReplacedRule, ValidationException}
 import org.ergoplatform.validation.{ValidationRules => VR}
@@ -81,8 +81,8 @@ class VotingSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("voting for non-existing parameter") {
-    val p: Parameters = Parameters(2, Map(BlockVersion -> 0), proposedUpdate)
+  property("voting for non-existing parameter - before block version V4") {
+    val p: Parameters = Parameters(2, Map(BlockVersion -> 3), proposedUpdate)
     val vr: VotingData = VotingData.empty
     val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
     val invalidVote = 100: Byte
@@ -95,6 +95,35 @@ class VotingSpecification extends ErgoCorePropertyTest {
     // proposing a vote for non-existing param is not allowed
     val h2 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
     esc2.appendHeader(h2).toEither.left.get.getMessage.contains("Incorrect vote") shouldBe true
+
+    // proposing a vote for non-existing param is not allowed
+
+    val votes2 = Array(StorageFeeFactorDecrease, NoParameter, NoParameter)
+    val h22 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes2, version = 0: Byte)
+    esc2.appendHeader(h22).toEither.left.get.getMessage.contains("Incorrect vote") shouldBe true
+  }
+
+  property("voting for non-existing parameter - on and after block version V4") {
+    val p: Parameters = Parameters(2, Map(BlockVersion -> 4), proposedUpdate)
+    val vr: VotingData = VotingData.empty
+    val validationSettingsNoIl: ErgoValidationSettings = validationSettings
+      .updated(ErgoValidationSettingsUpdate(Seq(ValidationRules.hdrVotesUnknown), Seq()))
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
+    val invalidVote = 100: Byte
+    val votes = Array(invalidVote , NoParameter, NoParameter)
+
+    // voting for non-existing param is okay if not start of an epoch
+    val h = defaultHeaderGen.sample.get.copy(height = 1, votes = votes, version = 0: Byte)
+    val esc2 = esc.appendHeader(h).get
+
+    // proposing a vote for non-existing param is not allowed
+    val h2 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
+    esc2.appendHeader(h2).toEither.toOption.isDefined shouldBe true
+
+    // proposing a vote for decreasing param is not allowed
+    val votes2 = Array(StorageFeeFactorDecrease, NoParameter, NoParameter)
+    val h22 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes2, version = 0: Byte)
+    esc2.appendHeader(h2).toEither.toOption.isDefined shouldBe true
   }
 
   //Simple checks for votes in header could be found also in NonVerifyADHistorySpecification("Header votes")
@@ -121,6 +150,32 @@ class VotingSpecification extends ErgoCorePropertyTest {
     val p4 = Parameters(4, Map(StorageFeeFactorIncrease -> (kInit + Parameters.StorageFeeFactorStep), BlockVersion -> 0), proposedUpdate)
     val esc41 = process(esc31, p4, he.copy(height = 4)).get
     esc41.currentParameters.storageFeeFactor shouldBe (kInit + Parameters.StorageFeeFactorStep)
+  }
+
+  //Simple checks for votes in header could be found also in NonVerifyADHistorySpecification("Header votes")
+  property("simple voting - decrease - start - conditions") {
+    val kInit = 1000000
+
+    val p: Parameters = Parameters(2, Map(StorageFeeFactorIncrease -> kInit, BlockVersion -> 0), proposedUpdate)
+    val vr: VotingData = VotingData.empty
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
+    val votes = Array(StorageFeeFactorDecrease, NoParameter, NoParameter)
+    val h = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
+    val esc2 = process(esc, p, h).get
+
+    //no quorum gathered - no parameter change
+    val he = defaultHeaderGen.sample.get.copy(votes = Array.fill(3)(NoParameter), version = 0: Byte)
+    val esc30 = process(esc2, p, he).get
+    val esc40 = process(esc30, p, he).get
+    esc40.currentParameters.storageFeeFactor shouldBe kInit
+
+    //quorum gathered - parameter change
+    val esc31 = process(esc2, p, h.copy(height = 3)).get
+    esc31.votingData.epochVotes.find(_._1 == StorageFeeFactorDecrease).get._2 shouldBe 2
+
+    val p4 = Parameters(4, Map(StorageFeeFactorIncrease -> (kInit - Parameters.StorageFeeFactorStep), BlockVersion -> 0), proposedUpdate)
+    val esc41 = process(esc31, p4, he.copy(height = 4)).get
+    esc41.currentParameters.storageFeeFactor shouldBe (kInit - Parameters.StorageFeeFactorStep)
   }
 
   /**

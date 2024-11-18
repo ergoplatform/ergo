@@ -66,6 +66,11 @@ class Parameters(val height: Height,
     */
   lazy val maxBlockCost: Int = parametersTable(MaxBlockCostIncrease)
 
+  /**
+    * Max total computation cost of a block.
+    */
+  lazy val subBlocksPerBlock: Int = parametersTable(SubblocksPerBlockIncrease)
+
   lazy val softForkStartingHeight: Option[Height] = parametersTable.get(SoftForkStartingHeight)
   lazy val softForkVotesCollected: Option[Int] = parametersTable.get(SoftForkVotesCollected)
 
@@ -126,7 +131,13 @@ class Parameters(val height: Height,
     if (softForkStartingHeight.nonEmpty
       && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs)
       && softForkApproved(votes)) {
-      table = table.updated(BlockVersion, table(BlockVersion) + 1)
+      val newVersion = table(BlockVersion) + 1
+
+      // insert sub-blocks per block parameter on block version v4 (protocol v6) activation
+      if (newVersion == 4) {
+        table = table.updated(SubblocksPerBlockIncrease, SubblocksPerBlockDefault)
+      }
+      table = table.updated(BlockVersion, newVersion)
       activatedUpdate = proposedUpdate
     }
 
@@ -264,6 +275,14 @@ object Parameters {
   val OutputCostIncrease: Byte = 8
   val OutputCostDecrease: Byte = (-OutputCostIncrease).toByte
 
+  // added in protocol v6.0 (block version 4.0)
+  val SubblocksPerBlockIncrease: Byte = 9
+  val SubblocksPerBlockDecrease: Byte = (-SubblocksPerBlockIncrease).toByte
+
+  val SubblocksPerBlockDefault: Int = 30
+  val SubblocksPerBlockStep: Int = 1
+  val SubblocksPerBlockMin: Int = 2
+  val SubblocksPerBlockMax: Int = 2048 //0.00001 Erg
 
   val StorageFeeFactorDefault: Int = 1250000
   val StorageFeeFactorMax: Int = 2500000
@@ -298,7 +317,8 @@ object Parameters {
     OutputCostIncrease -> OutputCostDefault,
     MaxBlockSizeIncrease -> MaxBlockSizeDefault,
     MaxBlockCostIncrease -> MaxBlockCostDefault,
-    BlockVersion -> 1
+    BlockVersion -> 1,
+    SubblocksPerBlockIncrease -> SubblocksPerBlockDefault
   )
 
   val parametersDescs: Map[Byte, String] = Map(
@@ -315,19 +335,22 @@ object Parameters {
 
   val stepsTable: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorStep,
-    MinValuePerByteIncrease -> MinValueStep
+    MinValuePerByteIncrease -> MinValueStep,
+    SubblocksPerBlockIncrease -> SubblocksPerBlockStep
   )
 
   val minValues: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorMin,
     MinValuePerByteIncrease -> MinValueMin,
     MaxBlockSizeIncrease -> MaxBlockSizeMin,
-    MaxBlockCostIncrease -> 16 * 1024
+    MaxBlockCostIncrease -> 16 * 1024,
+    SubblocksPerBlockIncrease -> SubblocksPerBlockMin
   )
 
   val maxValues: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorMax,
-    MinValuePerByteIncrease -> MinValueMax
+    MinValuePerByteIncrease -> MinValueMax,
+    SubblocksPerBlockIncrease -> SubblocksPerBlockMax
   )
 
   val ParamVotesCount = 2
@@ -418,7 +441,8 @@ object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
       "tokenAccessCost" -> p.tokenAccessCost.asJson,
       "inputCost" -> p.inputCost.asJson,
       "dataInputCost" -> p.dataInputCost.asJson,
-      "outputCost" -> p.outputCost.asJson
+      "outputCost" -> p.outputCost.asJson,
+      "subblocksPerBlock" -> p.subBlocksPerBlock.asJson
     ).asJson
   }
 

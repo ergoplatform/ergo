@@ -362,7 +362,7 @@ object CandidateGenerator extends ScorexLogging {
           // 1007 is needed to switch off primitive type validation to add Unsigned Big Int support
           // 1008 is needed to switch off non-primitive type validation to add Option & Header types support
           // 1011 is needed to add new methods
-          Seq(1011.toShort -> ReplacedRule(1011), 1008.toShort -> ReplacedRule(1008), 1007.toShort -> ReplacedRule(1007)))
+          Seq(1011.toShort -> ReplacedRule(1016), 1007.toShort -> ReplacedRule(1017), 1008.toShort -> ReplacedRule(1018)))
       } else {
         ergoSettings.votingTargets.desiredUpdate
       }

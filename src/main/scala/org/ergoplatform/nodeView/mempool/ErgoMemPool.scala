@@ -97,7 +97,6 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
   def put(txs: TraversableOnce[UnconfirmedTransaction]): ErgoMemPool = {
     txs.foldLeft(this) { case (acc, tx) => acc.put(tx) }
-    this
   }
 
   private def updateStatsOnRemoval(tx: ErgoTransaction): MemPoolStatistics = {

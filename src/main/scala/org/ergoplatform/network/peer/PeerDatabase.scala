@@ -1,6 +1,5 @@
 package org.ergoplatform.network.peer
 
-import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import java.io.{
   ByteArrayInputStream,
   ByteArrayOutputStream,

@@ -177,7 +177,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   /** Post list of unconfirmed transaction ids and check if they are in the mempool */
   def getUnconfirmedTxsByIdsR: Route = 
-    (pathPrefix("unconfirmed" / "transactionIds") & post & entity(as[Json])) { txIds =>
+    (pathPrefix("unconfirmed" / "byTransactionIds") & post & entity(as[Json])) { txIds =>
       txIds.as[List[String]] match {
         case Left(ex) =>
           ApiError(StatusCodes.BadRequest, ex.getMessage())

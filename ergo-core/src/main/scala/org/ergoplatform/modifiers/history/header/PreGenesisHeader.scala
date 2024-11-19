@@ -18,6 +18,7 @@ object PreGenesisHeader extends Header(
   extensionRoot = null,
   powSolution = null,
   votes = null,
+  unparsedBytes = Array.emptyByteArray,
   sizeOpt = None) {
 
   override def serializedId: Array[Byte] = idToBytes(Header.GenesisParentId)

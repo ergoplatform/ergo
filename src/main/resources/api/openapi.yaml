@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.22"
+  version: "5.0.25"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1301,6 +1301,15 @@ components:
           items:
             type: string
             description: hex-encoded serialized box bytes
+
+    PrivateKeyRequest:
+          description: Request for getting a secret corresponding to wallet address
+          type: object
+          required:
+            - address
+          properties:
+            address:
+              $ref: '#/components/schemas/ErgoAddress'
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
@@ -4933,7 +4942,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ErgoAddress"
+              $ref: "#/components/schemas/PrivateKeyRequest"
       responses:
         '200':
           description: Successfully retrieved secret key
@@ -6695,7 +6704,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-
+  /blockchain/tokens:
+    post:
+      summary: Retrieve minting information about a list of tokens
+      operationId: getTokensByIds
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                description: Token ID
+      responses:
+        '200':
+          description: Array of tokens with the provided IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexedToken'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /blockchain/balance:
     post:
       summary: Retrieve confirmed and unconfirmed balance of an address

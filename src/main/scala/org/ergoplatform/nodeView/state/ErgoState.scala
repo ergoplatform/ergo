@@ -126,6 +126,7 @@ object ErgoState extends ScorexLogging {
           case Success(box) =>
             collectBoxesById(remainingBoxIds, resultingBoxes.map(_ += box))
           case Failure(ex) =>
+            println("box not found")
             Failure(ex)
         }
       }

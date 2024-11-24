@@ -1,21 +1,23 @@
 package org.ergoplatform.nodeView.state
 
+import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.{Args, ErgoSettingsReader}
-import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
+import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest, ErgoStateContextHelpers, RandomWrapper}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalacheck.Gen
-import org.ergoplatform.core.bytesToVersion
-import org.ergoplatform.validation.ValidationResult.Valid
+import org.ergoplatform.core.{bytesToId, bytesToVersion}
+import org.ergoplatform.settings.Constants.TrueTree
+import org.ergoplatform.validation.ValidationResult.{Invalid, Valid}
 import scorex.db.ByteArrayWrapper
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}
 
-class ErgoStateSpecification extends ErgoCorePropertyTest {
+class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpers with ErgoStateContextHelpers {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
@@ -192,4 +194,39 @@ class ErgoStateSpecification extends ErgoCorePropertyTest {
     // no transactions are valid
     assert(ErgoState.execTransactions(Seq.empty, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))).isValid)
   }
+
+  property("ErgoState.execTransactions() - invalid 6.0 spending after 6.0 activation") {
+    val sc = stateContext(1, 4, settings)
+
+    val bx = new ErgoBoxCandidate(1000000000L, TrueTree, 0).toBox(bytesToId(Array.fill(32)(0.toByte)), 0)
+    val tx1 = validTransactionFromBoxes(IndexedSeq(bx), outputsProposition = TrueTree)
+
+    val ergoTree = compileSourceV6("sigmaProp(Global.serialize(2).size <= 0)")
+
+    val tx2 = validTransactionFromBoxes(tx1.outputs, outputsProposition = ergoTree)
+
+    val tx3 = validTransactionFromBoxes(tx2.outputs, outputsProposition = TrueTree)
+
+    val txs = IndexedSeq(tx1, tx2, tx3)
+
+    val boxes = (IndexedSeq(bx) ++ txs.flatMap(_.outputs)).map(o => ByteArrayWrapper(o.id) -> o).toMap
+
+    val execRes = ErgoState.execTransactions(txs, sc, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id))))
+    execRes.isInstanceOf[Invalid] shouldBe true
+    execRes.asInstanceOf[Invalid].errors.head.message.startsWith("Scripts of all transaction inputs should pass verification") shouldBe true
+
+    val ergoTree2 = compileSourceV6("sigmaProp(Global.serialize(2).size > 0)")
+
+    val tx22 = validTransactionFromBoxes(tx1.outputs, outputsProposition = ergoTree2)
+
+    val tx32 = validTransactionFromBoxes(tx22.outputs, outputsProposition = TrueTree)
+
+    val txs2 = IndexedSeq(tx1, tx22, tx32)
+
+    val boxes2 = (IndexedSeq(bx) ++ txs2.flatMap(_.outputs)).map(o => ByteArrayWrapper(o.id) -> o).toMap
+
+    val execRes2 = ErgoState.execTransactions(txs2, sc, settings.nodeSettings)(id => Try(boxes2(ByteArrayWrapper(id))))
+    execRes2.isInstanceOf[Valid[_]] shouldBe true
+  }
+
 }

@@ -49,11 +49,13 @@ object ValidBlocksGenerators
     validTransactionsFromBoxes(sizeLimit, stateBoxesIn, Seq(), rnd)
   }
 
-  /** @param sizeLimit maximum transactions size in bytes */
+  /** @param sizeLimit maximum transactions size in bytes
+    * @return generated transactions and unspent outputs
+    * */
   def validTransactionsFromBoxes(sizeLimit: Int,
-                                           stateBoxesIn: Seq[ErgoBox],
-                                           dataBoxesIn: Seq[ErgoBox],
-                                           rnd: RandomLike): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+                                 stateBoxesIn: Seq[ErgoBox],
+                                 dataBoxesIn: Seq[ErgoBox],
+                                 rnd: RandomLike): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     var createdEmissionBox: Seq[ErgoBox] = Seq()
 
     @tailrec

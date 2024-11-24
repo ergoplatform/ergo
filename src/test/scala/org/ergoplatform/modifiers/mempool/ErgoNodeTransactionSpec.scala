@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.mempool
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest, ErgoStateContextHelpers}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.util.{ModifierId, bytesToId}
@@ -19,18 +19,16 @@ import org.scalacheck.Gen
 import sigma.util.BenchmarkUtil
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import sigma.{Colls, VersionContext}
+import sigma.Colls
 import sigma.ast.ErgoTree.DefaultHeader
-import sigma.ast.{AND, ErgoTree, SBoolean, SSigmaProp, TrueLeaf, Value}
-import sigma.compiler.{CompilerResult, SigmaCompiler}
-import sigma.compiler.ir.CompiletimeIRContext
+import sigma.ast.{AND, ErgoTree, TrueLeaf}
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigma.serialization.ErgoTreeSerializer.DefaultSerializer
 import sigmastate.helpers.TestingHelpers._
 
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Random, Try}
 
-class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
+class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelpers with ErgoStateContextHelpers {
 
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -89,18 +87,6 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
   }
 
   property("monotonic creation height") {
-    def stateContext(height: Int, blockVersion: Byte): ErgoStateContext = {
-      val header = defaultHeaderGen.sample.get.copy(version = blockVersion, height = height)
-      val params = Parameters(MainnetLaunchParameters.height,
-        MainnetLaunchParameters.parametersTable.updated(Parameters.BlockVersion, blockVersion),
-        MainnetLaunchParameters.proposedUpdate)
-      new ErgoStateContext(Seq(header), None, genesisStateDigest, params, ErgoValidationSettings.initial,
-        VotingData.empty)(settings.chainSettings)
-    }
-
-    def stateContextForTx(tx: ErgoTransaction, blockVersion: Byte): ErgoStateContext = {
-      stateContext(tx.outputs.map(_.creationHeight).max, blockVersion)
-    }
 
     def updateOutputHeight(box: ErgoBoxCandidate, value: Int): ErgoBoxCandidate = {
       new ErgoBoxCandidate(box.value, box.ergoTree, value, box.additionalTokens, box.additionalRegisters)
@@ -140,14 +126,14 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
 
     forAll(txGen) { case (boxes, tx, fixed) =>
       // with initial block version == 1, monotonic rule does not work
-      tx.statefulValidity(boxes, IndexedSeq.empty, stateContextForTx(tx, blockVersion = 1)).isSuccess shouldBe true
+      tx.statefulValidity(boxes, IndexedSeq.empty, stateContextForTx(tx, blockVersion = 1, settings)).isSuccess shouldBe true
 
       // with pre-5.0 block version == 2, monotonic rule does not work as well
-      tx.statefulValidity(boxes, IndexedSeq.empty, stateContextForTx(tx, blockVersion = 2)).isSuccess shouldBe true
+      tx.statefulValidity(boxes, IndexedSeq.empty, stateContextForTx(tx, blockVersion = 2, settings)).isSuccess shouldBe true
 
       // starting from block version == 3, monotonic rule works,
       // so validation fails if transaction is not following the rule (fixed == false)
-      val ctx3 = stateContextForTx(tx, blockVersion = 3)
+      val ctx3 = stateContextForTx(tx, blockVersion = 3, settings)
       if (fixed) {
         tx.statefulValidity(boxes, IndexedSeq.empty, ctx3).isSuccess shouldBe true
       } else {
@@ -487,24 +473,6 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
     }
   }
 
-  private def compileSource(source: String, version: Byte) = {
-    VersionContext.withVersions(version, 1) {
-      val compiler = new SigmaCompiler(16.toByte)
-      val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(1.toByte)
-      val ergoTree = Try(compiler.compile(Map.empty, source)(new CompiletimeIRContext)).flatMap {
-        case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
-          Success(ErgoTree.fromProposition(ergoTreeHeader, script))
-        case CompilerResult(_, _, _, script: Value[SBoolean.type@unchecked]) if script.tpe == SBoolean =>
-          Success(ErgoTree.fromProposition(ergoTreeHeader, script.toSigmaProp))
-        case other =>
-          Failure(new Exception(s"Source compilation result is of type ${other.buildTree.tpe}, but `SBoolean` expected"))
-      }.get
-      ergoTree
-    }
-  }
-
-  private def compileSourceV6(source: String) = compileSource(source, 3)
-
   private val v60scripts = Array(
     "sigmaProp(Global.serialize(2).size > 0)",
     """{
@@ -596,4 +564,5 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
     val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
     f.isSuccess shouldBe false
   }
+
 }

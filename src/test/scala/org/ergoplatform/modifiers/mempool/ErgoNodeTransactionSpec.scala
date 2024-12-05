@@ -504,19 +504,17 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
 
       ergoTree.root.isRight shouldBe true // parsed
 
-      // VersionContext.withVersions(stateContext.blockVersion, 1) {
-        val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
+      val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
           Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
           0, 0)
-        val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
-        val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
+      val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
 
-        val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
+      val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
 
-        val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
-        f.isSuccess shouldBe true
-     //  }
+      val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
+      f.isSuccess shouldBe true
     }
   }
 

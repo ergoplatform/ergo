@@ -18,6 +18,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.Extensions._
+import sigma.VersionContext
 
 import scala.annotation.nowarn
 import scala.collection.mutable
@@ -170,8 +171,12 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
       txCount = r.getUInt().toIntExact
     }
 
-    val txs = (1 to txCount).map { _ =>
-      ErgoTransactionSerializer.parse(r)
+    val txs: IndexedSeq[ErgoTransaction] = {
+      VersionContext.withScriptVersion(VersionContext.fromBlockVersion(blockVersion).activatedVersion) {
+        (1 to txCount).map { _ =>
+          ErgoTransactionSerializer.parse(r)
+        }
+      }
     }
     BlockTransactions(headerId, blockVersion, txs, Some(r.position - startPos))
   }

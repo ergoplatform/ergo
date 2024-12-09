@@ -9,8 +9,8 @@ import scala.util.{Failure, Success, Try}
 
 trait ErgoCompilerHelpers {
 
-  private def compileSource(source: String, version: Byte) = {
-    VersionContext.withVersions(version, 1) {
+  private def compileSource(source: String, scriptVersion: Byte) = {
+    VersionContext.withScriptVersion(scriptVersion) {
       val compiler = new SigmaCompiler(16.toByte)
       val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(1.toByte)
       val ergoTree = Try(compiler.compile(Map.empty, source)(new CompiletimeIRContext)).flatMap {

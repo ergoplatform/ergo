@@ -7,6 +7,7 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
+import sigma.VersionContext
 
 /**
   * Transaction stored in the wallet.
@@ -57,7 +58,9 @@ object WalletTransactionSerializer extends ErgoSerializer[WalletTransaction] {
     }
 
     val txBytesLen = r.getUInt().toIntExact
-    val tx = ErgoTransactionSerializer.parseBytes(r.getBytes(txBytesLen))
+    val tx = (VersionContext.withScriptVersion(VersionContext.MaxSupportedScriptVersion) {
+      ErgoTransactionSerializer.parseBytes(r.getBytes(txBytesLen))
+    })
     WalletTransaction(tx, inclusionHeight, scanIds)
   }
 

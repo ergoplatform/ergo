@@ -566,7 +566,6 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
 
     val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
-    println(f)
     f.isSuccess shouldBe false
   }
 

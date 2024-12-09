@@ -146,7 +146,9 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
     }
     w.putUInt(bt.txs.size.toLong)
     bt.txs.foreach { tx =>
-      ErgoTransactionSerializer.serialize(tx, w)
+      VersionContext.withScriptVersion(VersionContext.V6SoftForkVersion) {
+        ErgoTransactionSerializer.serialize(tx, w)
+      }
     }
   }
 

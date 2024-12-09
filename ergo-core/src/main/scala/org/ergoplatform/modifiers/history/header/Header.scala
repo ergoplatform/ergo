@@ -145,6 +145,18 @@ object Header extends ApiCodecs {
     */
   val Interpreter60Version: Byte = 4
 
+  // todo: pass NetworkType, not String
+  def interpreter60VersionActivationHeight(networkTypeName: String): Int = {
+    if(networkTypeName == "mainnet") {
+      ???  // todo: set
+    } else if(networkTypeName == "testnet") {
+      ???  // todo: set
+    } else {
+      //devnet
+      ???  // todo: set
+    }
+  }
+
   def toSigma(header: Header): sigma.Header =
     CHeader(
       version = header.version,

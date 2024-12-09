@@ -36,6 +36,7 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSeriali
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
+import sigma.VersionContext
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -192,7 +193,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def processFirstTxProcessingCacheRecord(): Unit = {
     txProcessingCache.headOption.foreach { case (txId, processingCacheRecord) =>
-      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, processingCacheRecord.source)
+      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, fullBlockHeight = 0, remote = processingCacheRecord.source)
       txProcessingCache -= txId
     }
   }
@@ -679,6 +680,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def transactionsFromRemote(requestedModifiers: Map[ModifierId, Array[Byte]],
+                                     hr: ErgoHistory,
                                      mp: ErgoMemPool,
                                      remote: ConnectedPeer): Unit = {
     // filter out transactions already in the mempool
@@ -694,7 +696,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
     toProcess.foreach { case (txId, txBytes) =>
-      parseAndProcessTransaction(txId, txBytes, remote)
+      parseAndProcessTransaction(txId, txBytes, hr.fullBlockHeight, remote)
     }
     toPutIntoCache.foreach { case (txId, txBytes) =>
       txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
@@ -753,7 +755,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
 
     if (typeId == ErgoTransaction.modifierTypeId) {
-      transactionsFromRemote(requestedModifiers, mp, remote)
+      transactionsFromRemote(requestedModifiers, hr, mp, remote)
     } else {
       blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
     }
@@ -763,14 +765,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Parse transaction coming from remote, filtering out immediately too big one, and send parsed transaction
     * to mempool for processing
     */
-  def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
+    // todo: remove 6.0 versioning logic and fullBlockHeight after 6.0 activation
+  def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], fullBlockHeight: Int, remote: ConnectedPeer): Unit = {
     if (bytes.length > settings.nodeSettings.maxTransactionSize) {
       deliveryTracker.setInvalid(id, ErgoTransaction.modifierTypeId)
       penalizeMisbehavingPeer(remote)
       log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
     } else {
-      ErgoTransactionSerializer.parseBytesTry(bytes) match {
+      val scriptVersion = if (fullBlockHeight > Header.interpreter60VersionActivationHeight(settings.networkType.verboseName)) {
+        VersionContext.V6SoftForkVersion
+      } else {
+        VersionContext.JitActivationVersion
+      }
+      val parseResult = VersionContext.withScriptVersion(scriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
+      parseResult match {
         case Success(tx) if id == tx.id =>
           val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
           viewHolderRef ! TransactionFromRemote(utx)

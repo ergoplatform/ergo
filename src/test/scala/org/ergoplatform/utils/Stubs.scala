@@ -3,7 +3,7 @@ package org.ergoplatform.utils
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.P2PKAddress
+import org.ergoplatform.{OrderingBlockFound, P2PKAddress}
 import org.ergoplatform.mining.CandidateGenerator.Candidate
 import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -407,7 +407,9 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
-    ).value
+    ).asInstanceOf[OrderingBlockFound]  // todo: fix
+     .fb
+      .header
   }
 
 }

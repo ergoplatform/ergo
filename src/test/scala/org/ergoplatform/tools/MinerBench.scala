@@ -2,6 +2,7 @@ package org.ergoplatform.tools
 
 import com.google.common.primitives.Bytes
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.OrderingBlockFound
 import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
@@ -76,7 +77,10 @@ object MinerBench extends App with ErgoTestHelpers {
       System.currentTimeMillis(),
       ExtensionCandidate(Seq.empty),
       Array())
-    val newHeader = pow.proveCandidate(candidate, sk).get.header
+    val newHeader = pow.proveCandidate(candidate, sk)
+      .asInstanceOf[OrderingBlockFound]  // todo: fix
+      .fb
+      .header
 
     val Steps = 10000
 

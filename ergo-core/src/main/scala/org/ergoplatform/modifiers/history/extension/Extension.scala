@@ -72,6 +72,22 @@ object Extension extends ApiCodecs {
   val ValidationRulesPrefix: Byte = 0x02
 
   /**
+    * Prefix for keys related to sub-blocks related data.
+    */
+  val SubBlocksDataPrefix: Byte = 0x03
+
+  val PrevSubBlockIdKey: Array[Byte] = Array(SubBlocksDataPrefix, 0x00)
+
+  val SubBlockTransactionsDigestKey: Array[Byte] = Array(SubBlocksDataPrefix, 0x01)
+
+  /**
+    * Prefix for keys related to sidechains data.
+    */
+  val SidechainsDataPrefix: Byte = 0x04
+
+
+
+  /**
     * Id a type of network object encoding extension
     */
   val modifierTypeId: NetworkObjectTypeId.Value = ExtensionTypeId.value

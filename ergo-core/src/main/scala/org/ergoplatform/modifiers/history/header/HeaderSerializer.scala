@@ -30,7 +30,8 @@ object HeaderSerializer extends ErgoSerializer[Header] {
     w.putBytes(h.votes)
 
     // For block version >= 2, this new byte encodes length of possible new fields.
-    // Set to 0 for now, so no new fields.
+    // starting from 5.0.23, new fields also included.
+    // They should be added in >= 5 bock version, see serializer
     if (h.version > Header.InitialVersion) {
       w.putUByte(h.unparsedBytes.length)
       w.putBytes(h.unparsedBytes)

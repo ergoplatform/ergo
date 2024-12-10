@@ -106,14 +106,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
       None
     }
 
-  // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
-  private val indexerOpt: Option[ActorRef] =
-    if (ergoSettings.nodeSettings.extraIndex) {
-      Some(ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings))
-    } else {
-      None
-    }
-
   private val syncTracker = ErgoSyncTracker(scorexSettings.network)
 
   private val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(ergoSettings)
@@ -144,6 +136,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
         ManifestSpec.messageCode            -> ergoNodeViewSynchronizerRef,
         GetUtxoSnapshotChunkSpec.messageCode-> ergoNodeViewSynchronizerRef,
         UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef,
+        // nipopows exchange related messages
         GetNipopowProofSpec.messageCode     -> ergoNodeViewSynchronizerRef,
         NipopowProofSpec.messageCode        -> ergoNodeViewSynchronizerRef
       )
@@ -178,6 +171,14 @@ class ErgoApp(args: Args) extends ScorexLogging {
     syncTracker,
     ergoSettings
   )
+
+  // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
+  private val indexerOpt: Option[ActorRef] =
+    if (ergoSettings.nodeSettings.extraIndex) {
+      Some(ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings))
+    } else {
+      None
+    }
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),

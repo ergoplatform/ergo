@@ -207,21 +207,11 @@ class CandidateGenerator(
             }
           case _: InputSolutionFound =>
             log.info("Input-block mined!")
-            val newBlock = completeInputBlock(state.cache.get.candidateBlock, solution)
-            val powValid = SubBlockAlgos.checkInputBlockPoW(newBlock.header)
-            // todo: check links?
-            // todo: update candidate generator state
-            // todo: form and send real data
-
-            val prevSubBlockId: Option[Array[Byte]] = null
-            val subblockTransactionsDigest: Digest32 = null
-            val merkleProof: BatchMerkleProof[Digest32] = null
-
-            val sbi: SubBlockInfo = SubBlockInfo(SubBlockInfo.initialMessageVersion, newBlock.header, prevSubBlockId, subblockTransactionsDigest, merkleProof)
-            val sbt : SubBlockTransactionsData = null
+            val (sbi, sbt) = completeInputBlock(state.cache.get.candidateBlock, solution)
             sendInputToNodeView(sbi, sbt)
+
             StatusReply.error(
-              new Exception(s"Input block found! PoW valid: $powValid")
+              new Exception(s"Input block found! PoW valid: ${SubBlockAlgos.checkInputBlockPoW(sbi.subBlock)}")
             )
         }
       }
@@ -931,12 +921,23 @@ object CandidateGenerator extends ScorexLogging {
     new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
   }
 
-  def completeInputBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
+  def completeInputBlock(candidate: CandidateBlock, solution: AutolykosSolution): (SubBlockInfo, SubBlockTransactionsData) = {
+
+    // todo: check links?
+    // todo: update candidate generator state
+    // todo: form and send real data instead of null
+
+    val prevSubBlockId: Option[Array[Byte]] = null
+    val subblockTransactionsDigest: Digest32 = null
+    val merkleProof: BatchMerkleProof[Digest32] = null
+
     val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
-    val adProofs = ADProofs(header.id, candidate.adProofBytes)
-    val blockTransactions = BlockTransactions(header.id, candidate.version, candidate.transactions)
-    val extension = Extension(header.id, candidate.extension.fields)
-    new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
+    val txs = candidate.transactions
+
+    val sbi: SubBlockInfo = SubBlockInfo(SubBlockInfo.initialMessageVersion, header, prevSubBlockId, subblockTransactionsDigest, merkleProof)
+    val sbt : SubBlockTransactionsData = SubBlockTransactionsData(sbi.subBlock.id, txs)
+
+    (sbi, sbt)
   }
 
 }

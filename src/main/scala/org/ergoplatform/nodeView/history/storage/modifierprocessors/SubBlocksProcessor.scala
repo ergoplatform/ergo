@@ -16,6 +16,7 @@ trait SubBlocksProcessor extends ScorexLogging {
   val subBlockRecords = mutable.Map[ModifierId, SubBlockInfo]()
   val subBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
 
+  // reset sub-blocks structures, should be called on receiving ordering block (or slightly later?)
   def resetState() = {
     _bestSubblock = None
 
@@ -26,6 +27,7 @@ trait SubBlocksProcessor extends ScorexLogging {
 
   // sub-blocks related logic
   def applySubBlockHeader(sbi: SubBlockInfo): Unit = {
+    // new ordering block arrived ( should be processed outside ? )
     if (sbi.subBlock.height > _bestSubblock.map(_.subBlock.height).getOrElse(-1)) {
       resetState()
     }

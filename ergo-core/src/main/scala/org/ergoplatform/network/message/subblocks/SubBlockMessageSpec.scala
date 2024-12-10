@@ -1,7 +1,7 @@
 package org.ergoplatform.network.message.subblocks
 
 import org.ergoplatform.network.message.MessageConstants.MessageCode
-import org.ergoplatform.network.message.{InvData, MessageSpecInitial, MessageSpecSubblocks}
+import org.ergoplatform.network.message.MessageSpecSubblocks
 import org.ergoplatform.subblocks.SubBlockInfo
 import scorex.util.serialization.{Reader, Writer}
 

@@ -61,6 +61,11 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
   protected def historyStorage: HistoryStorage = _history.historyStorage
 
+  /**
+   * Used in tests to indicate the indexer has caught up to the chain
+   */
+  protected def caughtUpHook(height: Int = 0): Unit = {}
+
   // fast access buffers
   protected val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
   protected val boxes: mutable.HashMap[ModifierId, IndexedErgoBox] = mutable.HashMap.empty[ModifierId, IndexedErgoBox]
@@ -275,7 +280,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           val boxId = bytesToId(tx.inputs(i).boxId)
           if (findAndSpendBox(boxId, tx.id, height)) { // spend box and add tx
             val iEb = boxes(boxId)
-            findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))(state)
+            findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))(newState)
             cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
               findAndUpdateToken(iEb.box.additionalTokens(j)._1.toModifierId, Left(iEb))
             }
@@ -294,7 +299,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         outputs(i) = iEb.globalIndex
 
         // box by address
-        findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))(state)
+        findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))(newState)
 
         // check if box is creating new tokens, if yes record them
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
@@ -412,12 +417,13 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     case Index() if !state.caughtUp && !state.rollbackInProgress =>
       val newState = index(state.incrementIndexedHeight)
       if (modCount >= saveLimit) saveProgress(newState)
-      context.become(loaded(newState))
+      context.become(receive.orElse(loaded(newState)))
       self ! Index()
 
     case Index() if state.caughtUp =>
       if (modCount > 0) saveProgress(state)
       blockCache.clear()
+      caughtUpHook()
       log.info("Indexer caught up with chain")
 
     // after the indexer caught up with the chain, stay up to date
@@ -425,9 +431,10 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       if (header.height == state.indexedHeight + 1) { // applied block is next in line
         val newState: IndexerState = index(state.incrementIndexedHeight, Some(header))
         saveProgress(newState)
-        context.become(loaded(newState))
+        context.become(receive.orElse(loaded(newState)))
+        caughtUpHook(header.height)
       } else if (header.height > state.indexedHeight + 1) { // applied block is ahead of indexer
-        context.become(loaded(state.copy(caughtUp = false)))
+        context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
         self ! Index()
       } else // applied block has already been indexed, skipping duplicate
         log.warn(s"Skipping block ${header.id} applied at height ${header.height}, indexed height is ${state.indexedHeight}")
@@ -440,13 +447,13 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         history.heightOf(branchPoint) match {
           case Some(branchHeight) =>
             if (branchHeight < state.indexedHeight) {
-              context.become(loaded(state.copy(rollbackTo = branchHeight)))
+              context.become(receive.orElse(loaded(state.copy(rollbackTo = branchHeight))))
               self ! RemoveAfter(branchHeight)
             }
           case None =>
             log.error(s"No rollback height found for $branchPoint")
             val newState = state.copy(rollbackTo = 0)
-            context.become(loaded(newState))
+            context.become(receive.orElse(loaded(newState)))
             unstashAll()
         }
       }
@@ -455,7 +462,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       blockCache.clear()
       readingUpTo = 0
       val newState = removeAfter(state, branchHeight)
-      context.become(loaded(newState))
+      context.become(receive.orElse(loaded(newState)))
+      caughtUpHook()
       log.info(s"Successfully rolled back indexes to $branchHeight")
       unstashAll()
 
@@ -506,7 +514,7 @@ class ExtraIndexer(cacheSettings: CacheSettings,
     case StartExtraIndexer(history: ErgoHistory) =>
       _history = history
       val state = IndexerState.fromHistory(history)
-      context.become(loaded(state))
+      context.become(receive.orElse(loaded(state)))
       log.info(s"Started extra indexer at height ${state.indexedHeight}")
       self ! Index()
       unstashAll()

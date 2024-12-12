@@ -2,11 +2,13 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.http.api.SortDirection
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.Rollback
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.Index
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.SegmentSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.util.{ModifierId, bytesToId}
@@ -76,8 +78,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
   def checkSegmentables[T <: Segment[_] : ClassTag](segmentables: ID_LL,
                                                     isChild: Boolean = false,
-                                                    check: ((T, (Long, Long))) => Boolean
-                                                   ): Int = {
+                                                    check: ((T, (Long, Long))) => Boolean,
+                                                    height: Int): Int = {
     var errors: Int = 0
     segmentables.foreach { segmentable =>
       history.typedExtraIndexById[T](segmentable._1) match {
@@ -86,11 +88,11 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
             // check tx segments
             val txSegments: ID_LL = mutable.HashMap.empty[ModifierId, (Long, Long)]
             txSegments ++= (0 until obj.txSegmentCount).map(n => obj.idMod(txSegmentId(obj.parentId, n))).map(Tuple2(_, (0L, 0L)))
-            checkSegmentables(txSegments, isChild = true, check) shouldBe 0
+            checkSegmentables(txSegments, isChild = true, check, height) shouldBe 0
             // check box segments
             val boxSegments: ID_LL = mutable.HashMap.empty[ModifierId, (Long, Long)]
             boxSegments ++= (0 until obj.boxSegmentCount).map(n => obj.idMod(boxSegmentId(obj.parentId, n))).map(Tuple2(_, (0L, 0L)))
-            checkSegmentables(boxSegments, isChild = true, check) shouldBe 0
+            checkSegmentables(boxSegments, isChild = true, check, height) shouldBe 0
           } else { // this is the parent object
             // check properties of object
             if (!check((obj, segmentable._2)))
@@ -121,15 +123,15 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     errors
   }
 
-  def checkAddresses(addresses: ID_LL): Int =
+  def checkAddresses(addresses: ID_LL, height: Int): Int =
     checkSegmentables[IndexedErgoAddress](addresses, isChild = false, seg => {
       seg._1.balanceInfo.get.nanoErgs == seg._2._1 && seg._1.balanceInfo.get.tokens.map(_._2).sum == seg._2._2
-    })
+    }, height)
 
-  def checkTokens(indexedTokens: ID_LL): Int =
+  def checkTokens(indexedTokens: ID_LL, height: Int): Int =
     checkSegmentables[IndexedToken](indexedTokens, isChild = false, seg => {
       seg._1.boxCount == seg._2._1
-    })
+    }, height)
 
   // example G-30;R-20;G-35;R-30
   def rollbackWithPattern(pattern: String): Unit = {
@@ -151,10 +153,16 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       state = IndexerState.fromHistory(_history)
 
       // address balances
-      checkAddresses(addresses) shouldBe 0
+      checkAddresses(addresses, n) shouldBe 0
+
+      addresses.keys.foreach { addr =>
+        val utxos = history.typedExtraIndexById[IndexedErgoAddress](addr).get
+          .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, false, Set.empty)
+        utxos.exists(_.isSpent) shouldBe false
+      }
 
       // token indexes
-      checkTokens(indexedTokens) shouldBe 0
+      checkTokens(indexedTokens, n) shouldBe 0
 
       // check indexnumbers
       state.globalTxIndex shouldBe txsIndexed
@@ -185,6 +193,22 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       indexer ! Index()
       lock.lock()
       done.await()
+
+      val (addresses, _, _, _) = manualIndex(n)
+
+      addresses.keys.foreach { addr =>
+        val utxos = history.typedExtraIndexById[IndexedErgoAddress](addr).get
+          .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, false, Set.empty)
+        val trees = utxos.map(_.box.ergoTree).map(hashErgoTree)
+        trees.forall(_ == addr) shouldBe true
+      }
+
+      addresses.keys.foreach { addr =>
+        val utxos = history.typedExtraIndexById[IndexedErgoAddress](addr).get
+          .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, false, Set.empty)
+        utxos.exists(_.isSpent) shouldBe false
+      }
+
     }
 
     pattern.split(";").map(_.split("-")).map(x => x(0) -> x(1).toInt).foreach {
@@ -192,9 +216,11 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       case ("R", n) => rollback(n)
       case _ => System.err.println(s"Malformed rollback pattern: $pattern")
     }
+
+    indexer ! Reset()
   }
 
-  property("extra indexer transactions") {
+  property("transactions") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
     lock.lock()
@@ -206,10 +232,9 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       history.typedExtraIndexById[IndexedErgoTransaction](id.get.m) shouldNot be(empty)
     }
     indexer ! Reset()
-    Thread.sleep(1000)
   }
 
-  property("extra indexer boxes") {
+  property("boxes") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
     lock.lock()
@@ -223,27 +248,43 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
-  property("extra indexer addresses") {
+  property("addresses") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
     lock.lock()
     done.await()
     val (addresses, _, _, _) = manualIndex(HEIGHT)
-    checkAddresses(addresses) shouldBe 0
+    checkAddresses(addresses, HEIGHT) shouldBe 0
     indexer ! Reset()
   }
 
-  property("extra indexer tokens") {
+  property("tokens") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
     lock.lock()
     done.await()
     val (_, indexedTokens, _, _) = manualIndex(HEIGHT)
-    checkTokens(indexedTokens) shouldBe 0
+    checkTokens(indexedTokens, HEIGHT) shouldBe 0
     indexer ! Reset()
   }
 
-  property("extra indexer rollback") {
-    rollbackWithPattern("G-20;R-10;G-30;R-20;G-40;R-30;G-50;R-10")
+  property("alternating gens and rollbacks") {
+    rollbackWithPattern("G-10;R-5;G-15;R-10;G-20;R-5")
+  }
+
+  property("multiple gens before rollback") {
+    rollbackWithPattern("G-5;G-10;G-15;R-10;G-20;G-25;R-15")
+  }
+
+  property("consecutive rollbacks") {
+    rollbackWithPattern("G-30;R-25;R-20;R-15;R-10;R-5")
+  }
+
+  property("rollback to 1") {
+    rollbackWithPattern("G-10;G-20;G-30;R-10;G-35;R-1")
+  }
+
+  property("random gens and rollbacks") {
+    rollbackWithPattern("G-5;G-15;R-5;G-20;G-25;R-15;G-30;R-10;G-50;R-25")
   }
 }

@@ -200,12 +200,14 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     // perform segmentation on big addresses and save their internal segment buffer
     trees.values.foreach { tree =>
       tree.buffer.values.foreach(seg => segments.put(seg.id, seg))
+      tree.buffer.clear()
       tree.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 
     // perform segmentation on big tokens and save their internal segment buffer
     tokens.values.foreach { token =>
       token.buffer.values.foreach(seg => segments.put(seg.id, seg))
+      token.buffer.clear()
       token.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 
@@ -262,7 +264,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           val boxId = bytesToId(tx.inputs(i).boxId)
           if (findAndSpendBox(boxId, tx.id, height)) { // spend box and add tx
             val iEb = boxes(boxId)
-            findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))
+            findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))(newState)
             cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
               findAndUpdateToken(iEb.box.additionalTokens(j)._1.toModifierId, Left(iEb))
             }
@@ -279,7 +281,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         outputs(i) = iEb.globalIndex
 
         // box by address
-        findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))
+        findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))(newState)
 
         // check if box is creating new tokens, if yes record them
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>

@@ -83,11 +83,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
       val block = proveCandidate(candidate.get)
 
       assert(history.append(block.header).isSuccess)
-      block.blockSections.foreach(s => if (!history.contains(s)) {
-        val x = history.append(s)
-        if(x.isFailure) println(x.failed.get.getMessage)
-        assert(x.isSuccess)
-      })
+      block.blockSections.foreach(s => if (!history.contains(s)) assert(history.append(s).isSuccess))
 
       val outToPassNext = if (last.isEmpty) {
         block.transactions.flatMap(_.outputs).find(_.ergoTree == minerProp)

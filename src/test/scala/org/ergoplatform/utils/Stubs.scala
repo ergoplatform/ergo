@@ -48,7 +48,7 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-trait Stubs extends ErgoTestHelpers with TestFileUtils {
+trait Stubs extends ErgoTestHelpers with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ChainGenerator._

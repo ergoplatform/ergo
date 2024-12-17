@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.ErgoSettings
 
+import scala.reflect.ClassTag
 import scala.util.Try
 
 class SegmentSpec extends ErgoCorePropertyTest {
@@ -31,40 +32,23 @@ class SegmentSpec extends ErgoCorePropertyTest {
     val ia = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.slice(segmentTreshold * 3, boxes.size).reverse)
 
     val hr = new ErgoHistoryReader {
-      override protected[history] val historyStorage: HistoryStorage = new HistoryStorage(null, null, null ,null) {
-        override def getExtraIndex(id: ModifierId): Option[ExtraIndex] = {
-          val b = Base16.decode(id).get.head
-          if(b == 0) {
-            Some(segment0)
-          } else if(b == 1) {
-            Some(segment1)
-          } else if(b == 2) {
-            Some(segment2)
-          } else {
-            None
-          }
+      override def typedExtraIndexById[T <: ExtraIndex : ClassTag](id: ModifierId): Option[T] = {
+        val b = Base16.decode(id).get.head
+        if(b == 0) {
+          Some(segment0.asInstanceOf[T])
+        } else if(b == 1) {
+          Some(segment1.asInstanceOf[T])
+        } else if(b == 2) {
+          Some(segment2.asInstanceOf[T])
+        } else {
+          None
         }
       }
-
+      override protected[history] val historyStorage: HistoryStorage = null
       override protected val settings: ErgoSettings = null
-
-      /**
-        * Whether state requires to download adProofs before full block application
-        */
       override protected def requireProofs: Boolean = ???
-
-      /**
-        * @param m - modifier to process
-        * @return ProgressInfo - info required for State to be consistent with History
-        */
       override protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] = ???
-
-      /**
-        * @param m - modifier to validate
-        * @return Success() if modifier is valid from History point of view, Failure(error) otherwise
-        */
       override protected def validate(m: NonHeaderBlockSection): Try[Unit] = ???
-
       override val powScheme: AutolykosPowScheme = null
     }
 

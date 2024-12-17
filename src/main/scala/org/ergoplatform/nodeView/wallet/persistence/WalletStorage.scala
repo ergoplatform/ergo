@@ -8,7 +8,7 @@ import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerial
 import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.crypto.hash.Blake2b256
-import scorex.db.{LDBFactory, LDBKVStore}
+import scorex.db.{RocksDBFactory, RocksDBKVStore}
 import scorex.util.ScorexLogging
 import sigma.serialization.SigmaSerializer
 
@@ -25,7 +25,7 @@ import scala.util.{Failure, Success, Try}
   * * ErgoStateContext (not version-agnostic, but state changes including rollbacks it is updated externally)
   * * external scans
   */
-final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends ScorexLogging {
+final class WalletStorage(store: RocksDBKVStore, settings: ErgoSettings) extends ScorexLogging {
 
   import WalletStorage._
 
@@ -183,14 +183,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @return identifier of last inserted scan
     */
   def lastUsedScanId: Short = {
-    // pre-3.3.7 method to get last used scan id, now useful to read pre-3.3.7 databases
-    def oldScanId: Option[Short] =
-      store.lastKeyInRange(SmallestPossibleScanId, BiggestPossibleScanId)
-        .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
-
     store.get(lastUsedScanIdKey)
       .map(bs => Shorts.fromByteArray(bs))
-      .orElse(oldScanId)
       .getOrElse(PaymentsScanId)
   }
 
@@ -251,7 +245,7 @@ object WalletStorage {
   def storageFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/storage")
 
   def readOrCreate(settings: ErgoSettings): WalletStorage = {
-    val db = LDBFactory.createKvDb(storageFolder(settings).getPath)
+    val db = new RocksDBKVStore(RocksDBFactory.open(storageFolder(settings)))
     new WalletStorage(db, settings)
   }
 

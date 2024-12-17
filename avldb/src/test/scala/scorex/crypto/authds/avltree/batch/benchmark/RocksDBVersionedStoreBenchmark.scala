@@ -3,16 +3,16 @@ package scorex.crypto.authds.avltree.batch.benchmark
 import com.google.common.primitives.Longs
 import scorex.crypto.authds.avltree.batch.helpers.FileHelper
 import scorex.utils.Random
-import scorex.db.LDBVersionedStore
+import scorex.db.RocksDBVersionedStore
 
-object LDBVersionedStoreBenchmark extends App with FileHelper {
+object RocksDBVersionedStoreBenchmark extends App with FileHelper {
   val KL = 32
   val VL = 8
   val LL = 32
   val NumMods = 2000000
   val Step = 1000
 
-  val store = new LDBVersionedStore(getRandomTempDir, 10)
+  val store = new RocksDBVersionedStore(getRandomTempDir, 10)
   val mods = generateModifications()
   var currentVersion: Option[Long] = None
 

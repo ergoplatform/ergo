@@ -26,7 +26,7 @@ libraryDependencies ++= Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
   "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
   "com.storm-enroute" %% "scalameter" % Versions.scalameter(scalaVersion.value) % "test",
-  "org.rocksdb" % "rocksdbjni" % "8.9.1",
+  "org.rocksdb" % "rocksdbjni" % "9.7.3",
   "org.typelevel" %% "spire" % Versions.spire(scalaVersion.value)
 )
 

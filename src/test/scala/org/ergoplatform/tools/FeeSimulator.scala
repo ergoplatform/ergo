@@ -2,7 +2,7 @@ package org.ergoplatform.tools
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.Constants._
-import org.ergoplatform.settings.LaunchParameters._
+import org.ergoplatform.settings.MainnetLaunchParameters._
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import scorex.crypto.authds.ADKey
 import scorex.utils.Random

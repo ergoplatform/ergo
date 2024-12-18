@@ -211,14 +211,12 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     // perform segmentation on big addresses and save their internal segment buffer
     trees.values.foreach { tree =>
       tree.buffer.values.foreach(seg => segments.put(seg.id, seg))
-      tree.buffer.clear()
       tree.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 
     // perform segmentation on big tokens and save their internal segment buffer
     tokens.values.foreach { token =>
       token.buffer.values.foreach(seg => segments.put(seg.id, seg))
-      token.buffer.clear()
       token.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 

@@ -13,8 +13,17 @@ import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
 
 class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexerBase with FileUtils {
+
   override def receive: Receive = {
-    case test.CreateDB() => createDB()
+    case test.CreateDB(blockCount: Int) => createDB(blockCount)
+    case test.Reset() => reset()
+  }
+
+  override def caughtUpHook(height: Int = 0): Unit = {
+    if(height > 0 && height < chainHeight) return
+    test.lock.lock()
+    test.done.signal()
+    test.lock.unlock()
   }
 
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
@@ -28,21 +37,30 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, useExternalMiner = false, internalMinersCount = 1,
     internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
     200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
-    1000000, 100, adProofsSuffixLength = 112 * 1024, extraIndex = false)
+    1000000, headerChainDiff = 5000, adProofsSuffixLength = 112 * 1024, extraIndex = false)
 
-  def createDB(): Unit = {
-    val dir: File = createTempDir
-    dir.mkdirs()
+  private var dir: File = _
+  private var stateOpt: Option[UtxoState] = None
 
-    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, test.initSettings.chainSettings,
-      nodeSettings, test.initSettings.scorexSettings, test.initSettings.walletSettings, test.initSettings.cacheSettings)
+  def createDB(blockCount: Int): Unit = {
+    if(stateOpt.isEmpty) {
+      dir = createTempDir
+      dir.mkdirs()
 
-    _history = ErgoHistory.readOrGenerate(fullHistorySettings)(null)
+      val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, test.initSettings.chainSettings,
+        nodeSettings, test.initSettings.scorexSettings, test.initSettings.walletSettings, test.initSettings.cacheSettings)
 
-    ChainGenerator.generate(test.HEIGHT, dir)(_history)
+      _history = ErgoHistory.readOrGenerate(fullHistorySettings)(null)
+    }
+
+    stateOpt = Some(ChainGenerator.generate(blockCount, dir, _history, stateOpt))
     test._history = _history
+    context.become(receive.orElse(loaded(IndexerState.fromHistory(_history))))
+  }
 
-    // reset all variables
+  def reset(): Unit = {
+    stateOpt = None
+    test._history = null
     general.clear()
     boxes.clear()
     trees.clear()

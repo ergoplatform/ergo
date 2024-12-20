@@ -146,7 +146,7 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
     }
     w.putUInt(bt.txs.size.toLong)
     bt.txs.foreach { tx =>
-      VersionContext.withScriptVersion(VersionContext.V6SoftForkVersion) {
+      VersionContext.withVersions(VersionContext.V6SoftForkVersion, VersionContext.V6SoftForkVersion) {
         ErgoTransactionSerializer.serialize(tx, w)
       }
     }
@@ -174,7 +174,7 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
     }
 
     val txs: IndexedSeq[ErgoTransaction] = {
-      VersionContext.withScriptVersion(VersionContext.fromBlockVersion(blockVersion).activatedVersion) {
+      VersionContext.withVersions(VersionContext.fromBlockVersion(blockVersion).activatedVersion) {
         (1 to txCount).map { _ =>
           ErgoTransactionSerializer.parse(r)
         }

@@ -47,7 +47,7 @@ object RocksDBFactory extends ScorexLogging {
       lock.writeLock().lock()
       try {
         map.remove(path)
-        impl.syncWal()
+        if(System.getProperty("env") != "test") impl.syncWal()
         impl.close()
         open.set(false)
       } finally {

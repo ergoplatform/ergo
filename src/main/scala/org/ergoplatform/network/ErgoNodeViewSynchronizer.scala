@@ -778,7 +778,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       } else {
         VersionContext.JitActivationVersion
       }
-      val parseResult = VersionContext.withScriptVersion(scriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
+      //todo: tree version here unlikely properly set
+      val parseResult = VersionContext.withVersions(scriptVersion, scriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
       parseResult match {
         case Success(tx) if id == tx.id =>
           val utx = UnconfirmedTransaction(tx, bytes, Some(remote))

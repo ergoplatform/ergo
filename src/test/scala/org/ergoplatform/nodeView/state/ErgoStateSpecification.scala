@@ -201,7 +201,7 @@ class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpe
     val bx = new ErgoBoxCandidate(1000000000L, TrueTree, 0).toBox(bytesToId(Array.fill(32)(0.toByte)), 0)
     val tx1 = validTransactionFromBoxes(IndexedSeq(bx), outputsProposition = TrueTree)
 
-    val ergoTree = compileSourceV6("sigmaProp(Global.serialize(2).size <= 0)")
+    val ergoTree = compileSourceV6("sigmaProp(Global.serialize(2).size <= 0)", treeVersion = 3)
 
     val tx2 = validTransactionFromBoxes(tx1.outputs, outputsProposition = ergoTree)
 
@@ -215,7 +215,7 @@ class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpe
     execRes.isInstanceOf[Invalid] shouldBe true
     execRes.asInstanceOf[Invalid].errors.head.message.startsWith("Scripts of all transaction inputs should pass verification") shouldBe true
 
-    val ergoTree2 = compileSourceV6("sigmaProp(Global.serialize(2).size > 0)")
+    val ergoTree2 = compileSourceV6("sigmaProp(Global.serialize(2).size > 0)", treeVersion = 3)
 
     val tx22 = validTransactionFromBoxes(tx1.outputs, outputsProposition = ergoTree2)
 

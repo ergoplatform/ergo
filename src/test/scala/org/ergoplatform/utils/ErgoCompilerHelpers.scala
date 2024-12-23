@@ -9,10 +9,10 @@ import scala.util.{Failure, Success, Try}
 
 trait ErgoCompilerHelpers {
 
-  private def compileSource(source: String, scriptVersion: Byte) = {
-    VersionContext.withScriptVersion(scriptVersion) {
+  private def compileSource(source: String, scriptVersion: Byte, treeVersion: Byte) = {
+    VersionContext.withVersions(scriptVersion, treeVersion) {
       val compiler = new SigmaCompiler(16.toByte)
-      val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(1.toByte)
+      val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(treeVersion)
       val ergoTree = Try(compiler.compile(Map.empty, source)(new CompiletimeIRContext)).flatMap {
         case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
           Success(ErgoTree.fromProposition(ergoTreeHeader, script))
@@ -25,7 +25,7 @@ trait ErgoCompilerHelpers {
     }
   }
 
-  def compileSourceV5(source: String): ErgoTree = compileSource(source, 2)
-  def compileSourceV6(source: String): ErgoTree = compileSource(source, 3)
+  def compileSourceV5(source: String, treeVersion: Byte): ErgoTree = compileSource(source, 2, treeVersion)
+  def compileSourceV6(source: String, treeVersion: Byte): ErgoTree = compileSource(source, 3, treeVersion)
 
 }

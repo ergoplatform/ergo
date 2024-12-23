@@ -58,7 +58,8 @@ object WalletTransactionSerializer extends ErgoSerializer[WalletTransaction] {
     }
 
     val txBytesLen = r.getUInt().toIntExact
-    val tx = (VersionContext.withScriptVersion(VersionContext.MaxSupportedScriptVersion) {
+    // we use max supported script/tree to always parse everything there
+    val tx = (VersionContext.withVersions(VersionContext.MaxSupportedScriptVersion, VersionContext.MaxSupportedScriptVersion) {
       ErgoTransactionSerializer.parseBytes(r.getBytes(txBytesLen))
     })
     WalletTransaction(tx, inclusionHeight, scanIds)

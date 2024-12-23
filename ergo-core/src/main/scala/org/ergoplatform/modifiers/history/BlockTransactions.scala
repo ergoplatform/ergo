@@ -174,7 +174,8 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
     }
 
     val txs: IndexedSeq[ErgoTransaction] = {
-      VersionContext.withVersions(VersionContext.fromBlockVersion(blockVersion).activatedVersion) {
+      val version = VersionContext.fromBlockVersion(blockVersion)
+      VersionContext.withVersions(version.activatedVersion, version.ergoTreeVersion) {
         (1 to txCount).map { _ =>
           ErgoTransactionSerializer.parse(r)
         }

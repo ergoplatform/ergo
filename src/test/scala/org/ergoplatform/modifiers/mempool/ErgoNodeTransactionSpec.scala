@@ -491,16 +491,17 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
       | } """.stripMargin */
   )
 
-  property("Execution of 6.0 Ergoscript") {
+  property("Execution of 6.0 Ergoscript - v3 tree") {
 
     v60scripts.foreach { script =>
       val protocolVersion = 4.toByte
+      val treeVersion = (protocolVersion - 1).toByte
       val params = new Parameters(0, DevnetLaunchParameters.parametersTable.updated(123, protocolVersion), ErgoValidationSettingsUpdate.empty)
 
       val stateContext = emptyStateContext.copy(currentParameters = params)(chainSettings)
       stateContext.blockVersion shouldBe protocolVersion
 
-      val ergoTree = compileSourceV6(script)
+      val ergoTree = compileSourceV6(script, treeVersion)
 
       ergoTree.root.isRight shouldBe true // parsed
 
@@ -521,12 +522,13 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
   property("Execution of 6.0 Ergoscript reducing to false") {
 
     val protocolVersion = 4.toByte
+    val treeVersion = (protocolVersion - 1).toByte
     val params = new Parameters(0, DevnetLaunchParameters.parametersTable.updated(123, protocolVersion), ErgoValidationSettingsUpdate.empty)
 
     val stateContext = emptyStateContext.copy(currentParameters = params)(chainSettings)
     stateContext.blockVersion shouldBe protocolVersion
 
-    val ergoTree = compileSourceV6("sigmaProp(Global.serialize(2).size <= 0)")
+    val ergoTree = compileSourceV6("sigmaProp(Global.serialize(2).size <= 0)", treeVersion)
 
     ergoTree.root.isRight shouldBe true // parsed
 
@@ -552,8 +554,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     val stateContext = emptyStateContext.copy(currentParameters = params)(chainSettings)
     stateContext.blockVersion shouldBe protocolVersion
 
-    val ergoTree = DefaultSerializer.deserializeErgoTree(Base16.decode("1b130206022edf0580fcf622d193db060873007301").get)
-
+    val ergoTree = DefaultSerializer.deserializeErgoTree(Base16.decode("1a150206022edf0580fcf622d193db060873007e730106").get)
     ergoTree.root.isRight shouldBe false
 
     val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,

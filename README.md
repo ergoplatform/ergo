@@ -1,18 +1,21 @@
+*The World still needs for better money. Join us in this quest.* 
+
 # Ergo
 
-Welcome to the official repository for the [Ergo Platform](https://ergoplatform.org/). This repository contains the reference client, also known as the node, for Ergo. Ergo is a cryptocurrency protocol that has been designed to offer a secure environment for peer-to-peer transactions. It supports programmable scarce money (Ergo) and a wide range of financial tools.
+Welcome to the repository for the [Ergo Platform](https://ergoplatform.org/). Ergo is a Proof-of-Work cryptocurrency protocol that has been designed to offer a secure environment for new kinds of money, peer-to-peer interactions, trust-minimized financial tooling and derivatives. This repository contains the reference client, also known as the node, for Ergo.
 
-The reference client is primarily written in Scala. While certain components of the protocol are implemented in other languages (for instance, [sigma-rust](https://github.com/ergoplatform/sigma-rust) is a Rust-based implementation of the ErgoScript cryptocurrency scripting language), the reference client provides the most complete and comprehensive implementation of the Ergo protocol.
+The reference client is primarily written in Scala. While certain components of the protocol are implemented in other languages (for instance, [sigma-rust](https://github.com/ergoplatform/sigma-rust) is a Rust-based implementation of the ErgoScript cryptocurrency scripting language), the reference client provides the most complete and comprehensive implementation of the Ergo protocol at the moment.
 
 ## Key Features of Ergo
 
-Ergo, while sharing some commonalities with Bitcoin as a UTXO Proof-of-Work cryptocurrency, stands out due to its unique design and features. It has been built from the ground up, introducing several innovative elements:
+Ergo, while sharing some commonalities with Bitcoin as a UTXO Proof-of-Work cryptocurrency, stands out due to its unique design and features. It has been built from the ground up to achieve its goals 
+, introducing several innovative elements:
 
 * **ErgoScript**: A powerful contract language in the multi-stage extended UTXO model. More details can be found in the [ErgoScript whitepaper](https://ergoplatform.org/docs/ErgoScript.pdf).
 * **Autolykos2**: A memory-hard Proof-of-Work function, providing enhanced security. Learn more about it [here](https://docs.ergoplatform.com/ErgoPow.pdf).
 * Support for Stateless Clients: Ergo supports asymmetric stateless clients, based on [this paper](https://eprint.iacr.org/2016/994), and includes features like NiPoPoWs and hybrid modes.
 * **Advanced Transactional Language**: Ergo introduces an [alternative transactional language](https://github.com/ScorexFoundation/sigmastate-interpreter) that is more powerful than Bitcoin Script and is designed to be safe against heavy validation attacks.
-* **Innovative Fee Model**: Ergo implements an alternative fee model with a [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf ) (also known as demurrage).
+* **Innovative Fee Model**: Ergo implements an alternative fee model with a [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf ) (also known as demurrage). It provides truly fixed supply in the long-term, protection from UTXO dust bloating, and additional rewards stream for miners.
 
 ## Specifications
 

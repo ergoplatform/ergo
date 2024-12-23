@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.MessageSpecInitial
 import org.ergoplatform.settings.{Constants, Parameters}
-import org.ergoplatform.subblocks.SubBlockInfo
+import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -164,9 +164,9 @@ object structures {
     * @param sbi
     * @return - sub-block ids to download, sub-block transactions to download
     */
-  def processSubBlock(sbi: SubBlockInfo): (Seq[ModifierId], Seq[ModifierId]) = {
-    val sbHeader = sbi.subBlock
-    val prevSbIdOpt = sbi.prevSubBlockId.map(bytesToId)
+  def processSubBlock(sbi: InputBlockInfo): (Seq[ModifierId], Seq[ModifierId]) = {
+    val sbHeader = sbi.header
+    val prevSbIdOpt = sbi.prevInputBlockId.map(bytesToId)
     val sbHeight = sbHeader.height
 
     def emptyResult: (Seq[ModifierId], Seq[ModifierId]) = Seq.empty -> Seq.empty

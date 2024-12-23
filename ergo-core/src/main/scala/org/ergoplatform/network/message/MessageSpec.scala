@@ -41,7 +41,7 @@ trait MessageSpecInitial[Content] extends MessageSpec[Content] {
 /**
   * Sub-blocks related messages, V2 of the protocol
   */
-trait MessageSpecSubblocks[Content] extends MessageSpec[Content] {
+trait MessageSpecInputBlocks[Content] extends MessageSpec[Content] {
 
   override val protocolVersion: Version = Version.SubblocksVersion
 

@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.network.message.subblocks.SubBlockTransactionsData
+import org.ergoplatform.network.message.subblocks.InputBlockTransactionsData
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.{LocallyGeneratedInputBlock, LocallyGeneratedOrderingBlock}
@@ -23,7 +23,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
-import org.ergoplatform.subblocks.SubBlockInfo
+import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound, SubBlockAlgos}
 import scorex.crypto.authds.merkle.BatchMerkleProof
@@ -68,9 +68,9 @@ class CandidateGenerator(
   }
 
   /** Send solved input block to processing */
-  private def sendInputToNodeView(sbi: SubBlockInfo, sbt: SubBlockTransactionsData): Unit = {
+  private def sendInputToNodeView(sbi: InputBlockInfo, sbt: InputBlockTransactionsData): Unit = {
     log.info(
-      s"New input block ${sbi.subBlock.id} w. nonce ${Longs.fromByteArray(sbi.subBlock.powSolution.n)}"
+      s"New input block ${sbi.header.id} w. nonce ${Longs.fromByteArray(sbi.header.powSolution.n)}"
     )
     viewHolderRef ! LocallyGeneratedInputBlock(sbi, sbt)
   }
@@ -211,7 +211,7 @@ class CandidateGenerator(
             sendInputToNodeView(sbi, sbt)
 
             StatusReply.error(
-              new Exception(s"Input block found! PoW valid: ${SubBlockAlgos.checkInputBlockPoW(sbi.subBlock)}")
+              new Exception(s"Input block found! PoW valid: ${SubBlockAlgos.checkInputBlockPoW(sbi.header)}")
             )
         }
       }
@@ -439,10 +439,10 @@ object CandidateGenerator extends ScorexLogging {
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
         .flatMap(h => history.typedModifierById[Extension](h.extensionId))
 
-      val lastSubblockOpt: Option[SubBlockInfo] = history.bestSubblock()
+      val lastSubblockOpt: Option[InputBlockInfo] = history.bestSubblock()
 
       // there was sub-block generated before for this block
-      val continueSubblock = lastSubblockOpt.exists(sbi => bestHeaderOpt.map(_.id).contains(sbi.subBlock.parentId))
+      val continueSubblock = lastSubblockOpt.exists(sbi => bestHeaderOpt.map(_.id).contains(sbi.header.parentId))
 
       // Make progress in time since last block.
       // If no progress is made, then, by consensus rules, the block will be rejected.
@@ -454,7 +454,7 @@ object CandidateGenerator extends ScorexLogging {
 
       // Calculate required difficulty for the new block, the same diff for subblock
       val nBits: Long = if(continueSubblock) {
-        lastSubblockOpt.get.subBlock.nBits // .get is ok as lastSubblockOpt.exists in continueSubblock checks emptiness
+        lastSubblockOpt.get.header.nBits // .get is ok as lastSubblockOpt.exists in continueSubblock checks emptiness
       } else {
         bestHeaderOpt
           .map(parent => history.requiredDifficultyAfter(parent))
@@ -921,7 +921,7 @@ object CandidateGenerator extends ScorexLogging {
     new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
   }
 
-  def completeInputBlock(candidate: CandidateBlock, solution: AutolykosSolution): (SubBlockInfo, SubBlockTransactionsData) = {
+  def completeInputBlock(candidate: CandidateBlock, solution: AutolykosSolution): (InputBlockInfo, InputBlockTransactionsData) = {
 
     // todo: check links?
     // todo: update candidate generator state
@@ -934,8 +934,8 @@ object CandidateGenerator extends ScorexLogging {
     val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
     val txs = candidate.transactions
 
-    val sbi: SubBlockInfo = SubBlockInfo(SubBlockInfo.initialMessageVersion, header, prevSubBlockId, subblockTransactionsDigest, merkleProof)
-    val sbt : SubBlockTransactionsData = SubBlockTransactionsData(sbi.subBlock.id, txs)
+    val sbi: InputBlockInfo = InputBlockInfo(InputBlockInfo.initialMessageVersion, header, prevSubBlockId, subblockTransactionsDigest, merkleProof)
+    val sbt : InputBlockTransactionsData = InputBlockTransactionsData(sbi.header.id, txs)
 
     (sbi, sbt)
   }

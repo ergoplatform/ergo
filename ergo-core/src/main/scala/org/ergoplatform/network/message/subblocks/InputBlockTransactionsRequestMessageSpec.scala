@@ -1,11 +1,11 @@
 package org.ergoplatform.network.message.subblocks
 
 import org.ergoplatform.network.message.MessageConstants.MessageCode
-import org.ergoplatform.network.message.MessageSpecSubblocks
+import org.ergoplatform.network.message.MessageSpecInputBlocks
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 
-object SubBlockTransactionsRequestMessageSpec extends MessageSpecSubblocks[ModifierId] {
+object InputBlockTransactionsRequestMessageSpec extends MessageSpecInputBlocks[ModifierId] {
   /**
     * Code which identifies what message type is contained in the payload
     */
@@ -23,4 +23,5 @@ object SubBlockTransactionsRequestMessageSpec extends MessageSpecSubblocks[Modif
   override def parse(r: Reader): ModifierId = {
     bytesToId(r.getBytes(32))
   }
+
 }

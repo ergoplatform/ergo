@@ -25,7 +25,7 @@ import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
-import org.ergoplatform.subblocks.SubBlockInfo
+import org.ergoplatform.subblocks.InputBlockInfo
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -304,11 +304,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       }
 
     // subblocks related logic
-    case ProcessSubblock(sbi) =>
-      history().applySubBlockHeader(sbi)
+    case ProcessInputBlock(sbi) =>
+      history().applyInputBlock(sbi)
 
-    case ProcessSubblockTransactions(std) =>
-      history().applySubBlockTransactions(std.subblockID, std.transactions)
+    case ProcessInputBlockTransactions(std) =>
+      history().applySubBlockTransactions(std.inputBlockID, std.transactions)
   }
 
   /**
@@ -685,9 +685,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         pmodModify(section, local = true)
       }
     case LocallyGeneratedInputBlock(subblockInfo, subBlockTransactionsData) =>
-      log.info(s"Got locally generated input block ${subblockInfo.subBlock.id}")
-      history().applySubBlockHeader(subblockInfo)
-      history().applySubBlockTransactions(subblockInfo.subBlock.id, subBlockTransactionsData.transactions)
+      log.info(s"Got locally generated input block ${subblockInfo.header.id}")
+      history().applyInputBlock(subblockInfo)
+      history().applySubBlockTransactions(subblockInfo.header.id, subBlockTransactionsData.transactions)
       // todo: finish processing
   }
 
@@ -742,9 +742,9 @@ object ErgoNodeViewHolder {
     case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
 
     /**
-      * Wrapper for a locally generated sub-block submitted via API
+      * Wrapper for a locally generated input-block submitted via API
       */
-    case class LocallyGeneratedSubBlock(sbi: SubBlockInfo)
+    case class LocallyGeneratedInputBlock(sbi: InputBlockInfo)
 
     /**
       * Wrapper for a transaction submitted via API

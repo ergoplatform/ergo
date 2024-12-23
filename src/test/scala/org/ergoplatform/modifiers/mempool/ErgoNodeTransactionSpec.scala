@@ -554,6 +554,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     val stateContext = emptyStateContext.copy(currentParameters = params)(chainSettings)
     stateContext.blockVersion shouldBe protocolVersion
 
+    // v2 tree but v3 instructions
     val ergoTree = DefaultSerializer.deserializeErgoTree(Base16.decode("1a150206022edf0580fcf622d193db060873007e730106").get)
     ergoTree.root.isRight shouldBe false
 

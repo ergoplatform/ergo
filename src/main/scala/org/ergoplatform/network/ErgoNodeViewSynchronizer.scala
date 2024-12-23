@@ -778,7 +778,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       } else {
         VersionContext.JitActivationVersion
       }
-      //todo: tree version here unlikely properly set
+      // tree version is properly set in ErgoTreeSerializer inside
       val parseResult = VersionContext.withVersions(scriptVersion, scriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
       parseResult match {
         case Success(tx) if id == tx.id =>

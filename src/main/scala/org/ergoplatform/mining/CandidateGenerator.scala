@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.network.message.subblocks.InputBlockTransactionsData
+import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.{LocallyGeneratedInputBlock, LocallyGeneratedOrderingBlock}
@@ -439,7 +439,7 @@ object CandidateGenerator extends ScorexLogging {
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
         .flatMap(h => history.typedModifierById[Extension](h.extensionId))
 
-      val lastSubblockOpt: Option[InputBlockInfo] = history.bestSubblock()
+      val lastSubblockOpt: Option[InputBlockInfo] = history.bestInputBlock()
 
       // there was sub-block generated before for this block
       val continueSubblock = lastSubblockOpt.exists(sbi => bestHeaderOpt.map(_.id).contains(sbi.header.parentId))

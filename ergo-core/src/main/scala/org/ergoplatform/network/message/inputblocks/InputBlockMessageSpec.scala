@@ -1,4 +1,4 @@
-package org.ergoplatform.network.message.subblocks
+package org.ergoplatform.network.message.inputblocks
 
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.MessageSpecInputBlocks

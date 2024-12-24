@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -24,45 +25,66 @@ trait InputBlocksProcessor extends ScorexLogging {
   // input block id -> input block transactions index
   val inputBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
 
-  // reset sub-blocks structures, should be called on receiving ordering block (or slightly later?)
-  def resetState() = {
-    _bestInputBlock = None
+  private def bestInputBlockHeight: Option[Height] = _bestInputBlock.map(_.header.height)
 
-    // todo: subBlockRecords & subBlockTransactions should be cleared a bit later, as other peers may still ask for them
-    inputBlockRecords.clear()
-    inputBlockTransactions.clear()
+  private def prune() = {
+    val BlocksThreshold = 2 // we remove input-blocks data after 2 ordering blocks
+
+    val bestHeight = bestInputBlockHeight.getOrElse(0)
+    val idsToRemove = inputBlockRecords.flatMap{case (id, ibi) =>
+      val res = (bestHeight - ibi.header.height) > BlocksThreshold
+      if(res){
+        Some(id)
+      } else {
+        None
+      }
+    }
+    idsToRemove.foreach{ id =>
+      inputBlockRecords.remove(id)
+      inputBlockTransactions.remove(id)
+    }
+  }
+
+  // reset sub-blocks structures, should be called on receiving ordering block (or slightly later?)
+  private def resetState() = {
+    _bestInputBlock = None
+    prune()
   }
 
   // sub-blocks related logic
-  def applyInputBlock(sbi: InputBlockInfo): Unit = {
+  def applyInputBlock(ib: InputBlockInfo): Unit = {
     // new ordering block arrived ( should be processed outside ? )
-    if (sbi.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
+    if (ib.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
       resetState()
     }
 
-    inputBlockRecords.put(sbi.header.id, sbi)
+    inputBlockRecords.put(ib.header.id, ib)
 
     // todo: currently only one chain of subblocks considered,
     // todo: in fact there could be multiple trees here (one subblocks tree per header)
+    // todo: split best input header / block
     _bestInputBlock match {
-      case None => _bestInputBlock = Some(sbi)
-      case Some(maybeParent) if (sbi.prevInputBlockId.map(bytesToId).contains(maybeParent.header.id)) =>
-        _bestInputBlock = Some(sbi)
+      case None =>
+        log.debug(s"Applying best input block #: ${ib.header.id}, no parent")
+        _bestInputBlock = Some(ib)
+      case Some(maybeParent) if (ib.prevInputBlockId.map(bytesToId).contains(maybeParent.header.id)) =>
+        log.debug(s"Applying best input block #: ${ib.header.id}, parent is $maybeParent")
+        _bestInputBlock = Some(ib)
       case _ =>
         // todo: record it
-        log.debug(s"Applying non-best inpu block #: ${sbi.header.id}")
+        log.debug(s"Applying non-best input block #: ${ib.header.id}")
     }
   }
 
-  def applySubBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
+  def applyInputBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
     inputBlockTransactions.put(sbId, transactions)
   }
 
-  def getSubBlockTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] = {
+  def getInputBlockTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] = {
     inputBlockTransactions.get(sbId)
   }
 
-  def bestSubblock(): Option[InputBlockInfo] = {
+  def bestInputBlock(): Option[InputBlockInfo] = {
     _bestInputBlock
   }
 

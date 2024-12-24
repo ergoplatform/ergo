@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
@@ -13,6 +14,11 @@ import scala.collection.mutable
   *   * store input blocks for short time only
   */
 trait InputBlocksProcessor extends ScorexLogging {
+
+  /**
+    * @return interface to read objects from history database
+    */
+  def historyReader: ErgoHistoryReader
 
   /**
     * Pointer to a best input-block known
@@ -85,7 +91,13 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   def bestInputBlock(): Option[InputBlockInfo] = {
-    _bestInputBlock
+    _bestInputBlock.flatMap{bib =>
+      if(bib.header.height == historyReader.headersHeight) { // check header id?
+        Some(bib)
+      } else {
+        None
+      }
+    }
   }
 
 }

@@ -18,6 +18,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.Eliminate
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.{LocallyGeneratedInputBlock, LocallyGeneratedOrderingBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.InputBlocksProcessor
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoStateReader}
@@ -29,7 +30,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, Input
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigma.data.{Digest32Coll, ProveDlog}
 import sigma.crypto.CryptoFacade
 import sigma.eval.Extensions.EvalIterableOps
@@ -207,7 +208,8 @@ class CandidateGenerator(
             }
           case _: InputSolutionFound =>
             log.info("Input-block mined!")
-            val (sbi, sbt) = completeInputBlock(state.cache.get.candidateBlock, solution)
+
+            val (sbi, sbt) = completeInputBlock(state.hr, state.cache.get.candidateBlock, solution)
             sendInputToNodeView(sbi, sbt)
 
             StatusReply.error(
@@ -921,13 +923,15 @@ object CandidateGenerator extends ScorexLogging {
     new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
   }
 
-  def completeInputBlock(candidate: CandidateBlock, solution: AutolykosSolution): (InputBlockInfo, InputBlockTransactionsData) = {
+  def completeInputBlock(inputBlockProcessor: InputBlocksProcessor,
+                         candidate: CandidateBlock,
+                         solution: AutolykosSolution): (InputBlockInfo, InputBlockTransactionsData) = {
 
     // todo: check links?
     // todo: update candidate generator state
     // todo: form and send real data instead of null
 
-    val prevSubBlockId: Option[Array[Byte]] = null
+    val prevSubBlockId: Option[Array[Byte]] = inputBlockProcessor.bestInputBlock().map(_.header.id).map(idToBytes)
     val subblockTransactionsDigest: Digest32 = null
     val merkleProof: BatchMerkleProof[Digest32] = null
 

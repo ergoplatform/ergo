@@ -931,14 +931,14 @@ object CandidateGenerator extends ScorexLogging {
     // todo: update candidate generator state
     // todo: form and send real data instead of null
 
-    val prevSubBlockId: Option[Array[Byte]] = inputBlockProcessor.bestInputBlock().map(_.header.id).map(idToBytes)
-    val subblockTransactionsDigest: Digest32 = null
+    val prevInputBlockId: Option[Array[Byte]] = inputBlockProcessor.bestInputBlock().map(_.header.id).map(idToBytes)
+    val inputBlockTransactionsDigest: Digest32 = null
     val merkleProof: BatchMerkleProof[Digest32] = null
 
     val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
     val txs = candidate.transactions
 
-    val sbi: InputBlockInfo = InputBlockInfo(InputBlockInfo.initialMessageVersion, header, prevSubBlockId, subblockTransactionsDigest, merkleProof)
+    val sbi: InputBlockInfo = InputBlockInfo(InputBlockInfo.initialMessageVersion, header, prevInputBlockId, inputBlockTransactionsDigest, merkleProof)
     val sbt : InputBlockTransactionsData = InputBlockTransactionsData(sbi.header.id, txs)
 
     (sbi, sbt)

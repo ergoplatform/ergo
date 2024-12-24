@@ -66,19 +66,21 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     inputBlockRecords.put(ib.header.id, ib)
 
+    val ibParent = ib.prevInputBlockId
+
     // todo: currently only one chain of subblocks considered,
     // todo: in fact there could be multiple trees here (one subblocks tree per header)
     // todo: split best input header / block
     _bestInputBlock match {
       case None =>
-        log.debug(s"Applying best input block #: ${ib.header.id}, no parent")
+        log.info(s"Applying best input block #: ${ib.header.id}, no parent")
         _bestInputBlock = Some(ib)
-      case Some(maybeParent) if (ib.prevInputBlockId.map(bytesToId).contains(maybeParent.header.id)) =>
-        log.debug(s"Applying best input block #: ${ib.header.id}, parent is $maybeParent")
+      case Some(maybeParent) if (ibParent.map(bytesToId).contains(maybeParent.header.id)) =>
+        log.info(s"Applying best input block #: ${ib.header.id}, parent is ${maybeParent.header.id}")
         _bestInputBlock = Some(ib)
       case _ =>
-        // todo: record it
-        log.debug(s"Applying non-best input block #: ${ib.header.id}")
+        // todo: switch from one input block chain to another
+        log.info(s"Applying non-best input block #: ${ib.header.id}, parent #: ${ibParent}")
     }
   }
 
@@ -92,7 +94,8 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   def bestInputBlock(): Option[InputBlockInfo] = {
     _bestInputBlock.flatMap{bib =>
-      if(bib.header.height == historyReader.headersHeight) { // check header id?
+      // todo: check header id? best input block can be child of non-best ordering header
+      if(bib.header.height == historyReader.headersHeight + 1) {
         Some(bib)
       } else {
         None

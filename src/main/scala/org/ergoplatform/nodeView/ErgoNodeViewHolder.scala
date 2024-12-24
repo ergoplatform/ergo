@@ -303,7 +303,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         }
       }
 
-    // subblocks related logic
+    // input blocks related logic
     case ProcessInputBlock(sbi) =>
       history().applyInputBlock(sbi)
 

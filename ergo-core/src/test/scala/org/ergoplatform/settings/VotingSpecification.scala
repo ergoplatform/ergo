@@ -61,7 +61,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
   property(".toExtensionCandidate && .parseExtension") {
     val update = ErgoValidationSettingsUpdate(
       Seq.empty,
-      Seq(1011.toShort -> ReplacedRule(1011), 1008.toShort -> ReplacedRule(1008))
+      Seq(1011.toShort -> ReplacedRule(1016), 1007.toShort -> ReplacedRule(1017), 1008.toShort -> ReplacedRule(1018))
     )
     val vs = ErgoValidationSettings.initial.updated(update)
     val vs2 = ErgoValidationSettings.parseExtension(vs.toExtensionCandidate).get

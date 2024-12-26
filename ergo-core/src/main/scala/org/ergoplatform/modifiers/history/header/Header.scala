@@ -146,11 +146,12 @@ object Header extends ApiCodecs {
   val Interpreter60Version: Byte = 4
 
   // todo: pass NetworkType, not String
+  // todo: comments
   def interpreter60VersionActivationHeight(networkTypeName: String): Int = {
     if(networkTypeName == "mainnet") {
       ???  // todo: set
     } else if(networkTypeName == "testnet") {
-      ???  // todo: set
+      1548800  // todo: set
     } else {
       //devnet
       ???  // todo: set

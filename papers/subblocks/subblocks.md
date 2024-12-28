@@ -1,5 +1,5 @@
-Sub-Blocks and Improved Confirmed Transactions Propagation
-==========================
+Input-Blocks for Faster Transactions Propagation and Confirmation
+=================================================================
 
 * Author: kushti
 * Status: Proposed
@@ -14,16 +14,18 @@ Currently, a block is generated every two minutes on average, and confirmed tran
 other block sections. 
 
 This is not efficient at all. Most of new block's transactions are already available in a node's mempool, and 
-bottlenecking network bandwidth after two minutes of (more or less) idle state is also downgrading network performance.
+bottlenecking network bandwidth after two minutes of (more or less) idle state is downgrading network performance (for 
+more, see motivation in [1]).
 
 Also, while average block delay in Ergo is 2 minutes, variance is high, and often a user may wait 10 minutes for 
 first confirmation. Proposals to lower variance are introducing experimental and controversial changes in consensus protocol.
 Changing block delay via hardfork would have a lot of harsh consequences (e.g. many contracts relying on current block 
-delay would be broken). Thus it makes sense to consider weaker notions of confirmation which still could be useful for 
+delay would be broken), and security of consensus after reducing block delay under bounded processing capacity could be 
+compromised [2]. Thus it makes sense to consider weaker notions of confirmation which still could be useful for 
 a variety of applications. 
 
-Sub-Blocks
-----------
+Input-Blocks
+------------
 
 A valid block is sequence of (semantically valid) header fields (and corresponding valid block sections, such as block 
 transactions), including special field to iterate over, called nonce, such as *H(b) < T*, where *H()* is Autolykos Proof-of-Work
@@ -121,3 +123,12 @@ with weaker security guarantees.
 Security Considerations and Assumptions 
 ---------------------------------------
 
+
+
+References
+----------
+
+1. Eyal, Ittay, et al. "{Bitcoin-NG}: A scalable blockchain protocol." 13th USENIX symposium on networked systems design and implementation (NSDI 16). 2016. 
+   https://www.usenix.org/system/files/conference/nsdi16/nsdi16-paper-eyal.pdf
+2. Kiffer, Lucianna, et al. "Nakamoto Consensus under Bounded Processing Capacity." Proceedings of the 2024 on ACM SIGSAC Conference on Computer and Communications Security. 2024.
+   https://iacr.steepath.eu/2023/381-NakamotoConsensusunderBoundedProcessingCapacity.pdf

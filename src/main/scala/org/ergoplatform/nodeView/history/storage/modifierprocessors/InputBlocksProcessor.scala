@@ -37,15 +37,16 @@ trait InputBlocksProcessor extends ScorexLogging {
     val BlocksThreshold = 2 // we remove input-blocks data after 2 ordering blocks
 
     val bestHeight = bestInputBlockHeight.getOrElse(0)
-    val idsToRemove = inputBlockRecords.flatMap{case (id, ibi) =>
+    val idsToRemove = inputBlockRecords.flatMap { case (id, ibi) =>
       val res = (bestHeight - ibi.header.height) > BlocksThreshold
-      if(res){
+      if (res) {
         Some(id)
       } else {
         None
       }
     }
-    idsToRemove.foreach{ id =>
+    idsToRemove.foreach { id =>
+      log.info(s"Pruning input block # $id") // todo: .debug
       inputBlockRecords.remove(id)
       inputBlockTransactions.remove(id)
     }

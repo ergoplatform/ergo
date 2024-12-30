@@ -24,13 +24,17 @@ delay would be broken), and security of consensus after reducing block delay und
 compromised [2]. Thus it makes sense to consider weaker notions of confirmation which still could be useful for 
 a variety of applications. 
 
-Input-Blocks
-------------
+Input Blocks and Ordering Blocks
+--------------------------------
 
-A valid block is sequence of (semantically valid) header fields (and corresponding valid block sections, such as block 
+Following ideas in PRISM [3], parallel Proof-of-Work [4], and Tailstorm [5], we introduce two kinds of blocks in the Ergo 
+ via non-breaking consensus protocol update. 
+
+For starters, lets revisit blocks in current Ergo protocol, which is classic Proof-of-Work protocol formalized in [6]. 
+A valid block is a set of (semantically valid) header fields (and corresponding valid block sections, such as block 
 transactions), including special field to iterate over, called nonce, such as *H(b) < T*, where *H()* is Autolykos Proof-of-Work
-function, *b* are block bytes (including nonce), and *T* is a Proof-of-Work *target* value. A value which is reverse 
-to target is called difficulty *D*: *D = 2^256 / T* (in fact, slightly less value than 2^256 is taken, namely, order of 
+function, *b* are block header bytes (including nonce), and *T* is a Proof-of-Work *target* value. A value which is reverse 
+to target is called difficulty *D*: *D = 2^256 / T* (in fact, slightly less value than 2^256 is being used, namely, order of 
 secp256k1 curve group, this is inherited from initial Autolykos 1 Proof-of-Work algorithm). *D* (and so *T*) is being readjusted 
 regularly via a deterministic procedure (called difficulty readjustment algorithm) to have blocks coming every two minutes on average. 
 
@@ -39,13 +43,28 @@ a block which is more difficult to find than an ordinary, for example, for a (le
 *H(S) < T/2*, and in general, we can call n-level superblock a block *S* for which *H(S) < T/2^n*. Please note that a
 superblock is also a valid block (every superblock is passing block PoW test).
 
-Similarly, we can go in opposite direction and use *subblocks*, so blocks with lower difficulty. We can set *t = T/64*
-and define superblock *s* as *H(s) < t*, then miner can generate on average 64 subblocks (including normal block itself)
-per block generation period. Please note that, unlike superblocks, subblocks are not blocks, but a block is passing 
-subblock check.
+We propose to name full blocks in Ergo as *ordering blocks* from now, and use input-blocks (or sub-blocks) to carry most
+of transactions. For starters, we set *t = T/64* (the divisor will be revisited later) and define input-block *ib* generation 
+condition as *H(ib) < t*, then a miner can generate on average 63 input blocks plus an ordering block 
+per orderring block generation period. Please note that, unlike superblocks, input blocks are not passing ordering-block PoW check, 
+but an ordering block is passing input block check.
 
-Subblocks are similar to block shares already used in pooled mining. Rather, this proposal is considering to use 
-sub-blocks for improving transactions propagation and providing a framework for weaker confirmations.
+Thus we have now blockchain be like:
+
+(ordering) block - input block - input block - input block - (ordering) block - input block - input block - (ordering) block
+
+Next, we define how  transactions are spread among input-blocks, and what additional data structures are needed. 
+
+Transactions Handling
+---------------------
+
+Transactions are broken into two classes, for first one result of transaction validation can't change from one input 
+block to other , for the second, validation result can vary (this is true for transactions relying on block timestamp, 
+miner pubkey and other fields from block header, a clear example here is ERG emission contract).
+
+Transactions of the first class (about 99% of all transactions normally) can be included in input blocks only. 
+Transactions of the second class can be included in both kinds of blocks.
+
 
 Sub-Blocks And Transactions Propagation
 ---------------------------------------
@@ -132,3 +151,11 @@ References
    https://www.usenix.org/system/files/conference/nsdi16/nsdi16-paper-eyal.pdf
 2. Kiffer, Lucianna, et al. "Nakamoto Consensus under Bounded Processing Capacity." Proceedings of the 2024 on ACM SIGSAC Conference on Computer and Communications Security. 2024.
    https://iacr.steepath.eu/2023/381-NakamotoConsensusunderBoundedProcessingCapacity.pdf
+3. Bagaria, Vivek, et al. "Prism: Deconstructing the blockchain to approach physical limits." Proceedings of the 2019 ACM SIGSAC Conference on Computer and Communications Security. 2019.
+   https://dl.acm.org/doi/pdf/10.1145/3319535.3363213
+4. Garay, Juan, Aggelos Kiayias, and Yu Shen. "Proof-of-work-based consensus in expected-constant time." Annual International Conference on the Theory and Applications of Cryptographic Techniques. Cham: Springer Nature Switzerland, 2024.
+   https://eprint.iacr.org/2023/1663.pdf
+5. Keller, Patrik, et al. "Tailstorm: A secure and fair blockchain for cash transactions." arXiv preprint arXiv:2306.12206 (2023).
+   https://arxiv.org/pdf/2306.12206
+6. Garay, Juan, Aggelos Kiayias, and Nikos Leonardos. "The bitcoin backbone protocol: Analysis and applications." Journal of the ACM 71.4 (2024): 1-49.
+   https://dl.acm.org/doi/pdf/10.1145/3653445 

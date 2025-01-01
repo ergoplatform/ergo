@@ -59,11 +59,26 @@ Transactions Handling
 ---------------------
 
 Transactions are broken into two classes, for first one result of transaction validation can't change from one input 
-block to other , for the second, validation result can vary (this is true for transactions relying on block timestamp, 
-miner pubkey and other fields from block header, a clear example here is ERG emission contract).
+block to other , for the second, validation result can vary from one block candidate to another (this is true for transactions relying on block timestamp, 
+miner pubkey and other fields from block header, a clear example here is ERG emission contract, which is relying on miner pubkey).
 
 Transactions of the first class (about 99% of all transactions normally) can be included in input blocks only. 
 Transactions of the second class can be included in both kinds of blocks.
+
+As a miner does not know in advance which kind of block (input/ordering) will be generated, he is preparing for both 
+options by:
+
+* setting Merkle tree root of the block header to transactions seen in the last input block 
+and before that, since the last ordering block, plus all the second-class transactions miner has since the last ordering block.
+     
+* setting 3 new fields in extension field of a block:
+   - setting a new field to new transactions included
+   - setting a new field to removed second-class transactions (first-class cant be removed)
+   - setting a new field to reference to a last seen input block (or Merkle tree of input blocks seen since last ordering block maybe)
+  
+Miners are getting tx fees from first-class transactions and storage rent from input (sub) blocks, emission reward and tx fees 
+from second-class transactions from (ordering) blocks. 
+For tx fees  to be collectable in input blocks, fee script should be changed to "true" just (todo: EIP).
 
 
 Sub-Blocks And Transactions Propagation
@@ -141,6 +156,14 @@ with weaker security guarantees.
 
 Security Considerations and Assumptions 
 ---------------------------------------
+
+
+Protocol Update
+---------------
+
+And only mining nodes update would be needed, while older nodes can receive ordinary block transactions message after every ordering block.
+
+And all the new rules will be made soft-forkable.
 
 
 

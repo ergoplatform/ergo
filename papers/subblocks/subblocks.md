@@ -60,7 +60,8 @@ Transactions Handling
 
 Transactions are broken into two classes, for first one result of transaction validation can't change from one input 
 block to other , for the second, validation result can vary from one block candidate to another (this is true for transactions relying on block timestamp, 
-miner pubkey and other fields from block header, a clear example here is ERG emission contract, which is relying on miner pubkey).
+miner pubkey and other fields changing from one block header candidate to another, a clear example here is ERG emission contract, which is relying on miner pubkey. 
+See next section for more details).
 
 Transactions of the first class (about 99% of all transactions normally) can be included in input blocks only. 
 Transactions of the second class can be included in both kinds of blocks.
@@ -68,20 +69,39 @@ Transactions of the second class can be included in both kinds of blocks.
 As a miner does not know in advance which kind of block (input/ordering) will be generated, he is preparing for both 
 options by:
 
-* setting Merkle tree root of the block header to transactions seen in the last input block 
-and before that, since the last ordering block, plus all the second-class transactions miner has since the last ordering block.
+* setting Merkle tree root of the block header to transactions seen in all the input blocks since the last ordering 
+block, plus all the second-class transactions miner has since the last ordering block.
      
 * setting 3 new fields in extension field of a block:
-   - setting a new field to new transactions included
+   - setting a new field to new transactions since last input-block included
    - setting a new field to removed second-class transactions (first-class cant be removed)
-   - setting a new field to reference to a last seen input block (or Merkle tree of input blocks seen since last ordering block maybe)
+   - setting a new field to reference to a last seen input block
   
 Miners are getting tx fees from first-class transactions and storage rent from input (sub) blocks, emission reward and tx fees 
 from second-class transactions from (ordering) blocks. 
 For tx fees  to be collectable in input blocks, fee script should be changed to "true" just (todo: EIP).
 
+Transaction Classes And Blocks Processing
+-----------------------------------------
 
-Sub-Blocks And Transactions Propagation
+With overall picture provided in the previous section, we are going to define details of transactions and inputs- and
+ordering-blocks here. 
+
+First of all, lets define formally transactions classes. We define miner-affected transactions as transactions which 
+validity can be affected by a miner and block candidate the miner is forming, as their input scripts are using 
+following context fields:
+
+```
+def preHeader: PreHeader // timestamp, votes, minerPk can be changed from candidate to candidate
+
+def minerPubKey: Coll[Byte]
+```
+
+An example of such a transaction is ERG emission transaction. As a miner does not know which kind of block 
+(input/ordering) will be generated, he is including all the transactions into a block candidate. But then, if during 
+validation it turns out that an input-block is subject to validation, then miner-affected transactions are skipped. 
+
+Input-Blocks And Transactions Propagation
 ---------------------------------------
 
 Let's consider that new block is just generated. Miners A and B (among others) are working on a new block. Users are

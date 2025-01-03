@@ -73,13 +73,13 @@ options by:
 block, plus all the second-class transactions miner has since the last ordering block.
      
 * setting 3 new fields in extension field of a block:
-   - setting a new field to new transactions since last input-block included
-   - setting a new field to removed second-class transactions (first-class cant be removed)
+   - setting a new field to a digest (Merkle tree root) of new first-class transactions since last input-block
+   - setting a new field to a digest (Merkle tree root) first class transactions since ordering block
    - setting a new field to reference to a last seen input block
   
 Miners are getting tx fees from first-class transactions and storage rent from input (sub) blocks, emission reward and tx fees 
 from second-class transactions from (ordering) blocks. 
-For tx fees  to be collectable in input blocks, fee script should be changed to "true" just (todo: EIP).
+For tx fees to be collectable in input blocks, fee script should be changed to "true" just (todo: EIP).
 
 Transaction Classes And Blocks Processing
 -----------------------------------------
@@ -99,25 +99,32 @@ def minerPubKey: Coll[Byte]
 
 An example of such a transaction is ERG emission transaction. As a miner does not know which kind of block 
 (input/ordering) will be generated, he is including all the transactions into a block candidate. But then, if during 
-validation it turns out that an input-block is subject to validation, then miner-affected transactions are skipped. 
+validation it turns out that an input-block is subject to validation, then miner-affected transactions are to be skipped.
 
-Input-Blocks And Transactions Propagation
----------------------------------------
+Input and Ordering Blocks Propagation
+-------------------------------------
 
-Let's consider that new block is just generated. Miners A and B (among others) are working on a new block. Users are
-submitting new unconfirmed transactions at the same time to the p2p network, and eventually they are reaching miners 
-(including A and B, but at a given time a transaction could be in one of the mempools just, not necessarily both, it 
-could also be somewhere else and not known to both A and B).
+Here we consider how input and ordering blocks generated and their transactions are propagated over the p2p network, 
+for different clients (stateful/stateless). 
 
-Then, for example, miner A is generating a sub-block committing to new transactions after last block. It sends sub-block
-header as well as weak transaction ids (6 bytes hashes) of transactions included into this sub-block but not previous 
-sub-blocks to peers. Peers then are asking for transactions they do not know only, and if previous sub-block is not 
-known, they are downloading it along with its transactions delta, and go further recursively if needed. 
+When a miner is generating an input block, it is announcing it by spreading header along with id of a previous input 
+block (parent). A peer, by receiving an announcement, is asking for input block data introspection message, which 
+contains proof of parent and both transaction Merkle trees against extension digest in the header, along with 
+first-class transaction 6-byte weak ids (similar to weak ids in Compact Blocks in Bitcoin). Receiver checks transaction
+ ids and downloads only first-class transactions to check.
 
-Thus pulse of sub-blocks will allow to exchange transactions quickly. And when a new sub-block is also a block (passing 
-normal difficulty check), not many transactions to download, normally. Thus instead of exchanging all the full-block 
-transactions when a new block comes, peers will exchange relatively small transaction deltas all the time. Full-block 
-transactions sections exchange still will be supported, to support downloading historical blocks, and also old clients. 
+When a miner is generating an ordering block, it is announcing header similarly to input-block announcement. However, 
+in this case 
+
+TODO: stateless clients.
+
+Incentivization
+---------------
+
+No incentives to generate and propagate sub-blocks are planned for the Ergo core protocols at the moment. At the same
+time, incentives can be provided on the sub-block based merge-mined sidechains, or via application-specific agreements
+(where applications may pay to miners for faster confirmations).
+
 
 Sub-blocks Structure and Commitment to Sub-Blocks
 -------------------------------------------------
@@ -159,12 +166,6 @@ For rewarding miners submitting sub-blocks to Ergo network (sidechain block gene
 may be consist of main-chain sub-block and sidechain state along with membership proof. For enforcing linearity of transactions
 , sidechain consensus may enforce rollback to a sub-block before transaction reversal on proof of reversal being published. 
 
-Incentivization
----------------
-
-No incentives to generate and propagate sub-blocks are planned for the Ergo core protocols at the moment. At the same 
-time, incentives can be provided on the sub-block based merge-mined sidechains, or via application-specific agreements
-(where applications may pay to miners for faster confirmations).
 
 
 Weak Confirmations

@@ -76,10 +76,6 @@ block, plus all the second-class transactions miner has since the last ordering 
    - setting a new field to a digest (Merkle tree root) of new first-class transactions since last input-block
    - setting a new field to a digest (Merkle tree root) first class transactions since ordering block
    - setting a new field to reference to a last seen input block
-  
-Miners are getting tx fees from first-class transactions and storage rent from input (sub) blocks, emission reward and tx fees 
-from second-class transactions from (ordering) blocks. 
-For tx fees to be collectable in input blocks, fee script should be changed to "true" just (todo: EIP).
 
 Transaction Classes And Blocks Processing
 -----------------------------------------
@@ -121,34 +117,9 @@ TODO: stateless clients.
 Incentivization
 ---------------
 
-No incentives to generate and propagate sub-blocks are planned for the Ergo core protocols at the moment. At the same
-time, incentives can be provided on the sub-block based merge-mined sidechains, or via application-specific agreements
-(where applications may pay to miners for faster confirmations).
-
-
-Sub-blocks Structure and Commitment to Sub-Blocks
--------------------------------------------------
-
-Here we consider what kind of footprint sub-blocks would have in consensus-enforced data structures (i.e. on-chain). 
-Proper balance here is critical and hard to achieve. Strict consensus-enforced commitments (when all the 
-sub-blocks committed on-chain) require from all the miners to have all the sub-blocks in order to check them. But, 
-at the same time, consensus-enforced commitments to properly ordered sub-blocks would allow for protocols and 
-applications using sub-blocks data.
-
-We have chosen weak commitments. That is, a miner may (and incentivized to) to commit to longest sub-blocks chain 
-since previous full-block, but that there are no any requirements about that in Ergo consensus rules.
-
-New extension key space starting with 0x03 will be used for sub-blocks related data, with one key used per this EIP:
-
-0x03 0x00 - digest of a Merkle tree of longest sub-blocks chain starting with previous block (but not including it).
-
-So first sub-block having full-block as a parent will have empty tree, next one will have only first, and next 
-full-block will commit to all the sub-blocks since previous full-block. 
-
-Note that sub-blocks (like blocks) are forming direct acyclic graph (DAG), but only longest sub-blocks chain is 
-committed.
-
-At the same time, no any new checks are planned for the Ergo protocol. Checks are possible for sidechains. 
+Miners are getting tx fees from first-class transactions and storage rent from input (sub) blocks, emission reward and tx fees
+from second-class transactions from (ordering) blocks.
+For tx fees to be collectable in input blocks, fee script should be changed to "true" just (todo: EIP).
 
 
 Sub-Block Based Sidechains

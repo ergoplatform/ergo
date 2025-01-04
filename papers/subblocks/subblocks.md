@@ -122,40 +122,18 @@ from second-class transactions from (ordering) blocks.
 For tx fees to be collectable in input blocks, fee script should be changed to "true" just (todo: EIP).
 
 
-Sub-Block Based Sidechains
---------------------------
-
-As L1 incentivization for propagating and committing on-chain to sub-blocks are missed, we consider sub-block based 
-merge-mined sidechains as possible option to incentivize miners to participate in the sub-blocks sub-protocol. They 
-also can be used to enforce linearity (so that transactions added in a previous sub-block can't be reversed). 
-
-A merged-mined sidechain is using sub-blocks as well as blocks to update its state which can be committed via main-chain 
-transactions even. That is, in every sub-blocks side-chain state (sidechain UTXO set digest etc) can be written in a box 
-with sidechain NFT, and then every sub-block the box may be updated. 
-
-For rewarding miners submitting sub-blocks to Ergo network (sidechain block generators are listening to), a sidechain block
-may be consist of main-chain sub-block and sidechain state along with membership proof. For enforcing linearity of transactions
-, sidechain consensus may enforce rollback to a sub-block before transaction reversal on proof of reversal being published. 
-
-
-
-Weak Confirmations
-------------------
-
-With linearity of transactions history in sub-blocks chain, sub-blocks may be used for getting faster confirmations 
-with weaker security guarantees.
-
-
 Security Considerations and Assumptions 
 ---------------------------------------
 
+TODO: 
 
 Protocol Update
 ---------------
 
-And only mining nodes update would be needed, while older nodes can receive ordinary block transactions message after every ordering block.
+Щnly mining nodes update would be needed, while older nodes can receive ordinary block transactions message after every ordering block.
 
-And all the new rules will be made soft-forkable.
+And all the new rules will be made soft-forkable, so it will be possible to change them with soft-fork (mining nodes upgrade after
+90+% hashrate approval) only.
 
 
 

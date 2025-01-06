@@ -130,7 +130,10 @@ TODO:
 Protocol Update
 ---------------
 
-Щnly mining nodes update would be needed, while older nodes can receive ordinary block transactions message after every ordering block.
+Initially, there will be no requirement to have new fields in the extension section. The new requirements will be introduced 
+when most of hashrate (90+%) would be updated and generating input blocks in the network. 
+
+Only mining nodes update would be needed, while older nodes can receive ordinary block transactions message after every ordering block.
 
 And all the new rules will be made soft-forkable, so it will be possible to change them with soft-fork (mining nodes upgrade after
 90+% hashrate approval) only.

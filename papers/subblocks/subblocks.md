@@ -69,13 +69,18 @@ Transactions of the second class can be included in both kinds of blocks.
 As a miner does not know in advance which kind of block (input/ordering) will be generated, he is preparing for both 
 options by:
 
-* setting Merkle tree root of the block header to transactions seen in all the input blocks since the last ordering 
-block, plus all the second-class transactions miner has since the last ordering block.
+* setting Merkle tree root of the block header to transactions seen in all the previous input blocks since the last ordering 
+block, plus all the second-class transactions miner has since the last ordering block (including since last input block).
      
 * setting 3 new fields in extension field of a block:
    - setting a new field to a digest (Merkle tree root) of new first-class transactions since last input-block
-   - setting a new field to a digest (Merkle tree root) first class transactions since ordering block
-   - setting a new field to reference to a last seen input block
+   - setting a new field to a digest (Merkle tree root) first class transactions since ordering block till last input-block
+   - setting a new field to reference to a last seen input block 
+
+With this structure we may have old clients still processing blocks, while new clients having better bandwidth utilization 
+and higher transactions throughput.
+
+Next, we define how new clients will process input and ordering blocks.
 
 Transaction Classes And Blocks Processing
 -----------------------------------------

@@ -69,15 +69,22 @@ Transactions of the second class can be included in both kinds of blocks.
 As a miner does not know in advance which kind of block (input/ordering) will be generated, he is preparing for both 
 options by:
 
-* setting Merkle tree root of the block header to transactions seen in all the previous input blocks since the last ordering 
+* setting transactions Merkle tree root of the block header to transactions seen in all the previous input blocks since the last ordering 
 block, plus all the second-class transactions miner has since the last ordering block (including since last input block).
      
 * setting 3 new fields in extension field of a block:
-   - setting a new field to a digest (Merkle tree root) of new first-class transactions since last input-block
-   - setting a new field to a digest (Merkle tree root) first class transactions since ordering block till last input-block
-   - setting a new field to reference to a last seen input block 
+   - setting a new field E1 to a digest (Merkle tree root) of new first-class transactions since last input-block
+   - setting a new field E2 to a digest (Merkle tree root) first class transactions since ordering block till last input-block
+   - setting a new field E3 to reference to a last seen input block 
 
-With this structure we may have old clients still processing blocks, while new clients having better bandwidth utilization 
+Before input/ordering blocks split, transactions Merkle tree root contained commitment to block's transactions. Similarly, 
+this field for an ordering block contains commitments for transactions. For input blocks, incremental updates should be 
+checked for this field, by checking that E2 contains all the first class transactions from the header's transactions 
+Merkle tree root, and then that E2 of an input blocks contains all the transactions from E2 of previous input block. 
+Thus double-spending first-class transactions from input blocks is not possible. 
+
+Also, with this structure we may have old clients still processing blocks, by downloading full block transactions 
+corresponding to block header's transactions commitment, while new clients having better bandwidth utilization 
 and higher transactions throughput.
 
 Next, we define how new clients will process input and ordering blocks.
@@ -106,16 +113,15 @@ Input and Ordering Blocks Propagation
 -------------------------------------
 
 Here we consider how input and ordering blocks generated and their transactions are propagated over the p2p network, 
-for different clients (stateful/stateless). 
+for different clients (stateful/stateless).
 
-When a miner is generating an input block, it is announcing it by spreading header along with id of a previous input 
+When a miner has generated an input block, it is announcing it by spreading header along with id of a previous input 
 block (parent). A peer, by receiving an announcement, is asking for input block data introspection message, which 
 contains proof of parent and both transaction Merkle trees against extension digest in the header, along with 
 first-class transaction 6-byte weak ids (similar to weak ids in Compact Blocks in Bitcoin). Receiver checks transaction
  ids and downloads only first-class transactions to check.
 
-When a miner is generating an ordering block, it is announcing header similarly to input-block announcement. However, 
-in this case 
+When a miner is generating an ordering block, it is announcing header similarly to input-block announcement. 
 
 TODO: stateless clients.
 

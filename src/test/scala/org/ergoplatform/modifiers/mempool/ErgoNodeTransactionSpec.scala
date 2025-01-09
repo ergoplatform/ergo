@@ -13,14 +13,14 @@ import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
 import org.ergoplatform.validation.ValidationRules.CheckAndGetMethod
-import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
+import org.ergoplatform.wallet.boxes.{ErgoBoxAssetExtractor, ErgoBoxSerializer}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.scalacheck.Gen
 import sigma.util.BenchmarkUtil
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import sigma.Colls
+import sigma.{Colls, VersionContext}
 import sigma.ast.ErgoTree.ZeroHeader
 import sigma.ast.{AND, ErgoTree, TrueLeaf}
 import sigma.interpreter.{ContextExtension, ProverResult}
@@ -529,6 +529,13 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
       val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
 
       utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver).isSuccess shouldBe true
+    }
+  }
+
+  property("Unsigned big int in register - deserialization") {
+    VersionContext.withVersions(3, 3) {
+      val bs = "8094ebdc030b0208d3000001090102c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f774200"
+      an[sigma.validation.ValidationException] should be thrownBy ErgoBoxSerializer.parseBytes(Base16.decode(bs).get)
     }
   }
   

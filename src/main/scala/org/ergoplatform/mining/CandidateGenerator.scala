@@ -8,7 +8,8 @@ import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.extension.Extension.{InputBlockTransactionsDigestKey, PrevInputBlockIdKey, PreviousInputBlockTransactionsDigestKey}
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -473,7 +474,7 @@ object CandidateGenerator extends ScorexLogging {
       val interlinksExtension = popowAlgos.interlinksToExtension(updInterlinks)
 
       val votingSettings      = ergoSettings.chainSettings.voting
-      val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt
+      val (preExtensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt
         .map { header =>
           val newHeight     = header.height + 1
           val currentParams = stateContext.currentParameters
@@ -510,6 +511,13 @@ object CandidateGenerator extends ScorexLogging {
         .getOrElse(
           (interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion)
         )
+
+      val inputBlockTransactionsDigest = (InputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
+      val previousInputBlockTransactions = (PreviousInputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
+      val prevInputBlockId = (PrevInputBlockIdKey, Array.emptyByteArray) // todo: real bytes
+      val inputBlockFields = ExtensionCandidate(Seq(inputBlockTransactionsDigest, previousInputBlockTransactions, prevInputBlockId))
+
+      val extensionCandidate = preExtensionCandidate ++ inputBlockFields
 
       val upcomingContext = state.stateContext.upcoming(
         minerPk.value,

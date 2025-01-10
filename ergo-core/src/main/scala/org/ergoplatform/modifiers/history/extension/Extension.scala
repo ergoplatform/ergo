@@ -89,7 +89,7 @@ object Extension extends ApiCodecs {
   /**
     * Reference to last seen input block
     */
-  val PrevSubBlockIdKey: Array[Byte] = Array(InputBlocksDataPrefix, 0x02)
+  val PrevInputBlockIdKey: Array[Byte] = Array(InputBlocksDataPrefix, 0x02)
 
 
   /**

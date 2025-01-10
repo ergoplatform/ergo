@@ -312,6 +312,7 @@ object CandidateGenerator extends ScorexLogging {
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
 
   /**
+    * @param txsToInclude - user-provided transactions, to be included into a block (prioritized over mempool's)
     * @return None if chain is not synced or Some of attempt to create candidate
     */
   def generateCandidate(
@@ -320,22 +321,23 @@ object CandidateGenerator extends ScorexLogging {
     m: ErgoMemPoolReader,
     pk: ProveDlog,
     txsToInclude: Seq[ErgoTransaction],
-    ergoSettings: ErgoSettings
-  ): Option[Try[(Candidate, EliminateTransactions)]] = {
-    //mandatory transactions to include into next block taken from the previous candidate
+    ergoSettings: ErgoSettings): Option[Try[(Candidate, EliminateTransactions)]] = {
+
+    // prioritized transactions to include
+    // filter out transactions which inputs spent already
     lazy val unspentTxsToInclude = txsToInclude.filter { tx =>
       inputsNotSpent(tx, s)
     }
 
     val stateContext = s.stateContext
 
-    //only transactions valid from against the current utxo state we take from the mem pool
+    // mempool transactions to include into a block
     lazy val poolTransactions = m.getAllPrioritized
 
     lazy val emissionTxOpt =
       CandidateGenerator.collectEmission(s, pk, stateContext)
 
-    def chainSynced =
+    def chainSynced: Boolean =
       h.bestFullBlockOpt.map(_.id) == stateContext.lastHeaderOpt.map(_.id)
 
     def hasAnyMemPoolOrMinerTx =

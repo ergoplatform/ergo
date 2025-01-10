@@ -436,29 +436,29 @@ object CandidateGenerator extends ScorexLogging {
                        ergoSettings: ErgoSettings
   ): Try[(Candidate, EliminateTransactions)] =
     Try {
+
       val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
+      val stateContext = state.stateContext
 
       // Extract best header and extension of a best block for assembling a new block
       val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
         .flatMap(h => history.typedModifierById[Extension](h.extensionId))
 
-      val lastSubblockOpt: Option[InputBlockInfo] = history.bestInputBlock()
+      val lastInputBlockOpt: Option[InputBlockInfo] = history.bestInputBlock()
 
       // there was sub-block generated before for this block
-      val continueSubblock = lastSubblockOpt.exists(sbi => bestHeaderOpt.map(_.id).contains(sbi.header.parentId))
+      val continueInputBlock = lastInputBlockOpt.exists(sbi => bestHeaderOpt.map(_.id).contains(sbi.header.parentId))
 
       // Make progress in time since last block.
       // If no progress is made, then, by consensus rules, the block will be rejected.
-      // todo: review w. subblocks
       val timestamp =
         Math.max(System.currentTimeMillis(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
 
-      val stateContext = state.stateContext
-
       // Calculate required difficulty for the new block, the same diff for subblock
-      val nBits: Long = if(continueSubblock) {
-        lastSubblockOpt.get.header.nBits // .get is ok as lastSubblockOpt.exists in continueSubblock checks emptiness
+      val nBits: Long = if (continueInputBlock) {
+        // just take nbits from previous input block
+        lastInputBlockOpt.get.header.nBits // .get is ok as lastSubblockOpt.exists in continueSubblock checks emptiness
       } else {
         bestHeaderOpt
           .map(parent => history.requiredDifficultyAfter(parent))
@@ -471,6 +471,7 @@ object CandidateGenerator extends ScorexLogging {
       // Obtain NiPoPoW interlinks vector to pack it into the extension section
       val updInterlinks       = popowAlgos.updateInterlinks(bestHeaderOpt, bestExtensionOpt)
       val interlinksExtension = popowAlgos.interlinksToExtension(updInterlinks)
+
       val votingSettings      = ergoSettings.chainSettings.voting
       val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt
         .map { header =>
@@ -521,7 +522,7 @@ object CandidateGenerator extends ScorexLogging {
 
       val emissionTxs = emissionTxOpt.toSeq
 
-      // todo: remove in 5.0
+      // todo: could be removed after 5.0, but we still slowly decreasing it for starters
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
       // differently due to bugs in AOT costing
       val safeGap = if (state.stateContext.currentParameters.maxBlockCost < 1000000) {

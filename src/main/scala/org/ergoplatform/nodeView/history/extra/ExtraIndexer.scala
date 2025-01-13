@@ -517,8 +517,6 @@ class ExtraIndexer(cacheSettings: CacheSettings,
       self ! Index()
       unstashAll()
 
-    case _ => stash()
-
   }
 }
 

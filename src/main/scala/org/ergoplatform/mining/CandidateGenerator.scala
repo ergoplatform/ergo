@@ -451,6 +451,13 @@ object CandidateGenerator extends ScorexLogging {
       // there was sub-block generated before for this block
       val continueInputBlock = lastInputBlockOpt.exists(sbi => bestHeaderOpt.map(_.id).contains(sbi.header.parentId))
 
+      // todo: recheck
+      val parentInputBlockIdOpt = if (continueInputBlock) {
+        lastInputBlockOpt.map(_.header.serializedId)
+      } else {
+        None
+      }
+
       // Make progress in time since last block.
       // If no progress is made, then, by consensus rules, the block will be rejected.
       val timestamp =
@@ -512,10 +519,14 @@ object CandidateGenerator extends ScorexLogging {
           (interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion)
         )
 
-      val inputBlockTransactionsDigest = (InputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
+      val inputBlockTransactionsDigest = parentInputBlockIdOpt.map { prevInputBlockId =>
+        (InputBlockTransactionsDigestKey, prevInputBlockId)
+      }.toSeq
       val previousInputBlockTransactions = (PreviousInputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
       val prevInputBlockId = (PrevInputBlockIdKey, Array.emptyByteArray) // todo: real bytes
-      val inputBlockFields = ExtensionCandidate(Seq(inputBlockTransactionsDigest, previousInputBlockTransactions, prevInputBlockId))
+      val inputBlockFields = ExtensionCandidate(
+        inputBlockTransactionsDigest ++ Seq(previousInputBlockTransactions, prevInputBlockId)
+      )
 
       val extensionCandidate = preExtensionCandidate ++ inputBlockFields
 

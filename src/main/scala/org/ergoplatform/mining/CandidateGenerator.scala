@@ -519,13 +519,19 @@ object CandidateGenerator extends ScorexLogging {
           (interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion)
         )
 
-      val inputBlockTransactionsDigest = parentInputBlockIdOpt.map { prevInputBlockId =>
-        (InputBlockTransactionsDigestKey, prevInputBlockId)
+      // digest (Merkle tree root) of new first-class transactions since last input-block
+      val inputBlockTransactionsDigest = (InputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
+
+      // digest (Merkle tree root) of new first-class transactions since last input-block
+      val previousInputBlocksTransactions = (PreviousInputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
+
+      //  reference to a last seen input block
+      val prevInputBlockId = parentInputBlockIdOpt.map { prevInputBlockId =>
+        (PrevInputBlockIdKey, prevInputBlockId)
       }.toSeq
-      val previousInputBlockTransactions = (PreviousInputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
-      val prevInputBlockId = (PrevInputBlockIdKey, Array.emptyByteArray) // todo: real bytes
+
       val inputBlockFields = ExtensionCandidate(
-        inputBlockTransactionsDigest ++ Seq(previousInputBlockTransactions, prevInputBlockId)
+        prevInputBlockId ++ Seq(inputBlockTransactionsDigest, previousInputBlocksTransactions)
       )
 
       val extensionCandidate = preExtensionCandidate ++ inputBlockFields

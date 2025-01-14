@@ -460,8 +460,7 @@ object CandidateGenerator extends ScorexLogging {
 
       // Make progress in time since last block.
       // If no progress is made, then, by consensus rules, the block will be rejected.
-      val timestamp =
-        Math.max(System.currentTimeMillis(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
+      val timestamp = Math.max(System.currentTimeMillis(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
 
       // Calculate required difficulty for the new block, the same diff for subblock
       val nBits: Long = if (continueInputBlock) {
@@ -480,9 +479,15 @@ object CandidateGenerator extends ScorexLogging {
       val updInterlinks       = popowAlgos.updateInterlinks(bestHeaderOpt, bestExtensionOpt)
       val interlinksExtension = popowAlgos.interlinksToExtension(updInterlinks)
 
-      val votingSettings      = ergoSettings.chainSettings.voting
+      // todo: cache votes and version for a header, do not recalculate it each block
+      /*
+       * Calculate extension candidate without input-block specific fields, votes, and block version
+       */
+
       val (preExtensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt
         .map { header =>
+          val votingSettings      = ergoSettings.chainSettings.voting
+
           val newHeight     = header.height + 1
           val currentParams = stateContext.currentParameters
           val voteForSoftFork = forkOrdered(ergoSettings, currentParams, header)
@@ -519,6 +524,53 @@ object CandidateGenerator extends ScorexLogging {
           (interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion)
         )
 
+      /*
+       * Forming transactions to get included
+       */
+
+      // todo: could be removed after 5.0, but we still slowly decreasing it for starters
+      // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
+      // differently due to bugs in AOT costing
+      val safeGap = if (state.stateContext.currentParameters.maxBlockCost < 1000000) {
+        0
+      } else if (state.stateContext.currentParameters.maxBlockCost < 5000000) {
+        150000
+      } else {
+        500000
+      }
+
+      val upcomingContext = state.stateContext.upcoming(
+        minerPk.value,
+        timestamp,
+        nBits,
+        votes,
+        proposedUpdate,
+        version
+      )
+
+      val transactionCandidates = emissionTxOpt.toSeq ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
+
+      val (txs, toEliminate) = collectTxs(
+        minerPk,
+        state.stateContext.currentParameters.maxBlockCost - safeGap,
+        state.stateContext.currentParameters.maxBlockSize,
+        state,
+        upcomingContext,
+        transactionCandidates
+      )
+
+      val eliminateTransactions = EliminateTransactions(toEliminate)
+
+      if (txs.isEmpty) {
+        throw new IllegalArgumentException(
+          s"Proofs for 0 txs cannot be generated : emissionTx: ${emissionTxOpt.isDefined}, priorityTxs: ${prioritizedTransactions.size}, poolTxs: ${poolTxs.size}"
+        )
+      }
+
+      /*
+       * Put input block related fields into extension section of block candidate
+       */
+
       // digest (Merkle tree root) of new first-class transactions since last input-block
       val inputBlockTransactionsDigest = (InputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
 
@@ -535,45 +587,6 @@ object CandidateGenerator extends ScorexLogging {
       )
 
       val extensionCandidate = preExtensionCandidate ++ inputBlockFields
-
-      val upcomingContext = state.stateContext.upcoming(
-        minerPk.value,
-        timestamp,
-        nBits,
-        votes,
-        proposedUpdate,
-        version
-      )
-
-      val emissionTxs = emissionTxOpt.toSeq
-
-      // todo: could be removed after 5.0, but we still slowly decreasing it for starters
-      // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
-      // differently due to bugs in AOT costing
-      val safeGap = if (state.stateContext.currentParameters.maxBlockCost < 1000000) {
-        0
-      } else if (state.stateContext.currentParameters.maxBlockCost < 5000000) {
-        150000
-      } else {
-        500000
-      }
-
-      val (txs, toEliminate) = collectTxs(
-        minerPk,
-        state.stateContext.currentParameters.maxBlockCost - safeGap,
-        state.stateContext.currentParameters.maxBlockSize,
-        state,
-        upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
-      )
-
-      val eliminateTransactions = EliminateTransactions(toEliminate)
-
-      if (txs.isEmpty) {
-        throw new IllegalArgumentException(
-          s"Proofs for 0 txs cannot be generated : emissionTxs: ${emissionTxs.size}, priorityTxs: ${prioritizedTransactions.size}, poolTxs: ${poolTxs.size}"
-        )
-      }
 
       def deriveWorkMessage(block: CandidateBlock) = {
         ergoSettings.chainSettings.powScheme.deriveExternalCandidate(

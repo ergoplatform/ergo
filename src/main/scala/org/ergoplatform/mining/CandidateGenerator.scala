@@ -548,7 +548,13 @@ object CandidateGenerator extends ScorexLogging {
         version
       )
 
-      val transactionCandidates = emissionTxOpt.toSeq ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
+      // returns txs which may and may not be included into input-block
+      def filterInputBlockTransactions(candidates: Seq[ErgoTransaction]): (Seq[ErgoTransaction], Seq[ErgoTransaction]) = {
+        (candidates, Seq.empty) // todo: real implemenation
+      }
+
+      val (inputBlockTransactionCandidates, txsNotIncludedIntoInput) = filterInputBlockTransactions(prioritizedTransactions ++ poolTxs.map(_.transaction))
+      val orderingBlocktransactionCandidates = emissionTxOpt.toSeq ++ inputBlockTransactionCandidates ++ txsNotIncludedIntoInput
 
       val (txs, toEliminate) = collectTxs(
         minerPk,
@@ -556,7 +562,7 @@ object CandidateGenerator extends ScorexLogging {
         state.stateContext.currentParameters.maxBlockSize,
         state,
         upcomingContext,
-        transactionCandidates
+        orderingBlocktransactionCandidates
       )
 
       val eliminateTransactions = EliminateTransactions(toEliminate)

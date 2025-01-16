@@ -580,7 +580,7 @@ object CandidateGenerator extends ScorexLogging {
       // digest (Merkle tree root) of new first-class transactions since last input-block
       val inputBlockTransactionsDigest = (InputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
 
-      // digest (Merkle tree root) of new first-class transactions since last input-block
+      // digest (Merkle tree root) first class transactions since ordering block till last input-block
       val previousInputBlocksTransactions = (PreviousInputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
 
       //  reference to a last seen input block

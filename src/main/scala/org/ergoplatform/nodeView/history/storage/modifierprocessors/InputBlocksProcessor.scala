@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.subblocks.InputBlockInfo
@@ -30,6 +31,19 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   // input block id -> input block transactions index
   val inputBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
+
+  /**
+    * @return best ordering and input blocks
+    */
+  def bestBlocks: (Option[Header], Option[InputBlockInfo]) = {
+    val bestOrdering = historyReader.bestFullBlockOpt.map(_.header)
+    val bestInputForOrdering = if(_bestInputBlock.exists(sbi => bestOrdering.map(_.id).contains(sbi.header.parentId))) {
+      _bestInputBlock
+    } else {
+      None
+    }
+    bestOrdering -> bestInputForOrdering
+  }
 
   private def bestInputBlockHeight: Option[Height] = _bestInputBlock.map(_.header.height)
 

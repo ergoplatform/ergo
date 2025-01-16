@@ -442,30 +442,21 @@ object CandidateGenerator extends ScorexLogging {
       val stateContext = state.stateContext
 
       // Extract best header and extension of a best block for assembling a new block
-      val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
+      val (bestHeaderOpt, bestInputBlock) = history.bestBlocks
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
         .flatMap(h => history.typedModifierById[Extension](h.extensionId))
 
-      val lastInputBlockOpt: Option[InputBlockInfo] = history.bestInputBlock()
-
-      // there was sub-block generated before for this block
-      val continueInputBlock = lastInputBlockOpt.exists(sbi => bestHeaderOpt.map(_.id).contains(sbi.header.parentId))
-
-      // todo: recheck
-      val parentInputBlockIdOpt = if (continueInputBlock) {
-        lastInputBlockOpt.map(_.header.serializedId)
-      } else {
-        None
-      }
+      // todo: put previous input block id, not header id
+      val parentInputBlockIdOpt = bestInputBlock.map(_.header.serializedId)
 
       // Make progress in time since last block.
       // If no progress is made, then, by consensus rules, the block will be rejected.
       val timestamp = Math.max(System.currentTimeMillis(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
 
       // Calculate required difficulty for the new block, the same diff for subblock
-      val nBits: Long = if (continueInputBlock) {
+      val nBits: Long = if (bestInputBlock.isDefined) {
         // just take nbits from previous input block
-        lastInputBlockOpt.get.header.nBits // .get is ok as lastSubblockOpt.exists in continueSubblock checks emptiness
+        bestInputBlock.get.header.nBits // .get is ok as lastSubblockOpt.exists in continueSubblock checks emptiness
       } else {
         bestHeaderOpt
           .map(parent => history.requiredDifficultyAfter(parent))

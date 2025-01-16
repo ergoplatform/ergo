@@ -1098,6 +1098,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  // todo: send transactions? or transaction ids? or switch from one option to another depending on message size ?
   def processInputBlockTransactionsRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
     hr.getInputBlockTransactions(subBlockId) match {
       case Some(transactions) =>

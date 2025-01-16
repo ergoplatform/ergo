@@ -29,8 +29,15 @@ trait InputBlocksProcessor extends ScorexLogging {
   // input block id -> input block index
   val inputBlockRecords = mutable.Map[ModifierId, InputBlockInfo]()
 
-  // input block id -> input block transactions index
-  val inputBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
+  // input block id -> input block transaction ids index
+  val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
+
+  // txid -> transaction
+  val transactionsCache = mutable.Map[ModifierId, ErgoTransaction]()
+  
+  // todo: record incremental transaction sets for ordering blocks (and prune them)
+  // block header (ordering block) -> transaction ids
+  val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
   /**
     * @return best ordering and input blocks
@@ -100,11 +107,19 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   def applyInputBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
-    inputBlockTransactions.put(sbId, transactions)
+    val transactionIds = transactions.map(_.id)
+    inputBlockTransactions.put(sbId, transactionIds)
+    transactions.foreach {tx =>
+      transactionsCache.put(tx.id, tx)
+    }
   }
 
   def getInputBlockTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] = {
-    inputBlockTransactions.get(sbId)
+    // todo: cache input block transactions to avoid recalculating it on every p2p request
+    // todo: optimize the code below
+    inputBlockTransactions.get(sbId).map{ids =>
+      ids.flatMap(transactionsCache.get)
+    }
   }
 
   def bestInputBlock(): Option[InputBlockInfo] = {

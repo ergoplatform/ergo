@@ -446,7 +446,7 @@ object CandidateGenerator extends ScorexLogging {
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
         .flatMap(h => history.typedModifierById[Extension](h.extensionId))
 
-      val parentInputBlockIdOpt = bestInputBlock.flatMap(bestInput => bestInput.prevInputBlockId)
+      val parentInputBlockIdOpt = bestInputBlock.map(bestInput => bestInput.serializedId)
 
       // Make progress in time since last block.
       // If no progress is made, then, by consensus rules, the block will be rejected.

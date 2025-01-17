@@ -34,7 +34,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   // txid -> transaction
   val transactionsCache = mutable.Map[ModifierId, ErgoTransaction]()
-  
+
   // todo: record incremental transaction sets for ordering blocks (and prune them)
   // block header (ordering block) -> transaction ids
   val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
@@ -109,6 +109,11 @@ trait InputBlocksProcessor extends ScorexLogging {
   def applyInputBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
     val transactionIds = transactions.map(_.id)
     inputBlockTransactions.put(sbId, transactionIds)
+    if (sbId == _bestInputBlock.map(_.id).getOrElse("")) {
+      val orderingBlockId = _bestInputBlock.get.header.id
+      val curr = orderingBlockTransactions.getOrElse(orderingBlockId, Seq.empty)
+      orderingBlockTransactions.put(orderingBlockId, curr ++ transactionIds)
+    }
     transactions.foreach {tx =>
       transactionsCache.put(tx.id, tx)
     }

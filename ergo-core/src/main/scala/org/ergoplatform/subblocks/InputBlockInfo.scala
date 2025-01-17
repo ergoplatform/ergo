@@ -1,12 +1,15 @@
 package org.ergoplatform.subblocks
 
+import org.ergoplatform.core.bytesToId
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.serialization.ErgoSerializer
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.subblocks.InputBlockInfo.FakePrevInputBlockId
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
 import scorex.crypto.hash.{Blake2b, Blake2b256, CryptographicHash, Digest32}
 import scorex.util.Extensions.IntOps
+import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -21,12 +24,17 @@ import scorex.util.serialization.{Reader, Writer}
   *                      (as they are coming from extension section, and committed in `subBlock` header via extension
   *                      digest)
   */
+// todo: introduce id
 case class InputBlockInfo(version: Byte,
                           header: Header,
                           prevInputBlockId: Option[Array[Byte]],
                           transactionsDigest: Digest32,
                           merkleProof: BatchMerkleProof[Digest32] // Merkle proof for both prevSubBlockId & subblockTransactionsDigest
                        ) {
+
+  // todo: enough for unique id, but for protocols maybe its worth to authenticate transactions digest as well?
+  lazy val serializedId: Digest32 = Algos.hash(header.serializedId ++ prevInputBlockId.getOrElse(FakePrevInputBlockId))
+  lazy val id: ModifierId = bytesToId(serializedId)
 
   def valid(): Boolean = {
     // todo: implement data validity checks
@@ -37,6 +45,8 @@ case class InputBlockInfo(version: Byte,
 }
 
 object InputBlockInfo {
+
+  private val FakePrevInputBlockId: Array[Byte] = Array.fill(32)(0.toByte)
 
   val initialMessageVersion = 1.toByte
 

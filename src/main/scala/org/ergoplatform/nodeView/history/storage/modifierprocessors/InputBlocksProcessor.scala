@@ -12,7 +12,7 @@ import scala.collection.mutable
 /**
   * Storing and processing input-blocks related data
   * Desiderata:
-  *   * store input blocks for short time only
+  * * store input blocks for short time only
   */
 trait InputBlocksProcessor extends ScorexLogging {
 
@@ -35,7 +35,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   // txid -> transaction
   val transactionsCache = mutable.Map[ModifierId, ErgoTransaction]()
 
-  // todo: record incremental transaction sets for ordering blocks (and prune them)
+  // transactions generated AFTER an ordering block
   // block header (ordering block) -> transaction ids
   val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
@@ -44,7 +44,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   def bestBlocks: (Option[Header], Option[InputBlockInfo]) = {
     val bestOrdering = historyReader.bestFullBlockOpt.map(_.header)
-    val bestInputForOrdering = if(_bestInputBlock.exists(sbi => bestOrdering.map(_.id).contains(sbi.header.parentId))) {
+    val bestInputForOrdering = if (_bestInputBlock.exists(sbi => bestOrdering.map(_.id).contains(sbi.header.parentId))) {
       _bestInputBlock
     } else {
       None
@@ -114,7 +114,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       val curr = orderingBlockTransactions.getOrElse(orderingBlockId, Seq.empty)
       orderingBlockTransactions.put(orderingBlockId, curr ++ transactionIds)
     }
-    transactions.foreach {tx =>
+    transactions.foreach { tx =>
       transactionsCache.put(tx.id, tx)
     }
   }
@@ -122,15 +122,23 @@ trait InputBlocksProcessor extends ScorexLogging {
   def getInputBlockTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     // todo: optimize the code below
-    inputBlockTransactions.get(sbId).map{ids =>
+    inputBlockTransactions.get(sbId).map { ids =>
+      ids.flatMap(transactionsCache.get)
+    }
+  }
+
+  def getOrderingBlockTransactions(id: ModifierId): Option[Seq[ErgoTransaction]] = {
+    // todo: cache input block transactions to avoid recalculating it on every input block regeneration?
+    // todo: optimize the code below
+    orderingBlockTransactions.get(id).map { ids =>
       ids.flatMap(transactionsCache.get)
     }
   }
 
   def bestInputBlock(): Option[InputBlockInfo] = {
-    _bestInputBlock.flatMap{bib =>
+    _bestInputBlock.flatMap { bib =>
       // todo: check header id? best input block can be child of non-best ordering header
-      if(bib.header.height == historyReader.headersHeight + 1) {
+      if (bib.header.height == historyReader.headersHeight + 1) {
         Some(bib)
       } else {
         None

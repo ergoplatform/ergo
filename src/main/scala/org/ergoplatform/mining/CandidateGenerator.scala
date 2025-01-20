@@ -543,8 +543,9 @@ object CandidateGenerator extends ScorexLogging {
         (candidates, Seq.empty) // todo: real implemenation
       }
 
+      val previousOrderingBlockTransactions = bestInputBlock.map(_.header).map(_.id).flatMap(history.getOrderingBlockTransactions).getOrElse(Seq.empty)
       val (inputBlockTransactionCandidates, txsNotIncludedIntoInput) = filterInputBlockTransactions(prioritizedTransactions ++ poolTxs.map(_.transaction))
-      val orderingBlocktransactionCandidates = emissionTxOpt.toSeq ++ inputBlockTransactionCandidates ++ txsNotIncludedIntoInput
+      val orderingBlocktransactionCandidates = emissionTxOpt.toSeq ++ previousOrderingBlockTransactions ++ inputBlockTransactionCandidates ++ txsNotIncludedIntoInput
 
       val (txs, toEliminate) = collectTxs(
         minerPk,

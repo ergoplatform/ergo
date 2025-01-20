@@ -13,6 +13,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer, Head
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
+import org.ergoplatform.settings.Parameters
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
@@ -386,7 +387,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                                   startNonce: Long,
                                   endNonce: Long): BlockSolutionSearchResult = {
 
-    val subblocksPerBlock = 10 // todo : make configurable
+    val subblocksPerBlock = Parameters.SubsPerBlockDefault // todo : make adjustable
 
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
     val p1 = groupElemToBytes(genPk(sk))
@@ -412,9 +413,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
         toBigInt(hash(indexes.map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum.toByteArray))
       }
       if (d <= b) {
-        log.debug(s"Solution found at $i")
+        log.debug(s"Ordering block solution found at $i")
         OrderingSolutionFound(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else if (d <= b * subblocksPerBlock) {
+        log.debug(s"Input block solution found at $i")
         InputSolutionFound(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else {
         loop(i + 1)

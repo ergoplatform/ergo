@@ -54,7 +54,7 @@ object SubBlockAlgos {
   sealed trait BlockKind
 
   case object InputBlock extends BlockKind
-  case object FinalizingBlock extends BlockKind
+  case object OrderingBlock extends BlockKind
   case object InvalidPoWBlock extends BlockKind
 
   def blockKind(header: Header): BlockKind = {
@@ -66,7 +66,7 @@ object SubBlockAlgos {
     if (hit < subTarget) {
       InputBlock
     } else if (hit >= subTarget && hit < fullTarget) {
-      FinalizingBlock
+      OrderingBlock
     } else {
       InvalidPoWBlock
     }

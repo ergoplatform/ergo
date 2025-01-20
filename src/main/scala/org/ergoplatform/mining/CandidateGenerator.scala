@@ -214,7 +214,7 @@ class CandidateGenerator(
             sendInputToNodeView(sbi, sbt)
 
             StatusReply.error(
-              new Exception(s"Input block found! PoW valid: ${SubBlockAlgos.checkInputBlockPoW(sbi.header)}")
+              new Exception(s"Input block found! PoW valid: ${SubBlockAlgos.powScheme.checkInputBlockPoW(sbi.header)}")
             )
         }
       }

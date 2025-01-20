@@ -3,6 +3,7 @@ package org.ergoplatform.mining
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.SubBlockAlgos.{subsPerBlock}
 import org.ergoplatform.{BlockSolutionSearchResult, InputBlockFound, InputBlockHeaderFound, InputSolutionFound, NoSolutionFound, NothingFound, OrderingBlockFound, OrderingBlockHeaderFound, OrderingSolutionFound, ProveBlockResult}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -108,7 +109,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       // for version 1, we check equality of left and right sides of the equation
       require(checkPoWForVersion1(header), "Incorrect points")
     } else {
-      require(checkPoWForVersion2(header), "h(f) < b condition not met")
+      require(checkOrderingBlockPoW(header), "h(f) < b condition not met")
     }
   }
 
@@ -118,13 +119,21 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * @param header - header to check PoW for
     * @return whether PoW is valid or not
     */
-  def checkPoWForVersion2(header: Header): Boolean = {
-    val b = getB(header.nBits)
+  def checkOrderingBlockPoW(header: Header): Boolean = {
     // for version 2, we're calculating hit and compare it with target
     val hit = hitForVersion2(header)
+
+    val b = getB(header.nBits)
     hit < b
   }
 
+  def checkInputBlockPoW(header: Header): Boolean = {
+    val hit = hitForVersion2(header) // todo: cache hit in header
+
+    val orderingTarget = getB(header.nBits)
+    val inputTarget = orderingTarget * subsPerBlock // todo: use adjustable subsPerBlock
+    hit < inputTarget
+  }
   /**
     * Check PoW for Autolykos v1 header
     *

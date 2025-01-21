@@ -76,7 +76,9 @@ object MinerBench extends App with ErgoTestHelpers {
       fb.blockTransactions.txs,
       System.currentTimeMillis(),
       ExtensionCandidate(Seq.empty),
-      Array())
+      Array(),
+      Seq.empty
+    )
     val newHeader = pow.proveCandidate(candidate, sk)
       .asInstanceOf[OrderingBlockFound]  // todo: fix
       .fb

@@ -88,7 +88,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     inputBlockRecords.put(ib.header.id, ib)
 
-    val ibParent = ib.prevInputBlockId
+    val ibParent = ib.prevInputBlockId.map(bytesToId)
 
     // todo: currently only one chain of subblocks considered,
     // todo: in fact there could be multiple trees here (one subblocks tree per header)
@@ -97,12 +97,12 @@ trait InputBlocksProcessor extends ScorexLogging {
       case None =>
         log.info(s"Applying best input block #: ${ib.header.id}, no parent")
         _bestInputBlock = Some(ib)
-      case Some(maybeParent) if (ibParent.map(bytesToId).contains(maybeParent.header.id)) =>
-        log.info(s"Applying best input block #: ${ib.header.id}, parent is ${maybeParent.header.id}")
+      case Some(maybeParent) if (ibParent.contains(maybeParent.id)) =>
+        log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
         _bestInputBlock = Some(ib)
       case _ =>
         // todo: switch from one input block chain to another
-        log.info(s"Applying non-best input block #: ${ib.header.id}, parent #: ${ibParent}")
+        log.info(s"Applying non-best input block #: ${ib.header.id}, parent #: $ibParent")
     }
   }
 

@@ -304,6 +304,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       }
 
     // input blocks related logic
+    // process input block got from p2p network
     case ProcessInputBlock(sbi) =>
       history().applyInputBlock(sbi)
 
@@ -673,6 +674,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     case lm: LocallyGeneratedBlockSection =>
       log.info(s"Got locally generated modifier ${lm.blockSection.encodedId} of type ${lm.blockSection.modifierTypeId}")
       pmodModify(lm.blockSection, local = true)
+
     case LocallyGeneratedOrderingBlock(efb) =>
       log.info(s"Got locally generated ordering block ${efb.id}")
       pmodModify(efb.header, local = true)
@@ -684,6 +686,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       sectionsToApply.foreach { section =>
         pmodModify(section, local = true)
       }
+
     case LocallyGeneratedInputBlock(subblockInfo, subBlockTransactionsData) =>
       log.info(s"Got locally generated input block ${subblockInfo.header.id}")
       history().applyInputBlock(subblockInfo)

@@ -19,7 +19,6 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.Eliminate
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.{LocallyGeneratedInputBlock, LocallyGeneratedOrderingBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.InputBlocksProcessor
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoStateReader}
@@ -31,7 +30,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, Input
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging}
 import sigma.data.{Digest32Coll, ProveDlog}
 import sigma.crypto.CryptoFacade
 import sigma.eval.Extensions.EvalIterableOps
@@ -208,11 +207,15 @@ class CandidateGenerator(
                 )
             }
           case _: InputSolutionFound =>
-            log.info("Input-block mined!")
+            val (sbi, sbt) = completeInputBlock(state.cache.get.candidateBlock, solution)
 
-            val (sbi, sbt) = completeInputBlock(state.hr, state.cache.get.candidateBlock, solution)
+            log.info(s"Input-block mined @ height ${sbi.header.height}!")
+
             sendInputToNodeView(sbi, sbt)
 
+            // todo: return success
+            log.warn(s"Removing candidate due to input block")
+            context.become(initialized(state.copy(cache = None)))
             StatusReply.error(
               new Exception(s"Input block found! PoW valid: ${SubBlockAlgos.powScheme.checkInputBlockPoW(sbi.header)}")
             )
@@ -579,11 +582,9 @@ object CandidateGenerator extends ScorexLogging {
         (PrevInputBlockIdKey, prevInputBlockId)
       }.toSeq
 
-      val inputBlockFields = ExtensionCandidate(
-        prevInputBlockId ++ Seq(inputBlockTransactionsDigest, previousInputBlocksTransactions)
-      )
+      val inputBlockFields = prevInputBlockId ++ Seq(inputBlockTransactionsDigest, previousInputBlocksTransactions)
 
-      val extensionCandidate = preExtensionCandidate ++ inputBlockFields
+      val extensionCandidate = preExtensionCandidate ++ ExtensionCandidate(inputBlockFields)
 
       def deriveWorkMessage(block: CandidateBlock) = {
         ergoSettings.chainSettings.powScheme.deriveExternalCandidate(
@@ -604,7 +605,8 @@ object CandidateGenerator extends ScorexLogging {
             txs,
             timestamp,
             extensionCandidate,
-            votes
+            votes,
+            inputBlockFields
           )
           val ext = deriveWorkMessage(candidate)
           log.info(
@@ -636,7 +638,8 @@ object CandidateGenerator extends ScorexLogging {
                     fallbackTxs,
                     timestamp,
                     extensionCandidate,
-                    votes
+                    votes,
+                    inputBlockFields = Seq.empty // todo: recheck, likely should be different
                   )
                   Candidate(
                     candidate,
@@ -961,20 +964,23 @@ object CandidateGenerator extends ScorexLogging {
     new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
   }
 
-  def completeInputBlock(inputBlockProcessor: InputBlocksProcessor,
-                         candidate: CandidateBlock,
+  def completeInputBlock(candidate: CandidateBlock,
                          solution: AutolykosSolution): (InputBlockInfo, InputBlockTransactionsData) = {
+
+    val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
+    val txs = candidate.transactions
 
     // todo: check links?
     // todo: update candidate generator state
     // todo: form and send real data instead of null
 
-    val prevInputBlockId: Option[Array[Byte]] = inputBlockProcessor.bestInputBlock().map(_.header.id).map(idToBytes)
+    val prevInputBlockId: Option[Array[Byte]] = if(candidate.inputBlockFields.size < 3){
+      None
+    } else {
+      Some(candidate.inputBlockFields.head._2)
+    }
     val inputBlockTransactionsDigest: Digest32 = null
     val merkleProof: BatchMerkleProof[Digest32] = null
-
-    val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
-    val txs = candidate.transactions
 
     val sbi: InputBlockInfo = InputBlockInfo(InputBlockInfo.initialMessageVersion, header, prevInputBlockId, inputBlockTransactionsDigest, merkleProof)
     val sbt : InputBlockTransactionsData = InputBlockTransactionsData(sbi.header.id, txs)

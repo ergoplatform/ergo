@@ -559,6 +559,8 @@ object CandidateGenerator extends ScorexLogging {
         orderingBlocktransactionCandidates
       )
 
+      val inputBlockTransactions = inputBlockTransactionCandidates.filterNot(tx => toEliminate.contains(tx.id))
+
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
       if (txs.isEmpty) {
@@ -606,7 +608,8 @@ object CandidateGenerator extends ScorexLogging {
             timestamp,
             extensionCandidate,
             votes,
-            inputBlockFields
+            inputBlockFields,
+            inputBlockTransactions
           )
           val ext = deriveWorkMessage(candidate)
           log.info(
@@ -639,7 +642,8 @@ object CandidateGenerator extends ScorexLogging {
                     timestamp,
                     extensionCandidate,
                     votes,
-                    inputBlockFields = Seq.empty // todo: recheck, likely should be different
+                    inputBlockFields = Seq.empty, // todo: recheck, likely should be not empty,
+                    inputBlockTransactions = inputBlockTransactions
                   )
                   Candidate(
                     candidate,
@@ -968,13 +972,13 @@ object CandidateGenerator extends ScorexLogging {
                          solution: AutolykosSolution): (InputBlockInfo, InputBlockTransactionsData) = {
 
     val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
-    val txs = candidate.transactions
+    val txs = candidate.inputBlockTransactions
 
     // todo: check links?
     // todo: update candidate generator state
     // todo: form and send real data instead of null
 
-    val prevInputBlockId: Option[Array[Byte]] = if(candidate.inputBlockFields.size < 3){
+    val prevInputBlockId: Option[Array[Byte]] = if (candidate.inputBlockFields.size < 3) {
       None
     } else {
       Some(candidate.inputBlockFields.head._2)

@@ -107,6 +107,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   def applyInputBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
+    log.info(s"Applying input block transactions for ${sbId} , transactions: ${transactions.size}")
     val transactionIds = transactions.map(_.id)
     inputBlockTransactions.put(sbId, transactionIds)
     if (sbId == _bestInputBlock.map(_.id).getOrElse("")) {

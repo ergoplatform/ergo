@@ -59,7 +59,6 @@ object MinerBench extends App with ErgoTestHelpers {
     println(s"Calculation time of $Steps numberic hashes over ${data.length} bytes")
     println(s"Blake2b256: ${st2 - st} ms")
     println(s"Blake2b512: ${st4 - st3} ms")
-
   }
 
   def validationBench() {
@@ -77,6 +76,7 @@ object MinerBench extends App with ErgoTestHelpers {
       System.currentTimeMillis(),
       ExtensionCandidate(Seq.empty),
       Array(),
+      Seq.empty,
       Seq.empty
     )
     val newHeader = pow.proveCandidate(candidate, sk)

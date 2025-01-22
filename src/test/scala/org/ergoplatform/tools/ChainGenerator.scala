@@ -199,7 +199,7 @@ object ChainGenerator extends App with ErgoTestHelpers with Matchers {
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
-      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, Seq.empty)
+      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, Seq.empty, Seq.empty)
     }
   }.flatten
 

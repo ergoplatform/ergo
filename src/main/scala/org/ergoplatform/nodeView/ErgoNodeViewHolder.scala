@@ -690,7 +690,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     case LocallyGeneratedInputBlock(subblockInfo, subBlockTransactionsData) =>
       log.info(s"Got locally generated input block ${subblockInfo.header.id}")
       history().applyInputBlock(subblockInfo)
-      history().applyInputBlockTransactions(subblockInfo.header.id, subBlockTransactionsData.transactions)
+      history().applyInputBlockTransactions(subblockInfo.id, subBlockTransactionsData.transactions)
       // todo: finish processing
   }
 

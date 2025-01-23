@@ -22,15 +22,16 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
+import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound, SubBlockAlgos}
+import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigma.data.{Digest32Coll, ProveDlog}
 import sigma.crypto.CryptoFacade
 import sigma.eval.Extensions.EvalIterableOps
@@ -549,7 +550,7 @@ object CandidateGenerator extends ScorexLogging {
       val previousOrderingBlockTransactions = bestInputBlock.map(_.header).map(_.id).flatMap(history.getOrderingBlockTransactions).getOrElse(Seq.empty)
       val (inputBlockTransactionCandidates, txsNotIncludedIntoInput) = filterInputBlockTransactions(prioritizedTransactions ++ poolTxs.map(_.transaction))
 
-      val previousOrderingBlockTransactionIds = previousOrderingBlockTransactions.map(_.id)
+      val previousOrderingBlockTransactionIds = previousOrderingBlockTransactions.map(_.id) // todo: check only first-class txs there
       val filteredInputBlockTransactionCandidates = inputBlockTransactionCandidates.filterNot(tx => previousOrderingBlockTransactionIds.contains(tx.id))
       val orderingBlocktransactionCandidates = emissionTxOpt.toSeq ++ previousOrderingBlockTransactions ++ inputBlockTransactionCandidates ++ txsNotIncludedIntoInput
 
@@ -572,15 +573,18 @@ object CandidateGenerator extends ScorexLogging {
         )
       }
 
+      val inputBlockTransactionsDigestValue = Algos.merkleTreeRoot(inputBlockTransactions.map(tx => LeafData @@ tx.serializedId))
+      val previousInputBlocksTransactionsValue = Algos.merkleTreeRoot(previousOrderingBlockTransactionIds.map(id => LeafData @@ idToBytes(id)))
+
       /*
        * Put input block related fields into extension section of block candidate
        */
 
       // digest (Merkle tree root) of new first-class transactions since last input-block
-      val inputBlockTransactionsDigest = (InputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
+      val inputBlockTransactionsDigest = (InputBlockTransactionsDigestKey, inputBlockTransactionsDigestValue)
 
       // digest (Merkle tree root) first class transactions since ordering block till last input-block
-      val previousInputBlocksTransactions = (PreviousInputBlockTransactionsDigestKey, Array.emptyByteArray) // todo: real bytes
+      val previousInputBlocksTransactions = (PreviousInputBlockTransactionsDigestKey, previousInputBlocksTransactionsValue)
 
       //  reference to a last seen input block
       val prevInputBlockId = parentInputBlockIdOpt.map { prevInputBlockId =>

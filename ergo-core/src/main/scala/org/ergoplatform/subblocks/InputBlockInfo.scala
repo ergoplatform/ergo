@@ -24,7 +24,7 @@ import scorex.util.serialization.{Reader, Writer}
   *                      (as they are coming from extension section, and committed in `subBlock` header via extension
   *                      digest)
   */
-// todo: introduce id
+// todo: include prev txs digest and Merkle proof
 case class InputBlockInfo(version: Byte,
                           header: Header,
                           prevInputBlockId: Option[Array[Byte]],

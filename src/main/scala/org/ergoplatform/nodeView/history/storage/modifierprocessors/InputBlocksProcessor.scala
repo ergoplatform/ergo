@@ -127,6 +127,12 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
+  // Getters to serve client requests below
+
+  def getInputBlock(sbId: ModifierId): Option[InputBlockInfo] = {
+    inputBlockRecords.get(sbId)
+  }
+
   def getInputBlockTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     // todo: optimize the code below
@@ -135,6 +141,10 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
+  /**
+    * @param id ordering block (header) id
+    * @return transactions included in best input blocks chain since ordering block with identifier `id`
+    */
   def getOrderingBlockTransactions(id: ModifierId): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every input block regeneration?
     // todo: optimize the code below

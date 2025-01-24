@@ -306,7 +306,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     // input blocks related logic
     // process input block got from p2p network
     case ProcessInputBlock(sbi) =>
-      history().applyInputBlock(sbi)
+      val bestInputBlock = history().applyInputBlock(sbi)
+      // todo: publish after checking transactions
+      // todo: send NewBestInputBlock(None) on new full block
+      if (bestInputBlock) {
+        context.system.eventStream.publish(NewBestInputBlock(Some(sbi.id)))
+      }
 
     case ProcessInputBlockTransactions(std) =>
       history().applyInputBlockTransactions(std.inputBlockID, std.transactions)
@@ -689,7 +694,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     case LocallyGeneratedInputBlock(subblockInfo, subBlockTransactionsData) =>
       log.info(s"Got locally generated input block ${subblockInfo.header.id}")
-      history().applyInputBlock(subblockInfo)
+      val bestInputBlock = history().applyInputBlock(subblockInfo)
+      // todo: publish after checking transactions
+      if (bestInputBlock) {
+        context.system.eventStream.publish(NewBestInputBlock(Some(subblockInfo.id)))
+      }
       history().applyInputBlockTransactions(subblockInfo.id, subBlockTransactionsData.transactions)
       // todo: finish processing
   }

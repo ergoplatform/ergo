@@ -41,7 +41,7 @@ object ErgoNodeViewSynchronizerMessages {
 
     trait NodeViewHolderEvent
 
-    trait NodeViewChange extends NodeViewHolderEvent
+    sealed trait NodeViewChange extends NodeViewHolderEvent
 
     case class ChangedHistory(reader: ErgoHistoryReader) extends NodeViewChange
 
@@ -50,6 +50,8 @@ object ErgoNodeViewSynchronizerMessages {
     case class ChangedVault(reader: ErgoWalletReader) extends NodeViewChange
 
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
+
+    case class NewBestInputBlock(id: Option[ModifierId]) extends NodeViewChange
 
     /**
      * Event which is published when rollback happened (on finding a better chain)

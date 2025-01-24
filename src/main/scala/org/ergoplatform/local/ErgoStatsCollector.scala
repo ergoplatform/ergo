@@ -17,7 +17,7 @@ import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoSyncTracker
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 import org.ergoplatform.network.peer.PeersStatus
 
 import java.net.URL
@@ -38,6 +38,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
     readersHolder ! GetReaders
     context.system.eventStream.subscribe(self, classOf[ChangedHistory])
+    context.system.eventStream.subscribe(self, classOf[NewBestInputBlock])
     context.system.eventStream.subscribe(self, classOf[ChangedState])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool])
     context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
@@ -55,6 +56,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     settings.nodeSettings.stateType,
     None,
     settings.nodeSettings.mining,
+    None,
     None,
     None,
     None,
@@ -116,11 +118,20 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         nodeInfo = nodeInfo.copy(genesisBlockIdOpt = h.headerIdsAtHeight(GenesisHeight).headOption)
       }
 
+      // clearing best input block id on getting new full block
+      // todo: better to send signal NewBestInputBlock(None) on new best full block
+      if(nodeInfo.bestFullBlockOpt.map(_.id).getOrElse("") != h.bestFullBlockOpt.map(_.id).getOrElse("")){
+        nodeInfo = nodeInfo.copy(bestInputBlockId = None)
+      }
+
       nodeInfo = nodeInfo.copy(bestFullBlockOpt = h.bestFullBlockOpt,
         bestHeaderOpt = h.bestHeaderOpt,
         headersScore = h.bestHeaderOpt.flatMap(m => h.scoreOf(m.id)),
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id))
       )
+
+    case NewBestInputBlock(v) =>
+      nodeInfo = nodeInfo.copy(bestInputBlockId = v)
   }
 
   private def onConnectedPeers: Receive = {
@@ -187,6 +198,7 @@ object ErgoStatsCollector {
                       stateVersion: Option[String],
                       isMining: Boolean,
                       bestHeaderOpt: Option[Header],
+                      bestInputBlockId: Option[ModifierId],
                       headersScore: Option[BigInt],
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       fullBlocksScore: Option[BigInt],
@@ -215,6 +227,7 @@ object ErgoStatsCollector {
         "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,
         "bestFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.encodedId).asJson,
         "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Algos.encode).asJson,
+        "bestInputBlock" -> ni.bestInputBlockId.asJson,
         "difficulty" -> ni.bestFullBlockOpt.map(_.header.requiredDifficulty).map(difficultyEncoder.apply).asJson,
         "headersScore" -> ni.headersScore.map(difficultyEncoder.apply).asJson,
         "fullBlocksScore" -> ni.fullBlocksScore.map(difficultyEncoder.apply).asJson,

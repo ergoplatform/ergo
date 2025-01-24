@@ -37,6 +37,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   // transactions generated AFTER an ordering block
   // block header (ordering block) -> transaction ids
+  // so transaction ids do belong to transactions in input blocks since the block (header)
   val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
   /**
@@ -79,8 +80,11 @@ trait InputBlocksProcessor extends ScorexLogging {
     prune()
   }
 
-  // sub-blocks related logic
-  def applyInputBlock(ib: InputBlockInfo): Unit = {
+  /**
+    * Update input block related structures with a new input block got from a local miner or p2p network
+    * @return true if provided input block is a new best input block
+    */
+  def applyInputBlock(ib: InputBlockInfo): Boolean = {
     // new ordering block arrived ( should be processed outside ? )
     if (ib.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
       resetState()
@@ -97,12 +101,15 @@ trait InputBlocksProcessor extends ScorexLogging {
       case None =>
         log.info(s"Applying best input block #: ${ib.header.id}, no parent")
         _bestInputBlock = Some(ib)
+        true
       case Some(maybeParent) if (ibParent.contains(maybeParent.id)) =>
         log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
         _bestInputBlock = Some(ib)
+        true
       case _ =>
         // todo: switch from one input block chain to another
         log.info(s"Applying non-best input block #: ${ib.header.id}, parent #: $ibParent")
+        false
     }
   }
 

@@ -26,10 +26,12 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   var _bestInputBlock: Option[InputBlockInfo] = None
 
-  // input block id -> input block index
+  // todo: storing linking structures
+
+  // input block id -> input block
   val inputBlockRecords = mutable.Map[ModifierId, InputBlockInfo]()
 
-  // input block id -> input block transaction ids index
+  // input block id -> input block transaction ids
   val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
   // txid -> transaction

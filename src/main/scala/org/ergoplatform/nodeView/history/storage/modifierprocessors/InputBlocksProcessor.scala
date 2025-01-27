@@ -26,10 +26,11 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   var _bestInputBlock: Option[InputBlockInfo] = None
 
-  // todo: storing linking structures
-
   // input block id -> input block
   val inputBlockRecords = mutable.Map[ModifierId, InputBlockInfo]()
+
+  // input block id -> parent input block id (or None if parent is ordering block, and height from ordering block
+  val inputBlockParents = mutable.Map[ModifierId, (Option[ModifierId], Int)]()
 
   // input block id -> input block transaction ids
   val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
@@ -69,11 +70,14 @@ trait InputBlocksProcessor extends ScorexLogging {
         None
       }
     }
+
     idsToRemove.foreach { id =>
       log.info(s"Pruning input block # $id") // todo: .debug
       inputBlockRecords.remove(id)
       inputBlockTransactions.remove(id)
+      inputBlockParents.remove(id)
     }
+
   }
 
   // reset sub-blocks structures, should be called on receiving ordering block (or slightly later?)
@@ -96,6 +100,11 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     val ibParent = ib.prevInputBlockId.map(bytesToId)
 
+    // todo: consider the case when parent not available yet
+    val ibHeight = ibParent.map(parentId => inputBlockParents.get(parentId).map(_._2).getOrElse(0) + 1).getOrElse(1)
+
+    inputBlockParents.put(ib.id, ibParent -> ibHeight)
+
     // todo: currently only one chain of subblocks considered,
     // todo: in fact there could be multiple trees here (one subblocks tree per header)
     // todo: split best input header / block
@@ -109,7 +118,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         _bestInputBlock = Some(ib)
         true
       case _ =>
-        // todo: switch from one input block chain to another
+        // todo: switch from one input block chain to another using height in inputBlockParents
         log.info(s"Applying non-best input block #: ${ib.header.id}, parent #: $ibParent")
         false
     }

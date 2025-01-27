@@ -7,6 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 /**
@@ -81,9 +82,11 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   // reset sub-blocks structures, should be called on receiving ordering block (or slightly later?)
-  private def resetState() = {
+  private def resetState(doPruning: Boolean) = {
     _bestInputBlock = None
-    prune()
+    if (doPruning) {
+      prune()
+    }
   }
 
   /**
@@ -93,7 +96,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   def applyInputBlock(ib: InputBlockInfo): Boolean = {
     // new ordering block arrived ( should be processed outside ? )
     if (ib.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
-      resetState()
+      resetState(false)
     }
 
     inputBlockRecords.put(ib.header.id, ib)
@@ -116,6 +119,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       case Some(maybeParent) if (ibParent.contains(maybeParent.id)) =>
         log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
         _bestInputBlock = Some(ib)
+        println("Best inputs-block chain: " + getBestInputBlocksChain())
         true
       case _ =>
         // todo: switch from one input block chain to another using height in inputBlockParents
@@ -139,6 +143,31 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   // Getters to serve client requests below
+
+  // todo: call on header application
+  def updateStateWithOrderingBlock(h: Header): Unit = {
+    if (h.height >= _bestInputBlock.map(_.header.height).getOrElse(0)) {
+      resetState(true)
+    }
+  }
+
+  /**
+    * @return best known inputs-block chain for the current best-known ordering block
+    */
+  def getBestInputBlocksChain(): Seq[ModifierId] = {
+    bestInputBlock() match {
+      case Some(tip) =>
+        @tailrec
+        def stepBack(acc: Seq[ModifierId], inputId: ModifierId): Seq[ModifierId] = {
+          inputBlockParents.get(inputId) match {
+            case Some((Some(parentId), _)) => stepBack(acc :+ parentId, parentId)
+            case _ => acc
+          }
+        }
+        stepBack(Seq.empty, tip.id)
+      case None => Seq.empty
+    }
+  }
 
   def getInputBlock(sbId: ModifierId): Option[InputBlockInfo] = {
     inputBlockRecords.get(sbId)

@@ -119,7 +119,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       case Some(maybeParent) if (ibParent.contains(maybeParent.id)) =>
         log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
         _bestInputBlock = Some(ib)
-        println("Best inputs-block chain: " + getBestInputBlocksChain())
+        println("Best inputs-block chain: " + bestInputBlocksChain())
         true
       case _ =>
         // todo: switch from one input block chain to another using height in inputBlockParents
@@ -144,7 +144,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   // Getters to serve client requests below
 
-  // todo: call on header application
+  // todo: call on best header change
   def updateStateWithOrderingBlock(h: Header): Unit = {
     if (h.height >= _bestInputBlock.map(_.header.height).getOrElse(0)) {
       resetState(true)
@@ -154,7 +154,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * @return best known inputs-block chain for the current best-known ordering block
     */
-  def getBestInputBlocksChain(): Seq[ModifierId] = {
+  def bestInputBlocksChain(): Seq[ModifierId] = {
     bestInputBlock() match {
       case Some(tip) =>
         @tailrec

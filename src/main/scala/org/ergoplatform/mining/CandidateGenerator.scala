@@ -409,7 +409,7 @@ object CandidateGenerator extends ScorexLogging {
     val nextHeightCondition = if (ergoSettings.networkType.isMainNet) {
       nextHeight >= 823297 // mainnet voting start height, first block of epoch #804
     } else {
-      nextHeight >= 1548800
+      nextHeight >= 1548800 // testnet voting start height
     }
 
     // we automatically vote for 5.0 soft-fork in the mainnet if 120 = 0 vote not provided in settings

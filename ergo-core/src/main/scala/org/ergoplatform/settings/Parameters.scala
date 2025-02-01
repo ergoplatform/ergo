@@ -317,8 +317,8 @@ object Parameters {
     OutputCostIncrease -> OutputCostDefault,
     MaxBlockSizeIncrease -> MaxBlockSizeDefault,
     MaxBlockCostIncrease -> MaxBlockCostDefault,
-    BlockVersion -> 1,
-    SubblocksPerBlockIncrease -> SubblocksPerBlockDefault
+    BlockVersion -> 1
+    // , SubblocksPerBlockIncrease -> SubblocksPerBlockDefault // todo: consider when to inject , matchParameters rule should be tweaked
   )
 
   val parametersDescs: Map[Byte, String] = Map(
@@ -441,8 +441,8 @@ object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
       "tokenAccessCost" -> p.tokenAccessCost.asJson,
       "inputCost" -> p.inputCost.asJson,
       "dataInputCost" -> p.dataInputCost.asJson,
-      "outputCost" -> p.outputCost.asJson,
-      "subblocksPerBlock" -> p.subBlocksPerBlock.asJson
+      "outputCost" -> p.outputCost.asJson
+      // , "subblocksPerBlock" -> p.subBlocksPerBlock.asJson // todo: consider when to start showing (it should be on chain)
     ).asJson
   }
 

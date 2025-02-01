@@ -9,6 +9,9 @@ object MainnetLaunchParameters extends Parameters(height = 0,
   parametersTable = Parameters.DefaultParameters,
   proposedUpdate = ErgoValidationSettingsUpdate.empty)
 
+object TestnetLaunchParameters extends Parameters(height = 0,
+  parametersTable = Parameters.DefaultParameters,
+  proposedUpdate = ErgoValidationSettingsUpdate.empty)
 
 object DevnetLaunchParameters extends Parameters(height = 0,
   parametersTable = Parameters.DefaultParameters.updated(Parameters.BlockVersion, Header.Interpreter50Version),

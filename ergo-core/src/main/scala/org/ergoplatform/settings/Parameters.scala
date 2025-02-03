@@ -72,6 +72,8 @@ class Parameters(val height: Height,
     */
   lazy val subBlocksPerBlock: Int = parametersTable(SubblocksPerBlockIncrease)
 
+  lazy val subBlocksPerBlockOpt: Option[Int] = parametersTable.get(SubblocksPerBlockIncrease)
+
   lazy val softForkStartingHeight: Option[Height] = parametersTable.get(SoftForkStartingHeight)
   lazy val softForkVotesCollected: Option[Int] = parametersTable.get(SoftForkVotesCollected)
 
@@ -468,8 +470,8 @@ object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
       "tokenAccessCost" -> p.tokenAccessCost.asJson,
       "inputCost" -> p.inputCost.asJson,
       "dataInputCost" -> p.dataInputCost.asJson,
-      "outputCost" -> p.outputCost.asJson
-      // , "subblocksPerBlock" -> p.subBlocksPerBlock.asJson // todo: consider when to start showing (it should be on chain)
+      "outputCost" -> p.outputCost.asJson,
+      "subblocksPerBlock" -> p.subBlocksPerBlockOpt.asJson // todo: consider when to start showing (it should be on chain)
     ).asJson
   }
 

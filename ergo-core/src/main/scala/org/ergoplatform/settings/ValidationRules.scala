@@ -299,6 +299,7 @@ object ValidationRules {
   val exParseValidationSettings: Short = 411
   val exMatchValidationSettings: Short = 412
   val exIlUnableToValidate: Short = 413
+  val exMatchParameters60: Short = 414
 
   // full block application
   val fbOperationFailed: Short = 500

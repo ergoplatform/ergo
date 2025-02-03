@@ -39,7 +39,7 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
                                 override val validationSettings: ErgoValidationSettings,
                                 override val votingData: VotingData)(implicit chainSettings: ChainSettings)
   extends ErgoStateContext(lastHeaders, lastExtensionOpt, genesisStateDigest, currentParameters,
-                            validationSettings, votingData)(chainSettings) {
+    validationSettings, votingData)(chainSettings) {
 
   override def sigmaPreHeader: sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
@@ -130,7 +130,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       currentParameters.update(height, forkVote, ArraySeq.unsafeWrapArray(votingData.epochVotes), proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
     UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
-                          calculatedValidationSettings, votingData)
+      calculatedValidationSettings, votingData)
   }
 
   /**
@@ -195,7 +195,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                For the latter case, the light fullnode is just relied on PoW majority about parameters and validation
                settings.
                */
-              val (calculatedParams, calculatedSettings) = if (currentParameters.height == 0) {
+              val (calculatedParamsPre60, calculatedSettings) = if (currentParameters.height == 0) {
                 parsedParams -> parsedSettings
               } else {
                 val (params, settingsUpdates) = currentParameters
@@ -204,9 +204,20 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                 params -> settings
               }
 
+              // 6.0: insert number of sub-blocks per block if it is not there
+              val calculatedParams = if(header.version >= Header.Interpreter60Version && !calculatedParamsPre60.parametersTable.contains(Parameters.SubblocksPerBlockIncrease)) {
+                parsedParams.parametersTable.get(Parameters.SubblocksPerBlockIncrease) match {
+                  case Some(value) => calculatedParamsPre60.withNumOfSubblocksPerBlock(value)
+                  case None => calculatedParamsPre60.withNumOfSubblocksPerBlock(Parameters.SubblocksPerBlockDefault)
+                }
+              } else {
+                calculatedParamsPre60
+              }
+
               currentValidationState
                 .validate(exBlockVersion, calculatedParams.blockVersion == header.version, InvalidModifier(s"${calculatedParams.blockVersion} == ${header.version}", extension.id, extension.modifierTypeId))
                 .validateNoFailure(exMatchParameters, Parameters.matchParameters(parsedParams, calculatedParams), extension.id, extension.modifierTypeId)
+                .validateNoFailure(exMatchParameters60, Parameters.matchParameters60(parsedParams, calculatedParams, header.version), extension.id, extension.modifierTypeId)
                 .validate(exMatchValidationSettings, parsedSettings == calculatedSettings, InvalidModifier(s"$parsedSettings vs $calculatedSettings", extension.id, extension.modifierTypeId))
           }.result
       }.result
@@ -283,7 +294,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
     * the latter according to the former.
     *
-    * @param fb             - block to apply
+    * @param fb - block to apply
     * @return updated state context or error
     */
   def appendFullBlock(fb: ErgoFullBlock): Try[ErgoStateContext] = Try {

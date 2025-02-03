@@ -8,10 +8,11 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 
-import scala.util.Try
+import scala.util.{Success, Try}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import Extension.SystemParametersPrefix
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.sdk.BlockchainParameters
 
 import scala.annotation.nowarn
@@ -226,6 +227,10 @@ class Parameters(val height: Height,
     Parameters(height, parametersTable.updated(MaxBlockCostIncrease, cost), proposedUpdate)
   }
 
+  def withNumOfSubblocksPerBlock(subblocksPerBlock: Int): Parameters = {
+    Parameters(height, parametersTable.updated(SubblocksPerBlockIncrease, subblocksPerBlock), proposedUpdate)
+  }
+
   override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")}; $proposedUpdate)"
 
   def canEqual(o: Any): Boolean = o.isInstanceOf[Parameters]
@@ -401,6 +406,28 @@ object Parameters {
     p1.parametersTable.foreach { case (k, v) =>
       val v2 = p2.parametersTable(k)
       if (v2 != v) throw new Exception(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
+    }
+  }
+
+  def matchParameters60(p1: Parameters, p2: Parameters, blockVersion: Header.Version): Try[Unit] = {
+    if (blockVersion < Header.Interpreter60Version) {
+      Success(Unit)
+    } else {
+      Try {
+        if (p1.height != p2.height) {
+          throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")
+        }
+        if (p1.parametersTable.size <= p2.parametersTable.size) { // the only difference from matchParameters
+          throw new Exception(s"Parameters differ in size, p1 = $p1, p2 = $p2")
+        }
+        if (p1.proposedUpdate != p2.proposedUpdate) {
+          throw new Exception(s"Parameters proposedUpdate differs, p1 = ${p1.proposedUpdate}, p2 = ${p2.proposedUpdate}")
+        }
+        p1.parametersTable.foreach { case (k, v) =>
+          val v2 = p2.parametersTable(k)
+          if (v2 != v) throw new Exception(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
+        }
+      }
     }
   }
 

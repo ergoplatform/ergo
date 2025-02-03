@@ -22,6 +22,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
+import org.ergoplatform.settings.NetworkType.{DevNet, TestNet}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.hash.Digest32
@@ -408,8 +409,10 @@ object CandidateGenerator extends ScorexLogging {
 
     val nextHeightCondition = if (ergoSettings.networkType.isMainNet) {
       nextHeight >= 823297 // mainnet voting start height, first block of epoch #804
-    } else {
+    } else if(ergoSettings.networkType.isTestNet) {
       nextHeight >= 1548800 // testnet voting start height
+    } else {
+      nextHeight >= 8 // devnet voting start height
     }
 
     // we automatically vote for 5.0 soft-fork in the mainnet if 120 = 0 vote not provided in settings

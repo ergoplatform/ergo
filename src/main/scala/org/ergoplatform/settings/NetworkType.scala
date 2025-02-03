@@ -25,7 +25,7 @@ object NetworkType {
   case object TestNet extends NetworkType {
     override val verboseName: String = "testnet"
     override val isMainNet: Boolean = false
-    override val isTrstNet: Boolean = true
+    override val isTestNet: Boolean = true
     override val addressPrefix: Byte = ErgoAddressEncoder.TestnetNetworkPrefix
   }
 

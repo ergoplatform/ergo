@@ -101,29 +101,35 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     inputBlockRecords.put(ib.header.id, ib)
 
-    val ibParent = ib.prevInputBlockId.map(bytesToId)
+    val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
 
-    // todo: consider the case when parent not available yet
-    val ibHeight = ibParent.map(parentId => inputBlockParents.get(parentId).map(_._2).getOrElse(0) + 1).getOrElse(1)
-
-    inputBlockParents.put(ib.id, ibParent -> ibHeight)
+    // todo: consider the case when parent not available yet, likely a signal to download it should be sent
+    // todo: and so on receiving parent child data should be updated
+    val ibDepth = ibParentOpt.map(parentId => inputBlockParents.get(parentId).map(_._2).getOrElse(0) + 1).getOrElse(1)
+    inputBlockParents.put(ib.id, ibParentOpt -> ibDepth)
 
     // todo: currently only one chain of subblocks considered,
     // todo: in fact there could be multiple trees here (one subblocks tree per header)
     // todo: split best input header / block
     _bestInputBlock match {
       case None =>
+        // todo: check if input block is corresponding to the best header
         log.info(s"Applying best input block #: ${ib.header.id}, no parent")
         _bestInputBlock = Some(ib)
         true
-      case Some(maybeParent) if (ibParent.contains(maybeParent.id)) =>
+      case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
         log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
         _bestInputBlock = Some(ib)
-        println("Best inputs-block chain: " + bestInputBlocksChain())
         true
       case _ =>
+        ibParentOpt match {
+          case Some(ibParent) =>
+            // child of forked input block
+          case None =>
+            // first input block since ordering block but another best block exists
+        }
         // todo: switch from one input block chain to another using height in inputBlockParents
-        log.info(s"Applying non-best input block #: ${ib.header.id}, parent #: $ibParent")
+        log.info(s"Applying non-best input block #: ${ib.header.id}, parent #: $ibParentOpt")
         false
     }
   }

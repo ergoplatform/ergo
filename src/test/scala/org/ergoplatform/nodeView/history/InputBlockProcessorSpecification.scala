@@ -32,7 +32,11 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
   }
 
-  property("apply new best input block (input blocks chain switch)") {
+  property("apply new best input block (input blocks chain switch) - same ordering block") {
+
+  }
+
+  property("apply new best input block on another ordering block") {
 
   }
 

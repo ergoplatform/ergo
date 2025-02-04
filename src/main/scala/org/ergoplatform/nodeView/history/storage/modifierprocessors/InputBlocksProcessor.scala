@@ -113,10 +113,13 @@ trait InputBlocksProcessor extends ScorexLogging {
     // todo: split best input header / block
     _bestInputBlock match {
       case None =>
-        // todo: check if input block is corresponding to the best header
-        log.info(s"Applying best input block #: ${ib.header.id}, no parent")
-        _bestInputBlock = Some(ib)
-        true
+        if (ib.header.id == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
+          log.info(s"Applying best input block #: ${ib.header.id}, no parent")
+          _bestInputBlock = Some(ib)
+          true
+        } else {
+          false
+        }
       case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
         log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
         _bestInputBlock = Some(ib)

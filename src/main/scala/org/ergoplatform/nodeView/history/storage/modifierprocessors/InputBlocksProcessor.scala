@@ -44,6 +44,8 @@ trait InputBlocksProcessor extends ScorexLogging {
   // so transaction ids do belong to transactions in input blocks since the block (header)
   val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
+  val waitingForInputBlocks = mutable.Set[ModifierId]()
+
   /**
     * @return best ordering and input blocks
     */
@@ -59,7 +61,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   private def bestInputBlockHeight: Option[Height] = _bestInputBlock.map(_.header.height)
 
-  private def prune() = {
+  private def prune(): Unit = {
     val BlocksThreshold = 2 // we remove input-blocks data after 2 ordering blocks
 
     val bestHeight = bestInputBlockHeight.getOrElse(0)
@@ -73,8 +75,12 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     idsToRemove.foreach { id =>
-      log.info(s"Pruning input block # $id") // todo: .debug
-      inputBlockRecords.remove(id)
+      log.info(s"Pruning input block # $id") // todo: switch to .debug
+      inputBlockRecords.remove(id).foreach { ibi =>
+        ibi.prevInputBlockId.foreach { parentId =>
+          waitingForInputBlocks.remove(bytesToId(parentId))
+        }
+      }
       inputBlockTransactions.remove(id)
       inputBlockParents.remove(id)
     }
@@ -91,9 +97,11 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Update input block related structures with a new input block got from a local miner or p2p network
-    * @return true if provided input block is a new best input block
+    * @return true if provided input block is a new best input block,
+    *         and also optionally id of another input block to download
     */
-  def applyInputBlock(ib: InputBlockInfo): Boolean = {
+  def applyInputBlock(ib: InputBlockInfo): (Boolean, Option[ModifierId])= {
+
     // new ordering block arrived ( should be processed outside ? )
     if (ib.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
       resetState(false)
@@ -103,10 +111,21 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
 
-    // todo: consider the case when parent not available yet, likely a signal to download it should be sent
-    // todo: and so on receiving parent child data should be updated
-    val ibDepth = ibParentOpt.map(parentId => inputBlockParents.get(parentId).map(_._2).getOrElse(0) + 1).getOrElse(1)
-    inputBlockParents.put(ib.id, ibParentOpt -> ibDepth)
+    ibParentOpt.flatMap(parentId => inputBlockParents.get(parentId)) match {
+      case Some((_, parentDepth)) =>
+        val selfDepth = parentDepth + 1
+        inputBlockParents.put(ib.id, ibParentOpt -> selfDepth)
+      case None if ibParentOpt.isDefined => // parent exists but not known yet, download it
+        waitingForInputBlocks.add(ibParentOpt.get)
+        return (false, ibParentOpt)
+    }
+
+    if (waitingForInputBlocks.contains(ib.id)) {
+      // reapply children
+
+      return (false, None)
+    }
+
 
     // todo: currently only one chain of subblocks considered,
     // todo: in fact there could be multiple trees here (one subblocks tree per header)
@@ -116,24 +135,26 @@ trait InputBlocksProcessor extends ScorexLogging {
         if (ib.header.id == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
           log.info(s"Applying best input block #: ${ib.header.id}, no parent")
           _bestInputBlock = Some(ib)
-          true
+          (true, None)
         } else {
-          false
+          (false, None)
         }
       case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
         log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
         _bestInputBlock = Some(ib)
-        true
+        (true, None)
       case _ =>
         ibParentOpt match {
           case Some(ibParent) =>
             // child of forked input block
+            log.info(s"Applying forked input block #: ${ib.header.id}, with parent $ibParent")
+            // todo: forks switching etc
+            (false, None)
           case None =>
             // first input block since ordering block but another best block exists
+            log.info(s"Applying forked input block #: ${ib.header.id}, with no parent")
+            (false, None)
         }
-        // todo: switch from one input block chain to another using height in inputBlockParents
-        log.info(s"Applying non-best input block #: ${ib.header.id}, parent #: $ibParentOpt")
-        false
     }
   }
 

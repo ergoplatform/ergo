@@ -12,7 +12,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
   }
 
-  property("apply input block with parent input block not available") {
+  property("apply input block with parent input block not available (out of order application)") {
 
   }
 

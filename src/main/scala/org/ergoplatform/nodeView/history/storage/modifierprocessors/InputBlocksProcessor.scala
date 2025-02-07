@@ -115,15 +115,16 @@ trait InputBlocksProcessor extends ScorexLogging {
       case Some((_, parentDepth)) =>
         val selfDepth = parentDepth + 1
         inputBlockParents.put(ib.id, ibParentOpt -> selfDepth)
+
+        if (waitingForInputBlocks.contains(ib.id)) {
+          // todo: fix children's depth, check if the chain is connected ?
+          return (false, None)
+        }
       case None if ibParentOpt.isDefined => // parent exists but not known yet, download it
         waitingForInputBlocks.add(ibParentOpt.get)
         return (false, ibParentOpt)
-    }
 
-    if (waitingForInputBlocks.contains(ib.id)) {
-      // reapply children
-
-      return (false, None)
+      case _ =>
     }
 
 
@@ -132,7 +133,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     // todo: split best input header / block
     _bestInputBlock match {
       case None =>
-        if (ib.header.id == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
+        if (ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
           log.info(s"Applying best input block #: ${ib.header.id}, no parent")
           _bestInputBlock = Some(ib)
           (true, None)

@@ -124,7 +124,8 @@ trait InputBlocksProcessor extends ScorexLogging {
         waitingForInputBlocks.add(ibParentOpt.get)
         return (false, ibParentOpt)
 
-      case _ =>
+      case None =>
+        inputBlockParents.put(ib.id, None -> 1)
     }
 
 

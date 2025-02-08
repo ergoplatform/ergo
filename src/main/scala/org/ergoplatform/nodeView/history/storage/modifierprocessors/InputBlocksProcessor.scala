@@ -44,7 +44,10 @@ trait InputBlocksProcessor extends ScorexLogging {
   // so transaction ids do belong to transactions in input blocks since the block (header)
   val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
-  val waitingForInputBlocks = mutable.Set[ModifierId]()
+  // waiting list for input blocks for which we got children but the parent not delivered yet
+  val deliveryWaitlist = mutable.Set[ModifierId]()
+
+  val disconnectedWaitlist = mutable.Set[InputBlockInfo]()
 
   /**
     * @return best ordering and input blocks
@@ -78,8 +81,9 @@ trait InputBlocksProcessor extends ScorexLogging {
       log.info(s"Pruning input block # $id") // todo: switch to .debug
       inputBlockRecords.remove(id).foreach { ibi =>
         ibi.prevInputBlockId.foreach { parentId =>
-          waitingForInputBlocks.remove(bytesToId(parentId))
+          deliveryWaitlist.remove(bytesToId(parentId))
         }
+        disconnectedWaitlist.remove(ibi)
       }
       inputBlockTransactions.remove(id)
       inputBlockParents.remove(id)
@@ -116,12 +120,28 @@ trait InputBlocksProcessor extends ScorexLogging {
         val selfDepth = parentDepth + 1
         inputBlockParents.put(ib.id, ibParentOpt -> selfDepth)
 
-        if (waitingForInputBlocks.contains(ib.id)) {
-          // todo: fix children's depth, check if the chain is connected ?
-          return (false, None)
+        if (deliveryWaitlist.contains(ib.id)) {
+          // Add children from disconnectedWaitlist recursively
+
+          def addChildren(parentId: ModifierId, parentDepth: Int): Unit = {
+            val children = disconnectedWaitlist.filter(childIb =>
+              childIb.prevInputBlockId.exists(pid => bytesToId(pid) == parentId)
+            )
+            
+            children.foreach { childIb =>
+              val childDepth = parentDepth + 1
+              inputBlockParents.put(childIb.id, Some(parentId) -> childDepth)
+              disconnectedWaitlist.remove(childIb)
+              addChildren(childIb.id, childDepth)
+            }
+          }
+
+          // fix linking structure
+          addChildren(ib.id, selfDepth)
         }
       case None if ibParentOpt.isDefined => // parent exists but not known yet, download it
-        waitingForInputBlocks.add(ibParentOpt.get)
+        deliveryWaitlist.add(ibParentOpt.get)
+        disconnectedWaitlist.add(ib)
         return (false, ibParentOpt)
 
       case None =>
@@ -183,6 +203,17 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
+  def bestInputBlock(): Option[InputBlockInfo] = {
+    _bestInputBlock.flatMap { bib =>
+      // todo: check header id? best input block can be child of non-best ordering header
+      if (bib.header.height == historyReader.headersHeight + 1) {
+        Some(bib)
+      } else {
+        None
+      }
+    }
+  }
+
   /**
     * @return best known inputs-block chain for the current best-known ordering block
     */
@@ -222,17 +253,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     // todo: optimize the code below
     orderingBlockTransactions.get(id).map { ids =>
       ids.flatMap(transactionsCache.get)
-    }
-  }
-
-  def bestInputBlock(): Option[InputBlockInfo] = {
-    _bestInputBlock.flatMap { bib =>
-      // todo: check header id? best input block can be child of non-best ordering header
-      if (bib.header.height == historyReader.headersHeight + 1) {
-        Some(bib)
-      } else {
-        None
-      }
     }
   }
 

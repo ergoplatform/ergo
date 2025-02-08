@@ -64,6 +64,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val r1 = h.applyInputBlock(childIb)
     r1 should be (false -> Some(parentIb.id))
 
+    // todo: should not be true, return sequence of blocks to apply ?
     // Now apply parent - should succeed
     val r2 = h.applyInputBlock(parentIb)
     r2 should be (true -> None)

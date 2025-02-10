@@ -13,13 +13,13 @@ import org.ergoplatform.core.{VersionTag, idToVersion}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Digest32
-import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.db.{ByteArrayWrapper, RocksDBVersionedStore}
 
 import scala.util.{Failure, Success, Try}
 
 class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
                        override val version: VersionTag,
-                       store: LDBVersionedStore,
+                       store: RocksDBVersionedStore,
                        val versionedBoxHolder: VersionedInMemoryBoxHolder,
                        settings: ErgoSettings)
   extends UtxoState(prover, version, store, settings) {

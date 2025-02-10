@@ -19,7 +19,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val c2 = genChain(2, h).tail
     val ib = InputBlockInfo(1, c2(0).header, None, transactionsDigest = null, merkleProof = null)
     val r = h.applyInputBlock(ib)
-    r should be (true -> None)
+    r shouldBe None
   }
 
   property("apply child input block of best input block") {
@@ -34,7 +34,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
     val ib1 = InputBlockInfo(1, c2(0).header, None, transactionsDigest = null, merkleProof = null)
     val r1 = h.applyInputBlock(ib1)
-    r1 should be (true -> None)
+    r1 shouldBe None
 
     val c3 = genChain(height = 2, history = h).tail
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
@@ -42,7 +42,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     
     val ib2 = InputBlockInfo(1, c3(0).header, Some(idToBytes(ib1.id)), transactionsDigest = null, merkleProof = null)
     val r = h.applyInputBlock(ib2)
-    r should be (true -> None)
+    r shouldBe None
   }
 
   property("apply input block with parent input block not available (out of order application)") {
@@ -60,18 +60,17 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val c3 = genChain(2, h).tail
     val childIb = InputBlockInfo(1, c3(0).header, Some(idToBytes(parentIb.id)), transactionsDigest = null, merkleProof = null)
 
-    // Apply child first - should fail and return parent id as needed
+    // Apply child first - should return parent id as needed
     val r1 = h.applyInputBlock(childIb)
-    r1 should be (false -> Some(parentIb.id))
+    r1 shouldBe Some(parentIb.id)
 
-    // todo: should not be true, return sequence of blocks to apply ?
-    // Now apply parent - should succeed
+    // Now apply parent
     val r2 = h.applyInputBlock(parentIb)
-    r2 should be (true -> None)
+    r2 shouldBe None
 
     // Apply child again - should now succeed as parent is available
     val r3 = h.applyInputBlock(childIb)
-    r3 should be (true -> None)
+    r3 shouldBe None
   }
 
   property("apply input block with parent ordering block not available") {

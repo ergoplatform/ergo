@@ -104,7 +104,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @return true if provided input block is a new best input block,
     *         and also optionally id of another input block to download
     */
-  def applyInputBlock(ib: InputBlockInfo): (Boolean, Option[ModifierId])= {
+  def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
 
     // new ordering block arrived ( should be processed outside ? )
     if (ib.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
@@ -121,8 +121,8 @@ trait InputBlocksProcessor extends ScorexLogging {
         inputBlockParents.put(ib.id, ibParentOpt -> selfDepth)
 
         if (deliveryWaitlist.contains(ib.id)) {
-          // Add children from disconnectedWaitlist recursively
 
+          // Add children from linking structures recursively
           def addChildren(parentId: ModifierId, parentDepth: Int): Unit = {
             val children = disconnectedWaitlist.filter(childIb =>
               childIb.prevInputBlockId.exists(pid => bytesToId(pid) == parentId)
@@ -139,51 +139,56 @@ trait InputBlocksProcessor extends ScorexLogging {
           // fix linking structure
           addChildren(ib.id, selfDepth)
         }
+        None
       case None if ibParentOpt.isDefined => // parent exists but not known yet, download it
         deliveryWaitlist.add(ibParentOpt.get)
         disconnectedWaitlist.add(ib)
-        return (false, ibParentOpt)
+        ibParentOpt
 
       case None =>
         inputBlockParents.put(ib.id, None -> 1)
+        None
     }
+  }
 
-
+  def applyInputBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Seq[ModifierId] = {
+    log.info(s"Applying input block transactions for ${sbId} , transactions: ${transactions.size}")
+    val transactionIds = transactions.map(_.id)
+    inputBlockTransactions.put(sbId, transactionIds)
     // todo: currently only one chain of subblocks considered,
     // todo: in fact there could be multiple trees here (one subblocks tree per header)
     // todo: split best input header / block
-    _bestInputBlock match {
+
+    val ib = inputBlockRecords.get(sbId).get // todo: .get
+    val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
+
+    val res: Seq[ModifierId] = _bestInputBlock match {
       case None =>
         if (ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
           log.info(s"Applying best input block #: ${ib.header.id}, no parent")
           _bestInputBlock = Some(ib)
-          (true, None)
+          Seq(sbId)
         } else {
-          (false, None)
+          Seq.empty
         }
       case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
         log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
         _bestInputBlock = Some(ib)
-        (true, None)
+        Seq(sbId)
       case _ =>
         ibParentOpt match {
           case Some(ibParent) =>
             // child of forked input block
             log.info(s"Applying forked input block #: ${ib.header.id}, with parent $ibParent")
             // todo: forks switching etc
-            (false, None)
+            Seq.empty
           case None =>
             // first input block since ordering block but another best block exists
             log.info(s"Applying forked input block #: ${ib.header.id}, with no parent")
-            (false, None)
+            Seq.empty
         }
     }
-  }
 
-  def applyInputBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
-    log.info(s"Applying input block transactions for ${sbId} , transactions: ${transactions.size}")
-    val transactionIds = transactions.map(_.id)
-    inputBlockTransactions.put(sbId, transactionIds)
     if (sbId == _bestInputBlock.map(_.id).getOrElse("")) {
       val orderingBlockId = _bestInputBlock.get.header.id
       val curr = orderingBlockTransactions.getOrElse(orderingBlockId, Seq.empty)
@@ -192,6 +197,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     transactions.foreach { tx =>
       transactionsCache.put(tx.id, tx)
     }
+    res
   }
 
   // Getters to serve client requests below

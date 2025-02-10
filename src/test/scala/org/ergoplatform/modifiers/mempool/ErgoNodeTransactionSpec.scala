@@ -13,14 +13,14 @@ import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
 import org.ergoplatform.validation.ValidationRules.CheckAndGetMethod
-import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
+import org.ergoplatform.wallet.boxes.{ErgoBoxAssetExtractor, ErgoBoxSerializer}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.scalacheck.Gen
 import sigma.util.BenchmarkUtil
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import sigma.Colls
+import sigma.{Colls, VersionContext}
 import sigma.ast.ErgoTree.ZeroHeader
 import sigma.ast.{AND, ErgoTree, TrueLeaf}
 import sigma.interpreter.{ContextExtension, ProverResult}
@@ -494,35 +494,49 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
     * not recognizing it.
     */
   property("Soft-forked execution of Ergoscript containing unknown methods") {
+    val trees = Array(
+      "1b130206022edf0580fcf622d193db060873007301", // contains SBigInt.nbits
+      "19110204040400d191b1dc6a03dd0173007301", // sigmaProp(Global.serialize(2).size > 0)
+      "1916030601ff090105090100d192dc061473000173017302", // { val b = bigInt("-1"); val m = unsignedBigInt("5"); val ub = b.toUnsignedMod(m); ub >= 0 }
+    "190d00d193db0207e4e30102850880" // { val b = getVar[Byte](1).get; b.toBits == Coll(false, false, false, false, false, false, false, true) }
+      // todo: scripts with optional / Header values
+    )
 
-    val activatedVersion = 3.toByte
-    val params = new Parameters(0, LaunchParameters.parametersTable.updated(123, activatedVersion + 1), ErgoValidationSettingsUpdate.empty)
+    trees.foreach { tree =>
+      val activatedVersion = 3.toByte
+      val params = new Parameters(0, LaunchParameters.parametersTable.updated(123, activatedVersion + 1), ErgoValidationSettingsUpdate.empty)
 
-    // for next version, rule 1011 should be replaced , otherwise transaction validation will fail
-    // in this test, the rule is replaced with self, but for real activation this choice should be revised
-    val ruleId = CheckAndGetMethod.id
-    val updVs = ErgoValidationSettings.initial.updated(ErgoValidationSettingsUpdate(Seq(), Seq(ruleId -> ReplacedRule(ruleId))))
+      // for next version, rule 1011 should be replaced , otherwise transaction validation will fail
+      // in this test, the rule is replaced with self, but for real activation this choice should be revised
+      val ruleId = CheckAndGetMethod.id
+      val updVs = ErgoValidationSettings.initial.updated(ErgoValidationSettingsUpdate(Seq(), Seq(ruleId -> ReplacedRule(ruleId), 1007.toShort -> ReplacedRule(ruleId))))
 
-    val stateContext = emptyStateContext.copy(currentParameters = params, validationSettings = updVs)(chainSettings)
-    stateContext.blockVersion shouldBe activatedVersion + 1
+      val stateContext = emptyStateContext.copy(currentParameters = params, validationSettings = updVs)(chainSettings)
+      stateContext.blockVersion shouldBe activatedVersion + 1
 
-    // the following ergo tree contains SBigInt.nbits method which is not supported by this client (as of 5.x version)
-    // ergo tree version is 3, less value (e.g. version = 2 which gives 1a130206022edf0580fcf622d193db060873007301)
-    // also works
-    val ergoTree = DefaultSerializer.deserializeErgoTree(Base16.decode("1b130206022edf0580fcf622d193db060873007301").get)
+      // the following ergo tree contains a method or a type which is not supported by this client (as of 5.x version)
+      val ergoTree = DefaultSerializer.deserializeErgoTree(Base16.decode(tree).get)
 
-    ergoTree.root.isLeft shouldBe true // unparsed
+      ergoTree.root.isLeft shouldBe true // unparsed
 
-    val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
-      Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
-      0, 0)
-    val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+      val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
+        Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+        0, 0)
+      val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
-    val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
+      val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
 
-    val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
+      val utx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(oc))
 
-    utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver).isSuccess shouldBe true
+      utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver).isSuccess shouldBe true
+    }
   }
 
+  property("Unsigned big int in register - deserialization") {
+    VersionContext.withVersions(3, 3) {
+      val bs = "8094ebdc030b0208d3000001090102c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f774200"
+      an[sigma.validation.ValidationException] should be thrownBy ErgoBoxSerializer.parseBytes(Base16.decode(bs).get)
+    }
+  }
+  
 }

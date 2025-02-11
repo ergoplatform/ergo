@@ -205,7 +205,11 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
               }
 
               // 6.0: insert number of sub-blocks per block if it is not there
-              val calculatedParams = if(header.version >= Header.Interpreter60Version && !calculatedParamsPre60.parametersTable.contains(Parameters.SubblocksPerBlockIncrease)) {
+              val calculatedParams = if (
+                header.version >= Header.Interpreter60Version &&
+                !calculatedParamsPre60.parametersTable.contains(Parameters.SubblocksPerBlockIncrease) &&
+                !validationState.settings.isActive(exMatchParameters)
+              ) {
                 parsedParams.parametersTable.get(Parameters.SubblocksPerBlockIncrease) match {
                   case Some(value) => calculatedParamsPre60.withNumOfSubblocksPerBlock(value)
                   case None => calculatedParamsPre60.withNumOfSubblocksPerBlock(Parameters.SubblocksPerBlockDefault)

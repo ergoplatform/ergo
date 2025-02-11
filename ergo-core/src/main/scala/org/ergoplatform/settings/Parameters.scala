@@ -86,7 +86,13 @@ class Parameters(val height: Height,
              votingSettings: VotingSettings): (Parameters, ErgoValidationSettingsUpdate) = {
     val (table1, activatedUpdate) = updateFork(height, parametersTable, forkVote, epochVotes, proposedUpdate, votingSettings)
     val table2 = updateParams(table1, epochVotes, votingSettings)
-    (Parameters(height, table2, proposedUpdate), activatedUpdate)
+    // insert sub-blocks per block parameter on next epoch after block version v4 (protocol v6) activation
+    val table3 = if(table2.getOrElse(BlockVersion, -1) == 4 && !table2.contains(SubblocksPerBlockIncrease) && !activatedUpdate.rulesToDisable.contains(409)) {
+      table2.updated(SubblocksPerBlockIncrease, SubblocksPerBlockDefault)
+    } else {
+      table2
+    }
+    (Parameters(height, table3, proposedUpdate), activatedUpdate)
   }
 
   def updateFork(height: Height,
@@ -136,10 +142,6 @@ class Parameters(val height: Height,
       && softForkApproved(votes)) {
       val newVersion = table(BlockVersion) + 1
 
-      // insert sub-blocks per block parameter on block version v4 (protocol v6) activation
-      if (newVersion == 4) {
-        table = table.updated(SubblocksPerBlockIncrease, SubblocksPerBlockDefault)
-      }
       table = table.updated(BlockVersion, newVersion)
       activatedUpdate = proposedUpdate
     }
@@ -325,7 +327,6 @@ object Parameters {
     MaxBlockSizeIncrease -> MaxBlockSizeDefault,
     MaxBlockCostIncrease -> MaxBlockCostDefault,
     BlockVersion -> 1
-    // , SubblocksPerBlockIncrease -> SubblocksPerBlockDefault // todo: consider when to inject , matchParameters rule should be tweaked
   )
 
   val parametersDescs: Map[Byte, String] = Map(
@@ -471,7 +472,7 @@ object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
       "inputCost" -> p.inputCost.asJson,
       "dataInputCost" -> p.dataInputCost.asJson,
       "outputCost" -> p.outputCost.asJson,
-      "subblocksPerBlock" -> p.subBlocksPerBlockOpt.asJson // todo: consider when to start showing (it should be on chain)
+      "subblocksPerBlock" -> p.subBlocksPerBlockOpt.asJson
     ).asJson
   }
 

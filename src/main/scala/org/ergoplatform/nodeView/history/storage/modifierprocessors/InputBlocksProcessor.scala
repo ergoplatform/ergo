@@ -151,6 +151,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
+  /**
+    * @return - sequence of new best input blocks
+    */
   def applyInputBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Seq[ModifierId] = {
     log.info(s"Applying input block transactions for ${sbId} , transactions: ${transactions.size}")
     val transactionIds = transactions.map(_.id)
@@ -159,7 +162,12 @@ trait InputBlocksProcessor extends ScorexLogging {
     // todo: in fact there could be multiple trees here (one subblocks tree per header)
     // todo: split best input header / block
 
-    val ib = inputBlockRecords.get(sbId).get // todo: .get
+    if (!inputBlockRecords.contains(sbId)) {
+      log.warn(s"Input block transactions delivered for not known input block $sbId")
+      return Seq.empty
+    }
+
+    val ib = inputBlockRecords.apply(sbId)
     val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
 
     val res: Seq[ModifierId] = _bestInputBlock match {
@@ -200,14 +208,14 @@ trait InputBlocksProcessor extends ScorexLogging {
     res
   }
 
-  // Getters to serve client requests below
-
   // todo: call on best header change
   def updateStateWithOrderingBlock(h: Header): Unit = {
     if (h.height >= _bestInputBlock.map(_.header.height).getOrElse(0)) {
       resetState(true)
     }
   }
+
+  // Getters to serve client requests below
 
   def bestInputBlock(): Option[InputBlockInfo] = {
     _bestInputBlock.flatMap { bib =>

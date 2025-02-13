@@ -154,7 +154,8 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * @return - sequence of new best input blocks
     */
-  def applyInputBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Seq[ModifierId] = {
+  def applyInputBlockTransactions(sbId: ModifierId,
+                                  transactions: Seq[ErgoTransaction]): Seq[ModifierId] = {
     log.info(s"Applying input block transactions for ${sbId} , transactions: ${transactions.size}")
     val transactionIds = transactions.map(_.id)
     inputBlockTransactions.put(sbId, transactionIds)
@@ -167,45 +168,52 @@ trait InputBlocksProcessor extends ScorexLogging {
       return Seq.empty
     }
 
-    val ib = inputBlockRecords.apply(sbId)
-    val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
-
-    val res: Seq[ModifierId] = _bestInputBlock match {
-      case None =>
-        if (ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
-          log.info(s"Applying best input block #: ${ib.header.id}, no parent")
-          _bestInputBlock = Some(ib)
-          Seq(sbId)
-        } else {
-          Seq.empty
-        }
-      case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
-        log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
-        _bestInputBlock = Some(ib)
-        Seq(sbId)
-      case _ =>
-        ibParentOpt match {
-          case Some(ibParent) =>
-            // child of forked input block
-            log.info(s"Applying forked input block #: ${ib.header.id}, with parent $ibParent")
-            // todo: forks switching etc
-            Seq.empty
-          case None =>
-            // first input block since ordering block but another best block exists
-            log.info(s"Applying forked input block #: ${ib.header.id}, with no parent")
-            Seq.empty
-        }
-    }
-
-    if (sbId == _bestInputBlock.map(_.id).getOrElse("")) {
-      val orderingBlockId = _bestInputBlock.get.header.id
-      val curr = orderingBlockTransactions.getOrElse(orderingBlockId, Seq.empty)
-      orderingBlockTransactions.put(orderingBlockId, curr ++ transactionIds)
-    }
+    // put transactions into cache shared among all the input blocks,
+    // to avoid data duplication in input block related functions
     transactions.foreach { tx =>
       transactionsCache.put(tx.id, tx)
     }
-    res
+
+    def processBestInputBlockCandidate(blockId: ModifierId): Seq[ModifierId] = {
+      val ib = inputBlockRecords.apply(blockId)
+      val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
+
+      val res: Seq[ModifierId] = _bestInputBlock match {
+        case None =>
+          if (ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
+            log.info(s"Applying best input block #: ${ib.header.id}, no parent")
+            _bestInputBlock = Some(ib)
+            Seq(blockId)
+          } else {
+            Seq.empty
+          }
+        case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
+          log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
+          _bestInputBlock = Some(ib)
+          Seq(blockId)
+        case _ =>
+          ibParentOpt match {
+            case Some(ibParent) =>
+              // child of forked input block
+              log.info(s"Applying forked input block #: ${ib.header.id}, with parent $ibParent")
+              // todo: forks switching etc
+              Seq.empty
+            case None =>
+              // first input block since ordering block but another best block exists
+              log.info(s"Applying forked input block #: ${ib.header.id}, with no parent")
+              Seq.empty
+          }
+      }
+
+      if (res.headOption.getOrElse("0") == _bestInputBlock.map(_.id).getOrElse("1")) {
+        val orderingBlockId = _bestInputBlock.get.header.id
+        val curr = orderingBlockTransactions.getOrElse(orderingBlockId, Seq.empty)
+        orderingBlockTransactions.put(orderingBlockId, curr ++ transactionIds)
+      }
+      res
+    }
+
+    processBestInputBlockCandidate(sbId)
   }
 
   // todo: call on best header change

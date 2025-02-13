@@ -37,7 +37,14 @@ trait InputBlocksProcessor extends ScorexLogging {
   val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
   // txid -> transaction
+  // todo: improve removing, some txs included in forked input blocks may stuck in the cache
   val transactionsCache = mutable.Map[ModifierId, ErgoTransaction]()
+
+  // ordering block id -> best known input block chain tips
+  val bestTips = mutable.Map[ModifierId, mutable.Set[ModifierId]]()
+
+  // ordering block id -> best known input block chain height
+  val bestHeights = mutable.Map[ModifierId, Int]()
 
   // transactions generated AFTER an ordering block
   // block header (ordering block) -> transaction ids
@@ -68,7 +75,22 @@ trait InputBlocksProcessor extends ScorexLogging {
     val BlocksThreshold = 2 // we remove input-blocks data after 2 ordering blocks
 
     val bestHeight = bestInputBlockHeight.getOrElse(0)
-    val idsToRemove = inputBlockRecords.flatMap { case (id, ibi) =>
+
+    val orderingBlockIdsToRemove = bestHeights.keys.filter { orderingId =>
+      bestHeight > historyReader.heightOf(orderingId).getOrElse(0)
+    }.toSeq
+
+    orderingBlockIdsToRemove.foreach { id =>
+      bestHeights.remove(id)
+      bestTips.remove(id)
+      orderingBlockTransactions.remove(id).map { ids =>
+        ids.foreach { txId =>
+          transactionsCache.remove(txId)
+        }
+      }
+    }
+
+    val inputBlockIdsToRemove = inputBlockRecords.flatMap { case (id, ibi) =>
       val res = (bestHeight - ibi.header.height) > BlocksThreshold
       if (res) {
         Some(id)
@@ -77,7 +99,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
-    idsToRemove.foreach { id =>
+    inputBlockIdsToRemove.foreach { id =>
       log.info(s"Pruning input block # $id") // todo: switch to .debug
       inputBlockRecords.remove(id).foreach { ibi =>
         ibi.prevInputBlockId.foreach { parentId =>
@@ -119,6 +141,20 @@ trait InputBlocksProcessor extends ScorexLogging {
       case Some((_, parentDepth)) =>
         val selfDepth = parentDepth + 1
         inputBlockParents.put(ib.id, ibParentOpt -> selfDepth)
+
+        val orderingId = ib.header.id
+        val tipHeight = bestHeights.getOrElse(orderingId, 0)
+
+        if (selfDepth > tipHeight) {
+          bestHeights.put(orderingId, selfDepth)
+        }
+
+        val currentBestTips = bestTips.getOrElse(orderingId, mutable.Set.empty)
+
+        if (selfDepth >= tipHeight || (currentBestTips.size < 3 && tipHeight >= 4 && selfDepth >= tipHeight - 2)) {
+          val newBestTips = currentBestTips += ib.id
+          bestTips.put(orderingId, newBestTips)
+        }
 
         if (deliveryWaitlist.contains(ib.id)) {
 

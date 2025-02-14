@@ -36,6 +36,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
 
     val c3 = genChain(height = 2, history = h).tail
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
@@ -45,6 +46,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val r = h.applyInputBlock(ib2)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
   }
 
   property("apply input block with parent input block not available (out of order application)") {
@@ -66,16 +68,19 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val r1 = h.applyInputBlock(childIb)
     r1 shouldBe Some(parentIb.id)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id) shouldBe None
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe None
 
     // Now apply parent
     val r2 = h.applyInputBlock(parentIb)
     r2 shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(parentIb.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
 
     // Apply child again - should now succeed as parent is available
     val r3 = h.applyInputBlock(childIb)
     r3 shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(childIb.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
   }
 
   property("apply input block with parent ordering block not available") {

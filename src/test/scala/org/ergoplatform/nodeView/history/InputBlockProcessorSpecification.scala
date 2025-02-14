@@ -37,7 +37,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     r1 shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(ib1.id, ib1.id) shouldBe false
+    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
 
     val c3 = genChain(height = 2, history = h).tail
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
@@ -48,9 +48,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
-    h.isAncestor(ib2.id, ib1.id) shouldBe true
-    h.isAncestor(ib2.id, ib2.id) shouldBe false
-    h.isAncestor(ib1.id, ib2.id) shouldBe false
+    h.isAncestor(ib2.id, ib1.id).contains(ib2.id) shouldBe true
+    h.isAncestor(ib2.id, ib2.id).isEmpty shouldBe true
+    h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
   }
 
   property("apply input block with parent input block not available (out of order application)") {
@@ -73,23 +73,23 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     r1 shouldBe Some(parentIb.id)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id) shouldBe None
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe None
-    h.isAncestor(childIb.id, parentIb.id) shouldBe false
+    h.isAncestor(childIb.id, parentIb.id).isEmpty shouldBe true
 
     // Now apply parent
     val r2 = h.applyInputBlock(parentIb)
     r2 shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(parentIb.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(parentIb.id, parentIb.id) shouldBe false
+    h.isAncestor(parentIb.id, parentIb.id).isEmpty shouldBe true
 
     // Apply child again - should now succeed as parent is available
     val r3 = h.applyInputBlock(childIb)
     r3 shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(childIb.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
-    h.isAncestor(childIb.id, parentIb.id) shouldBe true
-    h.isAncestor(childIb.id, childIb.id) shouldBe false
-    h.isAncestor(parentIb.id, childIb.id) shouldBe false
+    h.isAncestor(childIb.id, parentIb.id).contains(childIb.id) shouldBe true
+    h.isAncestor(childIb.id, childIb.id).isEmpty shouldBe true
+    h.isAncestor(parentIb.id, childIb.id).isEmpty shouldBe true
   }
 
   property("apply input block with parent ordering block not available") {

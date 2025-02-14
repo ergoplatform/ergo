@@ -287,26 +287,23 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   /**
-    * Checks if input block with id `child` has ancestor with id `parent` in its chain
+    * Returns parent's immediate child that is an ancestor of the given child block
     *
-    * @param child id of potential descendant input block
-    * @param parent id of potential ancestor input block
-    * @return true if `parent` is ancestor of `child`, false otherwise
+    * @param child id of descendant input block
+    * @param parent id of ancestor input block
+    * @return Some(parentChild) if found in child's ancestry chain, None otherwise
     */
-  def isAncestor(child: ModifierId, parent: ModifierId): Boolean = {
+  def isAncestor(child: ModifierId, parent: ModifierId): Option[ModifierId] = {
     @tailrec
-    def loop(current: ModifierId): Boolean = {
-      if (current == parent) {
-        true
-      } else {
-        inputBlockParents.get(current) match {
-          case Some((Some(parentId), _)) => loop(parentId)
-          case _ => false
-        }
+    def loop(current: ModifierId, lastSeen: ModifierId): Option[ModifierId] = {
+      inputBlockParents.get(current) match {
+        case Some((Some(parentId), _)) if parentId == parent => Some(lastSeen)
+        case Some((Some(parentId), _)) => loop(parentId, current)
+        case _ => None
       }
     }
     
-    if (child == parent) false else loop(child)
+    if (child == parent) None else loop(child, child)
   }
 
   def getInputBlock(sbId: ModifierId): Option[InputBlockInfo] = {

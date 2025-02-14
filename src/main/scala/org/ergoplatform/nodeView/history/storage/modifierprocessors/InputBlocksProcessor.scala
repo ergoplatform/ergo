@@ -126,63 +126,59 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @return true if provided input block is a new best input block,
     *         and also optionally id of another input block to download
     */
+  // todo: use PoEM to store only 2-3 best chains and select best one quickly
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
-
-    // new ordering block arrived ( should be processed outside ? )
     if (ib.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
       resetState(false)
     }
 
     inputBlockRecords.put(ib.header.id, ib)
 
+    val orderingId = ib.header.parentId
+    def currentBestTips = bestTips.getOrElse(orderingId, mutable.Set.empty)
+    def tipHeight = bestHeights.getOrElse(orderingId, 0)
     val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
+
+    def updateBestTipsAndHeight(depth: Int): Unit = {
+      if (depth > tipHeight) {
+        bestHeights.put(orderingId, depth)
+      }
+      if (depth >= tipHeight || (currentBestTips.size < 3 && tipHeight >= 4 && depth >= tipHeight - 2)) {
+        bestTips.put(orderingId, currentBestTips += ib.id)
+      }
+    }
+
+    def addChildren(parentId: ModifierId, parentDepth: Int): Unit = {
+      val children = disconnectedWaitlist.filter(childIb =>
+        childIb.prevInputBlockId.exists(pid => bytesToId(pid) == parentId)
+      )
+      val childDepth = parentDepth + 1
+      updateBestTipsAndHeight(childDepth)
+      children.foreach { childIb =>
+        inputBlockParents.put(childIb.id, Some(parentId) -> childDepth)
+        disconnectedWaitlist.remove(childIb)
+        addChildren(childIb.id, childDepth)
+      }
+    }
 
     ibParentOpt.flatMap(parentId => inputBlockParents.get(parentId)) match {
       case Some((_, parentDepth)) =>
         val selfDepth = parentDepth + 1
         inputBlockParents.put(ib.id, ibParentOpt -> selfDepth)
-
-        val orderingId = ib.header.id
-        val tipHeight = bestHeights.getOrElse(orderingId, 0)
-
-        if (selfDepth > tipHeight) {
-          bestHeights.put(orderingId, selfDepth)
-        }
-
-        val currentBestTips = bestTips.getOrElse(orderingId, mutable.Set.empty)
-
-        if (selfDepth >= tipHeight || (currentBestTips.size < 3 && tipHeight >= 4 && selfDepth >= tipHeight - 2)) {
-          val newBestTips = currentBestTips += ib.id
-          bestTips.put(orderingId, newBestTips)
-        }
-
+        updateBestTipsAndHeight(selfDepth)
         if (deliveryWaitlist.contains(ib.id)) {
-
-          // Add children from linking structures recursively
-          def addChildren(parentId: ModifierId, parentDepth: Int): Unit = {
-            val children = disconnectedWaitlist.filter(childIb =>
-              childIb.prevInputBlockId.exists(pid => bytesToId(pid) == parentId)
-            )
-            
-            children.foreach { childIb =>
-              val childDepth = parentDepth + 1
-              inputBlockParents.put(childIb.id, Some(parentId) -> childDepth)
-              disconnectedWaitlist.remove(childIb)
-              addChildren(childIb.id, childDepth)
-            }
-          }
-
-          // fix linking structure
           addChildren(ib.id, selfDepth)
         }
         None
-      case None if ibParentOpt.isDefined => // parent exists but not known yet, download it
+
+      case None if ibParentOpt.isDefined =>
         deliveryWaitlist.add(ibParentOpt.get)
         disconnectedWaitlist.add(ib)
         ibParentOpt
 
       case None =>
         inputBlockParents.put(ib.id, None -> 1)
+        updateBestTipsAndHeight(1)
         None
     }
   }
@@ -300,6 +296,22 @@ trait InputBlocksProcessor extends ScorexLogging {
     inputBlockTransactions.get(sbId).map { ids =>
       ids.flatMap(transactionsCache.get)
     }
+  }
+
+  /**
+    * @param id ordering block (header) id
+    * @return tips (leaf input blocks) for the ordering block with identifier `id`
+    */
+  def getOrderingBlockTips(id: ModifierId): Option[Set[ModifierId]] = {
+    bestTips.get(id).map(_.toSet)
+  }
+  
+  /**
+    * @param id ordering block (header) id
+    * @return height of the best input block tip for the ordering block with identifier `id`
+    */
+  def getOrderingBlockTipHeight(id: ModifierId): Option[Int] = {
+    bestHeights.get(id)
   }
 
   /**

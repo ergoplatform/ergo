@@ -20,7 +20,7 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, OrderingBlockFound}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.{ErgoTree, SigmaAnd, SigmaPropConstant}
@@ -267,7 +267,8 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+          .asInstanceOf[OrderingBlockFound]  // todo: fix
+          .fb
         testProbe.expectNoMessage(200.millis)
         minerRef.tell(block.header.powSolution, testProbe.ref)
 

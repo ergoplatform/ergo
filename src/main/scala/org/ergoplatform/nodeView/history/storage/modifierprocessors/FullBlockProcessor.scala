@@ -136,7 +136,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       //Orphaned block or full chain is not initialized yet
       logStatus(Seq(), Seq(), params.fullBlock, None)
       historyStorage.insert(Array.empty[(ByteArrayWrapper, Array[Byte])], Array(params.newModRow)).map { _ =>
-        ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+        ProgressInfo.empty
       }
   }
 

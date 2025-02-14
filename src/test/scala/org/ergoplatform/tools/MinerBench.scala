@@ -2,6 +2,7 @@ package org.ergoplatform.tools
 
 import com.google.common.primitives.Bytes
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.OrderingBlockFound
 import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
@@ -58,7 +59,6 @@ object MinerBench extends App with ErgoTestHelpers {
     println(s"Calculation time of $Steps numberic hashes over ${data.length} bytes")
     println(s"Blake2b256: ${st2 - st} ms")
     println(s"Blake2b512: ${st4 - st3} ms")
-
   }
 
   def validationBench() {
@@ -75,8 +75,14 @@ object MinerBench extends App with ErgoTestHelpers {
       fb.blockTransactions.txs,
       System.currentTimeMillis(),
       ExtensionCandidate(Seq.empty),
-      Array())
-    val newHeader = pow.proveCandidate(candidate, sk).get.header
+      Array(),
+      Seq.empty,
+      Seq.empty
+    )
+    val newHeader = pow.proveCandidate(candidate, sk)
+      .asInstanceOf[OrderingBlockFound]  // todo: fix
+      .fb
+      .header
 
     val Steps = 10000
 

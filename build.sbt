@@ -96,6 +96,7 @@ val opts = Seq(
 )
 
 javaOptions in run ++= opts
+scalacOptions ++= Seq("-Xasync")
 scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 val scalacOpts = Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 

@@ -190,7 +190,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
-      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes)
+      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, Seq.empty, Seq.empty)
     }
   }.flatten
 
@@ -199,7 +199,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
     log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
 
     pow.proveCandidate(candidate, defaultProver.hdKeys.head.privateInput.w) match {
-      case Some(fb) => fb
+      case OrderingBlockFound(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt
           .map(nipopowAlgos.updateInterlinks(_, NipopowAlgos.unpackInterlinks(candidate.extension.fields).get))

@@ -23,20 +23,28 @@ trait InputBlocksProcessor extends ScorexLogging {
   def historyReader: ErgoHistoryReader
 
   /**
-    * Pointer to a best input-block known
+    * Pointer to a best input-block known, tip of a best input blocks chain
     */
   var _bestInputBlock: Option[InputBlockInfo] = None
 
-  // input block id -> input block
+  /**
+    * Input block id -> input block index
+    */
   val inputBlockRecords = mutable.Map[ModifierId, InputBlockInfo]()
 
-  // input block id -> parent input block id (or None if parent is ordering block, and height from ordering block
+  /**
+    * Index for input block id -> parent input block id (or None if parent is ordering block, and height from ordering block
+    */
   val inputBlockParents = mutable.Map[ModifierId, (Option[ModifierId], Int)]()
 
-  // input block id -> input block transaction ids
+  /**
+    * input block id -> input block transaction ids index
+    */
   val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
-  // txid -> transaction
+  /**
+    * txid -> transaction index
+    */
   // todo: improve removing, some txs included in forked input blocks may stuck in the cache
   val transactionsCache = mutable.Map[ModifierId, ErgoTransaction]()
 
@@ -46,14 +54,21 @@ trait InputBlocksProcessor extends ScorexLogging {
   // ordering block id -> best known input block chain height
   val bestHeights = mutable.Map[ModifierId, Int]()
 
-  // transactions generated AFTER an ordering block
-  // block header (ordering block) -> transaction ids
-  // so transaction ids do belong to transactions in input blocks since the block (header)
+  /**
+    * transactions generated AFTER an ordering block
+    * block header (ordering block) -> transaction ids
+    * so transaction ids do belong to transactions in input blocks since the block (header)
+    */
   val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
-  // waiting list for input blocks for which we got children but the parent not delivered yet
+  /**
+    * waiting list for input blocks for which we got children for but the parent not delivered yet
+    */
   val deliveryWaitlist = mutable.Set[ModifierId]()
 
+  /**
+    * Temporary cache of children which do not have parents downloaded yet
+    */
   val disconnectedWaitlist = mutable.Set[InputBlockInfo]()
 
   /**
@@ -215,6 +230,17 @@ trait InputBlocksProcessor extends ScorexLogging {
           if (ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
             log.info(s"Applying best input block #: ${ib.header.id}, no parent")
             _bestInputBlock = Some(ib)
+/*
+            // todo: apply child
+            val maybeChildToApply = (bestTips.getOrElse(ib.header.parentId, Set.empty).flatMap { tipId =>
+              isAncestor(tipId, ib.id).map(_ -> tipId)
+            }.filter{case (childId, _) =>
+              inputBlockTransactions.contains(childId)
+            }) match {
+              case s if s.isEmpty => None
+              case s => Some(s.maxBy{case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0)}._1)
+            }
+*/
             Seq(blockId)
           } else {
             Seq.empty

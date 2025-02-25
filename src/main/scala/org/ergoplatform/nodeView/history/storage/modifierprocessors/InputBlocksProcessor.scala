@@ -48,10 +48,16 @@ trait InputBlocksProcessor extends ScorexLogging {
   // todo: improve removing, some txs included in forked input blocks may stuck in the cache
   val transactionsCache = mutable.Map[ModifierId, ErgoTransaction]()
 
-  // ordering block id -> best known input block chain tips
+  /**
+    * Best known chain tips (in terms of pow), input blocks in those chain do not necessarily have transactions (yet)
+    * ordering block id -> best known input block chain tip ids
+    */
   val bestTips = mutable.Map[ModifierId, mutable.Set[ModifierId]]()
 
-  // ordering block id -> best known input block chain height
+  /**
+    * Best known input block chain tip heights known, input blocks not necessarily have transactions (yet)
+    * ordering block id -> best known input block chain height
+    */
   val bestHeights = mutable.Map[ModifierId, Int]()
 
   /**
@@ -138,21 +144,17 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Update input block related structures with a new input block got from a local miner or p2p network
+    *
     * @return true if provided input block is a new best input block,
     *         and also optionally id of another input block to download
     */
   // todo: use PoEM to store only 2-3 best chains and select best one quickly
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
-    if (ib.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
-      resetState(false)
-    }
+    lazy val orderingId = ib.header.parentId
 
-    inputBlockRecords.put(ib.header.id, ib)
-
-    val orderingId = ib.header.parentId
     def currentBestTips = bestTips.getOrElse(orderingId, mutable.Set.empty)
+
     def tipHeight = bestHeights.getOrElse(orderingId, 0)
-    val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
 
     def updateBestTipsAndHeight(depth: Int): Unit = {
       if (depth > tipHeight) {
@@ -175,6 +177,14 @@ trait InputBlocksProcessor extends ScorexLogging {
         addChildren(childIb.id, childDepth)
       }
     }
+
+    if (ib.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
+      resetState(false)
+    }
+
+    inputBlockRecords.put(ib.header.id, ib)
+
+    val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
 
     ibParentOpt.flatMap(parentId => inputBlockParents.get(parentId)) match {
       case Some((_, parentDepth)) =>
@@ -230,17 +240,17 @@ trait InputBlocksProcessor extends ScorexLogging {
           if (ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
             log.info(s"Applying best input block #: ${ib.header.id}, no parent")
             _bestInputBlock = Some(ib)
-/*
-            // todo: apply child
-            val maybeChildToApply = (bestTips.getOrElse(ib.header.parentId, Set.empty).flatMap { tipId =>
-              isAncestor(tipId, ib.id).map(_ -> tipId)
-            }.filter{case (childId, _) =>
-              inputBlockTransactions.contains(childId)
-            }) match {
-              case s if s.isEmpty => None
-              case s => Some(s.maxBy{case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0)}._1)
-            }
-*/
+            /*
+                        // todo: apply child
+                        val maybeChildToApply = (bestTips.getOrElse(ib.header.parentId, Set.empty).flatMap { tipId =>
+                          isAncestor(tipId, ib.id).map(_ -> tipId)
+                        }.filter{case (childId, _) =>
+                          inputBlockTransactions.contains(childId)
+                        }) match {
+                          case s if s.isEmpty => None
+                          case s => Some(s.maxBy{case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0)}._1)
+                        }
+            */
             Seq(blockId)
           } else {
             Seq.empty
@@ -307,6 +317,7 @@ trait InputBlocksProcessor extends ScorexLogging {
             case _ => acc
           }
         }
+
         stepBack(Seq.empty, tip.id)
       case None => Seq.empty
     }
@@ -315,7 +326,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * Returns parent's immediate child that is an ancestor of the given child block
     *
-    * @param child id of descendant input block
+    * @param child  id of descendant input block
     * @param parent id of ancestor input block
     * @return Some(parentChild) if found in child's ancestry chain, None otherwise
     */
@@ -328,7 +339,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         case _ => None
       }
     }
-    
+
     if (child == parent) None else loop(child, child)
   }
 
@@ -351,7 +362,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   def getOrderingBlockTips(id: ModifierId): Option[Set[ModifierId]] = {
     bestTips.get(id).map(_.toSet)
   }
-  
+
   /**
     * @param id ordering block (header) id
     * @return height of the best input block tip for the ordering block with identifier `id`

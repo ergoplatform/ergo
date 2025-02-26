@@ -152,26 +152,27 @@ trait InputBlocksProcessor extends ScorexLogging {
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
     lazy val orderingId = ib.header.parentId
 
-    def currentBestTips = bestTips.getOrElse(orderingId, mutable.Set.empty)
+    // updates best known input block chain tips and best tip's height
+    def updateBestTipsAndHeight(childId: ModifierId, depth: Int): Unit = {
+      def currentBestTips = bestTips.getOrElse(orderingId, mutable.Set.empty)
+      def tipHeight = bestHeights.getOrElse(orderingId, 0)
 
-    def tipHeight = bestHeights.getOrElse(orderingId, 0)
-
-    def updateBestTipsAndHeight(depth: Int): Unit = {
       if (depth > tipHeight) {
         bestHeights.put(orderingId, depth)
       }
       if (depth >= tipHeight || (currentBestTips.size < 3 && tipHeight >= 4 && depth >= tipHeight - 2)) {
-        bestTips.put(orderingId, currentBestTips += ib.id)
+        bestTips.put(orderingId, currentBestTips += childId)
       }
     }
 
+    // look through disconnected children to find ones which can be connected now
     def addChildren(parentId: ModifierId, parentDepth: Int): Unit = {
       val children = disconnectedWaitlist.filter(childIb =>
         childIb.prevInputBlockId.exists(pid => bytesToId(pid) == parentId)
       )
       val childDepth = parentDepth + 1
-      updateBestTipsAndHeight(childDepth)
       children.foreach { childIb =>
+        updateBestTipsAndHeight(childIb.id, childDepth)
         inputBlockParents.put(childIb.id, Some(parentId) -> childDepth)
         disconnectedWaitlist.remove(childIb)
         addChildren(childIb.id, childDepth)
@@ -190,7 +191,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       case Some((_, parentDepth)) =>
         val selfDepth = parentDepth + 1
         inputBlockParents.put(ib.id, ibParentOpt -> selfDepth)
-        updateBestTipsAndHeight(selfDepth)
+        updateBestTipsAndHeight(ib.id,selfDepth)
         if (deliveryWaitlist.contains(ib.id)) {
           addChildren(ib.id, selfDepth)
         }
@@ -203,7 +204,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
       case None =>
         inputBlockParents.put(ib.id, None -> 1)
-        updateBestTipsAndHeight(1)
+        updateBestTipsAndHeight(ib.id,1)
         None
     }
   }

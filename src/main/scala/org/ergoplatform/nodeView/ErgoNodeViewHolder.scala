@@ -313,7 +313,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
     case ProcessInputBlockTransactions(std) =>
-      val newBestInputBlocks = history().applyInputBlockTransactions(std.inputBlockID, std.transactions)
+      val newBestInputBlocks = history().applyInputBlockTransactions(std.inputBlockId, std.transactions)
       // todo: publish after checking transactions
       // todo: send NewBestInputBlock(None) on new full block
       newBestInputBlocks.foreach { id =>

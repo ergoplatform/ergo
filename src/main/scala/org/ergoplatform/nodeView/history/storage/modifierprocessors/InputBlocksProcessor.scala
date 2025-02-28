@@ -210,49 +210,39 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   // helper method to find best input block (tip of a best PoW chain containing transactions)
-  private def processBestInputBlockCandidate(blockId: ModifierId, transactionIds: Seq[ModifierId]): Seq[ModifierId] = {
+  private def processBestInputBlockCandidate(blockId: ModifierId,
+                                             transactionIds: Seq[ModifierId]): Boolean = {
     val ib = inputBlockRecords.apply(blockId)
     val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
 
-    val res: Seq[ModifierId] = _bestInputBlock match {
+    val res: Boolean = _bestInputBlock match {
       case None =>
         if (ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
           log.info(s"Applying best input block #: ${ib.header.id}, no parent")
           _bestInputBlock = Some(ib)
-          /*
-                      // todo: apply child
-                      val maybeChildToApply = (bestTips.getOrElse(ib.header.parentId, Set.empty).flatMap { tipId =>
-                        isAncestor(tipId, ib.id).map(_ -> tipId)
-                      }.filter{case (childId, _) =>
-                        inputBlockTransactions.contains(childId)
-                      }) match {
-                        case s if s.isEmpty => None
-                        case s => Some(s.maxBy{case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0)}._1)
-                      }
-          */
-          Seq(blockId)
+          true
         } else {
-          Seq.empty
+          false
         }
       case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
         log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
         _bestInputBlock = Some(ib)
-        Seq(blockId)
+        true
       case _ =>
         ibParentOpt match {
           case Some(ibParent) =>
             // child of forked input block
             log.info(s"Applying forked input block #: ${ib.header.id}, with parent $ibParent")
             // todo: forks switching etc
-            Seq.empty
+            false
           case None =>
             // first input block since ordering block but another best block exists
             log.info(s"Applying forked input block #: ${ib.header.id}, with no parent")
-            Seq.empty
+            false
         }
     }
 
-    if (res.headOption.getOrElse("0") == _bestInputBlock.map(_.id).getOrElse("1")) {
+    if (res) {
       val orderingBlockId = _bestInputBlock.get.header.id
       val curr = orderingBlockTransactions.getOrElse(orderingBlockId, Seq.empty)
       orderingBlockTransactions.put(orderingBlockId, curr ++ transactionIds)
@@ -283,7 +273,38 @@ trait InputBlocksProcessor extends ScorexLogging {
       transactionsCache.put(tx.id, tx)
     }
 
-    processBestInputBlockCandidate(sbId, transactionIds)
+    @tailrec
+    def bestInputBlockStep(sbId: ModifierId,
+                           transactionIds: Seq[ModifierId],
+                           acc: Seq[ModifierId] = Seq.empty):Seq[ModifierId] = {
+      if (processBestInputBlockCandidate(sbId, transactionIds)) {
+        val orderingId = inputBlockRecords.get(sbId).map(_.header.parentId).get // todo: .get
+
+        val maybeChildToApply = (bestTips.getOrElse(orderingId, Set.empty).flatMap { tipId =>
+          isAncestor(tipId, sbId).map(_ -> tipId)
+        }.filter{case (childId, _) =>
+          inputBlockTransactions.contains(childId)
+        }) match {
+          case s if s.isEmpty => None
+          case s => Some(s.maxBy{case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0)}._1)
+        }
+
+        val updAcc = acc :+ sbId
+
+        maybeChildToApply match {
+          case Some(nsbId) =>
+            inputBlockTransactions.get(sbId) match {
+              case Some(ntransactionIds) => bestInputBlockStep(nsbId, ntransactionIds, updAcc)
+              case None => updAcc
+            }
+          case None => updAcc
+        }
+      } else {
+        acc
+      }
+    }
+
+    bestInputBlockStep(sbId, transactionIds)
   }
 
   // todo: call on best header change

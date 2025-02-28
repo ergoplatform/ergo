@@ -18,7 +18,7 @@ object InputBlockTransactionsMessageSpec extends MessageSpecInputBlocks[InputBlo
   override val messageName: String = "InputBlockTxs"
 
   override def serialize(obj: InputBlockTransactionsData, w: Writer): Unit = {
-    w.putBytes(idToBytes(obj.inputBlockID))
+    w.putBytes(idToBytes(obj.inputBlockId))
     w.putUInt(obj.transactions.size)
     obj.transactions.foreach { tx =>
       ErgoTransactionSerializer.serialize(tx, w)

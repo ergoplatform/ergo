@@ -20,6 +20,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val ib = InputBlockInfo(1, c2(0).header, None, transactionsDigest = null, merkleProof = null)
     val r = h.applyInputBlock(ib)
     r shouldBe None
+
+    h.applyInputBlockTransactions(ib.id, Seq.empty) shouldBe Seq(ib.id)
   }
 
   property("apply child input block of best input block") {

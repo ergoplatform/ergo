@@ -145,8 +145,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * Update input block related structures with a new input block got from a local miner or p2p network
     *
-    * @return true if provided input block is a new best input block,
-    *         and also optionally id of another input block to download
+    * @return id of another input block to download
     */
   // todo: use PoEM to store only 2-3 best chains and select best one quickly
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
@@ -255,7 +254,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   def applyInputBlockTransactions(sbId: ModifierId,
                                   transactions: Seq[ErgoTransaction]): Seq[ModifierId] = {
-    log.info(s"Applying input block transactions for ${sbId} , transactions: ${transactions.size}")
+    log.info(s"Applying input block transactions for $sbId , transactions: ${transactions.size}")
     val transactionIds = transactions.map(_.id)
     inputBlockTransactions.put(sbId, transactionIds)
     // todo: currently only one chain of subblocks considered,

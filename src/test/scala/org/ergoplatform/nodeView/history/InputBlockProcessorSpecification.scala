@@ -37,6 +37,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val ib1 = InputBlockInfo(1, c2(0).header, None, transactionsDigest = null, merkleProof = null)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
     h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
@@ -53,6 +54,11 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.isAncestor(ib2.id, ib1.id).contains(ib2.id) shouldBe true
     h.isAncestor(ib2.id, ib2.id).isEmpty shouldBe true
     h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
+
+    // apply transactions
+    // todo: check out-of-order application
+    h.applyInputBlockTransactions(ib1.id, Seq.empty) shouldBe Seq(ib1.id)
+    h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq(ib2.id)
   }
 
   property("apply input block with parent input block not available (out of order application)") {
@@ -92,6 +98,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.isAncestor(childIb.id, parentIb.id).contains(childIb.id) shouldBe true
     h.isAncestor(childIb.id, childIb.id).isEmpty shouldBe true
     h.isAncestor(parentIb.id, childIb.id).isEmpty shouldBe true
+
+
   }
 
   property("apply input block with parent ordering block not available") {

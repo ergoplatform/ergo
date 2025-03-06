@@ -32,9 +32,7 @@ case class InputBlockInfo(version: Byte,
                           merkleProof: BatchMerkleProof[Digest32] // Merkle proof for both prevSubBlockId & subblockTransactionsDigest
                        ) {
 
-  // todo: enough for unique id, but for protocols maybe its worth to authenticate transactions digest as well?
-  lazy val serializedId: Digest32 = Algos.hash(header.serializedId ++ prevInputBlockId.getOrElse(FakePrevInputBlockId))
-  lazy val id: ModifierId = bytesToId(serializedId)
+  lazy val id: ModifierId = header.id
 
   def valid(): Boolean = {
     // todo: implement data validity checks

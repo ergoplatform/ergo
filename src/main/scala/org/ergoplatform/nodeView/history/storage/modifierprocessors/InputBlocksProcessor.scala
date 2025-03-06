@@ -182,7 +182,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       resetState(false)
     }
 
-    inputBlockRecords.put(ib.header.id, ib)
+    inputBlockRecords.put(ib.id, ib)
 
     val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
 

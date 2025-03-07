@@ -66,7 +66,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
           val prev = addresses.getOrElse(address, (0L, 0L))
           addresses.put(address, (prev._1 + output.value, prev._2 + output.additionalTokens.toArray.map(_._2).sum))
           cfor(0)(_ < output.additionalTokens.length, _ + 1) { j =>
-            val token = IndexedToken.fromBox(new IndexedErgoBox(i, None, None, output, 0), j)
+            val token = IndexedToken.fromBox(new IndexedErgoBox(i, None, None, None, output, 0), j)
             val prev2 = indexedTokens.getOrElse(token.id, (0L, 0L))
             indexedTokens.put(token.id, (prev2._1 + 1, 0))
           }
@@ -76,7 +76,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     (addresses, indexedTokens, txsIndexed, boxesIndexed)
   }
 
-  def checkSegmentables[T <: Segment[_] : ClassTag](segmentables: ID_LL,
+  def checkSegmentables[T <: Segment[T] : ClassTag](segmentables: ID_LL,
                                                     isChild: Boolean = false,
                                                     check: ((T, (Long, Long))) => Boolean,
                                                     height: Int): Int = {
@@ -87,11 +87,11 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
           if (isChild) { // this is a segment
             // check tx segments
             val txSegments: ID_LL = mutable.HashMap.empty[ModifierId, (Long, Long)]
-            txSegments ++= (0 until obj.txSegmentCount).map(n => obj.idMod(txSegmentId(obj.parentId, n))).map(Tuple2(_, (0L, 0L)))
+            txSegments ++= (0 until obj.txSegmentCount).map(n => obj.factory(txSegmentId(obj.id, n)).id).map(Tuple2(_, (0L, 0L)))
             checkSegmentables(txSegments, isChild = true, check, height) shouldBe 0
             // check box segments
             val boxSegments: ID_LL = mutable.HashMap.empty[ModifierId, (Long, Long)]
-            boxSegments ++= (0 until obj.boxSegmentCount).map(n => obj.idMod(boxSegmentId(obj.parentId, n))).map(Tuple2(_, (0L, 0L)))
+            boxSegments ++= (0 until obj.boxSegmentCount).map(n => obj.factory(boxSegmentId(obj.id, n)).id).map(Tuple2(_, (0L, 0L)))
             checkSegmentables(boxSegments, isChild = true, check, height) shouldBe 0
           } else { // this is the parent object
             // check properties of object
@@ -157,7 +157,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
       addresses.keys.foreach { addr =>
         val utxos = history.typedExtraIndexById[IndexedErgoAddress](addr).get
-          .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, false, Set.empty)
+          .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, unconfirmed = false, Set.empty)
         utxos.exists(_.isSpent) shouldBe false
       }
 
@@ -198,14 +198,14 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
       addresses.keys.foreach { addr =>
         val utxos = history.typedExtraIndexById[IndexedErgoAddress](addr).get
-          .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, false, Set.empty)
+          .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, unconfirmed = false, Set.empty)
         val trees = utxos.map(_.box.ergoTree).map(hashErgoTree)
         trees.forall(_ == addr) shouldBe true
       }
 
       addresses.keys.foreach { addr =>
         val utxos = history.typedExtraIndexById[IndexedErgoAddress](addr).get
-          .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, false, Set.empty)
+          .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, unconfirmed = false, Set.empty)
         utxos.exists(_.isSpent) shouldBe false
       }
 

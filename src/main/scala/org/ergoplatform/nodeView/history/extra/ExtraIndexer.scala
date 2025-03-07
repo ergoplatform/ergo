@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash}
-import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, GlobalConstants, Pay2SAddress}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
@@ -17,6 +16,7 @@ import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigma.ast.ErgoTree
 import sigma.Extensions._
+import sigma.interpreter.ProverResult
 
 import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
@@ -76,7 +76,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   /**
     * Input tokens in a transaction, cleared after every transaction
     */
-  private val inputTokens: ArrayBuffer[(TokenId, Long)] = ArrayBuffer.empty[(TokenId, Long)]
+  private val inputTokens: mutable.HashMap[Seq[Byte], Long] = mutable.HashMap.empty[Seq[Byte], Long]
 
   /**
     * Holds upcoming blocks to be indexed, and when empty, it is filled back from multiple threads
@@ -125,17 +125,21 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     * @param id     - id of the wanted box
     * @param txId   - id of the spending transaction
     * @param height - height of the block the spending transaction is included in
-    * @return whether or not the box was found in buffer or database -> should always return true
+    * @return whether the box was found in buffer or database -> should always return true
     */
-  private def findAndSpendBox(id: ModifierId, txId: ModifierId, height: Int): Boolean = {
+  private def findAndSpendBox(id: ModifierId, txId: ModifierId, height: Int, spendingProof: ProverResult): Boolean = {
     boxes.get(id).map(box => {
-      inputTokens ++= box.asSpent(txId, height).box.additionalTokens.toArray
+      box.asSpent(txId, height, spendingProof).box.additionalTokens.toArray.map(x => x._1.toArray.toSeq -> x._2).foreach { case (k, v) =>
+        inputTokens.put(k, inputTokens.getOrElse(k, 0L) + v)
+      }
       return true
     })
     history.typedExtraIndexById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
       case Some(x) => // box found in DB, update
-        boxes.put(id, x.asSpent(txId, height))
-        inputTokens ++= x.box.additionalTokens.toArray
+        boxes.put(id, x.asSpent(txId, height, spendingProof))
+        x.box.additionalTokens.toArray.map(x => x._1.toArray.toSeq -> x._2).foreach { case (k, v) =>
+          inputTokens.put(k, inputTokens.getOrElse(k, 0L) + v)
+        }
         true
       case None => // box not found at all (this shouldn't happen)
         log.warn(s"Unknown box used as input: $id")
@@ -276,7 +280,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       if (height > 1) { //only after 1st block (skip genesis box)
         cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
           val boxId = bytesToId(tx.inputs(i).boxId)
-          if (findAndSpendBox(boxId, tx.id, height)) { // spend box and add tx
+          val spendingProof = tx.inputs(i).spendingProof
+          if (findAndSpendBox(boxId, tx.id, height, spendingProof)) { // spend box and add tx
             val iEb = boxes(boxId)
             findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))(newState)
             cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
@@ -291,7 +296,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
       //process transaction outputs
       cfor(0)(_ < tx.outputs.size, _ + 1) { i =>
-        val iEb: IndexedErgoBox = new IndexedErgoBox(height, None, None, tx.outputs(i), newState.globalBoxIndex)
+        val iEb: IndexedErgoBox = new IndexedErgoBox(height, None, None, None, tx.outputs(i), newState.globalBoxIndex)
         boxes.put(iEb.id, iEb) // box by id
         general += NumericBoxIndex(newState.globalBoxIndex, iEb.id) // box id by global box number
         outputs(i) = iEb.globalIndex
@@ -301,11 +306,11 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
         // check if box is creating new tokens, if yes record them
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
-          if (!inputTokens.exists(x => java.util.Arrays.equals(x._1.toArray, iEb.box.additionalTokens(j)._1.toArray))) {
+          if (!inputTokens.contains(iEb.box.additionalTokens(j)._1.toArray.toSeq)) {
             val token = IndexedToken.fromBox(iEb, j)
             tokens.get(token.tokenId) match {
               case Some(t) => // same new token created in multiple boxes -> add amounts
-                tokens.put(token.tokenId, t.addEmissionAmount(token.amount))
+                tokens.put(token.tokenId, t.addEmissionAmount(token.amount.get))
               case None => tokens.put(token.tokenId, token) // new token
             }
           }
@@ -382,7 +387,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, newState.globalBoxIndex).get
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
           history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
-            if (token.boxId == iEb.id) { // token created, delete
+            if (token.boxId.get == iEb.id) { // token created, delete
               toRemove += token.id
               log.info(s"Removing token ${token.tokenId} created in box ${iEb.id} at height ${iEb.inclusionHeight}")
             } else // no token created, update
@@ -585,7 +590,7 @@ object ExtraIndexer {
   /**
     * Current newest database schema version. Used to force extra database resync.
     */
-  val NewestVersion: Int = 5
+  val NewestVersion: Int = 6
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")

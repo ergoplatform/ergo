@@ -8,7 +8,7 @@ import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ByteArrayOps, ModifierId, bytesToId}
 import sigma.Extensions._
 import sigma.ast.SByte
 import sigma.ast.syntax.CollectionConstant
@@ -26,13 +26,13 @@ import scala.collection.mutable.ArrayBuffer
   * @param boxes       - list of numberic box indexes, negative values indicate the box is spent
   */
 case class IndexedToken(tokenId: ModifierId,
-                        boxId: ModifierId = ModifierId @@ "",
-                        amount: Long = 0L,
-                        name: String = "",
-                        description: String = "",
-                        decimals: Int = 0,
+                        boxId: Option[ModifierId] = None,
+                        amount: Option[Long] = None,
+                        name: Option[String] = None,
+                        description: Option[String] = None,
+                        decimals: Option[Int] = None,
                         override val boxes: ArrayBuffer[Long] = new ArrayBuffer[Long])
-  extends Segment[IndexedToken](tokenId, id => IndexedToken(id), new ArrayBuffer[Long], boxes, uniqueId) with ExtraIndex {
+  extends Segment[IndexedToken](id => IndexedToken(id), new ArrayBuffer[Long], boxes) with ExtraIndex {
 
   override lazy val id: ModifierId = uniqueId(tokenId)
   override def serializedId: Array[Byte] = fastIdToBytes(id)
@@ -107,7 +107,7 @@ case class IndexedToken(tokenId: ModifierId,
    * @return updated token
    */
   private[extra] def addEmissionAmount(plus: Long): IndexedToken = {
-    val updated = IndexedToken(tokenId, boxId, amount + plus, name, description, decimals, boxes)
+    val updated = IndexedToken(tokenId, boxId, Some(amount.getOrElse(0L) + plus), name, description, decimals, boxes)
     updated.buffer ++= buffer
     updated
   }
@@ -128,29 +128,35 @@ object IndexedTokenSerializer extends ErgoSerializer[IndexedToken] {
 
   override def serialize(iT: IndexedToken, w: Writer): Unit = {
     w.putBytes(fastIdToBytes(iT.tokenId))
-    w.putUByte(iT.boxId.length / 2)
-    w.putBytes(fastIdToBytes(iT.boxId))
-    w.putULong(iT.amount)
-    val name: Array[Byte] = iT.name.getBytes("UTF-8")
-    w.putUShort(name.length)
-    w.putBytes(name)
-    val description: Array[Byte] = iT.description.getBytes("UTF-8")
-    w.putUShort(description.length)
-    w.putBytes(description)
-    w.putInt(iT.decimals)
+    w.putOption[ModifierId](iT.boxId)((ww,boxId) => ww.putBytes(fastIdToBytes(boxId)))
+    w.putOption[Long](iT.amount)((ww, amount) => ww.putULong(amount))
+    w.putOption[String](iT.name) { case (ww, name) =>
+      val bytes = name.getBytes
+      ww.putUShort(bytes.length)
+      ww.putBytes(bytes)
+    }
+    w.putOption[String](iT.description) { case (ww, description) =>
+      val bytes = description.getBytes
+      ww.putUShort(bytes.length)
+      ww.putBytes(bytes)
+    }
+    w.putOption[Int](iT.decimals)((ww, decimals) => ww.putInt(decimals))
     SegmentSerializer.serialize(iT, w)
   }
 
   override def parse(r: Reader): IndexedToken = {
     val tokenId: ModifierId = bytesToId(r.getBytes(32))
-    val boxIdLen: Int = r.getUByte()
-    val boxId: ModifierId = bytesToId(r.getBytes(boxIdLen))
-    val amount: Long = r.getULong()
-    val nameLen: Int = r.getUShort()
-    val name: String = new String(r.getBytes(nameLen), "UTF-8")
-    val descLen: Int = r.getUShort()
-    val description: String = new String(r.getBytes(descLen), "UTF-8")
-    val decimals: Int = r.getInt()
+    val boxId: Option[ModifierId] = r.getOption[ModifierId](r.getBytes(32).toModifierId)
+    val amount: Option[Long] = r.getOption[Long](r.getULong())
+    val name: Option[String] = r.getOption[String] {
+      val len = r.getUShort()
+      new String(r.getBytes(len))
+    }
+    val description: Option[String] = r.getOption[String] {
+      val len = r.getUShort()
+      new String(r.getBytes(len))
+    }
+    val decimals: Option[Int] = r.getOption[Int](r.getInt())
     val iT = IndexedToken(tokenId, boxId, amount, name, description, decimals)
     SegmentSerializer.parse(r, iT)
     iT
@@ -167,7 +173,7 @@ object IndexedToken {
     * so they are checked with Try-catches.
     *
     * @param iEb - box to use
-    * @param tokenIndex - token index to check in box' `additionalTokens`
+    * @param tokenIndex - token index to check in box `additionalTokens`
     * @return token index
     */
   def fromBox(iEb: IndexedErgoBox, tokenIndex: Int): IndexedToken = {
@@ -211,10 +217,10 @@ object IndexedToken {
       }
 
     IndexedToken(iEb.box.additionalTokens(tokenIndex)._1.toModifierId,
-                 iEb.id,
-                 iEb.box.additionalTokens(tokenIndex)._2,
-                 name,
-                 description,
-                 decimals)
+                 Some(iEb.id),
+                 Some(iEb.box.additionalTokens(tokenIndex)._2),
+                 Some(name),
+                 Some(description),
+                 Some(decimals))
   }
 }

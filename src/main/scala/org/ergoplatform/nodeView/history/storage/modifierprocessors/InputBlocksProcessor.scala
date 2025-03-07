@@ -216,7 +216,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     val res: Boolean = _bestInputBlock match {
       case None =>
-        if (ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
+        if (ibParentOpt.isEmpty && ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
           log.info(s"Applying best input block #: ${ib.header.id}, no parent")
           _bestInputBlock = Some(ib)
           true

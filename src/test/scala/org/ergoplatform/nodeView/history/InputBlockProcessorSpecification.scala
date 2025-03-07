@@ -56,9 +56,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
 
     // apply transactions
-    // todo: check out-of-order application
-    h.applyInputBlockTransactions(ib1.id, Seq.empty) shouldBe Seq(ib1.id)
-    h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq(ib2.id)
+    // out-of-order application
+    h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq()
+    h.applyInputBlockTransactions(ib1.id, Seq.empty) shouldBe Seq(ib1.id, ib2.id)
   }
 
   property("apply input block with parent input block not available (out of order application)") {
@@ -98,8 +98,6 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.isAncestor(childIb.id, parentIb.id).contains(childIb.id) shouldBe true
     h.isAncestor(childIb.id, childIb.id).isEmpty shouldBe true
     h.isAncestor(parentIb.id, childIb.id).isEmpty shouldBe true
-
-
   }
 
   property("apply input block with parent ordering block not available") {

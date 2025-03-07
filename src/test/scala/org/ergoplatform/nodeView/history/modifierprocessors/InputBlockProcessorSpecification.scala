@@ -1,11 +1,11 @@
-package org.ergoplatform.nodeView.history
+package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
-import scorex.util.idToBytes
+import scorex.util.{bytesToId, idToBytes}
 
 class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
@@ -82,18 +82,13 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id) shouldBe None
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe None
     h.isAncestor(childIb.id, parentIb.id).isEmpty shouldBe true
+    h.disconnectedWaitlist shouldBe Set(childIb)
+    h.deliveryWaitlist shouldBe Set(bytesToId(childIb.prevInputBlockId.get))
 
     // Now apply parent
     val r2 = h.applyInputBlock(parentIb)
     r2 shouldBe None
-    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(parentIb.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(parentIb.id, parentIb.id).isEmpty shouldBe true
-
-    // Apply child again - should now succeed as parent is available
-    val r3 = h.applyInputBlock(childIb)
-    r3 shouldBe None
-    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(childIb.id)
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set(childIb.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
     h.isAncestor(childIb.id, parentIb.id).contains(childIb.id) shouldBe true
     h.isAncestor(childIb.id, childIb.id).isEmpty shouldBe true

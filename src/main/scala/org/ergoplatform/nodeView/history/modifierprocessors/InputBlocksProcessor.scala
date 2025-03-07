@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
@@ -75,7 +75,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * Temporary cache of children which do not have parents downloaded yet
     */
-  val disconnectedWaitlist = mutable.Set[InputBlockInfo]()
+  private[modifierprocessors] val disconnectedWaitlist = mutable.Set[InputBlockInfo]()
 
   /**
     * @return best ordering and input blocks

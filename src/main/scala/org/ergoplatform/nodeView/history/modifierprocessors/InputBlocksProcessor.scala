@@ -25,57 +25,59 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * Pointer to a best input-block known, tip of a best input blocks chain
     */
-  var _bestInputBlock: Option[InputBlockInfo] = None
+  private var _bestInputBlock: Option[InputBlockInfo] = None
 
   /**
     * Input block id -> input block index
     */
-  val inputBlockRecords = mutable.Map[ModifierId, InputBlockInfo]()
+  private val inputBlockRecords = mutable.Map[ModifierId, InputBlockInfo]()
 
   /**
     * Index for input block id -> parent input block id (or None if parent is ordering block, and height from ordering block
     */
-  val inputBlockParents = mutable.Map[ModifierId, (Option[ModifierId], Int)]()
+  private val inputBlockParents = mutable.Map[ModifierId, (Option[ModifierId], Int)]()
 
   /**
     * input block id -> input block transaction ids index
     */
-  val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
+  private val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
   /**
     * txid -> transaction index
     */
   // todo: improve removing, some txs included in forked input blocks may stuck in the cache
-  val transactionsCache = mutable.Map[ModifierId, ErgoTransaction]()
+  private val transactionsCache = mutable.Map[ModifierId, ErgoTransaction]()
 
   /**
     * Best known chain tips (in terms of pow), input blocks in those chain do not necessarily have transactions (yet)
     * ordering block id -> best known input block chain tip ids
     */
-  val bestTips = mutable.Map[ModifierId, mutable.Set[ModifierId]]()
+  private val bestTips = mutable.Map[ModifierId, mutable.Set[ModifierId]]()
 
   /**
     * Best known input block chain tip heights known, input blocks not necessarily have transactions (yet)
     * ordering block id -> best known input block chain height
     */
-  val bestHeights = mutable.Map[ModifierId, Int]()
+  private val bestHeights = mutable.Map[ModifierId, Int]()
 
   /**
     * transactions generated AFTER an ordering block
     * block header (ordering block) -> transaction ids
     * so transaction ids do belong to transactions in input blocks since the block (header)
     */
-  val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
+  private val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
   /**
     * waiting list for input blocks for which we got children for but the parent not delivered yet
     */
-  val deliveryWaitlist = mutable.Set[ModifierId]()
+  private[modifierprocessors] val deliveryWaitlist = mutable.Set[ModifierId]()
 
   /**
     * Temporary cache of children which do not have parents downloaded yet
     */
   private[modifierprocessors] val disconnectedWaitlist = mutable.Set[InputBlockInfo]()
+
+  private def bestInputBlockHeight: Option[Height] = _bestInputBlock.map(_.header.height)
 
   /**
     * @return best ordering and input blocks
@@ -89,8 +91,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
     bestOrdering -> bestInputForOrdering
   }
-
-  private def bestInputBlockHeight: Option[Height] = _bestInputBlock.map(_.header.height)
 
   private def prune(): Unit = {
     val BlocksThreshold = 2 // we remove input-blocks data after 2 ordering blocks
@@ -152,12 +152,16 @@ trait InputBlocksProcessor extends ScorexLogging {
     lazy val orderingId = ib.header.parentId
 
     // updates best known input block chain tips and best tip's height
-    def updateBestTipsAndHeight(childId: ModifierId, depth: Int): Unit = {
+    def updateBestTipsAndHeight(childId: ModifierId, parentIdOpt: Option[ModifierId], depth: Int): Unit = {
       def currentBestTips = bestTips.getOrElse(orderingId, mutable.Set.empty)
       def tipHeight = bestHeights.getOrElse(orderingId, 0)
 
       if (depth > tipHeight) {
         bestHeights.put(orderingId, depth)
+      }
+
+      parentIdOpt.foreach { parentId =>
+        bestTips.put(orderingId, currentBestTips -= parentId)
       }
       if (depth >= tipHeight || (currentBestTips.size < 3 && tipHeight >= 4 && depth >= tipHeight - 2)) {
         bestTips.put(orderingId, currentBestTips += childId)
@@ -171,7 +175,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       )
       val childDepth = parentDepth + 1
       children.foreach { childIb =>
-        updateBestTipsAndHeight(childIb.id, childDepth)
+        updateBestTipsAndHeight(childIb.id, Some(parentId), childDepth)
         inputBlockParents.put(childIb.id, Some(parentId) -> childDepth)
         disconnectedWaitlist.remove(childIb)
         addChildren(childIb.id, childDepth)
@@ -179,6 +183,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     if (ib.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
+      log.debug("Resetting state")
       resetState(false)
     }
 
@@ -190,7 +195,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       case Some((_, parentDepth)) =>
         val selfDepth = parentDepth + 1
         inputBlockParents.put(ib.id, ibParentOpt -> selfDepth)
-        updateBestTipsAndHeight(ib.id,selfDepth)
+        updateBestTipsAndHeight(ib.id, ibParentOpt, selfDepth)
         if (deliveryWaitlist.contains(ib.id)) {
           addChildren(ib.id, selfDepth)
         }
@@ -202,8 +207,12 @@ trait InputBlocksProcessor extends ScorexLogging {
         ibParentOpt
 
       case None =>
-        inputBlockParents.put(ib.id, None -> 1)
-        updateBestTipsAndHeight(ib.id,1)
+        val selfDepth = 1
+        inputBlockParents.put(ib.id, None -> selfDepth)
+        updateBestTipsAndHeight(ib.id, None, selfDepth)
+        if (deliveryWaitlist.contains(ib.id)) {
+          addChildren(ib.id, selfDepth)
+        }
         None
     }
   }

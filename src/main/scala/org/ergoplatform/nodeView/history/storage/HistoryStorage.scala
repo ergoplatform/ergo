@@ -92,8 +92,8 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
       ExtraIndexSerializer.parseBytesTry(bytes) match {
         case Success(pm) =>
           log.trace(s"Cache miss for existing index $id")
-          if(pm.isInstanceOf[Segment[_]]){
-            extraCache.put(pm.id, pm) // cache all segment type objects
+          if(!pm.isInstanceOf[Segment[_]]){
+            extraCache.put(pm.id, pm) // cache non-segment objects
           }
           Some(pm)
         case Failure(_) =>

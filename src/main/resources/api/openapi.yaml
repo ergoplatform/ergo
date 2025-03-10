@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.24"
+  version: "5.0.25"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -3254,6 +3254,58 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErgoTransaction'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/unconfirmed/transactionIds:
+    get:
+      summary: Get list of unconfirmed transactions ids
+      operationId: getUnconfirmedTxIds
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: List of unconfirmed transaction ids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schema/ApiError'
+
+  /transactions/unconfirmed/byTransactionIds:
+    post:
+      summary: Get list of unconfirmed transactions by their ids
+      operationId: getUnconfirmedTxsByIds
+      tags:
+        - transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: List of unconfirmed transaction ids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
         default:
           description: Error
           content:

@@ -68,5 +68,4 @@ trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTra
     * @return recommended fee value for transaction to be proceeded in specified time
     */
   def getRecommendedFee(expectedWaitTimeMinutes: Int, txSize: Int) : Long
-
 }

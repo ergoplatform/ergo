@@ -55,8 +55,9 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @return this address
     */
   override private[extra] def spendBox(iEb: IndexedErgoBox, historyOpt: Option[ErgoHistoryReader] = None)(implicit ae: ErgoAddressEncoder): IndexedErgoAddress = {
-    if(historyOpt.isDefined)
+    if(historyOpt.isDefined) {
       findAndModBox(iEb.globalIndex, historyOpt.get)
+    }
     balanceInfo.foreach(_.subtract(iEb.box))
     this
   }

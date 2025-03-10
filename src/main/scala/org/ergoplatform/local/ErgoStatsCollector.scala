@@ -133,7 +133,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
       )
 
     case NewBestInputBlock(v) =>
-      nodeInfo = nodeInfo.copy(bestInputBlockId = v)
+      nodeInfo = nodeInfo.copy(bestInputBlockId = Some(v))
   }
 
   private def onConnectedPeers: Receive = {

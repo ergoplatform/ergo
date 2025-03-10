@@ -271,6 +271,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // sub-blocks related messages
     context.system.eventStream.subscribe(self, classOf[DownloadSubblockTransactions])
+    context.system.eventStream.subscribe(self, classOf[NewBestInputBlock])
 
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
 
@@ -1525,6 +1526,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       } else {
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
+
+    case NewBestInputBlock(_) =>
+      // todo: impl
   }
 
   /** handlers of messages coming from peers */

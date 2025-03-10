@@ -1,5 +1,8 @@
 package org.ergoplatform.modifiers.mempool
 
+import sigmastate.utils.Helpers._ // for Scala 2.11
+import cats.syntax.either._
+
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.settings._
@@ -9,13 +12,10 @@ import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.ModifierId
 import sigma.Colls
-import sigma.eval._
-import cats.syntax.either._
 import sigma.ast.{ByteArrayConstant, ByteConstant, ErgoTree, IntConstant, LongArrayConstant, SigmaPropConstant}
 import sigma.crypto.CryptoConstants
 import sigma.data.ProveDlog
 import sigma.interpreter.{ContextExtension, ProverResult}
-import sigmastate.utils.Helpers._
 
 
 class ErgoTransactionSpec extends ErgoCorePropertyTest {

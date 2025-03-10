@@ -318,7 +318,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       // todo: publish after checking transactions
       // todo: send NewBestInputBlock(None) on new full block
       newBestInputBlocks.foreach { id =>
-        context.system.eventStream.publish(NewBestInputBlock(Some(id)))
+        context.system.eventStream.publish(NewBestInputBlock(id))
       }
   }
 
@@ -703,10 +703,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       val newBestInputBlocks = history().applyInputBlockTransactions(subblockInfo.id, subBlockTransactionsData.transactions)
 
       toDownloadOpt.foreach { mId =>
-        // todo: download input block
+        log.error(s"Shouldn't be there: input-block ${subblockInfo.id} generated locally when its parent ")
       }
       newBestInputBlocks.foreach { id =>
-        context.system.eventStream.publish(NewBestInputBlock(Some(id)))
+        context.system.eventStream.publish(NewBestInputBlock(id))
       }
   }
 

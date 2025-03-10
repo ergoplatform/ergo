@@ -85,6 +85,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.disconnectedWaitlist shouldBe Set(childIb)
     h.deliveryWaitlist shouldBe Set(bytesToId(childIb.prevInputBlockId.get))
 
+    h.applyInputBlockTransactions(childIb.id, Seq.empty) shouldBe Seq()
+    h.bestInputBlock() shouldBe None
+
     // Now apply parent
     val r2 = h.applyInputBlock(parentIb)
     r2 shouldBe None
@@ -93,6 +96,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.isAncestor(childIb.id, parentIb.id).contains(childIb.id) shouldBe true
     h.isAncestor(childIb.id, childIb.id).isEmpty shouldBe true
     h.isAncestor(parentIb.id, childIb.id).isEmpty shouldBe true
+
+    h.applyInputBlockTransactions(parentIb.id, Seq.empty) shouldBe Seq(parentIb.id, childIb.id)
+    h.bestInputBlock().get shouldBe childIb
   }
 
   property("apply input block with parent ordering block not available") {

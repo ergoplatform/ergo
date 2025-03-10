@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history.header
 
-import cats.syntax.either._
+import cats.syntax.either._  // needed for Scala 2.11
 import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
@@ -41,6 +41,7 @@ import scala.concurrent.duration.FiniteDuration
   * @param extensionRoot - Merkle tree digest of the extension section of the block
   * @param powSolution - solution for the proof-of-work puzzle
   * @param votes - votes for changing system parameters
+  * @param unparsedBytes - bytes of fields added in future versions of the protocol and not parseable
   * @param sizeOpt - optionally, size of the header (to avoid serialization on calling .length)
   */
 case class Header(override val version: Header.Version,
@@ -54,8 +55,9 @@ case class Header(override val version: Header.Version,
                   override val extensionRoot: Digest32,
                   powSolution: AutolykosSolution,
                   override val votes: Array[Byte], //3 bytes
+                  override val unparsedBytes: Array[Byte],
                   override val sizeOpt: Option[Int] = None) extends HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-  nBits, height, extensionRoot, votes) with PreHeader with BlockSection {
+  nBits, height, extensionRoot, votes, unparsedBytes) with PreHeader with BlockSection {
 
   override def serializedId: Array[Header.Version] = Algos.hash(bytes)
 
@@ -199,7 +201,8 @@ object Header extends ApiCodecs {
       "size" -> h.size.asJson,
       "extensionId" -> Algos.encode(h.extensionId).asJson,
       "transactionsId" -> Algos.encode(h.transactionsId).asJson,
-      "adProofsId" -> Algos.encode(h.ADProofsId).asJson
+      "adProofsId" -> Algos.encode(h.ADProofsId).asJson,
+      "unparsedBytes" -> Algos.encode(h.unparsedBytes).asJson
     ).asJson
   }
 
@@ -216,8 +219,10 @@ object Header extends ApiCodecs {
       version <- c.downField("version").as[Byte]
       votes <- c.downField("votes").as[String]
       solutions <- c.downField("powSolutions").as[AutolykosSolution]
+      unparsedBytes <- c.downField("unparsedBytes").as[Option[Array[Byte]]]
     } yield Header(version, parentId, adProofsRoot, stateRoot,
-      transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get)
+      transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get,
+      unparsedBytes.getOrElse(Array.emptyByteArray))
   }
 
 }

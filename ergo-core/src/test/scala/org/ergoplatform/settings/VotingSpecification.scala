@@ -3,7 +3,7 @@ package org.ergoplatform.settings
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
-import org.ergoplatform.settings.ValidationRules.{exEmpty, exIlEncoding, exIlStructure, exIlUnableToValidate, rulesSpec}
+import org.ergoplatform.settings.ValidationRules.rulesSpec
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import sigma.validation.{DisabledRule, ReplacedRule, ValidationException}
 import org.ergoplatform.validation.{ValidationRules => VR}

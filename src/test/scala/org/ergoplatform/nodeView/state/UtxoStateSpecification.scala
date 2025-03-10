@@ -14,6 +14,7 @@ import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants.FalseTree
+import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.boxesHolderGen
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.scalatest.OptionValues
 import scorex.crypto.authds.ADKey
@@ -24,6 +25,10 @@ import sigma.ast.{ByteArrayConstant, ErgoTree}
 import sigma.data.ProveDlog
 import sigma.interpreter.ProverResult
 import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigma.ast.{ByteArrayConstant, ErgoTree}
+import sigma.data.ProveDlog
+import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigma.interpreter.ProverResult
 import sigmastate.helpers.TestingHelpers._
 import org.ergoplatform.settings.Constants.TrueTree
 
@@ -34,7 +39,6 @@ import scala.util.Try
 class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
-  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._

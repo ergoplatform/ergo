@@ -24,8 +24,9 @@ import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigma.ast.{AtLeast, ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
-import sigma.data.{CSigmaDslBuilder, ProveDlog}
+import sigma.data.ProveDlog
 import sigma.serialization.ValueSerializer
+import sigma.Colls
 import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
@@ -126,7 +127,6 @@ object ErgoState extends ScorexLogging {
           case Success(box) =>
             collectBoxesById(remainingBoxIds, resultingBoxes.map(_ += box))
           case Failure(ex) =>
-            println("box not found")
             Failure(ex)
         }
       }
@@ -206,14 +206,13 @@ object ErgoState extends ScorexLogging {
                         ergoTree: ErgoTree,
                         additionalTokens: Seq[(TokenId, Long)] = Seq.empty,
                         additionalRegisters: AdditionalRegisters = Map.empty): ErgoBox = {
-
     val creationHeight: Int = EmptyHistoryHeight
 
     val transactionId: ModifierId = ErgoBox.allZerosModifierId
     val boxIndex: Short = 0: Short
 
     new ErgoBox(value, ergoTree,
-      CSigmaDslBuilder.Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
+      Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
       additionalRegisters,
       transactionId, boxIndex, creationHeight)
   }
@@ -275,6 +274,7 @@ object ErgoState extends ScorexLogging {
     val bh = BoxHolder(boxes)
 
     UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, settings, settings.launchParameters).ensuring(us => {
+      log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootDigest)}")
       java.util.Arrays.equals(us.rootDigest, settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }

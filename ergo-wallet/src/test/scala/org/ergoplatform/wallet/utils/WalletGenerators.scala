@@ -17,8 +17,8 @@ import sigma.ast.syntax.CollectionConstant
 import sigma.crypto.CryptoFacade.SecretKeyLength
 import sigma.data.ProveDlog
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
+import sigma.eval.Extensions._
 
 object WalletGenerators {
 

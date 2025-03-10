@@ -17,7 +17,6 @@ import sigma.ast.ErgoTree
 import sigma.data.ProveDlog
 import sigmastate.eval.Extensions._
 import sigma.Extensions.ArrayOps
-import sigmastate.eval._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable

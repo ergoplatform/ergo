@@ -38,8 +38,10 @@ trait ReemissionContracts {
   /** Helper method to produce v1 tree from a SigmaPropValue instance (i.e. root node of AST).*/
   private def v1Tree(prop: SigmaPropValue): ErgoTree = {
     val version: Byte = 1
-    val header = ErgoTree.defaultHeaderWithVersion(version)
-    ErgoTree.fromProposition(header, prop)
+    // it used to be ErgoTree.headerWithVersion(version) before Sigma v5.0.14,
+    // which used the default header, now this is made explicit via naming
+    val headerFlags = ErgoTree.defaultHeaderWithVersion(version)
+    ErgoTree.fromProposition(headerFlags, prop)
   }
 
   /**

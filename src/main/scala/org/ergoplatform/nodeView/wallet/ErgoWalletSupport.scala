@@ -22,9 +22,9 @@ import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.util.ScorexLogging
 import sigma.Colls
 import sigma.ast.{ByteArrayConstant, ErgoTree}
+import sigma.data.ProveDlog
 import sigmastate.eval.Extensions._
 import sigma.Extensions.ArrayOps
-import sigma.data.ProveDlog
 import sigmastate.utils.Extensions._
 
 import scala.util.{Failure, Success, Try}

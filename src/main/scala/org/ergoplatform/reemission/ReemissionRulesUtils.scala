@@ -3,7 +3,7 @@ package org.ergoplatform.reemission
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.settings.ErgoSettingsReader
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
-import sigma.ast.{ErgoTree, SBoolean, TransformingSigmaBuilder, Value}
+import sigma.ast._
 import sigma.compiler.ir.CompiletimeIRContext
 import sigma.compiler.{CompilerSettings, SigmaCompiler}
 

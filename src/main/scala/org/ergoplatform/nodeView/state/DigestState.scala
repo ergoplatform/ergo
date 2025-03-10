@@ -154,7 +154,7 @@ class DigestState protected(override val version: VersionTag,
 object DigestState extends ScorexLogging with ScorexEncoding {
 
   /**
-    * Creates [[DigestState]] from existing [[ErgoStateContext]] corresponding to some `version` and `rootHash`.
+    * Creates [[DigestState]] with provided `ErgoStateContext` instance corresponding to some version` and `rootHash`.
     */
   def recover(version: VersionTag,
               rootHash: ADDigest,

@@ -3,12 +3,12 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.utils.{ErgoCorePropertyTest, WalletTestOps}
 import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import sigma.ast.{ByteArrayConstant, ErgoTree}
 import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}

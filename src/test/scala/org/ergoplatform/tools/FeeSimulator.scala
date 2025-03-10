@@ -11,6 +11,7 @@ import sigma.ast.ErgoTree
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions.ArrayByteOps
+import sigma.interpreter.{ContextExtension, ProverResult}
 
 
 object FeeSimulator extends App {

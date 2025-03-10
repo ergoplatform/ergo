@@ -1,14 +1,14 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.{ByteColl, uniqueId}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import scorex.util.serialization.{Reader, Writer}
+import scorex.util.{ModifierId, bytesToId}
 import sigma.Extensions._
 import sigma.ast.SByte
 import sigma.ast.syntax.CollectionConstant
@@ -167,7 +167,7 @@ object IndexedToken {
     * so they are checked with Try-catches.
     *
     * @param iEb - box to use
-    * @param tokenIndex - token index to check in [[ErgoBox.additionalTokens]]
+    * @param tokenIndex - token index to check in box' `additionalTokens`
     * @return token index
     */
   def fromBox(iEb: IndexedErgoBox, tokenIndex: Int): IndexedToken = {

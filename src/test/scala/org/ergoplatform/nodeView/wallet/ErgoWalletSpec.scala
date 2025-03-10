@@ -1063,9 +1063,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         //pay out all the wallet balance:
         val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toArray
         assetToSpend should not be empty
-        val req1 = PaymentRequest(
-          Pay2SAddress(ErgoTree.fromSigmaBoolean(CAND(Seq(secret1.publicImage, secret2.publicImage)))),
-          confirmedBalance, assetToSpend, Map.empty)
+        val req1 = PaymentRequest(Pay2SAddress(ErgoTree.fromSigmaBoolean(CAND(Seq(secret1.publicImage, secret2.publicImage)))), confirmedBalance, assetToSpend, Map.empty)
 
         val tx = await(wallet.generateTransaction(Seq(req1))).get
 

@@ -14,6 +14,7 @@ import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
+import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.validErgoTransactionGen
 import org.ergoplatform.utils.{ErgoCorePropertyTest, MempoolTestHelpers, WalletTestOps}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
@@ -43,7 +44,6 @@ class ErgoWalletServiceSpec
   import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
-  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   override val ergoSettings: ErgoSettings = settings

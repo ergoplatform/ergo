@@ -27,6 +27,10 @@ import scala.util.Try
   * Based on k-sum problem, so general idea is to find k numbers in a table of size N, such that
   * sum of numbers (or a hash of the sum) is less than target value.
   *
+  * There are two version of Autolykos PoW scheme, Autolykos v1 and v2. The main difference is that
+  * Autolykos v1 is (weakly) non-outsourceable, while v2 is outsourceable and also eliminates some vectors of
+  * optimizations a miner could follow.
+  *
   * See https://docs.ergoplatform.com/ErgoPow.pdf for details
   *
   * CPU Mining process is implemented in inefficient way and should not be used in real environment.
@@ -58,7 +62,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   val IncreasePeriodForN: Height = 50 * 1024
 
   /**
-    * On this height, the table (`N` value) will stop to grow
+    * On this height, the table (`N` value) will stop to grow.
+    * Max N on and after this height would be 2,143,944,600 which is still less than 2^^31.
     */
   val NIncreasementHeightMax: Height = 4198400
 
@@ -97,25 +102,37 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Checks that `header` contains correct solution of the Autolykos PoW puzzle.
     */
   def validate(header: Header): Try[Unit] = Try {
-    val b = getB(header.nBits)
     if (header.version == 1) {
       // for version 1, we check equality of left and right sides of the equation
-      require(checkPoWForVersion1(header, b), "Incorrect points")
+      require(checkPoWForVersion1(header), "Incorrect points")
     } else {
-      // for version 2, we're calculating hit and compare it with target
-      val hit = hitForVersion2(header)
-      require(hit < b, "h(f) < b condition not met")
+      require(checkPoWForVersion2(header), "h(f) < b condition not met")
     }
+  }
+
+  /**
+    * Check PoW for Autolykos v2 header
+    *
+    * @param header - header to check PoW for
+    * @return whether PoW is valid or not
+    */
+  def checkPoWForVersion2(header: Header): Boolean = {
+    val b = getB(header.nBits)
+    // for version 2, we're calculating hit and compare it with target
+    val hit = hitForVersion2(header)
+    hit < b
   }
 
   /**
     * Check PoW for Autolykos v1 header
     *
     * @param header - header to check PoW for
-    * @param b - PoW target
     * @return whether PoW is valid or not
     */
-  def checkPoWForVersion1(header: Header, b: BigInt): Boolean = {
+  def checkPoWForVersion1(header: Header): Boolean = {
+
+    val b = getB(header.nBits) // PoW target
+
     val version = 1: Byte
 
     val msg = msgByHeader(header)
@@ -152,7 +169,6 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * @return PoW hit
     */
   def hitForVersion2(header: Header): BigInt = {
-    val version = 2: Byte
 
     val msg = msgByHeader(header)
     val nonce = header.powSolution.n
@@ -160,6 +176,25 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val h = Ints.toByteArray(header.height)  // used in AL v.2 only
 
     val N = calcN(header)
+
+    hitForVersion2ForMessage(msg, nonce, h, N)
+  }
+
+  /**
+    * Get a PoW hit for custom message (not necessarily a block header) with Autolykos v2.
+    *
+    * PoW then can can be checked as hit < b, where b is PoW target value
+    *
+    * @param msg - message to check PoW on
+    * @param nonce - PoW nonce
+    * @param h - for Ergo blockchain, this is height encoded as bytes. For other use-cases, could be
+    *            unique value on each call or constant (in the latter case more pre-computations
+    *            could be possible
+    * @param N - table size
+    * @return pow hit
+    */
+  def hitForVersion2ForMessage(msg: Array[Byte], nonce: Array[Byte], h: Array[Byte], N: Int): BigInt = {
+    val version = 2: Byte // autolykos protocol version, used in genElement only
 
     val prei8 = BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(msg, nonce)).takeRight(8))
     val i = BigIntegers.asUnsignedByteArray(4, prei8.mod(BigInt(N).underlying()))
@@ -244,7 +279,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   //Proving-related code which is not critical for consensus below
 
   /**
-    * Find a nonce from `minNonce` to `maxNonce`, such that header with the specified fields will contain
+    * Autolykos solver suitable for CPU-mining in testnet and devnets.
+    *
+    * Finds a nonce from `minNonce` to `maxNonce`, such that header with the specified fields will contain
     * correct solution of the Autolykos PoW puzzle.
     */
   def prove(parentOpt: Option[Header],
@@ -262,7 +299,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val (parentId, height) = AutolykosPowScheme.derivedHeaderFields(parentOpt)
 
     val h = HeaderWithoutPow(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, votes)
+      nBits, height, extensionHash, votes, Array.emptyByteArray)
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()

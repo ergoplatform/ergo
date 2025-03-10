@@ -4,6 +4,7 @@ import io.circe.syntax._
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoLikeTransactionSerializer, Input}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
+import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.history.header.Header

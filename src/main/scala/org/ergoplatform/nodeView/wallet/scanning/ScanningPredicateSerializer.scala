@@ -7,6 +7,7 @@ import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import sigma.ast.{EvaluatedValue, SType}
 import sigma.serialization.ValueSerializer
+import sigma.ast._
 import sigmastate.eval.Extensions.ArrayByteOps
 
 

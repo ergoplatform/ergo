@@ -1302,6 +1302,15 @@ components:
             type: string
             description: hex-encoded serialized box bytes
 
+    PrivateKeyRequest:
+          description: Request for getting a secret corresponding to wallet address
+          type: object
+          required:
+            - address
+          properties:
+            address:
+              $ref: '#/components/schemas/ErgoAddress'
+
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
       type: object
@@ -3252,6 +3261,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /transactions/unconfirmed/transactionIds:
+    get:
+      summary: Get list of unconfirmed transactions ids
+      operationId: getUnconfirmedTxIds
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: List of unconfirmed transaction ids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schema/ApiError'
+
+  /transactions/unconfirmed/byTransactionIds:
+    post:
+      summary: Get list of unconfirmed transactions by their ids
+      operationId: getUnconfirmedTxsByIds
+      tags:
+        - transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: List of unconfirmed transaction ids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /transactions/unconfirmed/byErgoTree:
     parameters:
       - in: query
@@ -4881,7 +4942,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ErgoAddress"
+              $ref: "#/components/schemas/PrivateKeyRequest"
       responses:
         '200':
           description: Successfully retrieved secret key
@@ -6643,7 +6704,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-
+  /blockchain/tokens:
+    post:
+      summary: Retrieve minting information about a list of tokens
+      operationId: getTokensByIds
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                description: Token ID
+      responses:
+        '200':
+          description: Array of tokens with the provided IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexedToken'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /blockchain/balance:
     post:
       summary: Retrieve confirmed and unconfirmed balance of an address

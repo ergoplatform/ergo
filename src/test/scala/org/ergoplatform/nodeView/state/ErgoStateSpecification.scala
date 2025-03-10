@@ -11,6 +11,7 @@ import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalacheck.Gen
 import org.ergoplatform.core.{bytesToId, bytesToVersion}
 import org.ergoplatform.settings.Constants.TrueTree
+import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.{boxesHolderGen, validTransactionFromBoxes}
 import org.ergoplatform.validation.ValidationResult.{Invalid, Valid}
 import scorex.db.ByteArrayWrapper
 
@@ -20,7 +21,6 @@ import scala.util.{Failure, Try}
 class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpers with ErgoStateContextHelpers {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
-  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 

@@ -19,6 +19,8 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
+import sigma.ast.ErgoTree
+import sigma.data.ProveDlog
 import org.scalatest.matchers.should.Matchers
 import sigma.ast.ErgoTree
 import sigma.data.ProveDlog

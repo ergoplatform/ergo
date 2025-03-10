@@ -18,7 +18,6 @@ import sigma.ast.SByte
 import sigma.ast.syntax.CollectionConstant
 import sigma.serialization.{ErgoTreeSerializer, ValueSerializer}
 
-
 class ScriptApiRouteSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
@@ -128,7 +127,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
 
       val bac = ValueSerializer.deserialize(vbs).asInstanceOf[CollectionConstant[SByte.type]]
 
-      val bs = bac.value.toArray.map(_.byteValue())
+      val bs = bac.value.toArray.map(b => b.byteValue())
 
       val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bs)
 

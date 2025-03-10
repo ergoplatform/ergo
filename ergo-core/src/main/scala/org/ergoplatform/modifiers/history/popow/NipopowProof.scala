@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.history.popow
 
 import cats.syntax.either._
 import sigmastate.utils.Helpers._
+
 import io.circe.{Decoder, Encoder}
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}

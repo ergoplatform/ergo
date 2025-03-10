@@ -12,11 +12,11 @@ import org.scalatest.matchers.should.Matchers
 import sigma.ast.{ErgoTree, TrueLeaf}
 import sigma.ast.syntax.SigmaPropValue
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
 import sigmastate.utils.Extensions._
 import sigmastate.utils.Helpers._
 import sigma.Extensions.ArrayOps
+import sigma.eval.Extensions.EvalIterableOps
 
 import scala.util.{Success, Try}
 
@@ -37,19 +37,20 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
   val minerRewardDelay = 720
 
   val TrueProp: SigmaPropValue = TrueLeaf.toSigmaProp
+  val TrueTree = ErgoTree.fromProposition(TrueProp)
 
   val tid1 = stringToId("t1")
   val tid2 = stringToId("t2")
 
-  def box(value: Long) = testBox(value, ErgoTree.fromProposition(TrueProp), currentHeight)
+  def box(value: Long) = testBox(value, TrueTree, currentHeight)
 
   def box(value: Long, tokens: Seq[(TokenId, Long)]) =
-    testBox(value, ErgoTree.fromProposition(TrueProp), currentHeight, tokens)
+    testBox(value, TrueTree, currentHeight, tokens)
 
-  def boxCandidate(value: Long) = new ErgoBoxCandidate(value, ErgoTree.fromProposition(TrueProp), currentHeight)
+  def boxCandidate(value: Long) = new ErgoBoxCandidate(value, TrueTree, currentHeight)
 
   def boxCandidate(value: Long, tokens: Seq[(TokenId, Long)]) =
-    new ErgoBoxCandidate(value, ErgoTree.fromProposition(TrueProp), currentHeight, tokens.toArray.toColl)
+    new ErgoBoxCandidate(value, TrueTree, currentHeight, tokens.toColl)
 
   def transaction(inputBox: ErgoBox,
                   outBox: ErgoBoxCandidate,

@@ -4,13 +4,12 @@ import org.ergoplatform.ErgoAddressEncoder.TestnetNetworkPrefix
 import org.ergoplatform.ErgoTreePredef.boxCreationHeight
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.utils.FileUtils
 import org.ergoplatform.{ErgoBox, ErgoTreePredef}
 import scorex.crypto.authds.avltree.batch.Remove
 import sigma.ast.syntax.ValueOps
-import sigma.ast.{EQ, ErgoTree, GE, Height, IntConstant, Self, SigmaAnd, SigmaOr, SigmaPropConstant, TransformingSigmaBuilder}
+import sigma.ast.{TransformingSigmaBuilder, _}
 import sigma.compiler.ir.{CompiletimeIRContext, IRContext}
 import sigma.compiler.{CompilerSettings, SigmaCompiler}
 import sigma.crypto.CryptoConstants.dlogGroup
@@ -20,10 +19,10 @@ import sigmastate._
 import scala.util.Try
 
 class ScriptsSpec extends ErgoCorePropertyTest with FileUtils {
-  import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
-  import org.ergoplatform.wallet.utils.WalletGenerators._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+  import org.ergoplatform.wallet.utils.WalletGenerators._
 
   val compiler = SigmaCompiler(
     CompilerSettings(TestnetNetworkPrefix, TransformingSigmaBuilder, lowerMethodCalls = true)
@@ -31,24 +30,21 @@ class ScriptsSpec extends ErgoCorePropertyTest with FileUtils {
   val delta = emission.settings.minerRewardDelay
   val fixedBox: ErgoBox = ergoBoxGen(fromString("1 == 1"), heightGen = 0).sample.get
   implicit lazy val context: IRContext = new CompiletimeIRContext
+  val trueTree = ErgoTree.fromProposition(TrueLeaf.toSigmaProp)
+  val falseTree = ErgoTree.fromProposition(FalseLeaf.toSigmaProp)
 
   property("simple operations without cryptography") {
     // true/false
-    applyBlockSpendingScript(TrueTree) shouldBe 'success
-    applyBlockSpendingScript(FalseTree) shouldBe 'failure
+    applyBlockSpendingScript(trueTree) shouldBe 'success
+    applyBlockSpendingScript(falseTree) shouldBe 'failure
     // eq
-    applyBlockSpendingScript(
-      ErgoTree.fromProposition(EQ(IntConstant(1), IntConstant(1)).toSigmaProp)) shouldBe 'success
-    applyBlockSpendingScript(
-      ErgoTree.fromProposition(EQ(IntConstant(1), IntConstant(2)).toSigmaProp)) shouldBe 'failure
+    applyBlockSpendingScript(ErgoTree.fromProposition(EQ(IntConstant(1), IntConstant(1)).toSigmaProp)) shouldBe 'success
+    applyBlockSpendingScript(ErgoTree.fromProposition(EQ(IntConstant(1), IntConstant(2)).toSigmaProp)) shouldBe 'failure
     // math
-    applyBlockSpendingScript(
-      ErgoTree.fromProposition(EQ(Plus(1, 2), Minus(6, 3)).toSigmaProp)) shouldBe 'success
-    applyBlockSpendingScript(
-      ErgoTree.fromProposition(EQ(Multiply(1, 2), Divide(7, 3)).toSigmaProp)) shouldBe 'success
+    applyBlockSpendingScript(ErgoTree.fromProposition(EQ(Plus(1, 2), Minus(6, 3)).toSigmaProp)) shouldBe 'success
+    applyBlockSpendingScript(ErgoTree.fromProposition(EQ(Multiply(1, 2), Divide(7, 3)).toSigmaProp)) shouldBe 'success
     // context
-    applyBlockSpendingScript(
-      ErgoTree.fromProposition(EQ(IntConstant(1), Height).toSigmaProp)) shouldBe 'success
+    applyBlockSpendingScript(ErgoTree.fromProposition(EQ(IntConstant(1), Height).toSigmaProp)) shouldBe 'success
     applyBlockSpendingScript(fromString("CONTEXT.preHeader.height == 1")) shouldBe 'success
     applyBlockSpendingScript(fromString("CONTEXT.headers.size == 0")) shouldBe 'success
     applyBlockSpendingScript(fromString(s"CONTEXT.dataInputs.exists{ (box: Box) => box.value == ${fixedBox.value}L}")) shouldBe 'success
@@ -80,7 +76,9 @@ class ScriptsSpec extends ErgoCorePropertyTest with FileUtils {
 
 
   private def fromString(str: String): ErgoTree = {
-    ErgoTree.fromProposition(compiler.compile(Map(), str).buildTree.asBoolValue.toSigmaProp)
+    ErgoTree.fromProposition(
+      compiler.compile(Map(), str).buildTree.asBoolValue.toSigmaProp
+    )
   }
 
   private def applyBlockSpendingScript(script: ErgoTree): Try[UtxoState] = {

@@ -4,8 +4,6 @@ import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import scorex.crypto.authds.avltree.batch.AvlTreeParameters
 import sigma.ast.{ErgoTree, FalseLeaf, TrueLeaf}
-import sigma.ast.ErgoTree.{HeaderType, ZeroHeader}
-import sigma.ast.syntax.{FalseSigmaProp, TrueSigmaProp}
 
 object Constants {
   /**

@@ -269,6 +269,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
     context.system.eventStream.subscribe(self, classOf[BlockSectionsProcessingCacheUpdate])
 
+    // sub-blocks related messages
+    context.system.eventStream.subscribe(self, classOf[DownloadSubblockTransactions])
+
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
 
     val interval = networkSettings.syncInterval
@@ -630,6 +633,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           }
         }
       }
+    case DownloadSubblockTransactions(sbId, remote) =>
+      val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(sbId), None)
+      networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
   }
 
   /**
@@ -1084,7 +1090,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val prevSbIdOpt = inputBlockInfo.prevInputBlockId.map(bytesToId) // link to previous sub-block
         log.debug(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block $prevSbIdOpt and parent block ${subBlockHeader.parentId}")
         // write sub-block to db, ask for transactions in it
-        viewHolderRef ! ProcessInputBlock(inputBlockInfo)
+        viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
         // todo: ask for txs only if subblock's parent is a best subblock ?
         val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(inputBlockInfo.header.id), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))

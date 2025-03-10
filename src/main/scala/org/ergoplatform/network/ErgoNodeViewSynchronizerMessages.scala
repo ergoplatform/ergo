@@ -147,7 +147,7 @@ object ErgoNodeViewSynchronizerMessages {
     */
   case class ProcessNipopow(nipopowProof: NipopowProof)
 
-  case class ProcessInputBlock(subblock: InputBlockInfo)
+  case class ProcessInputBlock(subblock: InputBlockInfo, remote: ConnectedPeer)
 
   case class ProcessInputBlockTransactions(std: InputBlockTransactionsData)
 }

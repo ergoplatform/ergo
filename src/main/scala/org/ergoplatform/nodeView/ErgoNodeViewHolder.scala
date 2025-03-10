@@ -16,7 +16,7 @@ import org.ergoplatform.wallet.utils.FileUtils
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, NetworkType, ScorexSettings}
 import org.ergoplatform.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest, DownloadSubblockTransactions}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.validation.RecoverableModifierError
@@ -26,6 +26,7 @@ import spire.syntax.all.cfor
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.subblocks.InputBlockInfo
+import scorex.core.network.ConnectedPeer
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -305,10 +306,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     // input blocks related logic
     // process input block got from p2p network
-    case ProcessInputBlock(sbi) =>
+    case ProcessInputBlock(sbi, remote) =>
       val toDownloadOpt = history().applyInputBlock(sbi)
       toDownloadOpt.foreach { inputId =>
-        // todo: download input block
+        context.system.eventStream.publish(DownloadSubblockTransactions(inputId, remote))
       }
 
 
@@ -795,6 +796,8 @@ object ErgoNodeViewHolder {
     * to download them
     */
   case class DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) extends NodeViewHolderEvent
+
+  case class DownloadSubblockTransactions(subblockId: ModifierId, remote: ConnectedPeer)
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
 

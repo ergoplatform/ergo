@@ -136,7 +136,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib3.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
     h.isAncestor(ib2.id, ib1.id).isEmpty shouldBe true
-    h.isAncestor(ib3.id, ib2.id).contains(ib2.id) shouldBe true
+    h.isAncestor(ib3.id, ib2.id).contains(ib3.id) shouldBe true
     h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
 
     // apply transactions

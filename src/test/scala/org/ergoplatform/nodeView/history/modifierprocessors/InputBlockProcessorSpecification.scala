@@ -121,12 +121,15 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
     h.applyInputBlockTransactions(ib1.id, Seq.empty) shouldBe Seq(ib1.id)
 
-    val c3 = genChain(height = 3, history = h).tail
+    val c3 = genChain(height = 2, history = h).tail
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+
+    val c4 = genChain(height = 2, history = h).tail
+    c4.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
     val ib2 = InputBlockInfo(1, c3(0).header, None, transactionsDigest = null, merkleProof = null)
-    val ib3 = InputBlockInfo(1, c3(1).header, Some(idToBytes(ib2.id)), transactionsDigest = null, merkleProof = null)
+    val ib3 = InputBlockInfo(1, c4(0).header, Some(idToBytes(ib2.id)), transactionsDigest = null, merkleProof = null)
     h.applyInputBlock(ib2)
     val r = h.applyInputBlock(ib3)
     r shouldBe None

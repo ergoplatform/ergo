@@ -156,14 +156,13 @@ trait InputBlocksProcessor extends ScorexLogging {
       def currentBestTips = bestTips.getOrElse(orderingId, mutable.Set.empty)
       def tipHeight = bestHeights.getOrElse(orderingId, 0)
 
-      if (depth > tipHeight) {
-        bestHeights.put(orderingId, depth)
-      }
-
       parentIdOpt.foreach { parentId =>
         bestTips.put(orderingId, currentBestTips -= parentId)
       }
       if (depth >= tipHeight || (currentBestTips.size < 3 && tipHeight >= 4 && depth >= tipHeight - 2)) {
+        if (depth > tipHeight) {
+          bestHeights.put(orderingId, depth)
+        }
         bestTips.put(orderingId, currentBestTips += childId)
       }
     }

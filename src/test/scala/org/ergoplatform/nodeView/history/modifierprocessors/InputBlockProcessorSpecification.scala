@@ -101,6 +101,47 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.bestInputBlock().get shouldBe childIb
   }
 
+  property("input block - fork switching") {
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h).tail
+    c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib1 = InputBlockInfo(1, c2(0).header, None, transactionsDigest = null, merkleProof = null)
+    val r1 = h.applyInputBlock(ib1)
+    r1 shouldBe None
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
+    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+
+    h.applyInputBlockTransactions(ib1.id, Seq.empty) shouldBe Seq(ib1.id)
+
+    val c3 = genChain(height = 3, history = h).tail
+    c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib2 = InputBlockInfo(1, c3(0).header, None, transactionsDigest = null, merkleProof = null)
+    val ib3 = InputBlockInfo(1, c3(1).header, Some(idToBytes(ib2.id)), transactionsDigest = null, merkleProof = null)
+    h.applyInputBlock(ib2)
+    val r = h.applyInputBlock(ib3)
+    r shouldBe None
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib3.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
+    h.isAncestor(ib2.id, ib1.id).isEmpty shouldBe true
+    h.isAncestor(ib3.id, ib2.id).contains(ib2.id) shouldBe true
+    h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
+
+    // apply transactions
+    // out-of-order application
+    h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq()
+    h.applyInputBlockTransactions(ib3.id, Seq.empty) shouldBe Seq(ib2.id, ib3.id)
+  }
+
   property("apply input block with parent ordering block not available") {
 
   }

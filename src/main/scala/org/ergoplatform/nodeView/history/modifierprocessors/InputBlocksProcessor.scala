@@ -266,8 +266,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     log.info(s"Applying input block transactions for $sbId , transactions: ${transactions.size}")
     val transactionIds = transactions.map(_.id)
     inputBlockTransactions.put(sbId, transactionIds)
-    // todo: currently only one chain of subblocks considered,
-    // todo: in fact there could be multiple trees here (one subblocks tree per header)
 
     if (!inputBlockRecords.contains(sbId)) {
       log.warn(s"Input block transactions delivered for not known input block $sbId")
@@ -279,6 +277,8 @@ trait InputBlocksProcessor extends ScorexLogging {
     transactions.foreach { tx =>
       transactionsCache.put(tx.id, tx)
     }
+
+    // todo: find possible forks here, do rollbacks before calling bestInputBlockStep()
 
     @tailrec
     def bestInputBlockStep(sbId: ModifierId,

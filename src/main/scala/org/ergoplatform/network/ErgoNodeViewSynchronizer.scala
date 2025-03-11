@@ -1528,7 +1528,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
     case NewBestInputBlock(_) =>
-      // todo: impl
+      // todo: impl input block propagation
   }
 
   /** handlers of messages coming from peers */

@@ -268,7 +268,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     inputBlockTransactions.put(sbId, transactionIds)
     // todo: currently only one chain of subblocks considered,
     // todo: in fact there could be multiple trees here (one subblocks tree per header)
-    // todo: split best input header / block
 
     if (!inputBlockRecords.contains(sbId)) {
       log.warn(s"Input block transactions delivered for not known input block $sbId")

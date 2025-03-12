@@ -266,18 +266,26 @@ trait InputBlocksProcessor extends ScorexLogging {
     val transactionIds = transactions.map(_.id)
     inputBlockTransactions.put(sbId, transactionIds)
 
-    if (!inputBlockRecords.contains(sbId)) {
-      log.warn(s"Input block transactions delivered for not known input block $sbId")
-      return Seq.empty
-    }
-
     // put transactions into cache shared among all the input blocks,
     // to avoid data duplication in input block related functions
     transactions.foreach { tx =>
       transactionsCache.put(tx.id, tx)
     }
 
-    // todo: find possible forks here, do rollbacks before calling bestInputBlockStep()
+    inputBlockRecords.get(sbId) match {
+      case Some(ib) if ib.prevInputBlockId.map(bytesToId) == bestInputBlock().map(_.id) =>
+        // continuation of best input blocks chain, do nothing aside of linear tip update
+      case Some(ib) =>
+        // todo: find possible forks here, do rollbacks before calling bestInputBlockStep()
+        val depth = inputBlockParents.get(sbId).map(_._2).map(_ + 1).getOrElse(1)
+        if (depth > bestHeights.get(ib.header.parentId).getOrElse(1)) {
+          // find common input block and do rollback
+        }
+      case None =>
+        log.warn(s"Input block transactions delivered for not known input block $sbId")
+        // todo: should transactions be saved in this case ?
+        return Seq.empty
+    }
 
     @tailrec
     def bestInputBlockStep(sbId: ModifierId,

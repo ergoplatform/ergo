@@ -21,7 +21,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val r = h.applyInputBlock(ib)
     r shouldBe None
 
+    h.bestInputBlocksChain() shouldBe Seq()
     h.applyInputBlockTransactions(ib.id, Seq.empty) shouldBe Seq(ib.id)
+    h.bestInputBlocksChain() shouldBe Seq(ib.id)
   }
 
   property("apply child input block of best input block") {
@@ -58,7 +60,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     // apply transactions
     // out-of-order application
     h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq()
+    h.bestInputBlocksChain() shouldBe Seq()
     h.applyInputBlockTransactions(ib1.id, Seq.empty) shouldBe Seq(ib1.id, ib2.id)
+    h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
   }
 
   property("apply input block with parent input block not available (out of order application)") {
@@ -143,6 +147,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     // out-of-order application
     h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq()
     h.applyInputBlockTransactions(ib3.id, Seq.empty) shouldBe Seq(ib2.id, ib3.id)
+
+    h.bestInputBlocksChain() shouldBe Seq(ib3.id, ib2.id)
   }
 
   property("apply input block with parent ordering block not available") {

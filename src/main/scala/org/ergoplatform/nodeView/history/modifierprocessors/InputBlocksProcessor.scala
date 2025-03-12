@@ -355,7 +355,7 @@ trait InputBlocksProcessor extends ScorexLogging {
           }
         }
 
-        stepBack(Seq.empty, tip.id)
+        stepBack(Seq(tip.id), tip.id)
       case None => Seq.empty
     }
   }

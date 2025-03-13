@@ -260,6 +260,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * @return - sequence of new best input blocks
     */
+    //  todo: return input block ids rolled back?
   def applyInputBlockTransactions(sbId: ModifierId,
                                   transactions: Seq[ErgoTransaction]): Seq[ModifierId] = {
     log.info(s"Applying input block transactions for $sbId , transactions: ${transactions.size}")

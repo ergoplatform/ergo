@@ -250,7 +250,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     if (res) {
-      val orderingBlockId = _bestInputBlock.get.header.id
+      val orderingBlockId = _bestInputBlock.get.header.parentId
       val curr = orderingBlockTransactions.getOrElse(orderingBlockId, Seq.empty)
       orderingBlockTransactions.put(orderingBlockId, curr ++ transactionIds)
     }
@@ -272,14 +272,41 @@ trait InputBlocksProcessor extends ScorexLogging {
       transactionsCache.put(tx.id, tx)
     }
 
+    var forkingInputBlock: Option[ModifierId] = None
+
     inputBlockRecords.get(sbId) match {
       case Some(ib) if ib.prevInputBlockId.map(bytesToId) == bestInputBlock().map(_.id) =>
-        // continuation of best input blocks chain, do nothing aside of linear tip update
+      // continuation of best input blocks chain, do nothing aside of linear tip update
       case Some(ib) =>
-        // todo: find possible forks here, do rollbacks before calling bestInputBlockStep()
         val depth = inputBlockParents.get(sbId).map(_._2).map(_ + 1).getOrElse(1)
-        if (depth > bestHeights.get(ib.header.parentId).getOrElse(1)) {
+        if (depth > bestHeights.getOrElse(ib.header.parentId, 1)) {
+
           // find common input block and do rollback
+          val thisChain = inputBlocksChain(sbId)
+          if(thisChain.forall(id => inputBlockTransactions.contains(id))) {
+
+            val currentBestChain = bestInputBlocksChain()
+            var commonIndex = -1
+            ((currentBestChain.length - 1).to(0, -1)).foreach { idx =>
+              if (thisChain(idx) == currentBestChain(idx)) {
+                commonIndex = idx
+              }
+            }
+            ((currentBestChain.length - 1).to(Math.max(commonIndex, 0), -1)).foreach { idx =>
+              val ibId = currentBestChain(idx)
+              val txs = inputBlockTransactions.get(ibId).get
+              val orderingId = ib.header.parentId
+              orderingBlockTransactions.put(orderingId, orderingBlockTransactions.apply(orderingId).filter(id => !txs.contains(id)))
+            }
+
+            if (commonIndex > -1) {
+              _bestInputBlock = Some(inputBlockRecords(currentBestChain(commonIndex)))
+              forkingInputBlock = Some(thisChain(commonIndex - 1))
+            } else {
+              _bestInputBlock = None
+              forkingInputBlock = Some(thisChain.last)
+            }
+          }
         }
       case None =>
         log.warn(s"Input block transactions delivered for not known input block $sbId")
@@ -290,17 +317,17 @@ trait InputBlocksProcessor extends ScorexLogging {
     @tailrec
     def bestInputBlockStep(sbId: ModifierId,
                            transactionIds: Seq[ModifierId],
-                           acc: Seq[ModifierId] = Seq.empty):Seq[ModifierId] = {
+                           acc: Seq[ModifierId] = Seq.empty): Seq[ModifierId] = {
       if (processBestInputBlockCandidate(sbId, transactionIds)) {
         val orderingId = inputBlockRecords.get(sbId).map(_.header.parentId).get // todo: .get
 
         val maybeChildToApply = (bestTips.getOrElse(orderingId, Set.empty).flatMap { tipId =>
           isAncestor(tipId, sbId).map(_ -> tipId)
-        }.filter{case (childId, _) =>
+        }.filter { case (childId, _) =>
           inputBlockTransactions.contains(childId)
         }) match {
           case s if s.isEmpty => None
-          case s => Some(s.maxBy{case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0)}._1)
+          case s => Some(s.maxBy { case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0) }._1)
         }
 
         val updAcc = acc :+ sbId
@@ -318,7 +345,13 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
-    bestInputBlockStep(sbId, transactionIds)
+    if (forkingInputBlock.isEmpty) {
+      bestInputBlockStep(sbId, transactionIds)
+    } else {
+      val sbId = forkingInputBlock.get
+      val transactionIds = inputBlockTransactions.get(sbId).get
+      bestInputBlockStep(sbId, transactionIds)
+    }
   }
 
   // todo: call on best header change

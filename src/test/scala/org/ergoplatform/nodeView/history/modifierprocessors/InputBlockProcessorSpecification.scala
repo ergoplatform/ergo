@@ -147,7 +147,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
 
     // apply transactions
-    // out-of-order application
+    // todo: test out-of-order application
     h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq()
     h.applyInputBlockTransactions(ib3.id, Seq.empty) shouldBe Seq(ib2.id, ib3.id)
 

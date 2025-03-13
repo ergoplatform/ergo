@@ -103,6 +103,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
     h.applyInputBlockTransactions(parentIb.id, Seq.empty) shouldBe Seq(parentIb.id, childIb.id)
     h.bestInputBlock().get shouldBe childIb
+
+    h.bestInputBlocksChain() shouldBe Seq(childIb.id, parentIb.id)
+    h.inputBlocksChain(childIb.id) shouldBe Seq(childIb.id, parentIb.id)
   }
 
   property("input block - fork switching") {

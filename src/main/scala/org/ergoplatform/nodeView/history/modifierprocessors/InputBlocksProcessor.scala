@@ -341,21 +341,24 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
+  def inputBlocksChain(tipId: ModifierId): Seq[ModifierId] = {
+    @tailrec
+    def stepBack(acc: Seq[ModifierId], inputId: ModifierId): Seq[ModifierId] = {
+      inputBlockParents.get(inputId) match {
+        case Some((Some(parentId), _)) => stepBack(acc :+ parentId, parentId)
+        case _ => acc
+      }
+    }
+
+    stepBack(Seq(tipId), tipId)
+  }
+
   /**
     * @return best known inputs-block chain for the current best-known ordering block
     */
   def bestInputBlocksChain(): Seq[ModifierId] = {
     bestInputBlock() match {
-      case Some(tip) =>
-        @tailrec
-        def stepBack(acc: Seq[ModifierId], inputId: ModifierId): Seq[ModifierId] = {
-          inputBlockParents.get(inputId) match {
-            case Some((Some(parentId), _)) => stepBack(acc :+ parentId, parentId)
-            case _ => acc
-          }
-        }
-
-        stepBack(Seq(tip.id), tip.id)
+      case Some(tip) => inputBlocksChain(tip.id)
       case None => Seq.empty
     }
   }

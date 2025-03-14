@@ -283,29 +283,30 @@ trait InputBlocksProcessor extends ScorexLogging {
         if (depth > bestInputDepth) {
 
           // find common input block and do rollback
-          val thisChain = inputBlocksChain(sbId)
+          val thisChain = inputBlocksChain(sbId).reverse
           if(thisChain.forall(id => inputBlockTransactions.contains(id))) {
 
-            val currentBestChain = bestInputBlocksChain()
+            val currentBestChain = bestInputBlocksChain().reverse
             var commonIndex = -1
-            ((currentBestChain.length - 1).to(0, -1)).foreach { idx =>
+            (0 until currentBestChain.length).foreach { idx =>
               if (thisChain(idx) == currentBestChain(idx)) {
                 commonIndex = idx
               }
             }
-            ((currentBestChain.length - 1).to(Math.max(commonIndex, 0), -1)).foreach { idx =>
+            ((currentBestChain.length - 1).to(commonIndex + 1, -1)).foreach { idx =>
               val ibId = currentBestChain(idx)
               val txs = inputBlockTransactions.get(ibId).get
               val orderingId = ib.header.parentId
+              // removing input-block transactions
               orderingBlockTransactions.put(orderingId, orderingBlockTransactions.apply(orderingId).filter(id => !txs.contains(id)))
             }
 
             if (commonIndex > -1) {
               _bestInputBlock = Some(inputBlockRecords(currentBestChain(commonIndex)))
-              forkingInputBlock = Some(thisChain(commonIndex - 1))
+              forkingInputBlock = Some(thisChain(commonIndex + 1))
             } else {
               _bestInputBlock = None
-              forkingInputBlock = Some(thisChain.last)
+              forkingInputBlock = Some(thisChain.head)
             }
           }
         }

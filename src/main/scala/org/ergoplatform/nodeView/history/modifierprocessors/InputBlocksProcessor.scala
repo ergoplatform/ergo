@@ -261,8 +261,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @return - sequence of new best input blocks
     */
     //  todo: return input block ids rolled back?
-  def applyInputBlockTransactions(sbId: ModifierId,
-                                  transactions: Seq[ErgoTransaction]): Seq[ModifierId] = {
+  def applyInputBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Seq[ModifierId] = {
     log.info(s"Applying input block transactions for $sbId , transactions: ${transactions.size}")
     val transactionIds = transactions.map(_.id)
     inputBlockTransactions.put(sbId, transactionIds)
@@ -279,8 +278,9 @@ trait InputBlocksProcessor extends ScorexLogging {
       case Some(ib) if ib.prevInputBlockId.map(bytesToId) == bestInputBlock().map(_.id) =>
       // continuation of best input blocks chain, do nothing aside of linear tip update
       case Some(ib) =>
-        val depth = inputBlockParents.get(sbId).map(_._2).map(_ + 1).getOrElse(1)
-        if (depth > bestHeights.getOrElse(ib.header.parentId, 1)) {
+        val depth = inputBlockParents.get(sbId).map(_._2).getOrElse(1)
+        val bestInputDepth = _bestInputBlock.map(_.id).flatMap(inputBlockParents.get).map(_._2).getOrElse(1)
+        if (depth > bestInputDepth) {
 
           // find common input block and do rollback
           val thisChain = inputBlocksChain(sbId)

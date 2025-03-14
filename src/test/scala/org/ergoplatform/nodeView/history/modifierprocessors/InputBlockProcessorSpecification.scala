@@ -134,6 +134,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val c4 = genChain(height = 2, history = h).tail
     c4.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
 
     val ib2 = InputBlockInfo(1, c3(0).header, None, transactionsDigest = null, merkleProof = null)
     val ib3 = InputBlockInfo(1, c4(0).header, Some(idToBytes(ib2.id)), transactionsDigest = null, merkleProof = null)
@@ -183,6 +184,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val r2 = h.applyInputBlock(ib2)
     r2 shouldBe None
     h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq(ib2.id)
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
 
     val c4 = genChain(height = 2, history = h).tail
     c4.head.header.parentId shouldBe h.bestHeaderOpt.get.id
@@ -191,13 +194,11 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     c5.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val c6 = genChain(height = 2, history = h).tail
-    c6.head.header.parentId shouldBe h.bestHeaderOpt.get.id
-    h.bestFullBlockOpt.get.id shouldBe c1.last.id
-
     val ib3 = InputBlockInfo(1, c4(0).header, Some(idToBytes(ib1.id)), transactionsDigest = null, merkleProof = null)
     val r = h.applyInputBlock(ib3)
     r shouldBe None
+    // both tips of depth == 2 are recognized now
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib3.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
 
@@ -208,7 +209,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     val ib4 = InputBlockInfo(1, c5(0).header, Some(idToBytes(ib3.id)), transactionsDigest = null, merkleProof = null)
     val r4 = h.applyInputBlock(ib4)
     r4 shouldBe None
-    h.applyInputBlockTransactions(ib4.id, Seq.empty) shouldBe Seq()
+    h.applyInputBlockTransactions(ib4.id, Seq.empty) shouldBe Seq(ib3.id, ib4.id)
 
     h.bestInputBlocksChain() shouldBe Seq(ib4.id, ib3.id, ib1.id)
   }

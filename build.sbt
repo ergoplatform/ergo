@@ -198,7 +198,7 @@ findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "fin
 
 //Scapegoat settings
 
-ThisBuild / scapegoatVersion := "1.3.3"
+ThisBuild / scapegoatVersion := "1.3.11"
 
 scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
@@ -311,7 +311,7 @@ lazy val ergo = (project in file("."))
 
       "org.bitlet" % "weupnp" % "0.1.4",
       // command line args parsing
-      "com.github.scopt" %% "scopt" % "4.0.1",
+      "com.github.scopt" %% "scopt" % "4.1.0",
 
       // API dependencies
       "de.heikoseeberger" %% "akka-http-circe" % "1.20.0",

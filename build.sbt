@@ -193,8 +193,8 @@ docker / buildOptions := BuildOptions(
 
 //FindBugs settings
 
-findbugsReportType := Some(FindbugsReport.Xml)
-findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "findbugs-exclude.xml"))
+// findbugsReportType := Some(FindbugsReport.Xml)
+// findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "findbugs-exclude.xml"))
 
 //Scapegoat settings
 

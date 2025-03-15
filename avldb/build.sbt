@@ -18,7 +18,6 @@ val Versions = new {
 }
 
 libraryDependencies ++= Seq(
-  "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "23.0",
   "org.scorexfoundation" %% "scrypto" % "2.3.0",

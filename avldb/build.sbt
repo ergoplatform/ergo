@@ -17,12 +17,12 @@ val Versions = new {
     else "0.19"
   
   val scalacheck = (scalaVersion: String) =>
-    if (scalaVersion == scala211) "1.15.2"
+    if (scalaVersion == scala211) "1.14.3"
     else "1.18.1"
 
   val scalatestplus = (scalaVersion: String) =>
     if (scalaVersion == scala211)
-      "org.scalatestplus" %% "scalacheck-1-15" % "3.2.3.0" % Test
+      "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test
     else
       "org.scalatestplus" %% "scalacheck-1-18" % "3.2.19.0" % Test
 }

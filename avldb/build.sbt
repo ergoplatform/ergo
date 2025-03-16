@@ -9,24 +9,32 @@ name := "avldb"
 val Versions = new {
 
   val spire = (scalaVersion: String) =>
-    if (scalaVersion == scala213) "0.17.0"
-    else "0.14.1"
+    if (scalaVersion == scala213) "0.18.0"
+    else "0.16.2"
 
   val scalameter = (scalaVersion: String) =>
-    if (scalaVersion == scala213) "0.19"
-    else "0.9"
+    if (scalaVersion == scala213) "0.21"
+    else "0.19"
+  
+  val scalacheck = (scalaVersion: String) =>
+    if (scalaVersion == scala211) "1.15.2"
+    else "1.18.1"
+
+  val scalatestplus = (scalaVersion: String) =>
+    if (scalaVersion == scala211)
+      "org.scalatestplus" %% "scalacheck-1-15" % "3.2.3.0" % Test
+    else
+      "org.scalatestplus" %% "scalacheck-1-18" % "3.2.19.0" % Test
 }
 
 libraryDependencies ++= Seq(
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "com.google.guava" % "guava" % "23.0",
+  "ch.qos.logback" % "logback-classic" % "1.5.17",
   "org.scorexfoundation" %% "scrypto" % "2.3.0",
-  "org.scalatest" %% "scalatest" % "3.1.1" % "test",
-  "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
-  "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
-  "com.storm-enroute" %% "scalameter" % Versions.scalameter(scalaVersion.value) % "test",
-  "org.ethereum" % "leveldbjni-all"     % "1.18.3",
+  "org.scalatest" %% "scalatest" % "3.2.19" % Test,
+  "org.scalacheck" %% "scalacheck" % Versions.scalacheck(scalaVersion.value) % Test,
+  Versions.scalatestplus(scalaVersion.value),
+  "com.storm-enroute" %% "scalameter" % Versions.scalameter(scalaVersion.value) % Test,
   "org.typelevel" %% "spire" % Versions.spire(scalaVersion.value)
 )
 

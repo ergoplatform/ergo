@@ -9,7 +9,7 @@ name := "avldb"
 val Versions = new {
 
   val spire = (scalaVersion: String) =>
-    if (scalaVersion == scala213) "0.18.0"
+    if (scalaVersion == scala213) "0.17.0-M1"
     else "0.16.2"
 
   val scalameter = (scalaVersion: String) =>
@@ -30,6 +30,7 @@ val Versions = new {
 libraryDependencies ++= Seq(
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "ch.qos.logback" % "logback-classic" % "1.5.17",
+  "com.google.guava" % "guava" % "23.0",
   "org.scorexfoundation" %% "scrypto" % "2.3.0",
   "org.scalatest" %% "scalatest" % "3.2.19" % Test,
   "org.scalacheck" %% "scalacheck" % Versions.scalacheck(scalaVersion.value) % Test,

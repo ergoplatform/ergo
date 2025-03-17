@@ -23,4 +23,5 @@ object InputBlockMessageSpec extends MessageSpecInputBlocks[InputBlockInfo] {
   override def parse(r: Reader): InputBlockInfo = {
     InputBlockInfo.serializer.parse(r)
   }
+
 }

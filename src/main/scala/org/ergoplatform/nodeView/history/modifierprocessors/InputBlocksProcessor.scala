@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.history.modifierprocessors
 
-import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -23,7 +22,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   def historyReader: ErgoHistoryReader
 
   /**
-    * Pointer to a best input-block known, tip of a best input blocks chain
+    * Pointer to a best input-block with transactions known
     */
   private var _bestInputBlock: Option[InputBlockInfo] = None
 
@@ -33,7 +32,8 @@ trait InputBlocksProcessor extends ScorexLogging {
   private val inputBlockRecords = mutable.Map[ModifierId, InputBlockInfo]()
 
   /**
-    * Index for input block id -> parent input block id (or None if parent is ordering block, and height from ordering block
+    * Index for input block id -> parent input block id (or None if parent is ordering block), and height from ordering block
+    * First input-block after ordering block has height = 1.
     */
   private val inputBlockParents = mutable.Map[ModifierId, (Option[ModifierId], Int)]()
 
@@ -61,7 +61,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   private val bestHeights = mutable.Map[ModifierId, Int]()
 
   /**
-    * transactions generated AFTER an ordering block
+    * transactions generated AFTER an ordering block, till best known input block with transactions
     * block header (ordering block) -> transaction ids
     * so transaction ids do belong to transactions in input blocks since the block (header)
     */
@@ -76,8 +76,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     * Temporary cache of children which do not have parents downloaded yet
     */
   private[modifierprocessors] val disconnectedWaitlist = mutable.Set[InputBlockInfo]()
-
-  private def bestInputBlockHeight: Option[Height] = _bestInputBlock.map(_.header.height)
 
   /**
     * @return best ordering and input blocks
@@ -95,7 +93,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   private def prune(): Unit = {
     val BlocksThreshold = 2 // we remove input-blocks data after 2 ordering blocks
 
-    val bestHeight = bestInputBlockHeight.getOrElse(0)
+    val bestHeight = _bestInputBlock.map(_.header.height).getOrElse(0)
 
     val orderingBlockIdsToRemove = bestHeights.keys.filter { orderingId =>
       bestHeight > historyReader.heightOf(orderingId).getOrElse(0)
@@ -135,7 +133,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   // reset sub-blocks structures, should be called on receiving ordering block (or slightly later?)
-  private def resetState(doPruning: Boolean) = {
+  private def resetState(doPruning: Boolean): Unit = {
     _bestInputBlock = None
     if (doPruning) {
       prune()

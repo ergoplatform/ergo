@@ -320,8 +320,7 @@ lazy val ergo = (project in file("."))
       // jaxb-api is included only to avoid a runtime exception
       "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
 
-      // caching, bloom filters, Longs/Ints
-      "com.google.guava" % "guava" % "21.0",
+      // caching
       "com.github.ben-manes.caffeine" % "caffeine" % "2.9.3" // use 3.x only for java 11+
     )
   )

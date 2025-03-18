@@ -4249,7 +4249,12 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ErgoAddress"
+              type: object
+              required:
+                - address
+              properties:
+                address:
+                  $ref: "#/components/schemas/ErgoAddress"
       responses:
         '200':
           description: Change address updated successfully

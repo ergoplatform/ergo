@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history.header
 
-import cats.syntax.either._  // needed for Scala 2.11
+import cats.syntax.either._
 import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
@@ -17,8 +17,9 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
-import sigma.Colls
+import sigma.{Colls, VersionContext}
 import sigma.Extensions._
+import sigma.ast.BlockValue
 import sigma.crypto.EcPointType
 import sigma.data.{CAvlTree, CBigInt, CGroupElement, CHeader}
 
@@ -146,6 +147,10 @@ object Header extends ApiCodecs {
     * 6.0 interpreter (EIP-50)
     */
   val Interpreter60Version: Byte = 4
+
+  def scriptAndTreeFromBlockVersions(blockVersion: Byte): VersionContext = {
+    VersionContext((blockVersion - 1).toByte, (blockVersion - 1).toByte)
+  }
 
   // todo: pass NetworkType, not String
   // todo: comments

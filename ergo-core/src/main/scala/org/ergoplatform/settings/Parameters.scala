@@ -414,7 +414,7 @@ object Parameters {
 
   def matchParameters60(p1: Parameters, p2: Parameters, blockVersion: Header.Version): Try[Unit] = {
     if (blockVersion < Header.Interpreter60Version) {
-      Success(Unit)
+      Success(())
     } else {
       Try {
         if (p1.height != p2.height) {

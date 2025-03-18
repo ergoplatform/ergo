@@ -8,6 +8,7 @@ import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
@@ -78,7 +79,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   def p2sAddressR: Route = (path("p2sAddress") & post & source) { source =>
     withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext)) { case (addrsF, sc) =>
       onSuccess(addrsF) { addrs =>
-        val version = VersionContext.fromBlockVersion(sc.blockVersion)
+        val version = Header.scriptAndTreeFromBlockVersions(sc.blockVersion)
         VersionContext.withVersions(version.activatedVersion, version.ergoTreeVersion) {
           // todo: treeVersion == 1 is used here, revisit, likely 0 should be default for now
           compileSource(source, keysToEnv(addrs.map(_.pubkey)), 1).map(Pay2SAddress.apply).fold(
@@ -93,7 +94,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   def p2shAddressR: Route = (path("p2shAddress") & post & source) { source =>
     withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
       onSuccess(addrsF) { addrs =>
-        val version = VersionContext.fromBlockVersion(bv)
+        val version = Header.scriptAndTreeFromBlockVersions(bv)
         VersionContext.withVersions(version.activatedVersion, version.ergoTreeVersion) {
           compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(
             e => BadRequest(e.getMessage),

@@ -1,5 +1,7 @@
 package org.ergoplatform.settings
 
+import sigmastate.utils.Helpers._ // needed for Scala 2.11
+
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}

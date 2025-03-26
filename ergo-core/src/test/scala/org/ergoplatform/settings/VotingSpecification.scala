@@ -262,7 +262,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
     val esc12 = process(esc11, expectedParameters12, h12).get
     checkValidationSettings(esc12.validationSettings, proposedUpdate)
 
-    esc12.validationSettings.sigmaSettings.isSoftFork(VR.CheckValidOpCode.id, ValidationException("", VR.CheckValidOpCode, Seq.empty)) shouldBe true
+    esc12.validationSettings.sigmaSettings.isSoftFork(ValidationException("", VR.CheckValidOpCode, Seq.empty)) shouldBe true
 
     // vote for soft-fork @ activation height
     val h12w = h12.copy(votes = forkVote)

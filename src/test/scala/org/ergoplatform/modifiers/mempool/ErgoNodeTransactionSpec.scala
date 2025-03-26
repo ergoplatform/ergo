@@ -1,31 +1,34 @@
 package org.ergoplatform.modifiers.mempool
 
-import org.ergoplatform.ErgoBox.{TokenId}
+import org.ergoplatform.ErgoBox.{R4, TokenId}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest, ErgoStateContextHelpers}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.eval.Extensions._
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
-import org.ergoplatform.wallet.boxes.{ErgoBoxAssetExtractor}
+import org.ergoplatform.validation.ValidationRules.CheckAndGetMethod
+import org.ergoplatform.wallet.boxes.{ErgoBoxAssetExtractor, ErgoBoxSerializer}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.scalacheck.Gen
 import sigma.util.BenchmarkUtil
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import sigma.{Colls}
+import sigma.{Colls, VersionContext}
 import sigma.ast.ErgoTree.DefaultHeader
-import sigma.ast.{AND, ErgoTree, TrueLeaf}
+import sigma.ast.{AND, ErgoTree, TrueLeaf, UnsignedBigIntConstant}
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigma.serialization.ErgoTreeSerializer.DefaultSerializer
+import sigma.validation.ReplacedRule
 import sigmastate.helpers.TestingHelpers._
 
+import java.math.BigInteger
 import scala.util.{Random, Try}
 
 class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelpers with ErgoStateContextHelpers {
@@ -486,6 +489,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
       |  ub >= 0
       | } """.stripMargin /*,
     """{
+      |  // todo: test with Option[Header]
       |   val oh = getVar[Option[Header]](21).get
       |   sigmaProp(oh.isDefined)
       | } """.stripMargin */
@@ -504,10 +508,12 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
       val ergoTree = compileSourceV6(script, treeVersion)
 
       ergoTree.root.isRight shouldBe true // parsed
+      ergoTree.version shouldBe treeVersion
 
       val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
           Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
           0, 0)
+
       val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
       val oc = new ErgoBoxCandidate(b.value, b.ergoTree, b.creationHeight)
@@ -570,7 +576,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     val f = utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver)
     f.isSuccess shouldBe false
   }
-/*
+
   property("Boxes containing 6.0 data types") {
     val ubic = UnsignedBigIntConstant(new BigInteger("2"))
     val b = new ErgoBox(1000000000L, ErgoTreePredef.TrueProp(ErgoTree.defaultHeaderWithVersion(3.toByte)), Colls.emptyColl,
@@ -624,5 +630,5 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
 
     utx.statefulValidity(IndexedSeq(b), IndexedSeq.empty, stateContext, 0)(defaultProver).isSuccess shouldBe true
   }
-*/
+
 }

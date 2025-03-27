@@ -487,12 +487,12 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
       |  val m = unsignedBigInt("5")
       |  val ub = b.toUnsignedMod(m)
       |  ub >= 0
-      | } """.stripMargin /*,
+      | } """.stripMargin,
     """{
-      |  // todo: test with Option[Header]
-      |   val oh = getVar[Option[Header]](21).get
+      |   val bs = fromBase16("014201ad7fffba807080ce7f808001b4771880bdffbd7fff857f8db17fdc89b0015bff0189486d80934a84015e03c064c6d100c17fae55bf01f380007fbb00ff01d9000000013f0680d10015ff11c4b7ffff01ffb2d27f0001050064010080ffb93e7fff4cc15a2bffdd770480007f8080ff8026802f7f51007f004b01ff0080002380a581e8c0ca81dfca62007fa7ff01860019f37f3c4491067cd1001ee07e570fe8689b80ff11017aff7408703927a2bbc4fa0200000000032bdb4c610ddf0078b4f31f5a36bff7b003704dfc93b201fedd8fe331d9ff1102008d7fff010d80ff")
+      |   val oh = Global.deserializeTo[Option[Header]](bs)
       |   sigmaProp(oh.isDefined)
-      | } """.stripMargin */
+      | } """.stripMargin
   )
 
   property("Execution of 6.0 Ergoscript - v3 tree") {

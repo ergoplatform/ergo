@@ -156,12 +156,12 @@ object Header extends ApiCodecs {
   // todo: comments
   def interpreter60VersionActivationHeight(networkTypeName: String): Int = {
     if(networkTypeName == "mainnet") {
-      ???  // todo: set
+      1520000  // todo: set
     } else if(networkTypeName == "testnet") {
-      1548800  // todo: set
+      1548800
     } else {
       //devnet
-      ???  // todo: set
+      0  // todo: set
     }
   }
 

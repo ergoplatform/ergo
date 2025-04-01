@@ -141,12 +141,18 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
 
   override def serialize(bt: BlockTransactions, w: Writer): Unit = {
     w.putBytes(idToBytes(bt.headerId))
-    if (bt.blockVersion > 1) {
+    val blockVersion = bt.blockVersion
+    if (blockVersion > 1) {
       w.putUInt(MaxTransactionsInBlock.toLong + bt.blockVersion)
     }
     w.putUInt(bt.txs.size.toLong)
     bt.txs.foreach { tx =>
-      VersionContext.withVersions(VersionContext.V6SoftForkVersion, VersionContext.V6SoftForkVersion) {
+      if (blockVersion >= VersionContext.JitActivationVersion) {
+        VersionContext.withVersions(VersionContext.V6SoftForkVersion, VersionContext.V6SoftForkVersion) {
+          ErgoTransactionSerializer.serialize(tx, w)
+        }
+      } else {
+        // before 5.0 activation, VersionContext is not used
         ErgoTransactionSerializer.serialize(tx, w)
       }
     }

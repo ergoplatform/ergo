@@ -125,6 +125,20 @@ When a miner is generating an ordering block, it is announcing header similarly 
 
 TODO: stateless clients.
 
+P2P Messages
+------------
+
+When miner is generating a sub-block:
+
+* it sends sub-block announcement to its peers. An announcement is including sub-block header, link to previous block, 
+digests of sub-block transactions and previously confirmed transactions since the last block, along with Merkle proof 
+for these three fields against extension root in the header.
+* peers are passing the announcement further till the first announcement for the same sub-block got from the outside. 
+On getting the announcement, or in case of getting two announcements for the same sub-block, the peer is stopping to 
+announce it
+* a peer is asking for sub-block transactions immediately after getting sub-block announcement, before completing 
+header checks
+
 Incentivization
 ---------------
 
@@ -148,7 +162,6 @@ Only mining nodes update would be needed, while older nodes can receive ordinary
 
 And all the new rules will be made soft-forkable, so it will be possible to change them with soft-fork (mining nodes upgrade after
 90+% hashrate approval) only.
-
 
 
 References

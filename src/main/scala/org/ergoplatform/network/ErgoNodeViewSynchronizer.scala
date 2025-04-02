@@ -1527,8 +1527,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
 
-    case NewBestInputBlock(_) =>
-      // todo: impl input block propagation
+    case NewBestInputBlock(id) =>
+      historyReader.getInputBlock(id) match {
+        case Some(ibi) =>
+          log.debug(s"Sending input block $id out")
+          val msg = Message(InputBlockMessageSpec, Right(ibi), None)
+          networkControllerRef ! SendToNetwork(msg, Broadcast)
+        case None =>
+      }
   }
 
   /** handlers of messages coming from peers */

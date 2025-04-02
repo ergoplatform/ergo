@@ -13,11 +13,11 @@ import scorex.util.Extensions._
 case class InputBlockTransactionsData(inputBlockId: ModifierId,
                                       transactions: Seq[ErgoTransaction],
                                       override val sizeOpt: Option[Int] = None)
-  extends NonHeaderBlockSection with TransactionsCarryingBlockSection {  // todo: inheritance needed ? 
+  extends NonHeaderBlockSection with TransactionsCarryingBlockSection {  // todo: inheritance needed ?
 
   override def headerId: ModifierId = inputBlockId
 
-  override def digest: Digest32 = ???
+  override def digest: Digest32 = ??? // todo: include witnesses ?
 
   /**
     * Type of node view modifier (transaction, header etc)

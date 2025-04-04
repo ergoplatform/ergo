@@ -1109,6 +1109,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  def processInputBlockRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
+    hr.getInputBlock(subBlockId) match {
+      case Some(sbi) =>
+        val msg = Message(InputBlockMessageSpec, Right(sbi), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+      case None =>
+        log.warn(s"Requested sub block not found: $subBlockId")
+    }
+  }
+
   // todo: send transactions? or transaction ids? or switch from one option to another depending on message size ?
   def processInputBlockTransactionsRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
     hr.getInputBlockTransactions(subBlockId) match {
@@ -1588,6 +1598,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Sub-blocks related messages
     case (_: InputBlockMessageSpec.type, subBlockInfo: InputBlockInfo, remote) =>
       processInputBlock(subBlockInfo, hr, remote)
+    case (_: InputBlockRequestMessageSpec.type, subBlockId: String, remote) =>
+      processInputBlockRequest(ModifierId @@ subBlockId, hr, remote)
     case (_: InputBlockTransactionsRequestMessageSpec.type, subBlockId: String, remote) =>
       processInputBlockTransactionsRequest(ModifierId @@ subBlockId, hr, remote)
     case (_: InputBlockTransactionsMessageSpec.type, transactions: InputBlockTransactionsData, remote) =>

@@ -33,7 +33,7 @@ import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younge
 import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
-import org.ergoplatform.network.message.inputblocks.{InputBlockMessageSpec, InputBlockTransactionsData, InputBlockTransactionsMessageSpec, InputBlockTransactionsRequestMessageSpec}
+import org.ergoplatform.network.message.inputblocks.{InputBlockMessageSpec, InputBlockRequestMessageSpec, InputBlockTransactionsData, InputBlockTransactionsMessageSpec, InputBlockTransactionsRequestMessageSpec}
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
@@ -270,6 +270,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[BlockSectionsProcessingCacheUpdate])
 
     // sub-blocks related messages
+    context.system.eventStream.subscribe(self, classOf[DownloadSubblock])
     context.system.eventStream.subscribe(self, classOf[DownloadSubblockTransactions])
     context.system.eventStream.subscribe(self, classOf[NewBestInputBlock])
 
@@ -634,6 +635,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           }
         }
       }
+    case DownloadSubblock(sbId, remote) =>
+      val msg = Message(InputBlockRequestMessageSpec, Right(sbId), None)
+      networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
     case DownloadSubblockTransactions(sbId, remote) =>
       val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(sbId), None)
       networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))

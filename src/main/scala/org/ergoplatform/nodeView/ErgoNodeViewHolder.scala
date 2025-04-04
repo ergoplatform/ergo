@@ -16,7 +16,7 @@ import org.ergoplatform.wallet.utils.FileUtils
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, NetworkType, ScorexSettings}
 import org.ergoplatform.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest, DownloadSubblockTransactions}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest, DownloadSubblock, DownloadSubblockTransactions}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.validation.RecoverableModifierError
@@ -308,10 +308,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     // process input block got from p2p network
     case ProcessInputBlock(sbi, remote) =>
       val toDownloadOpt = history().applyInputBlock(sbi)
-      toDownloadOpt.foreach { inputId =>
-        context.system.eventStream.publish(DownloadSubblockTransactions(inputId, remote))
-      }
 
+      // todo: check if transactions already stored
+      context.system.eventStream.publish(DownloadSubblockTransactions(sbi.id, remote))
+      toDownloadOpt.foreach { inputId =>
+        context.system.eventStream.publish(DownloadSubblock(inputId, remote))
+      }
 
     case ProcessInputBlockTransactions(std) =>
       val newBestInputBlocks = history().applyInputBlockTransactions(std.inputBlockId, std.transactions)
@@ -797,6 +799,7 @@ object ErgoNodeViewHolder {
     */
   case class DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) extends NodeViewHolderEvent
 
+  case class DownloadSubblock(subblockId: ModifierId, remote: ConnectedPeer)
   case class DownloadSubblockTransactions(subblockId: ModifierId, remote: ConnectedPeer)
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)

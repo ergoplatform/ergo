@@ -1,20 +1,21 @@
 package org.ergoplatform.network.message.inputblocks
 
+
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.MessageSpecInputBlocks
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 
-object InputBlockTransactionsRequestMessageSpec extends MessageSpecInputBlocks[ModifierId] {
+object InputBlockRequestMessageSpec extends MessageSpecInputBlocks[ModifierId] {
   /**
     * Code which identifies what message type is contained in the payload
     */
-  override val messageCode: MessageCode = 92: Byte
+  override val messageCode: MessageCode = 91: Byte
 
   /**
     * Name of this message type. For debug purposes only.
     */
-  override val messageName: String = "SubBlockTxsReq"
+  override val messageName: String = "SubBlockReq"
 
   override def serialize(subBlockId: ModifierId, w: Writer): Unit = {
     w.putBytes(idToBytes(subBlockId))

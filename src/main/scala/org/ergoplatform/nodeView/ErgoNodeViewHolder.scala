@@ -709,14 +709,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     case LocallyGeneratedInputBlock(subblockInfo, subBlockTransactionsData) =>
       log.info(s"Got locally generated input block ${subblockInfo.header.id}")
       val toDownloadOpt = history().applyInputBlock(subblockInfo)
-      val newBestInputBlocks = history().applyInputBlockTransactions(subblockInfo.id, subBlockTransactionsData.transactions)
 
       toDownloadOpt.foreach { _ =>
         log.error(s"Shouldn't be there: input-block ${subblockInfo.id} generated locally when its parent is not available")
       }
-      newBestInputBlocks.foreach { id =>
-        context.system.eventStream.publish(NewBestInputBlock(id))
-      }
+
+      processInputBlockTransactions(subblockInfo.id, subBlockTransactionsData.transactions)
   }
 
   protected def getCurrentInfo: Receive = {

@@ -309,19 +309,26 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     case ProcessInputBlock(sbi, remote) =>
       val toDownloadOpt = history().applyInputBlock(sbi)
 
-      // todo: check if transactions already stored
-      context.system.eventStream.publish(DownloadSubblockTransactions(sbi.id, remote))
-      toDownloadOpt.foreach { inputId =>
-        context.system.eventStream.publish(DownloadSubblock(inputId, remote))
+      history().getInputBlockTransactions(sbi.id) match {
+        case Some(txs) =>
+          processInputBlockTransactions(sbi.id, txs)
+        case None =>
+          context.system.eventStream.publish(DownloadSubblockTransactions(sbi.id, remote))
+          toDownloadOpt.foreach { inputId =>
+            context.system.eventStream.publish(DownloadSubblock(inputId, remote))
+          }
       }
 
     case ProcessInputBlockTransactions(std) =>
-      val newBestInputBlocks = history().applyInputBlockTransactions(std.inputBlockId, std.transactions)
-      // todo: publish after checking transactions
-      // todo: send NewBestInputBlock(None) on new full block
-      newBestInputBlocks.foreach { id =>
-        context.system.eventStream.publish(NewBestInputBlock(id))
-      }
+      processInputBlockTransactions(std.inputBlockId, std.transactions)
+  }
+
+  private def processInputBlockTransactions(inputBlockId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
+    val newBestInputBlocks = history().applyInputBlockTransactions(inputBlockId, transactions)
+    // todo: send NewBestInputBlock(None) on new full block
+    newBestInputBlocks.foreach { id =>
+      context.system.eventStream.publish(NewBestInputBlock(id))
+    }
   }
 
   /**
@@ -704,8 +711,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       val toDownloadOpt = history().applyInputBlock(subblockInfo)
       val newBestInputBlocks = history().applyInputBlockTransactions(subblockInfo.id, subBlockTransactionsData.transactions)
 
-      toDownloadOpt.foreach { mId =>
-        log.error(s"Shouldn't be there: input-block ${subblockInfo.id} generated locally when its parent ")
+      toDownloadOpt.foreach { _ =>
+        log.error(s"Shouldn't be there: input-block ${subblockInfo.id} generated locally when its parent is not available")
       }
       newBestInputBlocks.foreach { id =>
         context.system.eventStream.publish(NewBestInputBlock(id))

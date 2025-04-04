@@ -636,9 +636,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
     case DownloadSubblock(sbId, remote) =>
+      // processing internal request to download an input block
       val msg = Message(InputBlockRequestMessageSpec, Right(sbId), None)
       networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
     case DownloadSubblockTransactions(sbId, remote) =>
+      // processing internal request to download input block transactions
       val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(sbId), None)
       networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
   }

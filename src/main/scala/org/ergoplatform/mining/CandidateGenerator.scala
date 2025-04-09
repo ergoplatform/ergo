@@ -213,7 +213,7 @@ class CandidateGenerator(
             log.info(s"Input-block mined @ height ${sbi.header.height}!")
 
             if (SubBlockAlgos.powScheme.checkInputBlockPoW(sbi.header)) { // check PoW only
-              // todo: finish input block 
+              // todo: finish input block mining API
               sendInputToNodeView(sbi, sbt)
               context.become(initialized(state.copy(cache = None))) // todo: cache input block ?
               StatusReply.success(())

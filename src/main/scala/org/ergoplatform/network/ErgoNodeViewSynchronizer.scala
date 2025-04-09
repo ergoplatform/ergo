@@ -1095,7 +1095,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (subBlockHeader.height == hr.fullBlockHeight + 1) {
       if (inputBlockInfo.valid()) { // check PoW / Merkle proofs before processing
         val prevSbIdOpt = inputBlockInfo.prevInputBlockId.map(bytesToId) // link to previous sub-block
-        log.debug(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block $prevSbIdOpt and parent block ${subBlockHeader.parentId}")
+        log.info(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block $prevSbIdOpt and parent block ${subBlockHeader.parentId}")
         // write sub-block to db, ask for transactions in it
         viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
         // todo: ask for txs only if subblock's parent is a best subblock ?

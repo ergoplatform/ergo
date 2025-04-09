@@ -36,7 +36,7 @@ case class InputBlockInfo(version: Byte,
 
   def valid(): Boolean = {
     // todo: implement data validity checks
-    false
+    true
   }
 
   def transactionsConfirmedDigest: Digest32 = header.transactionsRoot

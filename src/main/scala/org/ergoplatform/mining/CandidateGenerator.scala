@@ -209,11 +209,9 @@ class CandidateGenerator(
             }
           case _: InputSolutionFound =>
             val (sbi, sbt) = completeInputBlock(state.cache.get.candidateBlock, solution)
-
-            log.info(s"Input-block mined @ height ${sbi.header.height}!")
-
             if (SubBlockAlgos.powScheme.checkInputBlockPoW(sbi.header)) { // check PoW only
               // todo: finish input block mining API
+              log.info(s"Input-block ${sbi.id} mined @ height ${sbi.header.height}!")
               sendInputToNodeView(sbi, sbt)
               context.become(initialized(state.copy(cache = None))) // todo: cache input block ?
               StatusReply.success(())
@@ -221,7 +219,7 @@ class CandidateGenerator(
               log.warn(s"Removing candidate due to invalid input block")
               context.become(initialized(state.copy(cache = None)))
               StatusReply.error(
-                new Exception(s"Input block found! PoW valid: ${SubBlockAlgos.powScheme.checkInputBlockPoW(sbi.header)}")
+                new Exception(s"Invalid input block! PoW valid: ${SubBlockAlgos.powScheme.checkInputBlockPoW(sbi.header)}")
               )
             }
         }

@@ -47,8 +47,6 @@ object SubBlockAlgos {
   // todo: likely we need to update rule exMatchParameters (#409) to add new parameter to vote
   val subsPerBlock = Parameters.SubsPerBlockDefault
 
-  val weakTransactionIdLength = 6 // value taken from Bitcoin's compact blocks BIP
-
   lazy val powScheme = new AutolykosPowScheme(32, 26)
 
   sealed trait BlockKind

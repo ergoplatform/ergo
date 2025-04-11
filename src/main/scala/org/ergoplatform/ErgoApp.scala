@@ -76,14 +76,21 @@ class ErgoApp(args: Args) extends ScorexLogging {
       InvSpec,
       RequestModifierSpec,
       ModifiersSpec,
+      // utxo set snapshot exchange related messages
       GetSnapshotsInfoSpec,
       SnapshotsInfoSpec,
       GetManifestSpec,
       ManifestSpec,
       GetUtxoSnapshotChunkSpec,
       UtxoSnapshotChunkSpec,
+      // nipopows exchange related messages
       GetNipopowProofSpec,
-      NipopowProofSpec
+      NipopowProofSpec,
+      // input block related messages
+      InputBlockMessageSpec,
+      InputBlockRequestMessageSpec,
+      InputBlockTransactionsMessageSpec,
+      InputBlockTransactionsRequestMessageSpec
     )
   }
 

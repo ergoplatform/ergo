@@ -11,7 +11,7 @@ object InputBlockTransactionsMessageSpec extends MessageSpecInputBlocks[InputBlo
   /**
     * Code which identifies what message type is contained in the payload
     */
-  override val messageCode: MessageCode = 92: Byte
+  override val messageCode: MessageCode = 102: Byte
   /**
     * Name of this message type. For debug purposes only.
     */

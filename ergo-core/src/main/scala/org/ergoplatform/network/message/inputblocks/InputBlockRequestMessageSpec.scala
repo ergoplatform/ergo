@@ -10,7 +10,7 @@ object InputBlockRequestMessageSpec extends MessageSpecInputBlocks[ModifierId] {
   /**
     * Code which identifies what message type is contained in the payload
     */
-  override val messageCode: MessageCode = 91: Byte
+  override val messageCode: MessageCode = 101: Byte
 
   /**
     * Name of this message type. For debug purposes only.

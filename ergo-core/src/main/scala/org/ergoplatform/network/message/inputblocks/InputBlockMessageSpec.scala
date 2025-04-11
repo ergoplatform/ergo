@@ -13,7 +13,7 @@ object InputBlockMessageSpec extends MessageSpecInputBlocks[InputBlockInfo] {
 
   val MaxMessageSize = 10000
 
-  override val messageCode: MessageCode = 90: Byte
+  override val messageCode: MessageCode = 100: Byte
   override val messageName: String = "SubBlock"
 
   override def serialize(data: InputBlockInfo, w: Writer): Unit = {

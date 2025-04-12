@@ -28,7 +28,7 @@ import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound, SubBlockAlgos}
 import scorex.crypto.authds.LeafData
-import scorex.crypto.authds.merkle.BatchMerkleProof
+import scorex.crypto.authds.merkle.{BatchMerkleProof, MerkleTree}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
@@ -985,15 +985,18 @@ object CandidateGenerator extends ScorexLogging {
 
     // todo: check links?
     // todo: update candidate generator state
-    // todo: form and send real data instead of null
-
     val prevInputBlockId: Option[Array[Byte]] = if (candidate.inputBlockFields.size < 3) {
       None
     } else {
       Some(candidate.inputBlockFields.head._2)
     }
-    val inputBlockTransactionsDigest: Digest32 = null
-    val merkleProof: BatchMerkleProof[Digest32] = null
+
+    val txIds = txs.map(_.serializedId)
+    val merkleTree: MerkleTree[Digest32] = Algos.merkleTree(LeafData @@ txIds) // todo: add witness ids like done in block?
+
+    // todo: form and send real data instead of null , move it to candidate block (extension generation)
+    val inputBlockTransactionsDigest: Digest32 = merkleTree.rootHash
+    val merkleProof: BatchMerkleProof[Digest32] = BatchMerkleProof[Digest32](Seq.empty, Seq.empty)(Algos.hash) // todo: proof
 
     val sbi: InputBlockInfo = InputBlockInfo(InputBlockInfo.initialMessageVersion, header, prevInputBlockId, inputBlockTransactionsDigest, merkleProof)
     val sbt : InputBlockTransactionsData = InputBlockTransactionsData(sbi.header.id, txs)

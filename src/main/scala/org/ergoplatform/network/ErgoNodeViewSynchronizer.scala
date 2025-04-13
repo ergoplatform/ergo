@@ -1543,7 +1543,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
 
-    case NewBestInputBlock(id) =>
+    case NewBestInputBlock(id) => // todo: broadcast only locally generated new best input block
       historyReader.getInputBlock(id) match {
         case Some(ibi) =>
           log.debug(s"Sending input block $id out")

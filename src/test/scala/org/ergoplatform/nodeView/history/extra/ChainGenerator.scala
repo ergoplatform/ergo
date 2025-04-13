@@ -14,7 +14,9 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoState, UtxoStateReader}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform._
+import org.ergoplatform.settings.Algos
 import org.scalatest.matchers.should.Matchers
+import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.util.ModifierId
 import sigma.ast.ErgoTree
 import sigma.{Coll, Colls}
@@ -190,7 +192,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
-      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, Seq.empty, Seq.empty)
+      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, Seq.empty, BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash), Seq.empty)
     }
   }.flatten
 

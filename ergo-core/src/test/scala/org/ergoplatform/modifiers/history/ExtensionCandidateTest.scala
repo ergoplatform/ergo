@@ -33,7 +33,7 @@ class ExtensionCandidateTest extends ErgoCorePropertyTest {
 
         val fields = NipopowAlgos.packInterlinks(modifiers)
         val ext = ExtensionCandidate(fields)
-        val proofOpt = ext.batchProofFor(fields.map(_._1.clone).toArray: _*)
+        val proofOpt = ext.batchProofForInterlinks(fields.map(_._1.clone).toArray: _*)
         proofOpt shouldBe defined
         proofOpt.get.valid(ext.interlinksDigest) shouldBe true
       }
@@ -43,7 +43,7 @@ class ExtensionCandidateTest extends ErgoCorePropertyTest {
   property("batchProofFor should return None for a empty fields") {
     val fields: Seq[KV] = Seq.empty
     val ext = ExtensionCandidate(fields)
-    val proof = ext.batchProofFor(fields.map(_._1.clone).toArray: _*)
+    val proof = ext.batchProofForInterlinks(fields.map(_._1.clone).toArray: _*)
     proof shouldBe None
   }
 }

@@ -6,7 +6,9 @@ import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.Algos
+import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.hash.Digest32
 
 case class CandidateBlock(parentOpt: Option[Header],
                           version: Header.Version,
@@ -18,6 +20,7 @@ case class CandidateBlock(parentOpt: Option[Header],
                           extension: ExtensionCandidate,
                           votes: Array[Byte],
                           inputBlockFields: Seq[(Array[Byte], Array[Byte])],
+                          inputBlockFieldsProof: BatchMerkleProof[Digest32],
                           inputBlockTransactions: Seq[ErgoTransaction]) {
 
   override def toString: String = s"CandidateBlock(${this.asJson})"
@@ -37,7 +40,8 @@ object CandidateBlock {
       "transactions" -> c.transactions.map(_.asJson).asJson,
       "transactionsNumber" -> c.transactions.length.asJson,
       "votes" -> Algos.encode(c.votes).asJson,
-      "extensionHash" -> Algos.encode(c.extension.digest).asJson
+      "extensionHash" -> Algos.encode(c.extension.digest).asJson,
+      // todo: add input block related fields
     ).asJson)
 
 }

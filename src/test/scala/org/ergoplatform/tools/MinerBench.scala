@@ -7,7 +7,9 @@ import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoTestHelpers
+import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.{Blake2b256, Blake2b512, CryptographicHash, Digest}
 
 import scala.annotation.tailrec
@@ -77,6 +79,7 @@ object MinerBench extends App with ErgoTestHelpers {
       ExtensionCandidate(Seq.empty),
       Array(),
       Seq.empty,
+      BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash),
       Seq.empty
     )
     val newHeader = pow.proveCandidate(candidate, sk)

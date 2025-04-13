@@ -597,6 +597,8 @@ object CandidateGenerator extends ScorexLogging {
 
       val extensionCandidate = preExtensionCandidate ++ ExtensionCandidate(inputBlockFields)
 
+      val inputBlockFieldsProof = extensionCandidate.proofForInputBlockData.get // todo: .get
+
       def deriveWorkMessage(block: CandidateBlock) = {
         ergoSettings.chainSettings.powScheme.deriveExternalCandidate(
           block,
@@ -618,6 +620,7 @@ object CandidateGenerator extends ScorexLogging {
             extensionCandidate,
             votes,
             inputBlockFields,
+            inputBlockFieldsProof,
             inputBlockTransactions
           )
           val ext = deriveWorkMessage(candidate)
@@ -652,6 +655,7 @@ object CandidateGenerator extends ScorexLogging {
                     extensionCandidate,
                     votes,
                     inputBlockFields = Seq.empty, // todo: recheck, likely should be not empty,
+                    inputBlockFieldsProof = BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash), // todo: recheck
                     inputBlockTransactions = inputBlockTransactions
                   )
                   Candidate(

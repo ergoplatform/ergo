@@ -16,6 +16,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.ergoplatform.wallet.boxes.{BoxSelector, ReplaceCompactCollectBoxSelector}
 import org.scalatest.matchers.should.Matchers
+import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.util.ModifierId
 import sigma.data.ProveDlog
 
@@ -199,7 +200,7 @@ object ChainGenerator extends App with ErgoTestHelpers with Matchers {
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
-      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, Seq.empty, Seq.empty)
+      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, Seq.empty, BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash), Seq.empty)
     }
   }.flatten
 

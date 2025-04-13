@@ -91,6 +91,8 @@ object Extension extends ApiCodecs {
     */
   val PrevInputBlockIdKey: Array[Byte] = Array(InputBlocksDataPrefix, 0x02)
 
+  val InputBlockKeys = Array(InputBlockTransactionsDigestKey, PreviousInputBlockTransactionsDigestKey, PrevInputBlockIdKey)
+
 
   /**
     * Prefix for keys related to sidechains data. Not used for now, reserved for future.

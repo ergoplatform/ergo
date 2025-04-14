@@ -984,9 +984,12 @@ object CandidateGenerator extends ScorexLogging {
 
     // todo: add
     val inputBlockTransactionsDigest: Digest32 = candidate.inputBlockFields.transactionsDigest
+    val prevTransactionsDigest: Digest32 = candidate.inputBlockFields.prevTransactionsDigest
     val merkleProof: BatchMerkleProof[Digest32] = candidate.inputBlockFields.inputBlockFieldsProof
 
-    val sbi: InputBlockInfo = InputBlockInfo(InputBlockInfo.initialMessageVersion, header, prevInputBlockId, inputBlockTransactionsDigest, merkleProof)
+    val ibf = new InputBlockFields(prevInputBlockId, inputBlockTransactionsDigest, prevTransactionsDigest, merkleProof)
+
+    val sbi: InputBlockInfo = InputBlockInfo(InputBlockInfo.initialMessageVersion, header, ibf)
     val sbt : InputBlockTransactionsData = InputBlockTransactionsData(sbi.header.id, txs)
 
     (sbi, sbt)

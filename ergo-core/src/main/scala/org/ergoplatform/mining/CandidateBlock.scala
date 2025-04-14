@@ -11,6 +11,15 @@ import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
+/**
+* @param prevInputBlockId - previous sub block id `subBlock` is following, if missed, sub-block is linked
+*                         to a previous block
+* @param transactionsDigest - digest of new transactions appeared in subblock
+*
+* @param inputBlockFieldsProof - batch Merkle proof for `prevSubBlockId`` and `subblockTransactionsDigest`
+*                      (as they are coming from extension section, and committed in `subBlock` header via extension
+*                      digest)
+*/
 class InputBlockFields(val prevInputBlockId: Option[Array[Byte]],
                        val transactionsDigest: Digest32,
                        val prevTransactionsDigest: Digest32,

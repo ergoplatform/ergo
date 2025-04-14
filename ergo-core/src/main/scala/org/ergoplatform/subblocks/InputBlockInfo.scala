@@ -1,6 +1,7 @@
 package org.ergoplatform.subblocks
 
 import org.ergoplatform.core.bytesToId
+import org.ergoplatform.mining.InputBlockFields
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.{Algos, Constants}
@@ -17,20 +18,12 @@ import scorex.util.serialization.{Reader, Writer}
   *
   * @param version - message version E(to allow injecting new fields)
   * @param header - subblock
-  * @param prevInputBlockId - previous sub block id `subBlock` is following, if missed, sub-block is linked
-  *                         to a previous block
-  * @param transactionsDigest - digest of new transactions appeared in subblock
-  * @param merkleProof - batch Merkle proof for `prevSubBlockId`` and `subblockTransactionsDigest`
-  *                      (as they are coming from extension section, and committed in `subBlock` header via extension
-  *                      digest)
+
   */
 // todo: include prev input blocks txs digest
 case class InputBlockInfo(version: Byte,
                           header: Header,
-                          prevInputBlockId: Option[Array[Byte]],
-                          transactionsDigest: Digest32,
-                          merkleProof: BatchMerkleProof[Digest32] // Merkle proof for both prevSubBlockId & subblockTransactionsDigest
-                       ) {
+                          inputBlockFields: InputBlockFields) {
 
   lazy val id: ModifierId = header.id
 
@@ -39,7 +32,11 @@ case class InputBlockInfo(version: Byte,
     true
   }
 
-  def transactionsConfirmedDigest: Digest32 = header.transactionsRoot
+  def prevInputBlockId: Option[Array[Byte]] = inputBlockFields.prevInputBlockId
+
+  def transactionsDigest: Digest32 = inputBlockFields.transactionsDigest
+
+  def merkleProof: BatchMerkleProof[Digest32] = inputBlockFields.inputBlockFieldsProof
 }
 
 object InputBlockInfo {
@@ -56,6 +53,7 @@ object InputBlockInfo {
       HeaderSerializer.serialize(sbi.header, w)
       w.putOption(sbi.prevInputBlockId){case (w, id) => w.putBytes(id)}
       w.putBytes(sbi.transactionsDigest)
+      w.putBytes(sbi.inputBlockFields.prevTransactionsDigest)
       val proof = bmp.serialize(sbi.merkleProof)
       w.putUShort(proof.length.toShort)
       w.putBytes(proof)
@@ -67,13 +65,15 @@ object InputBlockInfo {
         val subBlock = HeaderSerializer.parse(r)
         val prevSubBlockId = r.getOption(r.getBytes(Constants.ModifierIdSize))
         val transactionsDigest = Digest32 @@ r.getBytes(Constants.ModifierIdSize)
+        val prevTransactionsDigest = Digest32 @@ r.getBytes(Constants.ModifierIdSize)
         val merkleProofSize = r.getUShort().toShortExact
         val merkleProofBytes = r.getBytes(merkleProofSize)
         val merkleProof = bmp.deserialize(merkleProofBytes).get // parse Merkle proof
-        new InputBlockInfo(version, subBlock, prevSubBlockId, transactionsDigest, merkleProof)
+        new InputBlockInfo(version, subBlock, new InputBlockFields(prevSubBlockId, transactionsDigest, prevTransactionsDigest, merkleProof))
       } else {
         throw new Exception("Unsupported sub-block message version")
       }
     }
   }
+
 }

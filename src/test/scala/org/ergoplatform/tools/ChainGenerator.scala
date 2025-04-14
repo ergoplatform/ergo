@@ -2,7 +2,7 @@ package org.ergoplatform.tools
 
 import org.ergoplatform._
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
+import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator, InputBlockFields}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.Header
@@ -16,7 +16,6 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.ergoplatform.wallet.boxes.{BoxSelector, ReplaceCompactCollectBoxSelector}
 import org.scalatest.matchers.should.Matchers
-import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.util.ModifierId
 import sigma.data.ProveDlog
 
@@ -200,7 +199,7 @@ object ChainGenerator extends App with ErgoTestHelpers with Matchers {
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
-      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, Seq.empty, BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash), Seq.empty)
+      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, InputBlockFields.empty, Seq.empty)
     }
   }.flatten
 

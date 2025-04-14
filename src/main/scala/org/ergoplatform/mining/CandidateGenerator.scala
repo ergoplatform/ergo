@@ -8,8 +8,7 @@ import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.extension.Extension.{InputBlockTransactionsDigestKey, PrevInputBlockIdKey, PreviousInputBlockTransactionsDigestKey}
-import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -28,7 +27,7 @@ import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound, SubBlockAlgos}
 import scorex.crypto.authds.LeafData
-import scorex.crypto.authds.merkle.{BatchMerkleProof, MerkleTree}
+import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
@@ -575,29 +574,23 @@ object CandidateGenerator extends ScorexLogging {
         )
       }
 
-      val inputBlockTransactionsDigestValue = Algos.merkleTreeRoot(inputBlockTransactions.map(tx => LeafData @@ tx.serializedId))
-      val previousInputBlocksTransactionsValue = Algos.merkleTreeRoot(previousOrderingBlockTransactionIds.map(id => LeafData @@ idToBytes(id)))
-
       /*
        * Put input block related fields into extension section of block candidate
        */
 
       // digest (Merkle tree root) of new first-class transactions since last input-block
-      val inputBlockTransactionsDigest = (InputBlockTransactionsDigestKey, inputBlockTransactionsDigestValue)
+      val inputBlockTransactionsDigestValue = Algos.merkleTreeRoot(inputBlockTransactions.map(tx => LeafData @@ tx.serializedId))
 
       // digest (Merkle tree root) first class transactions since ordering block till last input-block
-      val previousInputBlocksTransactions = (PreviousInputBlockTransactionsDigestKey, previousInputBlocksTransactionsValue)
+      val previousInputBlocksTransactionsValue = Algos.merkleTreeRoot(previousOrderingBlockTransactionIds.map(id => LeafData @@ idToBytes(id)))
 
-      //  reference to a last seen input block
-      val prevInputBlockId = parentInputBlockIdOpt.map { prevInputBlockId =>
-        (PrevInputBlockIdKey, prevInputBlockId)
-      }.toSeq
+      val inputBlockExtCandidate = InputBlockFields.toExtensionFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, inputBlockTransactionsDigestValue)
 
-      val inputBlockFields = prevInputBlockId ++ Seq(inputBlockTransactionsDigest, previousInputBlocksTransactions)
-
-      val extensionCandidate = preExtensionCandidate ++ ExtensionCandidate(inputBlockFields)
+      val extensionCandidate = preExtensionCandidate ++ inputBlockExtCandidate
 
       val inputBlockFieldsProof = extensionCandidate.proofForInputBlockData.get // todo: .get
+
+      val inputBlockFields = new InputBlockFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, previousInputBlocksTransactionsValue, inputBlockFieldsProof)
 
       def deriveWorkMessage(block: CandidateBlock) = {
         ergoSettings.chainSettings.powScheme.deriveExternalCandidate(
@@ -620,7 +613,6 @@ object CandidateGenerator extends ScorexLogging {
             extensionCandidate,
             votes,
             inputBlockFields,
-            inputBlockFieldsProof,
             inputBlockTransactions
           )
           val ext = deriveWorkMessage(candidate)
@@ -654,8 +646,7 @@ object CandidateGenerator extends ScorexLogging {
                     timestamp,
                     extensionCandidate,
                     votes,
-                    inputBlockFields = Seq.empty, // todo: recheck, likely should be not empty,
-                    inputBlockFieldsProof = BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash), // todo: recheck
+                    inputBlockFields = InputBlockFields.empty, // todo: recheck, likely should be not empty
                     inputBlockTransactions = inputBlockTransactions
                   )
                   Candidate(
@@ -989,18 +980,11 @@ object CandidateGenerator extends ScorexLogging {
 
     // todo: check links?
     // todo: update candidate generator state
-    val prevInputBlockId: Option[Array[Byte]] = if (candidate.inputBlockFields.size < 3) {
-      None
-    } else {
-      Some(candidate.inputBlockFields.head._2)
-    }
+    val prevInputBlockId: Option[Array[Byte]] = candidate.inputBlockFields.prevInputBlockId
 
-    val txIds = txs.map(_.serializedId)
-    val merkleTree: MerkleTree[Digest32] = Algos.merkleTree(LeafData @@ txIds) // todo: add witness ids like done in block?
-
-    // todo: form and send real data instead of null , move it to candidate block (extension generation)
-    val inputBlockTransactionsDigest: Digest32 = merkleTree.rootHash
-    val merkleProof: BatchMerkleProof[Digest32] = BatchMerkleProof[Digest32](Seq.empty, Seq.empty)(Algos.hash) // todo: proof
+    // todo: add
+    val inputBlockTransactionsDigest: Digest32 = candidate.inputBlockFields.transactionsDigest
+    val merkleProof: BatchMerkleProof[Digest32] = candidate.inputBlockFields.inputBlockFieldsProof
 
     val sbi: InputBlockInfo = InputBlockInfo(InputBlockInfo.initialMessageVersion, header, prevInputBlockId, inputBlockTransactionsDigest, merkleProof)
     val sbt : InputBlockTransactionsData = InputBlockTransactionsData(sbi.header.id, txs)

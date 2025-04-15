@@ -13,7 +13,6 @@ import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import org.ergoplatform.core._
-import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
 import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
@@ -149,9 +148,9 @@ class DigestState protected(override val version: VersionTag,
     }
   }
 
-  override def applyInputBlock(txs: InputBlockTransactionsData,
+  override def applyInputBlock(txs: Seq[ErgoTransaction],
                                tempSetAdded: Array[ErgoBox],
-                               tempSetRemoved: Seq[ModifierId]): Unit = ???
+                               tempSetRemoved: Array[ModifierId]): Try[(Array[ErgoBox], Array[ModifierId])] = ???
 
 }
 

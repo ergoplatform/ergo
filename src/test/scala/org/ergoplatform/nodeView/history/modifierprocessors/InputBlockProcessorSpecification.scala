@@ -7,11 +7,16 @@ import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
+import org.ergoplatform.utils.generators.ValidBlocksGenerators.createUtxoState
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.{bytesToId, idToBytes}
 
 class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
+
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
+
+  val (us, bh) = createUtxoState(initSettings)
 
   private def parentOnly(parentId: Array[Byte]): InputBlockFields = {
     new InputBlockFields(
@@ -34,7 +39,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     r shouldBe None
 
     h.bestInputBlocksChain() shouldBe Seq()
-    h.applyInputBlockTransactions(ib.id, Seq.empty) shouldBe Seq(ib.id)
+    h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe Seq(ib.id)
     h.bestInputBlocksChain() shouldBe Seq(ib.id)
   }
 
@@ -71,9 +76,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
     // apply transactions
     // out-of-order application
-    h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq()
+    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe Seq()
     h.bestInputBlocksChain() shouldBe Seq()
-    h.applyInputBlockTransactions(ib1.id, Seq.empty) shouldBe Seq(ib1.id, ib2.id)
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe Seq(ib1.id, ib2.id)
     h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
   }
 
@@ -101,7 +106,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.disconnectedWaitlist shouldBe Set(childIb)
     h.deliveryWaitlist shouldBe Set(bytesToId(childIb.prevInputBlockId.get))
 
-    h.applyInputBlockTransactions(childIb.id, Seq.empty) shouldBe Seq()
+    h.applyInputBlockTransactions(childIb.id, Seq.empty, us) shouldBe Seq()
     h.bestInputBlock() shouldBe None
 
     // Now apply parent
@@ -113,7 +118,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.isAncestor(childIb.id, childIb.id).isEmpty shouldBe true
     h.isAncestor(parentIb.id, childIb.id).isEmpty shouldBe true
 
-    h.applyInputBlockTransactions(parentIb.id, Seq.empty) shouldBe Seq(parentIb.id, childIb.id)
+    h.applyInputBlockTransactions(parentIb.id, Seq.empty, us) shouldBe Seq(parentIb.id, childIb.id)
     h.bestInputBlock().get shouldBe childIb
 
     h.bestInputBlocksChain() shouldBe Seq(childIb.id, parentIb.id)
@@ -138,7 +143,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
     h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
 
-    h.applyInputBlockTransactions(ib1.id, Seq.empty) shouldBe Seq(ib1.id)
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe Seq(ib1.id)
 
     val c3 = genChain(height = 2, history = h).tail
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
@@ -161,8 +166,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
     // apply transactions
     // todo: test out-of-order application, currently failing but maybe it is ok?
-    h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq()
-    h.applyInputBlockTransactions(ib3.id, Seq.empty) shouldBe Seq(ib2.id, ib3.id)
+    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe Seq(ib2.id, ib3.id)
 
     h.bestInputBlocksChain() shouldBe Seq(ib3.id, ib2.id)
   }
@@ -189,13 +194,13 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
     h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
 
-    h.applyInputBlockTransactions(ib1.id, Seq.empty) shouldBe Seq(ib1.id)
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe Seq(ib1.id)
 
 
     val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)))
     val r2 = h.applyInputBlock(ib2)
     r2 shouldBe None
-    h.applyInputBlockTransactions(ib2.id, Seq.empty) shouldBe Seq(ib2.id)
+    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe Seq(ib2.id)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
 
@@ -216,12 +221,12 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
     // apply transactions
     // todo: test out-of-order application, currently failing but maybe it is ok?
-    h.applyInputBlockTransactions(ib3.id, Seq.empty) shouldBe Seq()
+    h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe Seq()
 
     val ib4 = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib3.id)))
     val r4 = h.applyInputBlock(ib4)
     r4 shouldBe None
-    h.applyInputBlockTransactions(ib4.id, Seq.empty) shouldBe Seq(ib3.id, ib4.id)
+    h.applyInputBlockTransactions(ib4.id, Seq.empty, us) shouldBe Seq(ib3.id, ib4.id)
 
     h.bestInputBlocksChain() shouldBe Seq(ib4.id, ib3.id, ib1.id)
   }

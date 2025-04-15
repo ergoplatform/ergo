@@ -13,7 +13,6 @@ import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperation
 import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.core._
-import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
 import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import org.ergoplatform.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
@@ -229,9 +228,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  override def applyInputBlock(txs: InputBlockTransactionsData,
+  override def applyInputBlock(txs: Seq[ErgoTransaction],
                                tempSetAdded: Array[ErgoBox],
-                               tempSetRemoved: Seq[ModifierId]): Unit = ???
+                               tempSetRemoved: Array[ModifierId]): Try[(Array[ErgoBox], Array[ModifierId])] = {
+    // todo: implement
+    Success(Array.empty[ErgoBox] -> Array.empty[ModifierId])
+  }
 
 }
 

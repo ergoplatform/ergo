@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.modifierprocessors
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
@@ -76,6 +77,8 @@ trait InputBlocksProcessor extends ScorexLogging {
     * Temporary cache of children which do not have parents downloaded yet
     */
   private[modifierprocessors] val disconnectedWaitlist = mutable.Set[InputBlockInfo]()
+
+  private val invalid = mutable.Set[ModifierId]()
 
   /**
     * @return best ordering and input blocks
@@ -216,20 +219,31 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   // helper method to find best input block (tip of a best PoW chain containing transactions)
   private def processBestInputBlockCandidate(blockId: ModifierId,
-                                             transactionIds: Seq[ModifierId]): Boolean = {
+                                             transactionIds: Seq[ModifierId],
+                                             state: ErgoState[_]): Boolean = {
     val ib = inputBlockRecords.apply(blockId)
     val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
 
     val res: Boolean = _bestInputBlock match {
       case None =>
         if (ibParentOpt.isEmpty && ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
-          log.info(s"Applying best input block #: ${ib.header.id}, no parent")
-          _bestInputBlock = Some(ib)
-          true
+          // todo: validate txs
+          val txs = transactionIds.map(id => transactionsCache.apply(id))
+          val txsValid = state.applyInputBlock(txs, Array.empty, Array.empty)
+          if(txsValid.isSuccess) {
+            log.info(s"Applying best input block #: ${ib.header.id}, no parent")
+            _bestInputBlock = Some(ib)
+            true
+          } else {
+            // todo: more processing ?
+            invalid.add(blockId)
+            false
+          }
         } else {
           false
         }
       case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
+        // todo: validate txs
         log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
         _bestInputBlock = Some(ib)
         true
@@ -258,8 +272,10 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * @return - sequence of new best input blocks
     */
-    //  todo: return input block ids rolled back?
-  def applyInputBlockTransactions(sbId: ModifierId, transactions: Seq[ErgoTransaction]): Seq[ModifierId] = {
+  //  todo: return input block ids rolled back?
+  def applyInputBlockTransactions(sbId: ModifierId,
+                                  transactions: Seq[ErgoTransaction],
+                                  state: ErgoState[_]): Seq[ModifierId] = {
     log.info(s"Applying input block transactions for $sbId , transactions: ${transactions.size}")
     val transactionIds = transactions.map(_.id)
     inputBlockTransactions.put(sbId, transactionIds)
@@ -282,7 +298,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
           // find common input block and do rollback
           val thisChain = inputBlocksChain(sbId).reverse
-          if(thisChain.forall(id => inputBlockTransactions.contains(id))) {
+          if (thisChain.forall(id => inputBlockTransactions.contains(id))) {
 
             val currentBestChain = bestInputBlocksChain().reverse
             var commonIndex = -1
@@ -317,8 +333,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     @tailrec
     def bestInputBlockStep(sbId: ModifierId,
                            transactionIds: Seq[ModifierId],
+                           state: ErgoState[_],
                            acc: Seq[ModifierId] = Seq.empty): Seq[ModifierId] = {
-      if (processBestInputBlockCandidate(sbId, transactionIds)) {
+      if (processBestInputBlockCandidate(sbId, transactionIds, state)) {
         val orderingId = inputBlockRecords.get(sbId).map(_.header.parentId).get // todo: .get
 
         val maybeChildToApply = (bestTips.getOrElse(orderingId, Set.empty).flatMap { tipId =>
@@ -335,7 +352,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         maybeChildToApply match {
           case Some(nsbId) =>
             inputBlockTransactions.get(sbId) match {
-              case Some(ntransactionIds) => bestInputBlockStep(nsbId, ntransactionIds, updAcc)
+              case Some(ntransactionIds) => bestInputBlockStep(nsbId, ntransactionIds, state, updAcc)
               case None => updAcc
             }
           case None => updAcc
@@ -346,11 +363,11 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     if (forkingInputBlock.isEmpty) {
-      bestInputBlockStep(sbId, transactionIds)
+      bestInputBlockStep(sbId, transactionIds, state)
     } else {
       val sbId = forkingInputBlock.get
       val transactionIds = inputBlockTransactions.get(sbId).get
-      bestInputBlockStep(sbId, transactionIds)
+      bestInputBlockStep(sbId, transactionIds, state)
     }
   }
 

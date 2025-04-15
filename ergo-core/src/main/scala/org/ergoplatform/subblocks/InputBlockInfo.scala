@@ -1,14 +1,12 @@
 package org.ergoplatform.subblocks
 
-import org.ergoplatform.core.bytesToId
 import org.ergoplatform.mining.InputBlockFields
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.serialization.ErgoSerializer
-import org.ergoplatform.settings.{Algos, Constants}
-import org.ergoplatform.subblocks.InputBlockInfo.FakePrevInputBlockId
+import org.ergoplatform.settings.Constants
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
-import scorex.crypto.hash.{Blake2b, Blake2b256, CryptographicHash, Digest32}
+import scorex.crypto.hash.{Blake2b256, CryptographicHash, Digest32}
 import scorex.util.Extensions.IntOps
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}

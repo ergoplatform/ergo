@@ -17,6 +17,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.validation.ValidationResult.Valid
 import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
 import org.ergoplatform.core.{VersionTag, idToVersion}
+import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
 import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -58,6 +59,8 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
   def rollbackTo(version: VersionTag): Try[IState]
 
   def rollbackVersions: Iterable[VersionTag]
+
+  def applyInputBlock(txs: InputBlockTransactionsData, tempSetAdded: Array[ErgoBox], tempSetRemoved: Seq[ModifierId])
 
   /**
     * @return read-only view of this state

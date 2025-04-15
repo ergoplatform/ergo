@@ -227,10 +227,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     val res: Boolean = _bestInputBlock match {
       case None =>
         if (ibParentOpt.isEmpty && ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
-          // todo: validate txs
           val txs = transactionIds.map(id => transactionsCache.apply(id))
           val txsValid = state.applyInputBlock(txs, Array.empty, Array.empty)
-          if(txsValid.isSuccess) {
+          if (txsValid.isSuccess) {
             log.info(s"Applying best input block #: ${ib.header.id}, no parent")
             _bestInputBlock = Some(ib)
             true
@@ -243,10 +242,18 @@ trait InputBlocksProcessor extends ScorexLogging {
           false
         }
       case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
-        // todo: validate txs
-        log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
-        _bestInputBlock = Some(ib)
-        true
+        val txs = transactionIds.map(id => transactionsCache.apply(id))
+        val txsValid = state.applyInputBlock(txs, Array.empty, Array.empty)
+        if (txsValid.isSuccess) {
+          log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
+          _bestInputBlock = Some(ib)
+          true
+        } else {
+          // todo: eliminate common code with the previous branch
+          // todo: more processing ?
+          invalid.add(blockId)
+          false
+        }
       case _ =>
         ibParentOpt match {
           case Some(ibParent) =>

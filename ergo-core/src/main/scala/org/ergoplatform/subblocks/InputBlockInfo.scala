@@ -27,9 +27,9 @@ case class InputBlockInfo(version: Byte,
 
   lazy val id: ModifierId = header.id
 
+  // todo: only Merkle proof validated for now, check if it is enough
   def valid(): Boolean = {
-    // todo: implement data validity checks
-    true
+    inputBlockFields.inputBlockFieldsProof.valid(header.extensionRoot)
   }
 
   def prevInputBlockId: Option[Array[Byte]] = inputBlockFields.prevInputBlockId
@@ -37,6 +37,7 @@ case class InputBlockInfo(version: Byte,
   def transactionsDigest: Digest32 = inputBlockFields.transactionsDigest
 
   def merkleProof: BatchMerkleProof[Digest32] = inputBlockFields.inputBlockFieldsProof
+
 }
 
 object InputBlockInfo {

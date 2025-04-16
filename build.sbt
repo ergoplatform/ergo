@@ -39,7 +39,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "5.0.15-453-05e1f3cd-SNAPSHOT"
+val sigmaStateVersion = "5.0.15-474-4dfb72e4-SNAPSHOT"
 val ficusVersion = "1.4.7"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -98,6 +98,7 @@ val opts = Seq(
 )
 
 run / javaOptions ++= opts
+scalacOptions ++= Seq("-Xasync")
 scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 val scalacOpts = Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 

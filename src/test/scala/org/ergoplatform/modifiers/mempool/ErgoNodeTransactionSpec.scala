@@ -577,7 +577,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     f.isSuccess shouldBe false
   }
 
-  property("Boxes containing 6.0 data types") {
+  property("Box can't contain 6.0 data types in registers") {
     val ubic = UnsignedBigIntConstant(new BigInteger("2"))
     val b = new ErgoBox(1000000000L, ErgoTreePredef.TrueProp(ErgoTree.defaultHeaderWithVersion(3.toByte)), Colls.emptyColl,
       Map(R4 -> ubic), ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
@@ -585,8 +585,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
 
     VersionContext.withVersions(3, 3) {
       val bytes = ErgoBoxSerializer.toBytes(b)
-      println(Base16.encode(bytes))
-      ErgoBoxSerializer.parseBytes(bytes) shouldBe b
+      ErgoBoxSerializer.parseBytesTry(bytes).isSuccess shouldBe false
     }
   }
 

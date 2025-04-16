@@ -1,6 +1,6 @@
 package org.ergoplatform.utils.generators
 
-import org.ergoplatform.{Input, OrderingBlockFound}
+import org.ergoplatform.{Input, OrderingBlockFound, OrderingBlockHeaderFound}
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
@@ -113,8 +113,8 @@ object ChainGenerator {
       extensionHash,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
-    ).asInstanceOf[OrderingBlockFound]  // todo: fix
-    .fb.header
+    ).asInstanceOf[OrderingBlockHeaderFound]  // todo: fix
+    .h
   }
 
   def genChain(height: Int): Seq[ErgoFullBlock] =

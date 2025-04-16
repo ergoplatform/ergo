@@ -228,7 +228,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       case None =>
         if (ibParentOpt.isEmpty && ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
           val txs = transactionIds.map(id => transactionsCache.apply(id))
-          val txsValid = state.applyInputBlock(txs, Array.empty, Array.empty)
+          val txsValid = state.applyInputBlock(txs, ib.header)
           if (txsValid.isSuccess) {
             log.info(s"Applying best input block #: ${ib.header.id}, no parent")
             _bestInputBlock = Some(ib)
@@ -243,7 +243,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         }
       case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
         val txs = transactionIds.map(id => transactionsCache.apply(id))
-        val txsValid = state.applyInputBlock(txs, Array.empty, Array.empty)
+        val txsValid = state.applyInputBlock(txs, ib.header)
         if (txsValid.isSuccess) {
           log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
           _bestInputBlock = Some(ib)

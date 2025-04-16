@@ -1,13 +1,14 @@
 package org.ergoplatform.nodeView.history.modifierprocessors
 
+import com.google.common.io.Files.createTempDir
 import org.ergoplatform.mining.InputBlockFields
-import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
-import org.ergoplatform.utils.generators.ValidBlocksGenerators.createUtxoState
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.{bytesToId, idToBytes}
@@ -16,7 +17,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
   import org.ergoplatform.utils.ErgoNodeTestConstants._
 
-  val (us, bh) = createUtxoState(initSettings)
+  val bh = BoxHolder(Seq.empty)
+  val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
 
   private def parentOnly(parentId: Array[Byte]): InputBlockFields = {
     new InputBlockFields(
@@ -250,5 +252,19 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
   property("apply new best input block on another ordering block") {
 
   }
+
+  property("apply input block with invalid transaction") {
+
+  }
+
+  property("apply input block with double spending") {
+
+  }
+
+  property("apply input block with class II transaction") {
+
+  }
+
+  // todo : tests for digest state
 
 }

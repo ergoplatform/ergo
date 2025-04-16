@@ -87,6 +87,9 @@ Also, with this structure we may have old clients still processing blocks, by do
 corresponding to block header's transactions commitment, while new clients having better bandwidth utilization 
 and higher transactions throughput.
 
+We also have commitment to the UTXO set AFTER block application in the header now, it will be updated from one 
+input block to another now.
+
 Next, we define how new clients will process input and ordering blocks.
 
 Transaction Classes And Blocks Processing

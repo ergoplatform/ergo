@@ -228,11 +228,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  override def applyInputBlock(txs: Seq[ErgoTransaction],
-                               tempSetAdded: Array[ErgoBox],
-                               tempSetRemoved: Array[ModifierId]): Try[(Array[ErgoBox], Array[ModifierId])] = {
-    // todo: implement
-    Success(Array.empty[ErgoBox] -> Array.empty[ModifierId])
+  override def applyInputBlock(txs: Seq[ErgoTransaction], header: Header): Try[Unit] = {
+    // todo: do not write AVL+ updates into the db under the hood
+    val res = applyTransactions(txs, header.id, header.stateRoot, stateContext)
+    if(res.isFailure) {
+      log.warn(s"Input block validation failed for ${header.id} : " + res)
+    }
+    res
   }
 
 }

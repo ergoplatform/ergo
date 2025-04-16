@@ -16,7 +16,7 @@ import org.ergoplatform.core._
 import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
@@ -148,9 +148,7 @@ class DigestState protected(override val version: VersionTag,
     }
   }
 
-  override def applyInputBlock(txs: Seq[ErgoTransaction],
-                               tempSetAdded: Array[ErgoBox],
-                               tempSetRemoved: Array[ModifierId]): Try[(Array[ErgoBox], Array[ModifierId])] = ???
+  override def applyInputBlock(txs: Seq[ErgoTransaction], header: Header): Try[Unit] = ???
 
 }
 

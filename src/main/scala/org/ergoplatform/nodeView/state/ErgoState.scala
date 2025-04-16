@@ -59,9 +59,7 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   def rollbackVersions: Iterable[VersionTag]
 
-  def applyInputBlock(txs: Seq[ErgoTransaction],
-                      tempSetAdded: Array[ErgoBox],
-                      tempSetRemoved: Array[ModifierId]): Try[(Array[ErgoBox], Array[ModifierId])]
+  def applyInputBlock(txs: Seq[ErgoTransaction], header: Header): Try[Unit]
 
   /**
     * @return read-only view of this state

@@ -1,13 +1,13 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive1, Route}
+import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiError.BadRequest
-import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
+import org.ergoplatform.http.api.requests.{CompileRequest, CryptoResult, ExecuteRequest}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
@@ -47,18 +47,13 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   private val loadMaxKeys: Int = 100
 
-  private val source: Directive1[String] = entity(as[Json]).flatMap { p =>
-    p.hcursor.downField("source").as[String]
-      .fold(_ => reject, s => provide(s))
-  }
-
   private def addressResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
 
   private def keysToEnv(keys: Seq[ProveDlog]): Map[String, Any] = {
     keys.zipWithIndex.map { case (pk, i) => s"myPubKey_$i" -> pk }.toMap
   }
 
-  private def compileSource(source: String, env: Map[String, Any], treeVersion: Int = 0): Try[ErgoTree] = {
+  private def compileSource(source: String, env: Map[String, Any], treeVersion: Byte = 0): Try[ErgoTree] = {
     val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
     val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(treeVersion.toByte)
     Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
@@ -76,27 +71,13 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   // todo: unite p2sAddress and p2shAddress
-  def p2sAddressR: Route = (path("p2sAddress") & post & source) { source =>
-    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext)) { case (addrsF, sc) =>
-      onSuccess(addrsF) { addrs =>
-        val version = Header.scriptAndTreeFromBlockVersions(sc.blockVersion)
-        VersionContext.withVersions(version.activatedVersion, version.ergoTreeVersion) {
-          // todo: treeVersion == 1 is used here, revisit, likely 0 should be default for now
-          compileSource(source, keysToEnv(addrs.map(_.pubkey)), 1).map(Pay2SAddress.apply).fold(
-            e => BadRequest(e.getMessage),
-            address => ApiResponse(addressResponse(address))
-          )
-        }
-      }
-    }
-  }
-
-  def p2shAddressR: Route = (path("p2shAddress") & post & source) { source =>
+  private def p2sAddressR: Route = (path("p2sAddress") & post & entity(as[CompileRequest])) { compileRequest =>
     withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
       onSuccess(addrsF) { addrs =>
-        val version = Header.scriptAndTreeFromBlockVersions(bv)
-        VersionContext.withVersions(version.activatedVersion, version.ergoTreeVersion) {
-          compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(
+        val scriptVersion = Header.scriptFromBlockVersion(bv)
+        val treeVersion = compileRequest.treeVersion
+        VersionContext.withVersions(scriptVersion, treeVersion) {
+          compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SAddress.apply).fold(
             e => BadRequest(e.getMessage),
             address => ApiResponse(addressResponse(address))
           )
@@ -105,9 +86,26 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
-  def executeWithContextR: Route =
+
+  private def p2shAddressR: Route = (path("p2shAddress") & post & entity(as[CompileRequest])) { compileRequest =>
+    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
+      onSuccess(addrsF) { addrs =>
+        val scriptVersion = Header.scriptFromBlockVersion(bv)
+        val treeVersion = compileRequest.treeVersion
+        VersionContext.withVersions(scriptVersion, treeVersion) {
+          compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(
+            e => BadRequest(e.getMessage),
+            address => ApiResponse(addressResponse(address))
+          )
+        }
+      }
+    }
+  }
+
+
+  private def executeWithContextR: Route =
     (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
-      compileSource(req.script, req.env).fold(
+      compileSource(req.script, req.env, req.treeVersion.getOrElse(0)).fold(
         e => BadRequest(e.getMessage),
         tree => {
           val interpreter: ErgoLikeInterpreter = new ErgoLikeInterpreter()

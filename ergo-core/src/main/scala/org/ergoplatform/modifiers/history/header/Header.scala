@@ -148,6 +148,10 @@ object Header extends ApiCodecs {
     */
   val Interpreter60Version: Byte = 4
 
+  def scriptFromBlockVersion(blockVersion: Byte): Byte = {
+    (blockVersion - 1).toByte
+  }
+
   def scriptAndTreeFromBlockVersions(blockVersion: Byte): VersionContext = {
     VersionContext((blockVersion - 1).toByte, (blockVersion - 1).toByte)
   }

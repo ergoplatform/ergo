@@ -72,8 +72,8 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       val addressStr = json.hcursor.downField("address").as[String].right.get
       addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
     }
-    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
-    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
+    Post(prefix + suffix, Json.obj("source" -> Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 0.asJson))) ~> route ~> check(assertion(responseAs[Json]))
+    Post(prefix + suffix, Json.obj("source" -> Json.obj("source" -> scriptSourceSigProp.asJson, "treeVersion" -> 0.asJson))) ~> route ~>
       check(assertion(responseAs[Json]))
   }
 
@@ -83,11 +83,6 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       status shouldBe StatusCodes.OK
       val addressStr = json.hcursor.downField("address").as[String].right.get
       addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
-    }
-    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
-    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
-      check(assertion(responseAs[Json]))
-  }
 
   it should "get through address <-> ergoTree round-trip" in {
     val suffix = "addressToTree"

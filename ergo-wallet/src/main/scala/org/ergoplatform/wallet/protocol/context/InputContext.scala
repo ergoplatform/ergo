@@ -2,7 +2,6 @@ package org.ergoplatform.wallet.protocol.context
 
 import sigma.interpreter.ContextExtension
 
-
 /**
   * Part of execution context regarding a box to be spent.
   * It includes index of the box in inputs and also context extension

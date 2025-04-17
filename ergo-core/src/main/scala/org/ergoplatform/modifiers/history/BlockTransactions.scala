@@ -143,16 +143,18 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
     w.putBytes(idToBytes(bt.headerId))
     val blockVersion = bt.blockVersion
     if (blockVersion > 1) {
+      // see comments in parse()
       w.putUInt(MaxTransactionsInBlock.toLong + bt.blockVersion)
     }
     w.putUInt(bt.txs.size.toLong)
     bt.txs.foreach { tx =>
-      if (blockVersion >= VersionContext.JitActivationVersion) {
-        VersionContext.withVersions(VersionContext.V6SoftForkVersion, VersionContext.V6SoftForkVersion) {
+      if (blockVersion >= VersionContext.V6SoftForkVersion) {
+        // since 6.0 we use versioned serializers
+        VersionContext.withVersions(blockVersion, blockVersion) {
           ErgoTransactionSerializer.serialize(tx, w)
         }
       } else {
-        // before 5.0 activation, VersionContext is not used
+        // before 6.0 activation, VersionContext is not used
         ErgoTransactionSerializer.serialize(tx, w)
       }
     }
@@ -183,7 +185,7 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
       lazy val version = Header.scriptAndTreeFromBlockVersions(blockVersion)
 
       (1 to txCount).map { _ =>
-        if (blockVersion >= VersionContext.JitActivationVersion) {
+        if (blockVersion >= VersionContext.V6SoftForkVersion) {
           VersionContext.withVersions(version.activatedVersion, version.ergoTreeVersion) {
             ErgoTransactionSerializer.parse(r)
           }

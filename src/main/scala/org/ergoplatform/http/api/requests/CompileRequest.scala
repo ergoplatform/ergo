@@ -4,7 +4,7 @@ package org.ergoplatform.http.api.requests
 /**
   * Represents a request to compile a source script into an ErgoTree.
   *
-  * @param source      The ErgoScript source code to compile.
-  * @param treeVersion The version of the ErgoTree (defaults to 0).
+  * @param source      ErgoScript source code to compile
+  * @param treeVersion Version of target ErgoTree
   */
 case class CompileRequest(source: String, treeVersion: Byte)

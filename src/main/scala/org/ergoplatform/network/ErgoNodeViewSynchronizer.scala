@@ -181,6 +181,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
 
+  // current protocol version
+  private var protocolVersion = 0.toByte
+
   /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
@@ -193,7 +196,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def processFirstTxProcessingCacheRecord(): Unit = {
     txProcessingCache.headOption.foreach { case (txId, processingCacheRecord) =>
-      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, fullBlockHeight = 0, remote = processingCacheRecord.source)
+      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, remote = processingCacheRecord.source)
       txProcessingCache -= txId
     }
   }
@@ -696,7 +699,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
     toProcess.foreach { case (txId, txBytes) =>
-      parseAndProcessTransaction(txId, txBytes, hr.fullBlockHeight, remote)
+      parseAndProcessTransaction(txId, txBytes, remote)
     }
     toPutIntoCache.foreach { case (txId, txBytes) =>
       txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
@@ -765,21 +768,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Parse transaction coming from remote, filtering out immediately too big one, and send parsed transaction
     * to mempool for processing
     */
-    // todo: remove 6.0 versioning logic and fullBlockHeight after 6.0 activation
-  def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], fullBlockHeight: Int, remote: ConnectedPeer): Unit = {
+  def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
     if (bytes.length > settings.nodeSettings.maxTransactionSize) {
       deliveryTracker.setInvalid(id, ErgoTransaction.modifierTypeId)
       penalizeMisbehavingPeer(remote)
       log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
     } else {
-      val scriptVersion = if (fullBlockHeight > Header.interpreter60VersionActivationHeight(settings.networkType.verboseName)) {
-        VersionContext.V6SoftForkVersion
-      } else {
-        VersionContext.JitActivationVersion
-      }
       // tree version is properly set in ErgoTreeSerializer inside
-      val parseResult = VersionContext.withVersions(scriptVersion, scriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
+      val parseResult = VersionContext.withVersions(protocolVersion, protocolVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
       parseResult match {
         case Success(tx) if id == tx.id =>
           val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
@@ -1446,6 +1443,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       context.become(initialized(historyReader, newMempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
 
     case ChangedState(reader: ErgoStateReader) =>
+      protocolVersion = Header.scriptFromBlockVersion(reader.stateContext.blockVersion)
       reader match {
         case utxoStateReader: UtxoStateReader =>
           context.become(initialized(historyReader, mempoolReader, Some(utxoStateReader), blockAppliedTxsCache))

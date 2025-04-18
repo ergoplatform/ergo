@@ -68,7 +68,7 @@ class Parameters(val height: Height,
   lazy val maxBlockCost: Int = parametersTable(MaxBlockCostIncrease)
 
   /**
-    * Max total computation cost of a block.
+    * Number of sub-blocks per block, on average
     */
   lazy val subBlocksPerBlock: Int = parametersTable(SubblocksPerBlockIncrease)
 

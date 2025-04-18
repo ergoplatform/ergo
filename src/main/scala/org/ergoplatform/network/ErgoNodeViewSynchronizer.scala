@@ -683,7 +683,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def transactionsFromRemote(requestedModifiers: Map[ModifierId, Array[Byte]],
-                                     hr: ErgoHistory,
                                      mp: ErgoMemPool,
                                      remote: ConnectedPeer): Unit = {
     // filter out transactions already in the mempool
@@ -758,7 +757,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
 
     if (typeId == ErgoTransaction.modifierTypeId) {
-      transactionsFromRemote(requestedModifiers, hr, mp, remote)
+      transactionsFromRemote(requestedModifiers, mp, remote)
     } else {
       blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
     }
@@ -775,7 +774,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
     } else {
-      // tree version is properly set in ErgoTreeSerializer inside
+      // actual tree version is properly set in ErgoTreeSerializer inside
       val parseResult = VersionContext.withVersions(protocolVersion, protocolVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
       parseResult match {
         case Success(tx) if id == tx.id =>

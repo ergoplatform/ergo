@@ -19,9 +19,8 @@ import scorex.crypto.hash.Digest32
 import scorex.util._
 import sigma.{Colls, VersionContext}
 import sigma.Extensions._
-import sigma.ast.BlockValue
 import sigma.crypto.EcPointType
-import sigma.data.{CAvlTree, CBigInt, CGroupElement, CHeader}
+import sigma.data.{CBigInt, CGroupElement, CHeader}
 
 import scala.annotation.nowarn
 import scala.concurrent.duration.FiniteDuration
@@ -172,7 +171,7 @@ object Header extends ApiCodecs {
       powNonce = header.powSolution.n.toColl,
       powDistance = CBigInt(header.powSolution.d.bigInteger),
       votes = header.votes.toColl,
-      unparsedBytes = Colls.emptyColl[Byte] // todo: fix after merging w. 5.0.23
+      unparsedBytes = Colls.emptyColl[Byte]
     )
 
   val modifierTypeId: NetworkObjectTypeId.Value = HeaderTypeId.value

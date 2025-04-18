@@ -406,7 +406,7 @@ object CandidateGenerator extends ScorexLogging {
     val forkVotingAllowed = votingFinishHeight.forall(fh => nextHeight < fh)
 
     val nextHeightCondition = if (ergoSettings.networkType.isMainNet) {
-      nextHeight >= 823297 // mainnet voting start height, first block of epoch #804
+      nextHeight >= 823297 // todo: set mainnet voting start height, first block of epoch #804
     } else if(ergoSettings.networkType.isTestNet) {
       nextHeight >= 1548800 // testnet voting start height
     } else {

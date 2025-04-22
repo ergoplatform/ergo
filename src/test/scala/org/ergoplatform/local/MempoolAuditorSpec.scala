@@ -17,10 +17,11 @@ import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import sigma.ast.ErgoTree
 import sigma.ast.syntax.ValueOps
-import sigmastate.eval.{IRContext, RuntimeIRContext}
+import sigma.compiler.SigmaCompiler
+import sigma.compiler.ir.IRContext
 import sigmastate.interpreter.Interpreter.emptyEnv
-import sigmastate.lang.SigmaCompiler
 import sigma.serialization.ErgoTreeSerializer
+import sigmastate.utxo.blockchain.BlockchainSimulationTestingCommons.TestingIRContext
 
 import scala.concurrent.duration._
 
@@ -30,7 +31,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
-  implicit lazy val context: IRContext = new RuntimeIRContext
+  implicit lazy val context: IRContext = new TestingIRContext
 
   val cleanupDuration: FiniteDuration = 200.millis
   val settingsToTest: ErgoSettings = settings.copy(

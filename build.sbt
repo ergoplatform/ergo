@@ -191,11 +191,6 @@ docker / buildOptions := BuildOptions(
   removeIntermediateContainers = BuildOptions.Remove.OnSuccess
 )
 
-//FindBugs settings
-
-// findbugsReportType := Some(FindbugsReport.Xml)
-// findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "findbugs-exclude.xml"))
-
 //Scapegoat settings
 
 ThisBuild / scapegoatVersion := "1.3.11"

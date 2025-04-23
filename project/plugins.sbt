@@ -8,11 +8,7 @@ addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "2.3.1")
 
 addDependencyTreePlugin
 
-// addSbtPlugin("com.github.sbt" % "sbt-findbugs" % "2.0.0")
-
 addSbtPlugin("com.sksamuel.scapegoat" %% "sbt-scapegoat" % "1.2.12")
-
-// addSbtPlugin("com.github.sbt" % "sbt-cpd" % "2.0.0")
 
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.7")
 

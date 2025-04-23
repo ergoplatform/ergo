@@ -202,9 +202,12 @@ class CandidateGenerator(
         }
       val result: StatusReply[Unit] = {
         val newBlock = state.cachedCandidate
-          .map(candidate => completeBlock( candidate.candidateBlock, solution))
+          .map(candidate => completeBlock(candidate.candidateBlock, solution))
           .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
-          .getOrElse(completeBlock( state.cachedPreviousCandidate.get.candidateBlock, solution))
+          .getOrElse {
+            log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
+            completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
+          }
         log.info(s"New block mined, header: ${newBlock.header}")
         ergoSettings.chainSettings.powScheme
           .validate(newBlock.header)

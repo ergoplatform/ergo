@@ -22,22 +22,21 @@ import sigma.compiler.{CompilerResult, SigmaCompiler}
 import sigma.data.TrivialProp.TrueProp
 import sigma.interpreter.ProverResult
 
-import scala.util.{Failure, Success, Try}
 
 class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
   import org.ergoplatform.utils.ErgoNodeTestConstants._
 
-  private def compileSource(source: String, env: Map[String, Any]): Try[ErgoTree] = {
+  private def compileSource(source: String): ErgoTree = {
     import sigma.ast._
     val compiler = new SigmaCompiler(ErgoAddressEncoder.TestnetNetworkPrefix)
-    Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
+    compiler.compile(Map.empty, source)(new CompiletimeIRContext) match {
       case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
-        Success(ErgoTree.fromProposition(script))
+        ErgoTree.fromProposition(script)
       case CompilerResult(_, _, _, script: Value[SBoolean.type@unchecked]) if script.tpe == SBoolean =>
-        Success(ErgoTree.fromProposition(script.toSigmaProp))
-      case other =>
-        Failure(new Exception(s"Source compilation result is of type ${other.buildTree.tpe}, but `SBoolean` expected"))
+        ErgoTree.fromProposition(script.toSigmaProp)
+      case _ =>
+        ???
     }
   }
 
@@ -54,7 +53,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
   val eb2 = new ErgoBox(
     value = 1000000000L,
-    ergoTree = compileSource("CONTEXT.minerPubKey.size >= 0", Map.empty).get,
+    ergoTree = compileSource("CONTEXT.minerPubKey.size >= 0"),
     creationHeight = 0,
     additionalTokens = Colls.emptyColl,
     additionalRegisters = Map.empty,

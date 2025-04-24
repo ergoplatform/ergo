@@ -439,7 +439,9 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
        val ctx = new ErgoContext(
          emptyStateContext, transactionContext, inputContext,
          costLimit = emptyStateContext.currentParameters.maxBlockCost,
-         initCost = 0)
+         initCost = 0,
+         true
+       )
 
        val messageToSign = tx.messageToSign
 

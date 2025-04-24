@@ -111,7 +111,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                           box: ErgoBox,
                           inputIndex: Short,
                           stateContext: ErgoStateContext,
-                          currentTxCost: Long)
+                          currentTxCost: Long,
+                          softFieldsAllowed: Boolean)
                          (implicit verifier: ErgoInterpreter): ValidationResult[Long] = {
 
     // Cost limit per block
@@ -131,7 +132,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val ctx = new ErgoContext(
       stateContext, transactionContext, inputContext,
       costLimit = maxCost - currentTxCost, // remaining cost so far
-      initCost = 0)
+      initCost = 0,
+      softFieldsAllowed
+    )
 
     val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
     val (isCostValid, scriptCost: Long) =
@@ -358,7 +361,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def validateStateful(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
-                       accumulatedCost: Long)
+                       accumulatedCost: Long,
+                       softFieldsAllowed: Boolean)
                       (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
 
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
@@ -432,7 +436,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val currentTxCost = validation.result.payload.get
-        verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
+        verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost, softFieldsAllowed)
       }
       .validate(txReemission, !stateContext.chainSettings.reemission.checkReemissionRules ||
         verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifier(id, id, modifierTypeId))
@@ -444,9 +448,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
-                       accumulatedCost: Long = 0L)
+                       accumulatedCost: Long = 0L,
+                       softFieldsAllowed: Boolean = true)
                       (implicit verifier: ErgoInterpreter): Try[Int] = {
-    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry.map(_.toInt)
+    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost, softFieldsAllowed).result.toTry.map(_.toInt)
   }
 
   override type M = ErgoTransaction

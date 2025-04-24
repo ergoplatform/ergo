@@ -106,7 +106,8 @@ object ErgoState extends ScorexLogging {
     */
   def execTransactions(transactions: Seq[ErgoTransaction],
                        currentStateContext: ErgoStateContext,
-                       nodeSettings: NodeConfigurationSettings)
+                       nodeSettings: NodeConfigurationSettings,
+                       softFieldsAllowed: Boolean = true)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
@@ -133,7 +134,7 @@ object ErgoState extends ScorexLogging {
       }
     }
 
-    val checkpointHeight = nodeSettings.checkpoint.map(_.height).getOrElse(0)
+    val checkpointHeight = nodeSettings.checkpoint.map(_.height).getOrElse(-1)
     if (currentStateContext.currentHeight <= checkpointHeight) {
       Valid(0L)
     } else {
@@ -152,7 +153,7 @@ object ErgoState extends ScorexLogging {
           .validateNoFailure(txDataBoxes, dataBoxesTry, tx.id, tx.modifierTypeId)
           .payload[Long](validCostResult.value)
           .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", tx.id, tx.modifierTypeId, e)) { case (_, (dataBoxes, toSpend)) =>
-            tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value)(verifier).result
+            tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value, softFieldsAllowed)(verifier).result
           }
       }
       costResult

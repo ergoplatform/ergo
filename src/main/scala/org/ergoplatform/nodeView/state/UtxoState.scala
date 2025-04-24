@@ -71,7 +71,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        headerId: ModifierId,
                                        expectedDigest: ADDigest,
-                                       currentStateContext: ErgoStateContext): Try[Unit] = {
+                                       currentStateContext: ErgoStateContext,
+                                       softFieldsAllowed: Boolean = true): Try[Unit] = {
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
     def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
@@ -79,7 +80,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    val txProcessing = ErgoState.execTransactions(transactions, currentStateContext, ergoSettings.nodeSettings)(checkBoxExistence)
+    val txProcessing = ErgoState.execTransactions(transactions, currentStateContext, ergoSettings.nodeSettings, softFieldsAllowed)(checkBoxExistence)
     if (txProcessing.isValid) {
       log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
       val blockOpsTry = ErgoState.stateChanges(transactions).flatMap { stateChanges =>
@@ -230,8 +231,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   override def applyInputBlock(txs: Seq[ErgoTransaction], header: Header): Try[Unit] = {
     // todo: do not write AVL+ updates into the db under the hood
-    val res = applyTransactions(txs, header.id, header.stateRoot, stateContext)
-    if(res.isFailure) {
+    val res = applyTransactions(txs, header.id, header.stateRoot, stateContext, softFieldsAllowed = false)
+    if (res.isFailure) {
       log.warn(s"Input block validation failed for ${header.id} : " + res)
     }
     res

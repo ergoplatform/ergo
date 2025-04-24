@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, PoPowHeader}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.BoxUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
@@ -127,15 +128,17 @@ object ChainGenerator {
                history: ErgoHistory,
                blockVersion: Header.Version = Header.InitialVersion,
                nBits: Long = chainSettings.initialNBits,
-               extension: ExtensionCandidate = defaultExtension): Seq[ErgoFullBlock] = {
+               extension: ExtensionCandidate = defaultExtension,
+               stateOpt: Option[ErgoStateReader] = None): Seq[ErgoFullBlock] = {
     val prefix = history.bestFullBlockOpt
-    blockStream(prefix, blockVersion, nBits, extension).take(height + prefix.size)
+    blockStream(prefix, blockVersion, nBits, extension, stateOpt).take(height + prefix.size)
   }
 
   def blockStream(prefix: Option[ErgoFullBlock],
                             blockVersion: Header.Version = Header.InitialVersion,
                             nBits: Long = chainSettings.initialNBits,
-                            extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
+                            extension: ExtensionCandidate = defaultExtension,
+                            stateOpt: Option[ErgoStateReader] = None): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
     val minimalAmount = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, Colls.emptyColl, Map(), parameters)
@@ -144,9 +147,9 @@ object ChainGenerator {
     def txs = Seq(ErgoTransaction(inputs, outputs))
 
     lazy val blocks: Stream[ErgoFullBlock] =
-      nextBlock(prefix, txs, extension, blockVersion, nBits) #::
+      nextBlock(prefix, txs, extension, blockVersion, nBits, stateOpt) #::
         blocks.zip(Stream.from(2)).map { case (prev, _) =>
-          nextBlock(Option(prev), txs, extension, blockVersion, nBits)
+          nextBlock(Option(prev), txs, extension, blockVersion, nBits, stateOpt)
         }
     prefix ++: blocks
   }
@@ -155,7 +158,8 @@ object ChainGenerator {
                 txs: Seq[ErgoTransaction],
                 extension: ExtensionCandidate,
                 blockVersion: Header.Version = Header.InitialVersion,
-                nBits: Long = chainSettings.initialNBits): ErgoFullBlock = {
+                nBits: Long = chainSettings.initialNBits,
+                stateOpt: Option[ErgoStateReader] = None): ErgoFullBlock = {
     val interlinks = prev.toSeq.flatMap(x =>
       nipopowAlgos.updateInterlinks(x.header, NipopowAlgos.unpackInterlinks(x.extension.fields).get))
     val validExtension = extension ++ nipopowAlgos.interlinksToExtension(interlinks)
@@ -163,7 +167,7 @@ object ChainGenerator {
       prev.map(_.header),
       blockVersion,
       nBits,
-      EmptyStateRoot,
+      stateOpt.map(_.rootDigest).getOrElse(EmptyStateRoot),
       emptyProofs,
       txs,
       Math.max(System.currentTimeMillis(), prev.map(_.header.timestamp + 1).getOrElse(System.currentTimeMillis())),

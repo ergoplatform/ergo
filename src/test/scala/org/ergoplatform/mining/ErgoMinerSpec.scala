@@ -120,7 +120,8 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
         ErgoTransaction(costlyTx.inputs, costlyTx.dataInputs, costlyTx.outputCandidates),
         r.s.stateContext,
         costLimit = 440000,
-        None
+        None,
+        softFieldsAllowed = true
       ).get
     txCost shouldBe 439080
 

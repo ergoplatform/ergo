@@ -22,11 +22,12 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import org.ergoplatform.serialization.ErgoSerializer
-import org.ergoplatform.validation.ValidationResult.fromValidationState
-import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
+import org.ergoplatform.validation.ValidationResult.{Invalid, fromValidationState}
+import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, SoftFieldsAccessError, ValidationResult, ValidationState}
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import sigma.exceptions.SoftFieldAccessException
 import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
 
 import java.util
@@ -139,6 +140,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
     val (isCostValid, scriptCost: Long) =
       costTry match {
+        case Failure(t) if t.isInstanceOf[SoftFieldAccessException] =>
+          return Invalid(Seq(new SoftFieldsAccessError(t.asInstanceOf[SoftFieldAccessException], id)))
         case Failure(t) =>
           log.warn(s"Tx verification failed: ${t.getMessage}", t)
           log.warn(s"Tx $id verification context: " +

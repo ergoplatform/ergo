@@ -140,8 +140,6 @@ class Parameters(val height: Height,
     (table, activatedUpdate)
   }
 
-  //Update non-fork parameters
-  @nowarn
   def updateParams(parametersTable: Map[Byte, Int],
                    epochVotes: Seq[(Byte, Int)],
                    votingSettings: VotingSettings): Map[Byte, Int] = {

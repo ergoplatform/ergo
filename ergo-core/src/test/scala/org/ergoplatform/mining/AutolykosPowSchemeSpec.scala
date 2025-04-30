@@ -8,7 +8,7 @@ import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import cats.syntax.either._
-import org.ergoplatform.{InputSolutionFound, OrderingSolutionFound}
+import org.ergoplatform.OrderingSolutionFound
 
 class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoCoreTestConstants._

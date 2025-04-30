@@ -80,11 +80,13 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   private val invalid = mutable.Set[ModifierId]()
 
+  private def bestOrderingBlock(): Option[Header] = historyReader.bestFullBlockOpt.map(_.header)
+
   /**
     * @return best ordering and input blocks
     */
   def bestBlocks: (Option[Header], Option[InputBlockInfo]) = {
-    val bestOrdering = historyReader.bestFullBlockOpt.map(_.header)
+    val bestOrdering = bestOrderingBlock()
     val bestInputForOrdering = if (_bestInputBlock.exists(sbi => bestOrdering.map(_.id).contains(sbi.header.parentId))) {
       _bestInputBlock
     } else {
@@ -478,6 +480,10 @@ trait InputBlocksProcessor extends ScorexLogging {
     orderingBlockTransactions.get(id).map { ids =>
       ids.flatMap(transactionsCache.get)
     }
+  }
+
+  def getBestOrderingBlockTransactions(): Seq[ErgoTransaction] = {
+    bestOrderingBlock().map(h => h.id).flatMap(getOrderingBlockTransactions).getOrElse(Seq.empty)
   }
 
 }

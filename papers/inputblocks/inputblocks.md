@@ -60,11 +60,11 @@ Transactions Handling
 
 Transactions are broken into two classes, for first one result of transaction validation can't change from one input 
 block to other , for the second, validation result can vary from one block candidate to another (this is true for transactions relying on block timestamp, 
-miner pubkey and other fields changing from one block header candidate to another, a clear example here is ERG emission contract, which is relying on miner pubkey. 
+miner pubkey or miner's votes on protocol parameters, a clear example here is ERG emission contract, which is relying on miner pubkey. 
 See next section for more details).
 
 Transactions of the first class (about 99% of all transactions normally) can be included in input blocks only. 
-Transactions of the second class can be included in both kinds of blocks.
+Transactions of the second class can be included ordering blocks only.
 
 As a miner does not know in advance which kind of block (input/ordering) will be generated, he is preparing for both 
 options by:

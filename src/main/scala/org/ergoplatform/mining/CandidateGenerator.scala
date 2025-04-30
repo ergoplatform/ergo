@@ -24,6 +24,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoStateRe
 import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.validation.SoftFieldsAccessError
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound, SubBlockAlgos}
 import scorex.crypto.authds.LeafData
@@ -37,7 +38,6 @@ import sigma.eval.Extensions.EvalIterableOps
 import sigma.interpreter.ProverResult
 import sigma.{Coll, Colls}
 
-import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
@@ -429,7 +429,10 @@ object CandidateGenerator extends ScorexLogging {
     * @param emissionTxOpt           - optional emission transaction
     * @param prioritizedTransactions - transactions which are going into the block in the first place
     *                                (before transactions from the pool). No guarantee of inclusion in general case.
-    * @return - candidate or an error
+    *
+    * Block formed via createCandidate() should be validated via // todo: ref to validation procedure
+    *
+    * @return - block candidate or an error
     */
   def createCandidate(
                        minerPk: ProveDlog,
@@ -450,8 +453,6 @@ object CandidateGenerator extends ScorexLogging {
       val (bestHeaderOpt, bestInputBlock) = history.bestBlocks
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
         .flatMap(h => history.typedModifierById[Extension](h.extensionId))
-
-      val parentInputBlockIdOpt = bestInputBlock.map(bestInput => idToBytes(bestInput.id))
 
       // Make progress in time since last block.
       // If no progress is made, then, by consensus rules, the block will be rejected.
@@ -519,9 +520,23 @@ object CandidateGenerator extends ScorexLogging {
           (interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion)
         )
 
+      // form input block related data
+      val parentInputBlockIdOpt = bestInputBlock.map(bestInput => idToBytes(bestInput.id))
+      val previousOrderingBlockTransactions = history.getBestOrderingBlockTransactions()
+      val previousOrderingBlockTransactionIds = previousOrderingBlockTransactions.map(_.id)
+
       /*
-       * Forming transactions to get included
-       */
+      * Forming transactions to get included
+      */
+
+      val upcomingContext = state.stateContext.upcoming(
+        minerPk.value,
+        timestamp,
+        nBits,
+        votes,
+        proposedUpdate,
+        version
+      )
 
       // todo: could be removed after 5.0, but we still slowly decreasing it for starters
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
@@ -534,43 +549,29 @@ object CandidateGenerator extends ScorexLogging {
         500000
       }
 
-      val upcomingContext = state.stateContext.upcoming(
-        minerPk.value,
-        timestamp,
-        nBits,
-        votes,
-        proposedUpdate,
-        version
-      )
+      // new transactions coming from API (prioritizedTransactions), mempool, and also emission transaction
+      // to spread to next input and ordering blocks
+      // within collectTxs(), transactions from previous input blocks will be accounted in addition to the new txs
+      val newTransactionCandidates = emissionTxOpt.toSeq ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
 
-      // returns txs which may and may not be included into input-block
-      def filterInputBlockTransactions(candidates: Seq[ErgoTransaction]): (Seq[ErgoTransaction], Seq[ErgoTransaction]) = {
-        (candidates, Seq.empty) // todo: real implemenation
-      }
-
-      val previousOrderingBlockTransactions = bestInputBlock.map(_.header).map(_.id).flatMap(history.getOrderingBlockTransactions).getOrElse(Seq.empty)
-      val (inputBlockTransactionCandidates, txsNotIncludedIntoInput) = filterInputBlockTransactions(prioritizedTransactions ++ poolTxs.map(_.transaction))
-
-      val previousOrderingBlockTransactionIds = previousOrderingBlockTransactions.map(_.id) // todo: check only first-class txs there
-      val filteredInputBlockTransactionCandidates = inputBlockTransactionCandidates.filterNot(tx => previousOrderingBlockTransactionIds.contains(tx.id))
-      val orderingBlocktransactionCandidates = emissionTxOpt.toSeq ++ previousOrderingBlockTransactions ++ inputBlockTransactionCandidates ++ txsNotIncludedIntoInput
-
-      val (txs, toEliminate) = collectTxs(
+      val (inputBlockTransactions, orderingTxs, toEliminate) = collectTxs(
         minerPk,
         state.stateContext.currentParameters.maxBlockCost - safeGap,
         state.stateContext.currentParameters.maxBlockSize,
         state,
         upcomingContext,
-        orderingBlocktransactionCandidates
+        newTransactionCandidates
       )
-
-      val inputBlockTransactions = filteredInputBlockTransactionCandidates.filterNot(tx => toEliminate.contains(tx.id))
 
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
-      if (txs.isEmpty) {
+      if (previousOrderingBlockTransactionIds.size + orderingTxs.size == 0) {
         throw new IllegalArgumentException(
-          s"Proofs for 0 txs cannot be generated : emissionTx: ${emissionTxOpt.isDefined}, priorityTxs: ${prioritizedTransactions.size}, poolTxs: ${poolTxs.size}"
+          s"Proofs for 0 txs cannot be generated : " +
+            s"previousOrderingBlockTransactionIds: ${previousOrderingBlockTransactionIds}, " +
+            s"emissionTx: ${emissionTxOpt.isDefined}, " +
+            s"priorityTxs: ${prioritizedTransactions.size}, " +
+            s"poolTxs: ${poolTxs.size}"
         )
       }
 
@@ -599,6 +600,8 @@ object CandidateGenerator extends ScorexLogging {
           prioritizedTransactions.map(_.id)
         )
       }
+
+      val txs = previousOrderingBlockTransactions ++ orderingTxs
 
       state.proofsForTransactions(txs) match {
         case Success((adProof, adDigest)) =>
@@ -813,7 +816,7 @@ object CandidateGenerator extends ScorexLogging {
   /**
     * Helper function which decides whether transactions can fit into a block with given cost and size limits
     */
-  def correctLimits(
+  private def correctLimits(
     blockTxs: Seq[CostedTransaction],
     maxBlockCost: Long,
     maxBlockSize: Long
@@ -828,7 +831,7 @@ object CandidateGenerator extends ScorexLogging {
     * Resulting transactions total cost does not exceed `maxBlockCost`, total size does not exceed `maxBlockSize`,
     * and the miner's transaction is correct.
     *
-    * @return - transactions to include into the block, transaction ids turned out to be invalid.
+    * @return - input block transactions to include, ordering blocks transactions to include, transaction ids turned out to be invalid.
     */
   def collectTxs(
                   minerPk: ProveDlog,
@@ -837,7 +840,7 @@ object CandidateGenerator extends ScorexLogging {
                   us: UtxoStateReader,
                   upcomingContext: ErgoStateContext,
                   transactions: Seq[ErgoTransaction]
-                ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+                ): (Seq[ErgoTransaction], Seq[ErgoTransaction], Seq[ModifierId]) = {
 
     val currentHeight = us.stateContext.currentHeight
     val nextHeight = upcomingContext.currentHeight
@@ -848,81 +851,119 @@ object CandidateGenerator extends ScorexLogging {
 
     val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
 
-    @tailrec
+    // @tailrec - todo: fix
     def loop(
               mempoolTxs: Iterable[ErgoTransaction],
-              acc: Seq[CostedTransaction],
+              accInput: Seq[CostedTransaction],
+              accOrdering: Seq[CostedTransaction],
               lastFeeTx: Option[CostedTransaction],
               invalidTxs: Seq[ModifierId]
-            ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
-      // transactions from mempool and fee txs from the previous step
-      val currentCosted = acc ++ lastFeeTx
-      def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
+            ): (Seq[ErgoTransaction], Seq[ErgoTransaction], Seq[ModifierId]) = {
 
-      val stateWithTxs = us.withTransactions(current)
+      val acc = accInput ++ accOrdering
+      // transactions from mempool and fee txs from the previous step
+      //val currentCosted = acc ++ lastFeeTx
+
+      def currentInput: Seq[ErgoTransaction] = accInput.map(_._1)
+      def currentOrdering: Seq[ErgoTransaction] = (accOrdering ++ lastFeeTx).map(_._1)
+
+      val allCurrent = currentInput ++ currentOrdering
+
+      val stateWithTxs = us.withTransactions(allCurrent)
 
       mempoolTxs.headOption match {
         case Some(tx) =>
-          if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
+          if (!inputsNotSpent(tx, stateWithTxs) || doublespend(allCurrent, tx)) {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
-            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+            loop(mempoolTxs.tail, accInput, accOrdering, lastFeeTx, invalidTxs :+ tx.id)
           } else {
-            // check validity and calculate transaction cost
-            stateWithTxs.validateWithCost(
-              tx,
-              upcomingContext,
-              maxBlockCost,
-              Some(verifier)
-            ) match {
-              case Success(costConsumed) =>
-                val newTxs = acc :+ (tx -> costConsumed)
-                val newBoxes = newTxs.flatMap(_._1.outputs)
 
-                // todo: why to collect fees on each tx?
-                collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
-                  case Some(feeTx) =>
-                    val boxesToSpend = feeTx.inputs.flatMap(i =>
-                      newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
-                    )
-                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
-                      case Success(cost) =>
-                        val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
-                        if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
+            def validateTx(softFieldsAllowed: Boolean): Try[Int] = {
+              stateWithTxs.validateWithCost(
+                tx,
+                upcomingContext,
+                maxBlockCost,
+                Some(verifier),
+                softFieldsAllowed)
+            }
+
+            def okTx(costConsumed: Int,
+                     inputTx: Boolean): (Seq[ErgoTransaction], Seq[ErgoTransaction], Seq[ModifierId]) = {
+              val newTxs = acc :+ (tx -> costConsumed)
+              val newBoxes = newTxs.flatMap(_._1.outputs)
+
+              // todo: why to collect fees on each tx?
+              collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
+                case Some(feeTx) =>
+                  val boxesToSpend = feeTx.inputs.flatMap(i =>
+                    newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
+                  )
+                  feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
+                    case Success(cost) =>
+                      val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
+                      if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
+                        if (inputTx) {
+                          loop(mempoolTxs.tail, accInput :+ (tx -> costConsumed), accOrdering, Some(feeTx -> cost), invalidTxs)
                         } else {
-                          log.debug(s"Finishing block assembly on limits overflow, " +
-                                    s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
-                          current -> invalidTxs
+                          loop(mempoolTxs.tail, accInput, accOrdering :+ (tx -> costConsumed), Some(feeTx -> cost), invalidTxs)
                         }
-                      case Failure(e) =>
-                        log.warn(
-                          s"Fee collecting tx is invalid, not including it, " +
-                            s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
-                        )
-                        current -> invalidTxs
-                    }
-                  case None =>
-                    log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
-                    val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
-                    if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                      loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
+                      } else {
+                        lazy val totalCost = (accOrdering ++ lastFeeTx).map(_._2).sum
+                        log.debug(s"Finishing block assembly on limits overflow, " +
+                                  s"cost is $totalCost, cost limit: $maxBlockCost")
+                        (currentInput, currentOrdering, invalidTxs)
+                      }
+                    case Failure(e) =>
+                      log.warn(
+                        s"Fee collecting tx is invalid, not including it, " +
+                          s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
+                      )
+                      (currentInput, currentOrdering, invalidTxs)
+                  }
+                case None =>
+                  log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
+                  val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
+                  if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
+                    if (inputTx) {
+                      loop(mempoolTxs.tail, accInput :+ (tx -> costConsumed), accOrdering, lastFeeTx, invalidTxs)
                     } else {
-                      current -> invalidTxs
+                      loop(mempoolTxs.tail, accInput, accOrdering :+ (tx -> costConsumed), lastFeeTx, invalidTxs)
                     }
+                  } else {
+                    (currentInput, currentOrdering, invalidTxs)
+                  }
+              }
+            }
+
+            def failTx(e: Throwable): (Seq[ErgoTransaction], Seq[ErgoTransaction], Seq[ModifierId]) = {
+              log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
+              loop(mempoolTxs.tail, accInput, accOrdering, lastFeeTx, invalidTxs :+ tx.id)
+            }
+
+            // check validity and calculate transaction cost
+            validateTx(softFieldsAllowed = false) match {
+              case Success(costConsumed) =>
+                okTx(costConsumed, inputTx = true)
+              case Failure(e) if e.isInstanceOf[SoftFieldsAccessError] =>
+                log.info(s"Rechecking transaction: $tx.id")
+                validateTx(softFieldsAllowed = true) match {
+                  case Success(costConsumed) =>
+                    okTx(costConsumed, inputTx = false)
+                  case Failure(e) =>
+                    failTx(e)
                 }
               case Failure(e) =>
-                log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
-                loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+                failTx(e)
             }
           }
         case None => // mempool is empty
-          current -> invalidTxs
+          (currentInput, currentOrdering, invalidTxs)
       }
     }
 
-    val res = loop(transactions, Seq.empty, None, Seq.empty)
+    val res = loop(transactions, Seq.empty, Seq.empty, None, Seq.empty)
     log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
         s"invalid transaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")

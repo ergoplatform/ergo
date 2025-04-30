@@ -50,7 +50,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
 
   var endTime: Long = 0
 
-  def generate(length: Int, dir: File, history: ErgoHistory, stateOpt: Option[UtxoState]): UtxoState = {
+  def generate(length: Int, dir: File, history: ErgoHistory, stateOpt: Option[UtxoState]): Option[UtxoState] = {
     val state = stateOpt.getOrElse {
         val stateDir = new File(s"${dir.getAbsolutePath}/state")
         stateDir.mkdirs()
@@ -61,11 +61,17 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
     endTime = startTime + (blockInterval * length).toMillis
     val initBox = history.bestFullBlockOpt.map(_.transactions.last.outputs.head)
     val chain = loop(state, initBox, history.bestHeaderOpt, Seq())(history)
+    System.out.println(s"Chain: ${chain.size}")
     history.bestHeaderOpt shouldBe history.bestFullBlockOpt.map(_.header)
+    if (chain.isEmpty) {
+      System.out.println(s"Chain EMPTY?: ${chain.size}")
+      System.out.println(s"Chain EMPTY")
+      return None
+    }
     history.bestFullBlockOpt.get.id shouldBe chain.last
     System.out.println(s"History ${if(stateOpt.isEmpty) "generated" else "extended"} successfully, " +
       s"blocks: ${history.fullBlockHeight}")
-    state
+    Some(state)
   }
 
   @tailrec
@@ -93,6 +99,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
       assert(outToPassNext.isDefined)
 
       System.out.println(s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
+      System.out.println(s"Tokens: ${acc.size}")
 
       loop(state.applyModifier(block, None)(_ => ()).get, outToPassNext, Some(block.header), acc :+ block.id)(history)
     } else {

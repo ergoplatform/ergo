@@ -114,7 +114,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
   private[extra] def splitToSegments(implicit segmentTreshold: Int): Array[T] = {
     val data: ArrayBuffer[T] = new ArrayBuffer[T]
 
-    // Split txs until under segmentTreshold
+    // Split txs until under segmentThreshold
     while(txs.length > segmentTreshold) {
       data += factory(txSegmentId(parentId, txSegmentCount))
       data.last.txs ++= txs.take(segmentTreshold)
@@ -122,7 +122,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       txs.remove(0, segmentTreshold)
     }
 
-    // Split boxes until under segmentTreshold
+    // Split boxes until under segmentThreshold
     while(boxes.length > segmentTreshold) {
       data += factory(boxSegmentId(parentId, boxSegmentCount))
       data.last.boxes ++= boxes.take(segmentTreshold)

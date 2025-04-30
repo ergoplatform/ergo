@@ -53,7 +53,11 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
       _history = ErgoHistory.readOrGenerate(fullHistorySettings)(null)
     }
 
-    stateOpt = Some(ChainGenerator.generate(blockCount, dir, _history, stateOpt))
+    stateOpt = ChainGenerator.generate(blockCount, dir, _history, stateOpt)
+    if (stateOpt.isEmpty) {
+      sender() ! akka.actor.Status.Failure(new Exception("ChainGenerator returned empty"))
+    }
+
     test._history = _history
     context.become(receive.orElse(loaded(IndexerState.fromHistory(_history))))
   }

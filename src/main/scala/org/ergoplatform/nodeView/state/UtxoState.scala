@@ -72,7 +72,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                                        headerId: ModifierId,
                                        expectedDigest: ADDigest,
                                        currentStateContext: ErgoStateContext,
-                                       softFieldsAllowed: Boolean = true): Try[Unit] = {
+                                       softFieldsAllowed: Boolean = true,
+                                       checkUtxoSetTransformations: Boolean = true): Try[Unit] = {
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
     def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
@@ -81,7 +82,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext, ergoSettings.nodeSettings, softFieldsAllowed)(checkBoxExistence)
-    if (txProcessing.isValid) {
+    if (txProcessing.isValid && checkUtxoSetTransformations) {
       log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
       val blockOpsTry = ErgoState.stateChanges(transactions).flatMap { stateChanges =>
         val operations = stateChanges.operations
@@ -231,7 +232,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   override def applyInputBlock(txs: Seq[ErgoTransaction], header: Header): Try[Unit] = {
     // todo: do not write AVL+ updates into the db under the hood
-    val res = applyTransactions(txs, header.id, header.stateRoot, stateContext, softFieldsAllowed = false)
+    val res = applyTransactions(txs, header.id, header.stateRoot, stateContext, softFieldsAllowed = false, false)
     if (res.isFailure) {
       log.warn(s"Input block validation failed for ${header.id} : " + res)
     }

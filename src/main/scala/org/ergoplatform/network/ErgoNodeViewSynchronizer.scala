@@ -1440,7 +1440,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
     case FullBlockApplied(header) =>
-      if (header.isNew(2.hours)) {
+      if (historyReader.bestHeaderOpt.exists(_.height <= header.height)) {
+        // todo: broadcast BlockTransactions instance only to older clients
         broadcastModifierInv(Header.modifierTypeId, header.id)
         header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id) }
       }

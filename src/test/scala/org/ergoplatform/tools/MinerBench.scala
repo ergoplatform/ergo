@@ -77,6 +77,7 @@ object MinerBench extends App with ErgoTestHelpers {
       ExtensionCandidate(Seq.empty),
       Array(),
       InputBlockFields.empty,
+      Seq.empty,
       Seq.empty
     )
     val newHeader = pow.proveCandidate(candidate, sk)

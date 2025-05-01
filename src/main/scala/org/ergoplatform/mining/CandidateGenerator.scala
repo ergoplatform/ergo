@@ -190,6 +190,7 @@ class CandidateGenerator(
       val result: StatusReply[Unit] = {
         sf match {
           case _: OrderingSolutionFound =>
+            // todo: account for input blocks
             val newBlock = completeOrderingBlock(state.cache.get.candidateBlock, solution)
             log.info(s"New block mined, header: ${newBlock.header}")
             ergoSettings.chainSettings.powScheme
@@ -616,7 +617,8 @@ object CandidateGenerator extends ScorexLogging {
             extensionCandidate,
             votes,
             inputBlockFields,
-            inputBlockTransactions
+            inputBlockTransactions,
+            orderingTxs
           )
           val ext = deriveWorkMessage(candidate)
           log.info(
@@ -650,7 +652,8 @@ object CandidateGenerator extends ScorexLogging {
                     extensionCandidate,
                     votes,
                     inputBlockFields = InputBlockFields.empty, // todo: recheck, likely should be not empty
-                    inputBlockTransactions = inputBlockTransactions
+                    inputBlockTransactions = inputBlockTransactions,
+                    fallbackTxs
                   )
                   Candidate(
                     candidate,

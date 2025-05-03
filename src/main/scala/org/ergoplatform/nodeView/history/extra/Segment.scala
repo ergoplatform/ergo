@@ -111,23 +111,23 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    *
    * @return array of parent objects
    */
-  private[extra] def splitToSegments(implicit segmentTreshold: Int): Array[T] = {
+  private[extra] def splitToSegments(implicit segmentThreshold: Int): Array[T] = {
     val data: ArrayBuffer[T] = new ArrayBuffer[T]
 
     // Split txs until under segmentThreshold
-    while(txs.length > segmentTreshold) {
+    while(txs.length > segmentThreshold) {
       data += factory(txSegmentId(parentId, txSegmentCount))
-      data.last.txs ++= txs.take(segmentTreshold)
+      data.last.txs ++= txs.take(segmentThreshold)
       txSegmentCount += 1
-      txs.remove(0, segmentTreshold)
+      txs.remove(0, segmentThreshold)
     }
 
     // Split boxes until under segmentThreshold
-    while(boxes.length > segmentTreshold) {
+    while(boxes.length > segmentThreshold) {
       data += factory(boxSegmentId(parentId, boxSegmentCount))
-      data.last.boxes ++= boxes.take(segmentTreshold)
+      data.last.boxes ++= boxes.take(segmentThreshold)
       boxSegmentCount += 1
-      boxes.remove(0, segmentTreshold)
+      boxes.remove(0, segmentThreshold)
     }
     data.toArray
   }
@@ -175,9 +175,9 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
                                                   idOf: (ModifierId, Int) => ModifierId,
                                                   arraySelector: T => ArrayBuffer[Long],
                                                   retrieve: (ArrayBuffer[Long], ErgoHistoryReader) => Array[B])
-                                                 (implicit segmentTreshold: Int): Array[B] = {
+                                                 (implicit segmentThreshold: Int): Array[B] = {
 
-    val total: Int = segmentTreshold * segmentCount + arr.length
+    val total: Int = segmentThreshold * segmentCount + arr.length
     if (offset >= total)
       return Array.empty[B] // return empty array if all elements are skipped
     val collected: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
@@ -192,8 +192,8 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
     }else { // skip all elements in memory
       off -= arr.size
     }
-    while(off > segmentTreshold && segment >= 0) { // skip segments until offset gets smaller than one segment
-      off -= segmentTreshold
+    while(off > segmentThreshold && segment >= 0) { // skip segments until offset gets smaller than one segment
+      off -= segmentThreshold
       segment -= 1
     }
     while(lim > 0 && segment >= 0) { // take limit elements from remaining segments (also skip remaining offset)
@@ -214,7 +214,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param limit   - items to retrieve
    * @return array of transactions with full bodies
    */
-  def retrieveTxs(history: ErgoHistoryReader, offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[IndexedErgoTransaction] =
+  def retrieveTxs(history: ErgoHistoryReader, offset: Int, limit: Int)(implicit segmentThreshold: Int): Array[IndexedErgoTransaction] =
     getFromSegments(history, offset, limit, txSegmentCount, txs, txSegmentId, _.txs, getTxs)
 
   /**
@@ -225,7 +225,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param limit   - items to retrieve
    * @return array of boxes
    */
-  def retrieveBoxes(history: ErgoHistoryReader, offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[IndexedErgoBox] =
+  def retrieveBoxes(history: ErgoHistoryReader, offset: Int, limit: Int)(implicit segmentThreshold: Int): Array[IndexedErgoBox] =
     getFromSegments(history, offset, limit, boxSegmentCount, boxes, boxSegmentId, _.boxes, getBoxes)
 
 
@@ -291,7 +291,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @return modifier ids to remove
    */
   protected def rollbackState(txTarget: Long, boxTarget: Long, history: ErgoHistoryReader)
-                             (implicit segmentTreshold: Int): ArrayBuffer[ModifierId] = {
+                             (implicit segmentThreshold: Int): ArrayBuffer[ModifierId] = {
 
     if((txCount == 0 && boxCount == 0) || // already rolled back
       (txs.lastOption.getOrElse[Long](0) <= txTarget &&
@@ -337,7 +337,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param history  - history handle to update segment(s) in database
    * @return modifier ids to remove
    */
-  private[extra] def rollback(txTarget: Long, boxTarget: Long, history: ErgoHistory)(implicit segmentTreshold: Int): Array[ModifierId]
+  private[extra] def rollback(txTarget: Long, boxTarget: Long, history: ErgoHistory)(implicit segmentThreshold: Int): Array[ModifierId]
 
   /**
    * Add transaction index

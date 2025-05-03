@@ -533,7 +533,7 @@ object ExtraIndexer {
     case class StartExtraIndexer(history: ErgoHistory)
 
     /**
-      * Retreive the currently used segment treshold
+      * Retrieve the currently used segment threshold
       */
     case class GetSegmentThreshold()
 

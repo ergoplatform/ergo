@@ -28,8 +28,8 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
 
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
 
-  override protected val saveLimit: Int = 1 // save every block
-  override protected implicit val segmentThreshold: Int = 8 // split to smaller segments
+  override protected val saveLimit: Int = 2 // save every block
+  override protected implicit val segmentThreshold: Int = test.segmentThreshold
   override protected implicit val addressEncoder: ErgoAddressEncoder = test.initSettings.chainSettings.addressEncoder
 
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
@@ -37,7 +37,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     ChainGenerator.txCostLimit, ChainGenerator.txSizeLimit, useExternalMiner = false, internalMinersCount = 1,
     internalMinerPollingInterval = 1.second, miningPubKeyHex = None, offlineGeneration = false,
     200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte, rebroadcastCount = 20,
-    1000000, headerChainDiff = 5000, adProofsSuffixLength = 112 * 1024, extraIndex = false)
+    1000000, headerChainDiff = 5000, adProofsSuffixLength = 112 * 1024, extraIndex = true)
 
   private var dir: File = _
   private var stateOpt: Option[UtxoState] = None
@@ -50,7 +50,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
       val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, test.initSettings.chainSettings,
         nodeSettings, test.initSettings.scorexSettings, test.initSettings.walletSettings, test.initSettings.cacheSettings)
 
-      _history = ErgoHistory.readOrGenerate(fullHistorySettings)(null)
+      _history = ErgoHistory.readOrGenerate(fullHistorySettings)(this.context)
     }
 
     stateOpt = ChainGenerator.generate(blockCount, dir, _history, stateOpt)

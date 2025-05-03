@@ -17,7 +17,7 @@ import scala.util.Try
 
 class SegmentSpec extends ErgoCorePropertyTest {
 
-  implicit val segmentTreshold: Int = 512
+  implicit val segmentThreshold: Int = 512
 
   val hash: util.ModifierId.Type = ModifierId @@ Base16.encode(Array.fill(32)(0.toByte))
   val boxes = new ArrayBuffer[Long]()
@@ -25,10 +25,10 @@ class SegmentSpec extends ErgoCorePropertyTest {
     boxes.append(i)
   }
 
-  val segment0: IndexedErgoAddress = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.take(segmentTreshold))
-  val segment1: IndexedErgoAddress = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.slice(segmentTreshold, segmentTreshold * 2))
-  val segment2: IndexedErgoAddress = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.slice(segmentTreshold * 2, segmentTreshold * 3))
-  val ia: IndexedErgoAddress = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.slice(segmentTreshold * 3, boxes.size))
+  val segment0: IndexedErgoAddress = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.take(segmentThreshold))
+  val segment1: IndexedErgoAddress = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.slice(segmentThreshold, segmentThreshold * 2))
+  val segment2: IndexedErgoAddress = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.slice(segmentThreshold * 2, segmentThreshold * 3))
+  val ia: IndexedErgoAddress = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.slice(segmentThreshold * 3, boxes.size))
 
   val hr: ErgoHistoryReader = new ErgoHistoryReader {
     override protected[history] val historyStorage: HistoryStorage = new HistoryStorage(null, null, null ,null) {

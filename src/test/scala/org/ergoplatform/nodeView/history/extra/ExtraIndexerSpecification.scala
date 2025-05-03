@@ -29,8 +29,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
 
   val HEIGHT: Int = 50
-  //val BRANCHPOINT: Int = HEIGHT / 2
-  val segmentThreshold: Int = 9
+  val BRANCHPOINT: Int = HEIGHT / 2
+  val segmentThreshold: Int = 8
 
   val system: ActorSystem = ActorSystem.create("indexer-test")
   val indexer: ActorRef = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))
@@ -54,21 +54,26 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         txsIndexed += 1
         if (i != 1) {
           tx.inputs.foreach { input =>
+            // Retrieve the spent box to update address balances
             val iEb: IndexedErgoBox = _history.getReader.typedExtraIndexById[IndexedErgoBox](bytesToId(input.boxId)).get
             val address = hashErgoTree(ExtraIndexer.getAddress(iEb.box.ergoTree)(addressEncoder).script)
             val prev = addresses(address)
+            // Subtract spent Ergs and tokens from address balance
             addresses.put(address, (prev._1 - iEb.box.value, prev._2 - iEb.box.additionalTokens.toArray.map(_._2).sum))
           }
         }
         tx.outputs.foreach { output =>
           boxesIndexed += 1
+          // Update address balance with received Ergs and tokens
           val address = hashErgoTree(addressEncoder.fromProposition(output.ergoTree).get.script)
           val prev = addresses.getOrElse(address, (0L, 0L))
           addresses.put(address, (prev._1 + output.value, prev._2 + output.additionalTokens.toArray.map(_._2).sum))
+          // Process tokens in the output box
           cfor(0)(_ < output.additionalTokens.length, _ + 1) { j =>
             val token = IndexedToken.fromBox(new IndexedErgoBox(i, None, None, output, 0), j)
-            val prev2 = indexedTokens.getOrElse(token.id, (0L, 0L))
-            indexedTokens.put(token.id, (prev2._1 + 1, 0))
+            val prevTokenData = indexedTokens.getOrElse(token.id, (0L, 0L))
+            val tokenAmount = output.additionalTokens(j)._2 // Get the token amount
+            indexedTokens.put(token.id, (prevTokenData._1 + 1, prevTokenData._2 + tokenAmount))
           }
         }
       }
@@ -130,7 +135,24 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
   def checkTokens(indexedTokens: ID_LL, height: Int): Int =
     checkSegmentables[IndexedToken](indexedTokens, isChild = false, seg => {
-      seg._1.boxCount(segmentThreshold) == seg._2._1
+      val indexedToken = seg._1 // The IndexedToken object from the indexer
+      val manualData = seg._2 // Manually calculated data (boxesCount, totalTokenAmount)
+
+      var checksPassed = true
+
+      val indexedTotalAmount: Long = indexedToken.amount
+      if (indexedTotalAmount != (manualData._2 / 10)) { // correct manualData by decimals
+        System.err.println(s"Token ${indexedToken.id}: Total amount mismatch. Indexed: $indexedTotalAmount, Manual: ${manualData._2}")
+        checksPassed = false
+      }
+
+      val indexedBoxCount = indexedToken.boxCount(segmentThreshold)
+      if (indexedBoxCount != manualData._1) {
+        System.err.println(s"Token ${indexedToken.id}: Box count mismatch. Indexed: $indexedBoxCount, Manual: ${manualData._1}")
+        checksPassed = false
+      }
+
+      checksPassed
     }, height)
 
   // example G-30;R-20;G-35;R-30
@@ -220,33 +242,43 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
-//  property("transactions") {
-//    indexer ! CreateDB(HEIGHT)
-//    indexer ! Index()
-//    lock.lock()
-//    done.await()
-//    val state = IndexerState.fromHistory(_history)
-//    cfor(0)(_ < state.globalTxIndex, _ + 1) { n =>
-//      val id = history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n)))
-//      id shouldNot be(empty)
-//      history.typedExtraIndexById[IndexedErgoTransaction](id.get.m) shouldNot be(empty)
-//    }
-//    indexer ! Reset()
-//  }
+  property("transactions") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    lock.lock()
+    done.await()
+    val state = IndexerState.fromHistory(_history)
+    cfor(0)(_ < state.globalTxIndex, _ + 1) { n =>
+      val id = history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n)))
+      id shouldNot be(empty)
+      history.typedExtraIndexById[IndexedErgoTransaction](id.get.m) shouldNot be(empty)
+    }
+    indexer ! Reset()
+  }
 
-//  property("boxes") {
-//    indexer ! CreateDB(HEIGHT)
-//    indexer ! Index()
-//    lock.lock()
-//    done.await()
-//    val state = IndexerState.fromHistory(_history)
-//    cfor(0)(_ < state.globalBoxIndex, _ + 1) { n =>
-//      val id = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n)))
-//      id shouldNot be(empty)
-//      history.typedExtraIndexById[IndexedErgoBox](id.get.m) shouldNot be(empty)
-//    }
-//    indexer ! Reset()
-//  }
+  property("boxes") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    lock.lock()
+    done.await()
+    val state = IndexerState.fromHistory(_history)
+    cfor(0)(_ < state.globalBoxIndex, _ + 1) { n =>
+      val id = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n)))
+      id shouldNot be(empty)
+      history.typedExtraIndexById[IndexedErgoBox](id.get.m) shouldNot be(empty)
+    }
+    indexer ! Reset()
+  }
+
+  property("addresses") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    lock.lock()
+    done.await()
+    val (addresses, _, _, _) = manualIndex(HEIGHT)
+    checkAddresses(addresses, HEIGHT) shouldBe 0
+    indexer ! Reset()
+  }
 
   property("tokens") {
     indexer ! CreateDB(HEIGHT)
@@ -258,33 +290,23 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
-//  property("addresses") {
-//    indexer ! CreateDB(HEIGHT)
-//    indexer ! Index()
-//    lock.lock()
-//    done.await()
-//    val (addresses, _, _, _) = manualIndex(HEIGHT)
-//    checkAddresses(addresses, HEIGHT) shouldBe 0
-//    indexer ! Reset()
-//  }
-//
-//  property("alternating gens and rollbacks") {
-//    rollbackWithPattern("G-10;R-5;G-15;R-10;G-20;R-5")
-//  }
-//
-//  property("multiple gens before rollback") {
-//    rollbackWithPattern("G-5;G-10;G-15;R-10;G-20;G-25;R-15")
-//  }
-//
-//  property("consecutive rollbacks") {
-//    rollbackWithPattern("G-30;R-25;R-20;R-15;R-10;R-5")
-//  }
-//
-//  property("rollback to 1") {
-//    rollbackWithPattern("G-10;G-20;G-30;R-10;G-35;R-1")
-//  }
-//
-//  property("random gens and rollbacks") {
-//    rollbackWithPattern("G-5;G-15;R-5;G-20;G-25;R-15;G-30;R-10;G-50;R-25")
-//  }
+  property("alternating gens and rollbacks") {
+    rollbackWithPattern("G-10;R-5;G-15;R-10;G-20;R-5")
+  }
+
+  property("multiple gens before rollback") {
+    rollbackWithPattern("G-5;G-10;G-15;R-10;G-20;G-25;R-15")
+  }
+
+  property("consecutive rollbacks") {
+    rollbackWithPattern("G-30;R-25;R-20;R-15;R-10;R-5")
+  }
+
+  property("rollback to 1") {
+    rollbackWithPattern("G-10;G-20;G-30;R-10;G-35;R-1")
+  }
+
+  property("random gens and rollbacks") {
+    rollbackWithPattern("G-5;G-15;R-5;G-20;G-25;R-15;G-30;R-10;G-50;R-25")
+  }
 }

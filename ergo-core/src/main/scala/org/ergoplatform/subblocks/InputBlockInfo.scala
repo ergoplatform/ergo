@@ -39,9 +39,7 @@ case class InputBlockInfo(version: Byte,
 
 object InputBlockInfo {
 
-  private val FakePrevInputBlockId: Array[Byte] = Array.fill(32)(0.toByte)
-
-  val initialMessageVersion = 1.toByte
+  val initialMessageVersion: Byte = 1.toByte
 
   private val bmp = new BatchMerkleProofSerializer[Digest32, CryptographicHash[Digest32]]()(Blake2b256)
 
@@ -69,6 +67,7 @@ object InputBlockInfo {
         val merkleProof = bmp.deserialize(merkleProofBytes).get // parse Merkle proof
         new InputBlockInfo(version, subBlock, new InputBlockFields(prevSubBlockId, transactionsDigest, prevTransactionsDigest, merkleProof))
       } else {
+        // todo: consider proper versioning, eg adding unparsed bytes like done in Header
         throw new Exception("Unsupported sub-block message version")
       }
     }

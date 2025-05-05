@@ -11,7 +11,7 @@ import scorex.util.serialization.{Reader, Writer}
   */
 object InputBlockMessageSpec extends MessageSpecInputBlocks[InputBlockInfo] {
 
-  val MaxMessageSize = 10000
+  val MaxMessageSize = 16384
 
   override val messageCode: MessageCode = 100: Byte
   override val messageName: String = "SubBlock"
@@ -21,6 +21,7 @@ object InputBlockMessageSpec extends MessageSpecInputBlocks[InputBlockInfo] {
   }
 
   override def parse(r: Reader): InputBlockInfo = {
+    require(r.remaining < MaxMessageSize, "Too big input block info message")
     InputBlockInfo.serializer.parse(r)
   }
 

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.viewholder
 import akka.actor.ActorRef
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, VotingSettings}
@@ -59,7 +59,7 @@ class PrunedNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps
 
     fullChain.takeRight(totalBlocks - toSkip).foreach { block =>
       block.blockSections.foreach { section =>
-        nodeViewHolderRef ! LocallyGeneratedModifier(section)
+        nodeViewHolderRef ! LocallyGeneratedBlockSection(section)
         Thread.sleep(50)
       }
     }

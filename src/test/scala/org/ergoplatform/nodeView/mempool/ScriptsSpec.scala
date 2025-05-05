@@ -10,11 +10,11 @@ import org.ergoplatform.{ErgoBox, ErgoTreePredef}
 import scorex.crypto.authds.avltree.batch.Remove
 import sigma.ast.syntax.ValueOps
 import sigma.ast.{TransformingSigmaBuilder, _}
+import sigma.compiler.ir.{CompiletimeIRContext, IRContext}
+import sigma.compiler.{CompilerSettings, SigmaCompiler}
 import sigma.crypto.CryptoConstants.dlogGroup
 import sigma.data.ProveDlog
 import sigmastate._
-import sigmastate.eval.{CompiletimeIRContext, IRContext}
-import sigmastate.lang.{CompilerSettings, SigmaCompiler}
 
 import scala.util.Try
 

@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.25"
+  version: "5.0.26"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -4249,7 +4249,12 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ErgoAddress"
+              type: object
+              required:
+                - address
+              properties:
+                address:
+                  $ref: "#/components/schemas/ErgoAddress"
       responses:
         '200':
           description: Change address updated successfully

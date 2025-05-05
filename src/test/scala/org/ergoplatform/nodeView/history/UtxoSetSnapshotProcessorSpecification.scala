@@ -2,11 +2,11 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.core.VersionTag
+import org.ergoplatform.nodeView.history.modifierprocessors.UtxoSetSnapshotProcessor
 import org.ergoplatform.serialization.{ManifestSerializer, SubtreeSerializer}
 import scorex.db.LDBVersionedStore
 import scorex.util.ModifierId

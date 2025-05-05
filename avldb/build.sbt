@@ -1,41 +1,49 @@
 import sbt.Keys.testFrameworks
 
 val scala211 = "2.11.12"
-val scala212 = "2.12.18"
-val scala213 = "2.13.12"
+val scala212 = "2.12.20"
+val scala213 = "2.13.16"
 
 name := "avldb"
 
 val Versions = new {
 
   val spire = (scalaVersion: String) =>
-    if (scalaVersion == scala213) "0.17.0"
-    else "0.14.1"
+    if (scalaVersion == scala213) "0.17.0-M1"
+    else "0.16.2"
 
   val scalameter = (scalaVersion: String) =>
-    if (scalaVersion == scala213) "0.19"
-    else "0.9"
+    if (scalaVersion == scala213) "0.21"
+    else "0.19"
+  
+  val scalacheck = (scalaVersion: String) =>
+    if (scalaVersion == scala211) "1.14.3"
+    else "1.18.1"
+
+  val scalatestplus = (scalaVersion: String) =>
+    if (scalaVersion == scala211)
+      "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test
+    else
+      "org.scalatestplus" %% "scalacheck-1-18" % "3.2.19.0" % Test
 }
 
 libraryDependencies ++= Seq(
-  "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "ch.qos.logback" % "logback-classic" % "1.2.13",
   "com.google.guava" % "guava" % "23.0",
   "org.scorexfoundation" %% "scrypto" % "2.3.0",
-  "org.scalatest" %% "scalatest" % "3.1.1" % "test",
-  "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
-  "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
-  "com.storm-enroute" %% "scalameter" % Versions.scalameter(scalaVersion.value) % "test",
-  "org.ethereum" % "leveldbjni-all"     % "1.18.3",
+  "org.scalatest" %% "scalatest" % "3.2.19" % Test,
+  "org.scalacheck" %% "scalacheck" % Versions.scalacheck(scalaVersion.value) % Test,
+  Versions.scalatestplus(scalaVersion.value),
+  "com.storm-enroute" %% "scalameter" % Versions.scalameter(scalaVersion.value) % Test,
   "org.typelevel" %% "spire" % Versions.spire(scalaVersion.value)
 )
 
-testOptions in Test := Seq(Tests.Filter(t => !t.matches(".*Benchmark$")))
-javaOptions in run += "-Xmx6G"
+Test / testOptions := Seq(Tests.Filter(t => !t.matches(".*Benchmark$")))
+run / javaOptions += "-Xmx6G"
 
 publishMavenStyle := true
 
-publishArtifact in Test := false
+Test / publishArtifact := false
 
 publishTo := {
   val nexus = "https://oss.sonatype.org/"
@@ -53,7 +61,7 @@ scalacOptions ++= Seq("-feature", "-deprecation")
 // see https://github.com/eclipse/jetty.project/issues/3244
 // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
 // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
-scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8"))
+Compile / compile / scalacOptions ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8"))
 scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xfatal-warnings")
 
 enablePlugins(ReproducibleBuildsPlugin)

@@ -76,7 +76,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     var poolCost = ErgoMemPool.empty(sortByCostSettings)
     poolCost = poolCost.process(UnconfirmedTransaction(tx, None), wus)._1
     val validationContext = wus.stateContext.simplifiedUpcoming()
-    val cost = wus.validateWithCost(tx, validationContext, Int.MaxValue, None).get
+    val cost = wus.validateWithCost(tx, validationContext, Int.MaxValue, None, true).get
     poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, cost).weight
   }
 

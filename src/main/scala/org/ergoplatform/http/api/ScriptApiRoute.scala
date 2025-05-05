@@ -15,10 +15,10 @@ import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.util.encode.Base16
 import sigma.ast.{ByteArrayConstant, ErgoTree}
+import sigma.compiler.{CompilerResult, SigmaCompiler}
+import sigma.compiler.ir.CompiletimeIRContext
 import sigma.data.ProveDlog
-import sigmastate.eval.CompiletimeIRContext
 import sigmastate.interpreter.Interpreter
-import sigmastate.lang.{CompilerResult, SigmaCompiler}
 import sigma.serialization.ValueSerializer
 
 import scala.concurrent.Future

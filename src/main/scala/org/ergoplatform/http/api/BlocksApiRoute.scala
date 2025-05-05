@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.BadRequest
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32
@@ -41,7 +41,10 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getBlockTransactionsByHeaderIdR ~
       getProofForTxR ~
       getFullBlockByHeaderIdR ~
-      getModifierByIdR
+      getModifierByIdR ~
+      // input block related API
+      getBestInputBlockR ~
+      getBestInputBlocksChainR
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
@@ -61,6 +64,27 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     getHistory.map { history =>
       history.headerIdsAt(offset, limit).asJson
     }
+
+  private def getBestInputBlockR = {
+    (pathPrefix("bestInputBlock") & get) {
+      ApiResponse(getHistory.map{ h =>
+        val bh = h.bestHeaderOpt.map(_.id)
+        val bi = h.bestInputBlock().map(_.id)
+        Json.obj("bestOrdering" -> bh.getOrElse("").asJson, "bestInputBlock" -> bi.getOrElse("").asJson)
+      })
+    }
+  }
+
+
+  private def getBestInputBlocksChainR = {
+    (pathPrefix("bestInputChain") & get) {
+      ApiResponse(getHistory.map{ h =>
+        val bh = h.bestHeaderOpt.map(_.id)
+        val bi = h.bestInputBlocksChain()
+        Json.obj("bestOrdering" -> bh.getOrElse("").asJson, "bestInputBlocks" -> bi.asJson)
+      })
+    }
+  }
 
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] =
     getHistory.map { history =>
@@ -127,9 +151,9 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     if (ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess) {
       log.info("Received a new valid block through the API: " + block)
 
-      viewHolderRef ! LocallyGeneratedModifier(block.header)
+      viewHolderRef ! LocallyGeneratedBlockSection(block.header)
       block.blockSections.foreach {
-        viewHolderRef ! LocallyGeneratedModifier(_)
+        viewHolderRef ! LocallyGeneratedBlockSection(_)
       }
 
       ApiResponse.OK

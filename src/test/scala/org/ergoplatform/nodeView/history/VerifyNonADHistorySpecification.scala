@@ -1,11 +1,10 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.HeaderSerializer
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.history.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.{ErgoCorePropertyTest, MapPimp}
@@ -78,8 +77,7 @@ class VerifyNonADHistorySpecification extends ErgoCorePropertyTest {
     val invalidChainHead = altChain.head
 
     // invalidate modifier from fork
-    history.reportModifierIsInvalid(invalidChainHead.blockTransactions,
-      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty))
+    history.reportModifierIsInvalid(invalidChainHead.blockTransactions)
 
     history.bestFullBlockIdOpt.get shouldEqual initChain.last.id
 

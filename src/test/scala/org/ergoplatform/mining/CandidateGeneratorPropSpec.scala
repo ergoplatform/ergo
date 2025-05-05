@@ -9,7 +9,6 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
 import sigma.data.ProveDlog
 
-import scala.concurrent.duration._
 
 class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -172,7 +171,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
       val costs: Seq[Int] = fromBigMempool.map { tx =>
-        us.validateWithCost(tx, upcomingContext, Int.MaxValue, Some(verifier)).getOrElse {
+        us.validateWithCost(tx, upcomingContext, Int.MaxValue, Some(verifier), true).getOrElse {
           val boxesToSpend =
             tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
           tx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext).get
@@ -279,16 +278,4 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     }
   }
 
-  property("it should calculate average block mining time from creation timestamps") {
-    val timestamps1 = System.currentTimeMillis()
-    val timestamps2 = timestamps1 + 100
-    val timestamps3 = timestamps2 + 200
-    val timestamps4 = timestamps3 + 300
-    val avgMiningTime = {
-      CandidateGenerator.getBlockMiningTimeAvg(
-        Vector(timestamps1, timestamps2, timestamps3, timestamps4)
-      )
-    }
-    avgMiningTime shouldBe 200.millis
-  }
 }

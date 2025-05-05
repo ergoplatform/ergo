@@ -1,6 +1,6 @@
 package org.ergoplatform.utils.generators
 
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, OrderingBlockFound}
 import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
@@ -213,7 +213,8 @@ object ValidBlocksGenerators
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt.map(_.header), Header.InitialVersion, settings.chainSettings.initialNBits, updStateDigest, adProofBytes,
-      transactions, time, extension, votes, defaultMinerSecretNumber).get
+      transactions, time, extension, votes, defaultMinerSecretNumber).asInstanceOf[OrderingBlockFound]  // todo: fix
+      .fb
   }
 
   /**
@@ -237,7 +238,8 @@ object ValidBlocksGenerators
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt, Header.InitialVersion, settings.chainSettings.initialNBits, updStateDigest,
-      adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber).get
+      adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber).asInstanceOf[OrderingBlockFound]  // todo: fix
+      .fb
   }
 
   private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {

@@ -20,7 +20,7 @@ import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network._
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message._
-import org.ergoplatform.network.message.inputblocks.{InputBlockMessageSpec, InputBlockRequestMessageSpec, InputBlockTransactionsMessageSpec, InputBlockTransactionsRequestMessageSpec}
+import org.ergoplatform.network.message.inputblocks.{InputBlockMessageSpec, InputBlockRequestMessageSpec, InputBlockTransactionsMessageSpec, InputBlockTransactionsRequestMessageSpec, OrderingBlockAnnouncementMessageSpec}
 import org.ergoplatform.network.peer.PeerManagerRef
 import scorex.util.ScorexLogging
 
@@ -90,7 +90,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
       InputBlockMessageSpec,
       InputBlockRequestMessageSpec,
       InputBlockTransactionsMessageSpec,
-      InputBlockTransactionsRequestMessageSpec
+      InputBlockTransactionsRequestMessageSpec,
+      OrderingBlockAnnouncementMessageSpec
     )
   }
 
@@ -151,7 +152,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
         InputBlockMessageSpec.messageCode                    -> ergoNodeViewSynchronizerRef,
         InputBlockRequestMessageSpec.messageCode             -> ergoNodeViewSynchronizerRef,
         InputBlockTransactionsMessageSpec.messageCode        -> ergoNodeViewSynchronizerRef,
-        InputBlockTransactionsRequestMessageSpec.messageCode -> ergoNodeViewSynchronizerRef
+        InputBlockTransactionsRequestMessageSpec.messageCode -> ergoNodeViewSynchronizerRef,
+        OrderingBlockAnnouncementMessageSpec.messageCode -> ergoNodeViewSynchronizerRef
       )
       // Launching PeerSynchronizer actor which is then registering itself at network controller
       if (ergoSettings.scorexSettings.network.peerDiscovery) {

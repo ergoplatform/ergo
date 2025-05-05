@@ -37,18 +37,19 @@ object InputBlockTransactionsDataSerializer extends ErgoSerializer[InputBlockTra
   override def serialize(obj: InputBlockTransactionsData, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.inputBlockId))
     w.putUInt(obj.transactions.size.toLong)
-    obj.transactions.foreach { tx =>
+    obj.transactions.foreach { tx => // todo: replace with cfor
       ErgoTransactionSerializer.serialize(tx, w)
     }
   }
 
   override def parse(r: Reader): InputBlockTransactionsData = {
+    //todo: consider max message size
     val startPos = r.position
 
     val headerId: ModifierId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val txCount = r.getUInt().toIntExact
 
-    val txs = (1 to txCount).map { _ =>
+    val txs = (1 to txCount).map { _ => // todo: replace with cfor
       ErgoTransactionSerializer.parse(r)
     }
     InputBlockTransactionsData(headerId, txs, Some(r.position - startPos))

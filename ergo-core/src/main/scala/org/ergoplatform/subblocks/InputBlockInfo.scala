@@ -14,11 +14,10 @@ import scorex.util.serialization.{Reader, Writer}
 /**
   * Sub-block message, sent by the node to peers when a sub-block is generated
   *
-  * @param version - message version E(to allow injecting new fields)
-  * @param header - subblock
-
+  * @param version - message version (to allow injection of new fields)
+  * @param header - subblock header
+  * @param inputBlockFields - input block related fields in extension section along with Merkle proof of their inclusion
   */
-// todo: include prev input blocks txs digest
 case class InputBlockInfo(version: Byte,
                           header: Header,
                           inputBlockFields: InputBlockFields) {

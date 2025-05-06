@@ -4,8 +4,8 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.settings.ErgoSettingsReader
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import sigma.ast._
-import sigmastate.eval.CompiletimeIRContext
-import sigmastate.lang.{CompilerSettings, SigmaCompiler}
+import sigma.compiler.ir.CompiletimeIRContext
+import sigma.compiler.{CompilerSettings, SigmaCompiler}
 
 import scala.util.Try
 

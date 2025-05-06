@@ -121,6 +121,7 @@ class CandidateGenerator(
         state.solvedBlock,
         candidateGenInterval
       )) {
+        log.debug(s"Regenerating candidate block")
         context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, mpr = mp)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
       } else {

@@ -6,7 +6,7 @@ import scorex.crypto.authds.{ADKey, ADValue, Balance}
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, hashFn}
 import scorex.crypto.authds.avltree.batch.serialization.ProxyInternalNode
 import scorex.crypto.hash.Digest32
-import scorex.db.LDBVersionedStore
+import scorex.db.RocksDBVersionedStore
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -15,9 +15,9 @@ import scorex.util.serialization.{Reader, Writer}
   *
   * @param store - store which could be provided to fetch children of a node when a child is requested
   */
-class ProverNodeSerializer(store: LDBVersionedStore) extends ErgoSerializer[ProverNodes[DigestType]] {
+class ProverNodeSerializer(store: RocksDBVersionedStore) extends ErgoSerializer[ProverNodes[DigestType]] {
 
-  import VersionedLDBAVLStorage.{InternalNodePrefix,LeafPrefix}
+  import VersionedRocksDBAVLStorage.{InternalNodePrefix,LeafPrefix}
 
   override def serialize(node: ProverNodes[DigestType], w: Writer): Unit = {
     node match {

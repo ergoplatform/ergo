@@ -50,7 +50,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
 
   var endTime: Long = 0
 
-  def generate(length: Int, dir: File, history: ErgoHistory, stateOpt: Option[UtxoState]): UtxoState = {
+  def generate(length: Int, dir: File, history: ErgoHistory, stateOpt: Option[UtxoState]): Option[UtxoState] = {
     val state = stateOpt.getOrElse {
         val stateDir = new File(s"${dir.getAbsolutePath}/state")
         stateDir.mkdirs()
@@ -65,7 +65,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
     history.bestFullBlockOpt.get.id shouldBe chain.last
     System.out.println(s"History ${if(stateOpt.isEmpty) "generated" else "extended"} successfully, " +
       s"blocks: ${history.fullBlockHeight}")
-    state
+    Some(state)
   }
 
   @tailrec

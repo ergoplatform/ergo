@@ -45,7 +45,7 @@ case class IndexedToken(tokenId: ModifierId,
    * @param history   - history handle to update segment(s) in database
    * @return modifier ids to remove
    */
-  override private[extra] def rollback(txTarget: Long, boxTarget: Long, history: ErgoHistory)(implicit segmentTreshold: Int): Array[ModifierId] = {
+  override private[extra] def rollback(txTarget: Long, boxTarget: Long, history: ErgoHistory)(implicit segmentThreshold: Int): Array[ModifierId] = {
 
     val toRemove: ArrayBuffer[ModifierId] = rollbackState(txTarget, boxTarget, history.getReader)
 

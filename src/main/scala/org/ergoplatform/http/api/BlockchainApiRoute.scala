@@ -32,7 +32,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  private lazy val segmentTreshold: Int = indexerOpt.map { indexer =>
+  private lazy val segmentThreshold: Int = indexerOpt.map { indexer =>
     Await.result[Int]((indexer ? GetSegmentThreshold).asInstanceOf[Future[Int]], Duration(3, SECONDS))
   }.getOrElse(0)
 
@@ -152,7 +152,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getTxsByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[(Seq[IndexedErgoTransaction],Long)] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => (addr.retrieveTxs(history, offset, limit)(segmentTreshold), addr.txCount(segmentTreshold))
+        case Some(addr) => (addr.retrieveTxs(history, offset, limit)(segmentThreshold), addr.txCount(segmentThreshold))
         case None       => (Seq.empty[IndexedErgoTransaction], 0L)
       }
     }
@@ -220,7 +220,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxesByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => (addr.retrieveBoxes(history, offset, limit)(segmentTreshold).reverse, addr.boxCount(segmentTreshold))
+        case Some(addr) => (addr.retrieveBoxes(history, offset, limit)(segmentThreshold).reverse, addr.boxCount(segmentThreshold))
         case None       => (Seq.empty[IndexedErgoBox], 0L)
       }
     }
@@ -312,7 +312,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxesByErgoTree(tree: ErgoTree, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
     getHistory.map { history =>
       getAddress(tree)(history) match {
-        case Some(iEa) => (iEa.retrieveBoxes(history, offset, limit)(segmentTreshold).reverse, iEa.boxCount(segmentTreshold))
+        case Some(iEa) => (iEa.retrieveBoxes(history, offset, limit)(segmentThreshold).reverse, iEa.boxCount(segmentThreshold))
         case None      => (Seq.empty[IndexedErgoBox], 0L)
       }
     }
@@ -365,7 +365,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxesByTokenId(id: ModifierId, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
     getHistory.map { history =>
       history.typedExtraIndexById[IndexedToken](uniqueId(id)) match {
-        case Some(token) => (token.retrieveBoxes(history, offset, limit)(segmentTreshold), token.boxCount(segmentTreshold))
+        case Some(token) => (token.retrieveBoxes(history, offset, limit)(segmentThreshold), token.boxCount(segmentThreshold))
         case None        => (Seq.empty[IndexedErgoBox], 0L)
       }
     }

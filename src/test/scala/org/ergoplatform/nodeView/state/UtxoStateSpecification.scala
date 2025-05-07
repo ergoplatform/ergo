@@ -416,6 +416,20 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
     }
   }
 
+  property("proofsForTransactions() does not change state digest") {
+    forAll(boxesHolderGen) { bh =>
+      val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
+      val us = createUtxoState(bh, parameters)
+      val d1 = us.rootDigest
+      us.proofsForTransactions(txsFromHolder).isSuccess shouldBe true
+      val d2 = us.rootDigest
+      d1.sameElements(d2) shouldBe true
+      us.proofsForTransactions(txsFromHolder).isSuccess shouldBe true
+      val d3 = us.rootDigest
+      d1.sameElements(d3) shouldBe true
+    }
+  }
+
   property("proofsForTransactions() fails if a transaction is spending an output created by a follow-up transaction") {
     forAll(boxesHolderGen) { bh =>
       val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
